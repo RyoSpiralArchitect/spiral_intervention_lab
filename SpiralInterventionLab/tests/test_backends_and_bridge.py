@@ -19,6 +19,7 @@ from SpiralInterventionLab.bridge.controller_clients import (
     _normalize_controller_payload,
 )
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
+from SpiralInterventionLab.controllers.providers import OpenAIControllerProvider
 from SpiralInterventionLab.runtime.baselines import run_b1
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.schema import parse_observation_packet
@@ -124,6 +125,20 @@ class _FakeMLXResponse:
         self.finish_reason = finish_reason
 
 
+class _FakeOpenAIResponsesAPI:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return type("FakeResponse", (), {"output_text": "{\"version\":\"0.1\",\"decision\":\"noop\"}", "usage": {}})()
+
+
+class _FakeOpenAIClient:
+    def __init__(self) -> None:
+        self.responses = _FakeOpenAIResponsesAPI()
+
+
 class TestBackendsAndBridge(unittest.TestCase):
     def test_provider_controller_client_retries_until_valid_json(self):
         provider = _FakeProvider("not json", "```json\n{\"version\":\"0.1\",\"decision\":\"noop\"}\n```")
@@ -193,6 +208,35 @@ class TestBackendsAndBridge(unittest.TestCase):
             {"surface_id": "s_resid_l1_last"},
         )
 
+    def test_normalize_controller_payload_accepts_project_orthogonal_aliases(self):
+        normalized = _normalize_controller_payload(
+            {
+                "fn": "project_orthogonal",
+                "input": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "hidden", "layer": 1, "token": {"mode": "last"}}},
+                "against": {"ref": {"scope": "trace", "trace_id": "paired_baseline", "worker": "os_0", "tensor": "hidden", "layer": 1, "token": {"mode": "last"}}},
+            }
+        )
+
+        self.assertEqual(normalized["fn"], "project_orthogonal")
+        self.assertIn("arg", normalized)
+        self.assertIn("basis", normalized)
+
+    def test_normalize_controller_payload_rewrites_trace_scope_aliases(self):
+        normalized = _normalize_controller_payload(
+            {
+                "ref": {
+                    "scope": "paired_baseline",
+                    "worker": "os_0",
+                    "tensor": "hidden",
+                    "layer": 1,
+                    "token": {"mode": "last"},
+                }
+            }
+        )
+
+        self.assertEqual(normalized["ref"]["scope"], "trace")
+        self.assertEqual(normalized["ref"]["trace_id"], "paired_baseline")
+
     def test_provider_prompt_hint_controller_trims_plain_text(self):
         provider = _FakeProvider("  try the digit near the end  \n")
         controller = ProviderPromptHintController(provider, system_prompt="sys")
@@ -200,6 +244,22 @@ class TestBackendsAndBridge(unittest.TestCase):
         hint = controller.invoke({"step": 2})
 
         self.assertEqual(hint, "try the digit near the end")
+
+    def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
+        client = _FakeOpenAIClient()
+        provider = OpenAIControllerProvider(model="gpt-5.2", client=client)
+
+        provider.complete(
+            ControllerProviderRequest(
+                system_prompt="sys",
+                payload={"step": 1},
+                expect_json=True,
+            )
+        )
+
+        self.assertEqual(client.responses.calls[0]["text"]["format"]["type"], "json_object")
+        self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "low")
+        self.assertTrue(client.responses.calls[0]["input"].startswith("JSON packet:\n"))
 
     def test_local_backend_worker_runtime_packet_is_schema_shaped(self):
         runtime = LocalBackendWorkerRuntime(

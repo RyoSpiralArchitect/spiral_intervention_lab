@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
+from .edit_budget import estimate_edit_cost
 from .schema import (
     CachePairSource,
     ControllerCommand,
@@ -37,6 +38,7 @@ class GlobalBudget:
     max_edits_per_step: int = 1
     max_edits_per_run: int = 4
     max_total_alpha: float = 0.5
+    max_total_edit_cost: float = 0.5
     max_rank_per_edit: int = 1
 
 
@@ -176,6 +178,7 @@ def validate_command_against_packet(
         raise PolicyViolation("command exceeds policy.max_edits_per_run")
 
     total_alpha = 0.0
+    total_edit_cost = 0.0
     rank_patch_count = 0
 
     for edit in cmd.edits:
@@ -198,6 +201,9 @@ def validate_command_against_packet(
         if edit.budget.norm_clip is not None and surface.caps.norm_clip is not None:
             if edit.budget.norm_clip > surface.caps.norm_clip:
                 raise PolicyViolation(f"edit '{edit.id}' exceeds surface norm clip cap")
+        if edit.budget.step_size is not None and surface.caps.step_size is not None:
+            if edit.budget.step_size > surface.caps.step_size:
+                raise PolicyViolation(f"edit '{edit.id}' exceeds surface step_size cap")
 
         if isinstance(edit.op, Rank1PatchOp):
             rank_patch_count += 1
@@ -217,10 +223,22 @@ def validate_command_against_packet(
 
         _validate_expr_budget(edit.source, pol)
         _validate_trace_access(edit.source, pkt)
+        effective_step_size = edit.budget.step_size if edit.budget.step_size is not None else surface.caps.step_size
+        total_edit_cost += estimate_edit_cost(
+            op_kind=edit.op.kind,
+            alpha=edit.op.alpha,
+            ttl_steps=edit.budget.ttl_steps,
+            step_size=effective_step_size,
+            rank_cap=edit.budget.rank_cap,
+        )
 
     if total_alpha > pkt.budget.alpha_left_total:
         raise PolicyViolation("command exceeds packet alpha budget")
     if total_alpha > pol.global_budget.max_total_alpha:
         raise PolicyViolation("command exceeds policy total alpha budget")
+    if pkt.budget.edit_cost_left_total is not None and total_edit_cost > pkt.budget.edit_cost_left_total:
+        raise PolicyViolation("command exceeds packet edit cost budget")
+    if total_edit_cost > pol.global_budget.max_total_edit_cost:
+        raise PolicyViolation("command exceeds policy total edit cost budget")
     if rank_patch_count > pkt.budget.active_patch_slots_left:
         raise PolicyViolation("command exceeds packet active_patch_slots_left")

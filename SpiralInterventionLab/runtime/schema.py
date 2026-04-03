@@ -419,6 +419,7 @@ def parse_op(value: Any) -> Op:
 class Budget:
     ttl_steps: int
     norm_clip: float | None = None
+    step_size: float | None = None
     rank_cap: int | None = None
     revertible: bool = True
 
@@ -434,9 +435,13 @@ class Budget:
         norm_clip = _optional_float(data.get("norm_clip"), "budget.norm_clip")
         if norm_clip is not None and norm_clip <= 0.0:
             raise SchemaError("budget.norm_clip must be > 0")
+        step_size = _optional_float(data.get("step_size"), "budget.step_size")
+        if step_size is not None and step_size <= 0.0:
+            raise SchemaError("budget.step_size must be > 0")
         return cls(
             ttl_steps=ttl_steps,
             norm_clip=norm_clip,
+            step_size=step_size,
             rank_cap=rank_cap,
             revertible=_require_bool(_require_key(data, "revertible", "budget"), "budget.revertible"),
         )
@@ -503,17 +508,34 @@ class SurfaceCaps:
     max_alpha: float
     max_ttl_steps: int
     norm_clip: float | None = None
+    step_size: float | None = None
     rank_cap: int | None = None
     revertible_only: bool = True
 
     @classmethod
     def from_dict(cls, value: Any) -> "SurfaceCaps":
         data = _as_mapping(value, "caps")
+        max_alpha = _require_float(_require_key(data, "max_alpha", "caps"), "caps.max_alpha")
+        max_ttl_steps = _require_int(_require_key(data, "max_ttl_steps", "caps"), "caps.max_ttl_steps")
+        norm_clip = _optional_float(data.get("norm_clip"), "caps.norm_clip")
+        step_size = _optional_float(data.get("step_size"), "caps.step_size")
+        rank_cap = _optional_int(data.get("rank_cap"), "caps.rank_cap")
+        if max_alpha <= 0.0:
+            raise SchemaError("caps.max_alpha must be > 0")
+        if max_ttl_steps <= 0:
+            raise SchemaError("caps.max_ttl_steps must be > 0")
+        if norm_clip is not None and norm_clip <= 0.0:
+            raise SchemaError("caps.norm_clip must be > 0")
+        if step_size is not None and step_size <= 0.0:
+            raise SchemaError("caps.step_size must be > 0")
+        if rank_cap is not None and rank_cap <= 0:
+            raise SchemaError("caps.rank_cap must be > 0")
         return cls(
-            max_alpha=_require_float(_require_key(data, "max_alpha", "caps"), "caps.max_alpha"),
-            max_ttl_steps=_require_int(_require_key(data, "max_ttl_steps", "caps"), "caps.max_ttl_steps"),
-            norm_clip=_optional_float(data.get("norm_clip"), "caps.norm_clip"),
-            rank_cap=_optional_int(data.get("rank_cap"), "caps.rank_cap"),
+            max_alpha=max_alpha,
+            max_ttl_steps=max_ttl_steps,
+            norm_clip=norm_clip,
+            step_size=step_size,
+            rank_cap=rank_cap,
             revertible_only=_require_bool(_require_key(data, "revertible_only", "caps"), "caps.revertible_only"),
         )
 
@@ -571,6 +593,8 @@ class ActiveEdit:
     alpha: float
     ttl_left: int
     revertible: bool
+    step_size: float | None = None
+    edit_cost: float | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "ActiveEdit":
@@ -583,6 +607,8 @@ class ActiveEdit:
             surface_id=_require_str(_require_key(data, "surface_id", "active_edit"), "active_edit.surface_id"),
             op=op,
             alpha=_require_float(_require_key(data, "alpha", "active_edit"), "active_edit.alpha"),
+            step_size=_optional_float(data.get("step_size"), "active_edit.step_size"),
+            edit_cost=_optional_float(data.get("edit_cost"), "active_edit.edit_cost"),
             ttl_left=_require_int(_require_key(data, "ttl_left", "active_edit"), "active_edit.ttl_left"),
             revertible=_require_bool(_require_key(data, "revertible", "active_edit"), "active_edit.revertible"),
         )
@@ -641,6 +667,7 @@ class BudgetState:
     alpha_left_total: float
     active_patch_slots_left: int
     rollbackable_ids: tuple[str, ...] = ()
+    edit_cost_left_total: float | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "BudgetState":
@@ -649,6 +676,7 @@ class BudgetState:
             edits_left_this_step=_require_int(_require_key(data, "edits_left_this_step", "budget"), "budget.edits_left_this_step"),
             edits_left_this_run=_require_int(_require_key(data, "edits_left_this_run", "budget"), "budget.edits_left_this_run"),
             alpha_left_total=_require_float(_require_key(data, "alpha_left_total", "budget"), "budget.alpha_left_total"),
+            edit_cost_left_total=_optional_float(data.get("edit_cost_left_total"), "budget.edit_cost_left_total"),
             active_patch_slots_left=_require_int(
                 _require_key(data, "active_patch_slots_left", "budget"),
                 "budget.active_patch_slots_left",

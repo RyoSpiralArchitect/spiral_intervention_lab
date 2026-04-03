@@ -5,6 +5,8 @@ from typing import Any, Callable
 
 import torch
 
+from .edit_budget import clip_delta_matrix
+
 
 class OverlayHandle:
     def attach(self) -> None:
@@ -35,6 +37,7 @@ class LinearRank1OverlayHandle(OverlayHandle):
     u_fn: Callable[[Any], torch.Tensor]
     v_fn: Callable[[Any], torch.Tensor]
     alpha: float
+    step_size: float | None = None
     handle: Any | None = field(default=None, init=False)
 
     def attach(self) -> None:
@@ -57,7 +60,8 @@ class LinearRank1OverlayHandle(OverlayHandle):
                 )
             coeff = torch.matmul(x, v)
             patch = coeff.unsqueeze(-1) * u
-            return output + (self.alpha * patch)
+            delta = clip_delta_matrix(self.alpha * patch, step_size=self.step_size)
+            return output + delta
 
         self.handle = self.module.register_forward_hook(forward_hook)
 
@@ -74,6 +78,7 @@ class ParameterRank1OverlayHandle(OverlayHandle):
     u_fn: Callable[[Any], torch.Tensor]
     v_fn: Callable[[Any], torch.Tensor]
     alpha: float
+    step_size: float | None = None
     delta: torch.Tensor | None = field(default=None, init=False)
     attached: bool = field(default=False, init=False)
 
@@ -91,7 +96,7 @@ class ParameterRank1OverlayHandle(OverlayHandle):
                     f"target={tuple(target.shape)}, u={tuple(u.shape)}, v={tuple(v.shape)}"
                 )
             delta = torch.outer(u, v)
-            return self.alpha * delta
+            return clip_delta_matrix(self.alpha * delta, step_size=self.step_size)
 
         rows = int(target.numel() // target.shape[-1])
         cols = int(target.shape[-1])
@@ -102,7 +107,7 @@ class ParameterRank1OverlayHandle(OverlayHandle):
                 f"u={tuple(u.shape)}, v={tuple(v.shape)}"
             )
         delta = torch.outer(u, v).reshape_as(target)
-        return self.alpha * delta
+        return clip_delta_matrix(self.alpha * delta, step_size=self.step_size)
 
     def attach(self) -> None:
         if self.attached:

@@ -48,13 +48,16 @@ class HookedTransformerWorkerRuntime:
         goal_hint: str | None = None,
         constraints: Sequence[str] | None = None,
         max_generated_tokens: int = 32,
+        min_generated_tokens: int = 0,
         max_edits_per_step: int = 1,
         max_edits_per_run: int = 4,
         max_total_alpha: float = 0.5,
+        max_total_edit_cost: float | None = None,
         max_active_patch_slots: int = 1,
         generated_tail_chars: int = 80,
         recent_token_count: int = 6,
         stop_token_ids: Sequence[int] | None = None,
+        allowed_token_ids: Sequence[int] | None = None,
         stop_checker: Callable[[str], bool] | None = None,
         trace_metadata: Mapping[str, Mapping[str, Any]] | None = None,
         task_feedback_fn: Callable[[str], Mapping[str, Any] | None] | None = None,
@@ -73,13 +76,16 @@ class HookedTransformerWorkerRuntime:
         self.goal_hint = goal_hint
         self.constraints = tuple(constraints or ())
         self.max_generated_tokens = max_generated_tokens
+        self.min_generated_tokens = max(0, int(min_generated_tokens))
         self.max_edits_per_step = max_edits_per_step
         self.max_edits_per_run = max_edits_per_run
         self.max_total_alpha = max_total_alpha
+        self.max_total_edit_cost = float(max_total_edit_cost if max_total_edit_cost is not None else max_total_alpha)
         self.max_active_patch_slots = max_active_patch_slots
         self.generated_tail_chars = generated_tail_chars
         self.recent_token_count = recent_token_count
         self.stop_token_ids = set(int(token_id) for token_id in (stop_token_ids or ()))
+        self.allowed_token_ids = tuple(sorted({int(token_id) for token_id in (allowed_token_ids or ())}))
         self.stop_checker = stop_checker
         self.trace_metadata = {str(trace_id): dict(meta) for trace_id, meta in (trace_metadata or {}).items()}
         self.task_feedback_fn = task_feedback_fn
@@ -107,6 +113,7 @@ class HookedTransformerWorkerRuntime:
         self._pending_effects: list[dict[str, Any]] = []
         self._seen_registration_ids: set[str] = set()
         self._spent_budget_alpha: dict[str, float] = {}
+        self._spent_budget_cost: dict[str, float] = {}
         self._last_packet: dict[str, Any] | None = None
         self._no_progress_steps = 0
 
@@ -123,7 +130,7 @@ class HookedTransformerWorkerRuntime:
         logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
         if not isinstance(logits, torch.Tensor) or logits.ndim != 3:
             raise ValueError(f"runtime_state.run_with_cache must return logits shaped [batch, pos, vocab], got {type(logits)!r}")
-        next_logits = logits[0, -1].detach()
+        next_logits = self._apply_token_constraints(logits[0, -1].detach())
         next_token = int(torch.argmax(next_logits).item())
         self._append_output_token(next_token)
         self._steps += 1
@@ -134,8 +141,11 @@ class HookedTransformerWorkerRuntime:
 
     def done(self) -> bool:
         output_tokens = self._output_token_ids()
-        if self.max_generated_tokens > 0 and len(output_tokens) >= self.max_generated_tokens:
+        generated_tokens = len(output_tokens)
+        if self.max_generated_tokens > 0 and generated_tokens >= self.max_generated_tokens:
             return True
+        if generated_tokens < self.min_generated_tokens:
+            return False
         if output_tokens and output_tokens[-1] in self.stop_token_ids:
             return True
         if self.stop_checker is not None and self.stop_checker(self.final_text()):
@@ -203,6 +213,7 @@ class HookedTransformerWorkerRuntime:
             self._seen_registration_ids.add(edit_id)
             budget_key = str(active.get("budget_key", edit_id.split(":", 1)[0]))
             self._spent_budget_alpha.setdefault(budget_key, float(active["alpha"]))
+            self._spent_budget_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
             self._pending_effects.append(
                 {
                     "edit_id": edit_id,
@@ -272,6 +283,7 @@ class HookedTransformerWorkerRuntime:
         self._pending_effects = []
         self._seen_registration_ids = set()
         self._spent_budget_alpha = {}
+        self._spent_budget_cost = {}
         self._last_packet = None
         self._no_progress_steps = 0
         if self.trace_recorder is not None:
@@ -288,6 +300,17 @@ class HookedTransformerWorkerRuntime:
             self._segments[-1].token_ids.append(int(token_id))
             return
         self._segments.append(_TokenSegment(kind="output", token_ids=[int(token_id)]))
+
+    def _apply_token_constraints(self, next_logits: torch.Tensor) -> torch.Tensor:
+        if not self.allowed_token_ids:
+            return next_logits
+        allowed = [token_id for token_id in self.allowed_token_ids if 0 <= token_id < next_logits.shape[-1]]
+        if not allowed:
+            return next_logits
+        masked = torch.full_like(next_logits, float("-inf"))
+        index = torch.tensor(allowed, dtype=torch.long, device=next_logits.device)
+        masked[index] = next_logits[index]
+        return masked
 
     def _output_token_ids(self) -> list[int]:
         output_tokens: list[int] = []
@@ -484,6 +507,8 @@ class HookedTransformerWorkerRuntime:
             "alpha": alpha,
             "ttl_left": int(ttl_left),
             "revertible": revertible,
+            "step_size": None if metadata.get("step_size") is None else float(metadata["step_size"]),
+            "edit_cost": None if metadata.get("edit_cost") is None else float(metadata["edit_cost"]),
             "budget_key": str(metadata.get("budget_key", str(edit_id).split(":", 1)[0])),
         }
 
@@ -504,10 +529,12 @@ class HookedTransformerWorkerRuntime:
     def _budget_state(self, active_edits: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         active_patch_slots = sum(1 for edit in active_edits if edit.get("op") == "rank1_patch")
         spent_alpha = sum(self._spent_budget_alpha.values())
+        spent_edit_cost = sum(self._spent_budget_cost.values())
         return {
             "edits_left_this_step": self.max_edits_per_step,
             "edits_left_this_run": max(0, self.max_edits_per_run - len(self._spent_budget_alpha)),
             "alpha_left_total": max(0.0, self.max_total_alpha - spent_alpha),
+            "edit_cost_left_total": max(0.0, self.max_total_edit_cost - spent_edit_cost),
             "active_patch_slots_left": max(0, self.max_active_patch_slots - active_patch_slots),
             "rollbackable_ids": [str(edit["edit_id"]) for edit in active_edits if bool(edit.get("revertible", True))],
         }
@@ -561,6 +588,7 @@ class HookedTransformerWorkerRuntime:
                 "max_alpha": surface.caps.max_alpha,
                 "max_ttl_steps": surface.caps.max_ttl_steps,
                 "norm_clip": surface.caps.norm_clip,
+                "step_size": surface.caps.step_size,
                 "rank_cap": surface.caps.rank_cap,
                 "revertible_only": surface.caps.revertible_only,
             },

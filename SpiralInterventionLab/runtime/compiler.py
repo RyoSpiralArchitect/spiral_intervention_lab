@@ -6,6 +6,7 @@ from typing import Any, Callable
 import torch
 
 from .adapter import ModelAdapter
+from .edit_budget import budget_metadata
 from .policy import HarnessPolicy, validate_command_against_packet
 from .schema import (
     CachePairSource,
@@ -188,14 +189,49 @@ def _compile_rollback(edit_id: str) -> CompiledEdit:
     )
 
 
-def _compile_resid_add(edit: Any, surface: Any, expr_fn: TensorThunk, ctx: StepContext) -> CompiledEdit:
-    alpha = float(edit.op.alpha)
-    budget = {
+def _resolved_step_size(edit: Any, surface: Any) -> float | None:
+    if edit.budget.step_size is not None:
+        return float(edit.budget.step_size)
+    surface_step_size = getattr(getattr(surface, "caps", None), "step_size", None)
+    if surface_step_size is None:
+        return None
+    return float(surface_step_size)
+
+
+def _runtime_budget(edit: Any, surface: Any) -> dict[str, Any]:
+    return {
         "ttl_steps": edit.budget.ttl_steps,
         "revertible": edit.budget.revertible,
         "norm_clip": edit.budget.norm_clip,
+        "step_size": _resolved_step_size(edit, surface),
         "rank_cap": edit.budget.rank_cap,
     }
+
+
+def _registration_metadata(edit: Any, surface: Any) -> dict[str, Any]:
+    runtime_budget = _runtime_budget(edit, surface)
+    metadata = {
+        "surface_id": surface.surface_id,
+        "op": edit.op.kind,
+        "alpha": float(edit.op.alpha),
+        "budget_key": edit.id,
+    }
+    metadata.update(
+        budget_metadata(
+            op_kind=edit.op.kind,
+            alpha=edit.op.alpha,
+            ttl_steps=edit.budget.ttl_steps,
+            step_size=runtime_budget["step_size"],
+            rank_cap=edit.budget.rank_cap,
+        )
+    )
+    return metadata
+
+
+def _compile_resid_add(edit: Any, surface: Any, expr_fn: TensorThunk, ctx: StepContext) -> CompiledEdit:
+    alpha = float(edit.op.alpha)
+    budget = _runtime_budget(edit, surface)
+    metadata = _registration_metadata(edit, surface)
     hook_name, hook_fn = ctx.adapter.make_activation_hook(
         surface=surface,
         op_kind="resid_add",
@@ -212,12 +248,7 @@ def _compile_resid_add(edit: Any, surface: Any, expr_fn: TensorThunk, ctx: StepC
             edit_id=edit.id,
             ttl_steps=edit.budget.ttl_steps,
             revertible=edit.budget.revertible,
-            metadata={
-                "surface_id": surface.surface_id,
-                "op": "resid_add",
-                "alpha": alpha,
-                "budget_key": edit.id,
-            },
+            metadata=metadata,
         )
 
     def rollback(step_ctx: StepContext) -> None:
@@ -235,12 +266,8 @@ def _compile_resid_add(edit: Any, surface: Any, expr_fn: TensorThunk, ctx: StepC
 
 def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
     alpha = float(edit.op.alpha)
-    budget = {
-        "ttl_steps": edit.budget.ttl_steps,
-        "revertible": edit.budget.revertible,
-        "norm_clip": edit.budget.norm_clip,
-        "rank_cap": edit.budget.rank_cap,
-    }
+    budget = _runtime_budget(edit, surface)
+    metadata = _registration_metadata(edit, surface)
 
     if edit.op.which == "kv":
         if not isinstance(edit.source, CachePairSource) or edit.source.k is None or edit.source.v is None:
@@ -258,12 +285,7 @@ def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
                 edit_id=f"{edit.id}:k",
                 ttl_steps=edit.budget.ttl_steps,
                 revertible=edit.budget.revertible,
-                metadata={
-                    "surface_id": surface.surface_id,
-                    "op": "kv_mix",
-                    "alpha": alpha,
-                    "budget_key": edit.id,
-                },
+                metadata=metadata,
             )
             step_ctx.runtime_state.register_hook(
                 hook_name=v_hook_name,
@@ -271,12 +293,7 @@ def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
                 edit_id=f"{edit.id}:v",
                 ttl_steps=edit.budget.ttl_steps,
                 revertible=edit.budget.revertible,
-                metadata={
-                    "surface_id": surface.surface_id,
-                    "op": "kv_mix",
-                    "alpha": alpha,
-                    "budget_key": edit.id,
-                },
+                metadata=metadata,
             )
 
         def rollback(step_ctx: StepContext) -> None:
@@ -309,12 +326,7 @@ def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
             edit_id=edit.id,
             ttl_steps=edit.budget.ttl_steps,
             revertible=edit.budget.revertible,
-            metadata={
-                "surface_id": surface.surface_id,
-                "op": "kv_mix",
-                "alpha": alpha,
-                "budget_key": edit.id,
-            },
+            metadata=metadata,
         )
 
     def rollback(step_ctx: StepContext) -> None:
@@ -332,12 +344,8 @@ def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
 
 def _compile_rank1_patch(edit: Any, surface: Any, u_fn: TensorThunk, v_fn: TensorThunk, ctx: StepContext) -> CompiledEdit:
     alpha = float(edit.op.alpha)
-    budget = {
-        "ttl_steps": edit.budget.ttl_steps,
-        "revertible": edit.budget.revertible,
-        "norm_clip": edit.budget.norm_clip,
-        "rank_cap": edit.budget.rank_cap,
-    }
+    budget = _runtime_budget(edit, surface)
+    metadata = _registration_metadata(edit, surface)
 
     def apply(step_ctx: StepContext) -> None:
         step_ctx.adapter.set_step_context(step_ctx)
@@ -353,12 +361,7 @@ def _compile_rank1_patch(edit: Any, surface: Any, u_fn: TensorThunk, v_fn: Tenso
             handle=handle,
             ttl_steps=edit.budget.ttl_steps,
             revertible=edit.budget.revertible,
-            metadata={
-                "surface_id": surface.surface_id,
-                "op": "rank1_patch",
-                "alpha": alpha,
-                "budget_key": edit.id,
-            },
+            metadata=metadata,
         )
 
     def rollback(step_ctx: StepContext) -> None:

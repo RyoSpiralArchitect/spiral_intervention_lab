@@ -109,13 +109,20 @@ class OpenAIControllerProvider(ControllerProvider):
         return self._model_name
 
     def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
+        text_config: dict[str, Any] = {"verbosity": "low"}
+        if request.expect_json:
+            text_config["format"] = {"type": "json_object"}
+        payload_text = request.payload_text()
+        if request.expect_json:
+            payload_text = f"JSON packet:\n{payload_text}"
         raw = self.client.responses.create(
             model=self.model_name,
             instructions=request.effective_system_prompt(),
-            input=request.payload_text(),
+            input=payload_text,
             temperature=request.temperature,
             max_output_tokens=request.max_output_tokens,
             metadata=dict(request.metadata),
+            text=text_config,
         )
         text = getattr(raw, "output_text", None) or ""
         return ControllerProviderResponse(

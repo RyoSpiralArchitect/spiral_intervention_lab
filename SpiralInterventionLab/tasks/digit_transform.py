@@ -98,11 +98,13 @@ class SpiralDigitTransformEnv:
         return len(candidate) >= len(episode.target_text)
 
     def worker_runtime_kwargs(self) -> dict[str, Any]:
+        episode = self._episode()
         return {
             "task_id": self.task_id,
             "goal_hint": self.goal_hint,
             "constraints": self.constraints,
-            "max_generated_tokens": self.max_digits,
+            "max_generated_tokens": len(episode.target_text),
+            "decode_constraint": "digits_only",
             "stop_checker": self.stop_checker,
             "task_feedback_fn": self.task_feedback,
         }

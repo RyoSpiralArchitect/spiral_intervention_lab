@@ -68,12 +68,35 @@ def _normalize_controller_payload(value: Any) -> Any:
             normalized["args"] = [normalized.pop("a"), normalized.pop("b")]
         elif "left" in normalized and "right" in normalized:
             normalized["args"] = [normalized.pop("left"), normalized.pop("right")]
+    elif fn in {"project_parallel", "project_orthogonal"}:
+        args = normalized.get("args")
+        if isinstance(args, list) and len(args) >= 2:
+            normalized.setdefault("arg", args[0])
+            normalized.setdefault("basis", args[1])
+        if "arg" not in normalized:
+            for alias in ("input", "x"):
+                if alias in normalized:
+                    normalized["arg"] = normalized.pop(alias)
+                    break
+        if "basis" not in normalized:
+            for alias in ("against", "reference", "direction", "onto"):
+                if alias in normalized:
+                    normalized["basis"] = normalized.pop(alias)
+                    break
 
     if "ttl_steps" in normalized and "budget" not in normalized and "op" in normalized:
         normalized["budget"] = {
             "ttl_steps": normalized.pop("ttl_steps"),
             "revertible": True,
         }
+
+    if "scope" in normalized and "tensor" in normalized:
+        scope = normalized.get("scope")
+        if scope in {"best_success", "last_success", "paired_baseline"}:
+            normalized["scope"] = "trace"
+            normalized.setdefault("trace_id", scope)
+        elif scope == "running_stats":
+            normalized["scope"] = "stats"
 
     return normalized
 

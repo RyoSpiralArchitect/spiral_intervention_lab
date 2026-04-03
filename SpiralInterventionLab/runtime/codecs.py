@@ -55,12 +55,20 @@ class ModelTokenizerCodec:
 
     def decode(self, token_ids: Sequence[int] | torch.Tensor) -> str:
         if isinstance(token_ids, torch.Tensor):
-            tensor = token_ids.detach().clone().to(dtype=torch.long)
+            flat = token_ids.detach().reshape(-1).to(dtype=torch.long).tolist()
         else:
-            tensor = torch.tensor(list(token_ids), dtype=torch.long)
-        if tensor.ndim == 1:
-            tensor = tensor.unsqueeze(0)
-        return str(self.model.to_string(tensor))
+            flat = [int(token_id) for token_id in token_ids]
+        tokenizer = getattr(self.model, "tokenizer", None)
+        if tokenizer is not None:
+            return str(tokenizer.decode(flat, clean_up_tokenization_spaces=False))
+
+        tensor = torch.tensor(flat, dtype=torch.long).unsqueeze(0)
+        decoded = self.model.to_string(tensor)
+        if isinstance(decoded, (list, tuple)):
+            if len(decoded) == 1:
+                return str(decoded[0])
+            return "".join(str(item) for item in decoded)
+        return str(decoded)
 
 
 def resolve_text_codec(model: Any, codec: TextCodec | None = None) -> TextCodec:

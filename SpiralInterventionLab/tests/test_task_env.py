@@ -60,7 +60,8 @@ class TestSpiralDigitTransformEnv(unittest.TestCase):
 
         kwargs = env.worker_runtime_kwargs()
         self.assertEqual(kwargs["task_id"], env.task_id)
-        self.assertEqual(kwargs["max_generated_tokens"], 4)
+        self.assertEqual(kwargs["max_generated_tokens"], len(target))
+        self.assertEqual(kwargs["decode_constraint"], "digits_only")
         self.assertTrue(kwargs["stop_checker"](target))
         self.assertEqual(kwargs["task_feedback_fn"](target)["partial_score"], 1.0)
 

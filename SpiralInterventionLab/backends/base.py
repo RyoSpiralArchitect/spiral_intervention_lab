@@ -84,6 +84,7 @@ class LocalBackendWorkerRuntime:
         goal_hint: str | None = None,
         constraints: Sequence[str] | None = None,
         max_generated_tokens: int = 32,
+        min_generated_tokens: int = 0,
         generated_tail_chars: int = 80,
         recent_token_count: int = 6,
         stop_token_ids: Sequence[int] | None = None,
@@ -99,6 +100,7 @@ class LocalBackendWorkerRuntime:
         self.goal_hint = goal_hint
         self.constraints = tuple(constraints or ())
         self.max_generated_tokens = int(max_generated_tokens)
+        self.min_generated_tokens = max(0, int(min_generated_tokens))
         self.generated_tail_chars = int(generated_tail_chars)
         self.recent_token_count = int(recent_token_count)
         self.stop_token_ids = {int(token_id) for token_id in (stop_token_ids or ())}
@@ -132,9 +134,12 @@ class LocalBackendWorkerRuntime:
 
     def done(self) -> bool:
         output_tokens = self.backend.output_token_ids()
-        if self.backend.backend_done():
+        generated_tokens = len(output_tokens)
+        if self.max_generated_tokens > 0 and generated_tokens >= self.max_generated_tokens:
             return True
-        if self.max_generated_tokens > 0 and len(output_tokens) >= self.max_generated_tokens:
+        if generated_tokens < self.min_generated_tokens:
+            return False
+        if self.backend.backend_done():
             return True
         if output_tokens and output_tokens[-1] in self.stop_token_ids:
             return True

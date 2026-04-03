@@ -7,6 +7,7 @@ from SpiralInterventionLab.runtime.adapter import BoundSurface, HookedTransforme
 from SpiralInterventionLab.runtime.baselines import run_b0, run_b1, run_c1, run_minimal_baseline_suite
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.compiler import StepContext, compile_command
+from SpiralInterventionLab.runtime.edit_budget import prepare_direction
 from SpiralInterventionLab.runtime.effects import build_edit_effect
 from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
@@ -428,6 +429,7 @@ class FakeAdapter(ModelAdapter):
 
         def hook_fn(act, _hook):
             vec = tensor_fn(self._current_step_ctx)
+            vec = prepare_direction(vec, alpha=alpha, norm_clip=budget.get("norm_clip"), step_size=budget.get("step_size"))
             return self._add_to_selected_tokens(act, vec, surface.token_selector, alpha)
 
         return surface.hook_name, hook_fn
@@ -437,6 +439,7 @@ class FakeAdapter(ModelAdapter):
 
         def hook_fn(act, _hook):
             vec = tensor_fn(self._current_step_ctx)
+            vec = prepare_direction(vec, alpha=alpha, norm_clip=budget.get("norm_clip"), step_size=budget.get("step_size"))
             return self._mix_selected_tokens(act, vec, surface.token_selector, alpha)
 
         return surface.hook_name, hook_fn
@@ -473,6 +476,14 @@ class TestSchemaAndPolicy(unittest.TestCase):
         with self.assertRaises(PolicyViolation):
             validate_command_against_packet(command, packet)
 
+    def test_policy_rejects_step_size_above_surface_cap(self):
+        packet = _make_packet()
+        packet["surface_catalog"][0]["caps"]["step_size"] = 0.05
+        command = _resid_command()
+        command["edits"][0]["budget"]["step_size"] = 0.08
+        with self.assertRaises(PolicyViolation):
+            validate_command_against_packet(command, packet)
+
 
 class TestCompiler(unittest.TestCase):
     def test_compile_resid_add_registers_hook(self):
@@ -489,8 +500,14 @@ class TestCompiler(unittest.TestCase):
         act = torch.zeros(1, 4, 3)
         hook_fn = runtime_state.hooks["e_rescue"]["hook_fn"]
         out = hook_fn(act, None)
+        expected_vec = prepare_direction(
+            torch.tensor([1.0, 2.0, 3.0]),
+            alpha=0.2,
+            norm_clip=1.5,
+            step_size=None,
+        )
 
-        self.assertTrue(torch.allclose(out[0, -1], torch.tensor([0.2, 0.4, 0.6])))
+        self.assertTrue(torch.allclose(out[0, -1], 0.2 * expected_vec))
         self.assertTrue(torch.allclose(out[0, 0], torch.zeros(3)))
 
     def test_compile_rank1_patch_registers_overlay_and_rolls_back(self):
@@ -509,6 +526,28 @@ class TestCompiler(unittest.TestCase):
         compiled[0].rollback(ctx)
         self.assertNotIn("e_rank1", runtime_state.overlays)
         self.assertTrue(overlay.detached)
+
+    def test_compile_resid_add_enforces_step_size_and_records_cost(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet_payload = _make_packet()
+        packet_payload["surface_catalog"][0]["caps"]["step_size"] = 0.1
+        packet_payload["budget"]["edit_cost_left_total"] = 0.5
+        packet = parse_observation_packet(packet_payload)
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        command = _resid_command()
+        command["edits"][0]["budget"]["step_size"] = 0.1
+
+        compiled = compile_command(command, packet, ctx)
+        compiled[0].apply(ctx)
+
+        hook_record = runtime_state.hooks["e_rescue"]
+        self.assertAlmostEqual(hook_record["metadata"]["step_size"], 0.1, places=6)
+        self.assertGreater(hook_record["metadata"]["edit_cost"], 0.0)
+
+        act = torch.zeros(1, 4, 3)
+        out = hook_record["hook_fn"](act, None)
+        self.assertLessEqual(float(out[0, -1].norm().item()), 0.1001)
 
 
 class _ToyTaskEnv:
@@ -793,6 +832,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertIsInstance(parsed, ControllerObservationPacket)
         self.assertEqual(packet["worker_view"]["generated_tail"], "a")
         self.assertEqual(packet["budget"]["edits_left_this_run"], 4)
+        self.assertEqual(packet["budget"]["edit_cost_left_total"], 0.5)
         self.assertEqual(packet["surface_catalog"][0]["surface_id"], "s_resid_l11_last")
 
     def test_worker_runtime_snapshot_trace_records_step_aligned_frames(self):

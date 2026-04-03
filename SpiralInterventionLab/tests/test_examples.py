@@ -7,11 +7,14 @@ from unittest.mock import patch
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.examples import (
     build_default_activation_surface_catalog,
+    build_allowed_token_ids_for_constraint,
     build_hooked_transformer_worker_runtime,
     load_worker_model,
     run_digit_transform_experiment,
+    run_digit_transform_sweep,
 )
-from SpiralInterventionLab.runtime.codecs import CharacterCodec
+from SpiralInterventionLab.examples.digit_transform_e2e import _infer_tlens_model_ref
+from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
 from SpiralInterventionLab.tasks import SpiralDigitTransformEnv
 
 HAS_TRANSFORMER_LENS = bool(find_spec("transformer_lens"))
@@ -38,8 +41,38 @@ class _NoopProvider(ControllerProvider):
         )
 
 
+class _FakeTokenizer:
+    def decode(self, token_ids, clean_up_tokenization_spaces=False):
+        mapping = {0: " ", 1: "1", 2: " 2", 3: "a"}
+        return "".join(mapping[int(token_id)] for token_id in token_ids)
+
+
+class _FakeCodecModel:
+    def __init__(self):
+        self.tokenizer = _FakeTokenizer()
+
+    def to_tokens(self, text: str, prepend_bos: bool = False):
+        return __import__("torch").tensor([[1 if char == "1" else 0 for char in text]], dtype=__import__("torch").long)
+
+    def to_string(self, tensor):
+        return ["should-not-leak-list-format"]
+
+
+class _FakeHFConfig:
+    def __init__(self, **kwargs):
+        self.model_type = kwargs.get("model_type", "llama")
+        self.hidden_size = kwargs.get("hidden_size", 3072)
+        self.num_hidden_layers = kwargs.get("num_hidden_layers", 28)
+        self.vocab_size = kwargs.get("vocab_size", 128256)
+
+
 @unittest.skipUnless(HAS_TRANSFORMER_LENS, "transformer_lens is not installed")
 class TestExamples(unittest.TestCase):
+    def test_model_tokenizer_codec_decodes_without_list_wrapper(self):
+        codec = ModelTokenizerCodec(model=_FakeCodecModel())
+
+        self.assertEqual(codec.decode([1, 2]), "1 2")
+
     def _make_model_and_codec(self):
         alphabet = "".join(chr(i) for i in range(32, 127)) + "\n"
         cfg = HookedTransformerConfig(
@@ -67,6 +100,7 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(catalog[0]["target"]["kind"], "activation")
         self.assertEqual(catalog[0]["target"]["site"], "resid_pre")
         self.assertEqual(catalog[0]["target"]["layer"], 1)
+        self.assertIn("step_size", catalog[0]["caps"])
 
     def test_build_hooked_transformer_worker_runtime_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -81,6 +115,27 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(packet["task_view"]["task_id"], env.task_id)
         self.assertTrue(packet["surface_catalog"])
         self.assertEqual(packet["surface_catalog"][0]["target"]["site"], "resid_pre")
+        self.assertIn("step_size", packet["surface_catalog"][0]["caps"])
+        self.assertTrue(runtime.allowed_token_ids)
+
+    def test_build_allowed_token_ids_for_digit_constraint(self):
+        codec = CharacterCodec(" 12a")
+        model = type("FakeModel", (), {"cfg": type("Cfg", (), {"d_vocab": 4})()})()
+
+        allowed = build_allowed_token_ids_for_constraint(model, codec=codec, decode_constraint="digits_only")
+
+        self.assertEqual(allowed, (1, 2))
+
+    def test_infer_tlens_model_ref_maps_local_llama32_3b_path(self):
+        fake_model = type("FakeHFModel", (), {"config": _FakeHFConfig()})()
+
+        inferred = _infer_tlens_model_ref("/definitely/not/local", fake_model)
+        self.assertEqual(inferred, "/definitely/not/local")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            inferred = _infer_tlens_model_ref(tmpdir, fake_model)
+
+        self.assertEqual(inferred, "meta-llama/Llama-3.2-3B")
 
     def test_run_digit_transform_experiment_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -112,6 +167,30 @@ class TestExamples(unittest.TestCase):
             self.assertTrue(Path(tmpdir, "b0.jsonl").exists())
             self.assertTrue(Path(tmpdir, "b1.jsonl").exists())
             self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
+
+    def test_run_digit_transform_sweep_smoke(self):
+        model, codec = self._make_model_and_codec()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch(
+                "SpiralInterventionLab.examples.digit_transform_e2e.create_controller_provider",
+                return_value=_NoopProvider(),
+            ):
+                result = run_digit_transform_sweep(
+                    provider_name="openai",
+                    controller_model_name="fake-controller",
+                    worker_model_name="tiny-random",
+                    seeds=(3, 4),
+                    worker_model=model,
+                    codec=codec,
+                    log_dir=tmpdir,
+                )
+            payload = result.to_dict()
+            self.assertEqual(payload["summary"]["num_runs"], 2)
+            self.assertEqual(len(payload["runs"]), 2)
+            self.assertEqual(payload["seeds"], [3, 4])
+            self.assertTrue(Path(tmpdir, "seed_3", "b0.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "seed_4", "c1.jsonl").exists())
 
     @patch("SpiralInterventionLab.examples.digit_transform_e2e._load_local_hooked_transformer_from_hf")
     @patch("SpiralInterventionLab.examples.digit_transform_e2e.AutoTokenizer")
