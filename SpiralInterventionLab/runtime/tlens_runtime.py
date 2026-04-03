@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, TYPE_CHECKING
 
 import torch
 
 from .overlays import OverlayHandle
+
+if TYPE_CHECKING:
+    from .trace_recorder import StepAlignedTrace
 
 try:
     from transformer_lens.hook_points import LensHandle
@@ -49,6 +52,8 @@ class HookedTransformerRuntimeState:
         self.trace_caches: dict[str, dict[str, torch.Tensor]] = {
             trace_id: self._freeze_cache(cache) for trace_id, cache in (trace_caches or {}).items()
         }
+        self.trace_sequences: dict[str, "StepAlignedTrace"] = {}
+        self.trace_alignment_step: int | None = None
         self.running_stats: dict[str, torch.Tensor] = {
             name: tensor.detach().clone() for name, tensor in (running_stats or {}).items()
         }
@@ -81,7 +86,19 @@ class HookedTransformerRuntimeState:
     def put_trace_cache(self, trace_id: str, cache: Mapping[str, torch.Tensor] | Any) -> None:
         self.trace_caches[trace_id] = self._freeze_cache(cache)
 
-    def get_cache(self, scope: str, trace_id: str | None = None) -> Mapping[str, torch.Tensor]:
+    def put_step_trace(self, trace_id: str, trace: "StepAlignedTrace") -> None:
+        self.trace_sequences[trace_id] = trace
+
+    def set_trace_alignment(self, step: int | None) -> None:
+        self.trace_alignment_step = None if step is None else int(step)
+
+    def get_cache(
+        self,
+        scope: str,
+        trace_id: str | None = None,
+        *,
+        step: int | None = None,
+    ) -> Mapping[str, torch.Tensor]:
         if scope == "runtime":
             if self.last_cache is None:
                 raise KeyError("runtime cache is empty; call run_with_cache first")
@@ -89,6 +106,10 @@ class HookedTransformerRuntimeState:
         if scope == "trace":
             if trace_id is None:
                 raise KeyError("trace scope requires trace_id")
+            trace = self.trace_sequences.get(trace_id)
+            if trace is not None:
+                aligned_step = self.trace_alignment_step if step is None else step
+                return trace.aligned_cache(aligned_step)
             try:
                 return self.trace_caches[trace_id]
             except KeyError as exc:

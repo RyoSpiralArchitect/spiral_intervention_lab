@@ -21,6 +21,15 @@ keywords = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+controllers = [
+  "anthropic>=0.72.0",
+  "google-genai>=1.55.0",
+  "mistralai>=1.9.11",
+  "openai>=1.109.1",
+]
+hf = ["transformers>=5.2.0"]
+llama = ["llama-cpp-python>=0.3.0"]
+mlx = ["mlx>=0.30.0", "mlx-lm>=0.30.5"]
 tlens = ["transformer-lens>=2.0"]
 
 [project.urls]

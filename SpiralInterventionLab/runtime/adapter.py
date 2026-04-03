@@ -5,6 +5,7 @@ from typing import Any, Callable, TYPE_CHECKING
 
 import torch
 
+from .edit_budget import prepare_direction
 from .overlays import LinearRank1OverlayHandle, OverlayHandle, ParameterRank1OverlayHandle
 from .rank1_bridge import HybridRank1VectorBridge, Rank1Geometry, Rank1VectorBridge
 from .schema import (
@@ -117,6 +118,16 @@ class ModelAdapter:
                 raise IndexError(f"empty token span [{selector.start}, {selector.end}) for length {seq_len}")
             return list(range(start, end))
         raise ValueError(f"unsupported token selector mode: {selector.mode}")
+
+    def _context_step(self, ctx: "StepContext") -> int | None:
+        packet = getattr(ctx, "packet", None)
+        if isinstance(packet, dict):
+            step = packet.get("step")
+        else:
+            step = getattr(packet, "step", None)
+        if step is None:
+            return None
+        return int(step)
 
     def _coerce_vector(self, value: torch.Tensor, width: int, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         vec = value.to(device=device, dtype=dtype).reshape(-1)
@@ -276,7 +287,13 @@ class HookedTransformerAdapter(ModelAdapter):
         scope = ref["scope"]
         if scope == "stats":
             return ctx.runtime_state.read_stat_tensor(ref)
-        cache = ctx.runtime_state.get_cache(scope, ref.get("trace_id"))
+        step = self._context_step(ctx)
+        if scope == "trace" and hasattr(ctx.runtime_state, "set_trace_alignment"):
+            ctx.runtime_state.set_trace_alignment(step)
+        try:
+            cache = ctx.runtime_state.get_cache(scope, ref.get("trace_id"), step=step)
+        except TypeError:
+            cache = ctx.runtime_state.get_cache(scope, ref.get("trace_id"))
         hook_name = self._hook_name_for_ref(ref["tensor"], ref["layer"])
         try:
             raw_tensor = cache[hook_name]
@@ -333,15 +350,13 @@ class HookedTransformerAdapter(ModelAdapter):
         if surface.hook_name is None:
             raise ValueError(f"surface '{surface.surface_id}' does not expose an activation hook")
         norm_clip = budget.get("norm_clip")
+        step_size = budget.get("step_size")
 
         def hook_fn(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
             if self._current_step_ctx is None:
                 raise RuntimeError("step context is not bound before hook execution")
             vec = tensor_fn(self._current_step_ctx)
-            if norm_clip is not None:
-                norm = vec.norm()
-                if float(norm) > float(norm_clip):
-                    vec = vec * (float(norm_clip) / (float(norm) + 1e-8))
+            vec = prepare_direction(vec, alpha=alpha, norm_clip=norm_clip, step_size=step_size)
             return self._add_to_selected_tokens(act, vec, surface.token_selector, alpha)
 
         return surface.hook_name, hook_fn
@@ -357,15 +372,13 @@ class HookedTransformerAdapter(ModelAdapter):
         if surface.hook_name is None:
             raise ValueError(f"surface '{surface.surface_id}' does not expose a cache hook")
         norm_clip = budget.get("norm_clip")
+        step_size = budget.get("step_size")
 
         def hook_fn(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
             if self._current_step_ctx is None:
                 raise RuntimeError("step context is not bound before hook execution")
             vec = tensor_fn(self._current_step_ctx)
-            if norm_clip is not None:
-                norm = vec.norm()
-                if float(norm) > float(norm_clip):
-                    vec = vec * (float(norm_clip) / (float(norm) + 1e-8))
+            vec = prepare_direction(vec, alpha=alpha, norm_clip=norm_clip, step_size=step_size)
             return self._mix_cache_selected_tokens(act, vec, surface.token_selector, alpha, head=surface.head)
 
         return surface.hook_name, hook_fn
@@ -400,6 +413,7 @@ class HookedTransformerAdapter(ModelAdapter):
                 u_fn=bridged_u_fn,
                 v_fn=bridged_v_fn,
                 alpha=alpha,
+                step_size=budget.get("step_size"),
             )
         return LinearRank1OverlayHandle(
             module=surface.module_ref,
@@ -407,6 +421,7 @@ class HookedTransformerAdapter(ModelAdapter):
             u_fn=u_fn,
             v_fn=v_fn,
             alpha=alpha,
+            step_size=budget.get("step_size"),
         )
 
     def _parameter_geometry(self, surface: BoundSurface) -> Rank1Geometry:

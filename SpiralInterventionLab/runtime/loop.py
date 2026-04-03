@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict, is_dataclass
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
 from .compiler import StepContext, compile_command
 
@@ -60,7 +61,7 @@ class InMemoryStructuredLogger:
     events: list[dict[str, Any]] = field(default_factory=list)
 
     def log(self, event: dict[str, Any]) -> None:
-        self.events.append(dict(event))
+        self.events.append(_coerce_jsonable(dict(event)))
 
 
 @dataclass
@@ -70,7 +71,7 @@ class JSONLStructuredLogger:
     def log(self, event: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True))
+            handle.write(json.dumps(_coerce_jsonable(event), ensure_ascii=False, sort_keys=True))
             handle.write("\n")
 
 
@@ -80,6 +81,16 @@ class EpisodeResult:
     output: str
     score: float
     steps: int
+
+
+def _coerce_jsonable(value: Any) -> Any:
+    if is_dataclass(value):
+        return _coerce_jsonable(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _coerce_jsonable(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_coerce_jsonable(item) for item in value]
+    return value
 
 
 def run_episode(
