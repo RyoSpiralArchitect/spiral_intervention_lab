@@ -61,7 +61,14 @@ def run_b1(
         nonlocal hints_used
         if hints_used >= max_hints_per_run:
             return
-        advice = prompt_controller.invoke(packet)
+        try:
+            advice = prompt_controller.invoke(packet)
+        except Exception as exc:
+            _log_prompt_controller_trace(logger, prompt_controller, step=packet["step"])
+            if logger is not None:
+                logger.log({"event": "controller_error", "step": packet["step"], "phase": "invoke", "error": str(exc)})
+            raise
+        _log_prompt_controller_trace(logger, prompt_controller, step=packet["step"])
         if advice is None:
             return
         text = str(advice).strip()
@@ -251,3 +258,40 @@ def _make_logger(
     if logger_factory is None:
         return None
     return logger_factory(baseline_name)
+
+
+def _prompt_controller_trace(prompt_controller: Any) -> dict[str, Any] | None:
+    getter = getattr(prompt_controller, "latest_trace", None)
+    if not callable(getter):
+        return None
+    trace = getter()
+    if not isinstance(trace, dict):
+        return None
+    return trace
+
+
+def _log_prompt_controller_trace(
+    logger: StructuredLogger | None,
+    prompt_controller: Any,
+    *,
+    step: int,
+) -> None:
+    if logger is None:
+        return
+    trace = _prompt_controller_trace(prompt_controller)
+    if trace is None:
+        return
+
+    observation = trace.get("observation")
+    if isinstance(observation, dict):
+        logger.log({"event": "controller_observation", "step": step, **observation})
+
+    attempts = trace.get("attempts")
+    if isinstance(attempts, list):
+        for attempt in attempts:
+            if isinstance(attempt, dict):
+                logger.log({"event": "controller_provider_attempt", "step": step, **attempt})
+
+    decision = trace.get("decision")
+    if isinstance(decision, dict):
+        logger.log({"event": "controller_decision", "step": step, **decision})

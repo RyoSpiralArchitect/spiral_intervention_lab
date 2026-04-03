@@ -9,7 +9,7 @@ import torch
 from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext
-from .effects import build_edit_effect
+from .effects import build_edit_effect, summarize_effects
 from .schema import SurfaceInfo
 from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder
 
@@ -107,9 +107,12 @@ class HookedTransformerWorkerRuntime:
             "top1_margin": 0.0,
             "repetition_score": 0.0,
         }
+        self._last_task_feedback: dict[str, Any] = {"done": False, "progress_label": "progressing"}
         self._last_status = "thinking"
         self._previous_probe_vectors: dict[str, torch.Tensor] = {}
         self._recent_effects: list[dict[str, Any]] = []
+        self._latest_completed_effects: list[dict[str, Any]] = []
+        self._recent_effect_summary: dict[str, Any] = summarize_effects(())
         self._pending_effects: list[dict[str, Any]] = []
         self._seen_registration_ids: set[str] = set()
         self._spent_budget_alpha: dict[str, float] = {}
@@ -136,6 +139,7 @@ class HookedTransformerWorkerRuntime:
         self._steps += 1
         self._last_metrics = self._compute_metrics(next_logits)
         self._update_status()
+        self._last_task_feedback = self._compute_task_feedback()
         self._record_trace_step(emitted_token_id=next_token)
         self._last_packet = None
 
@@ -183,14 +187,15 @@ class HookedTransformerWorkerRuntime:
             "trace_bank": self._build_trace_bank(),
             "active_edits": active_edits,
             "recent_effects": [dict(effect) for effect in self._recent_effects],
+            "recent_effect_summary": dict(self._recent_effect_summary),
             "budget": self._budget_state(active_edits),
-            "task_feedback": self._task_feedback(),
+            "task_feedback": dict(self._last_task_feedback),
         }
         self._last_packet = packet
         return packet
 
     def observe_recent_effects(self) -> None:
-        current_metrics = dict(self._last_metrics)
+        current_metrics = self._effect_metrics()
         completed = [
             build_edit_effect(
                 edit_id=pending["edit_id"],
@@ -198,12 +203,20 @@ class HookedTransformerWorkerRuntime:
                 observed_window_steps=1,
                 before=pending["before"],
                 after=current_metrics,
+                hypothesis=pending.get("hypothesis"),
+                expected_effect=pending.get("expected_effect"),
+                controller_confidence=pending.get("controller_confidence"),
+                op=pending.get("op"),
+                step_size=pending.get("step_size"),
+                edit_cost=pending.get("edit_cost"),
             )
             for pending in self._pending_effects
         ]
         if completed:
             self._recent_effects.extend(completed)
             self._recent_effects = self._recent_effects[-8:]
+        self._latest_completed_effects = completed
+        self._recent_effect_summary = summarize_effects(self._recent_effects)
         self._pending_effects = []
 
         for active in self._collect_active_edits():
@@ -219,6 +232,12 @@ class HookedTransformerWorkerRuntime:
                     "edit_id": edit_id,
                     "surface_id": str(active["surface_id"]),
                     "before": current_metrics,
+                    "hypothesis": active.get("hypothesis"),
+                    "expected_effect": active.get("expected_effect"),
+                    "controller_confidence": active.get("controller_confidence"),
+                    "op": active.get("op"),
+                    "step_size": active.get("step_size"),
+                    "edit_cost": active.get("edit_cost"),
                 }
             )
 
@@ -277,9 +296,12 @@ class HookedTransformerWorkerRuntime:
         self._segments = []
         self._steps = 0
         self._last_metrics = {"entropy": 0.0, "top1_margin": 0.0, "repetition_score": 0.0}
+        self._last_task_feedback = {"done": False, "progress_label": "progressing"}
         self._last_status = "thinking"
         self._previous_probe_vectors = {}
         self._recent_effects = []
+        self._latest_completed_effects = []
+        self._recent_effect_summary = summarize_effects(())
         self._pending_effects = []
         self._seen_registration_ids = set()
         self._spent_budget_alpha = {}
@@ -375,11 +397,21 @@ class HookedTransformerWorkerRuntime:
         }
 
     def _task_feedback(self) -> dict[str, Any]:
+        return dict(self._last_task_feedback)
+
+    def _compute_task_feedback(self) -> dict[str, Any]:
         feedback = {"done": self.done(), "progress_label": "stalled" if self._last_status == "looping" else "progressing"}
         if self.task_feedback_fn is None:
             return feedback
         custom = self.task_feedback_fn(self.final_text()) or {}
         return feedback | dict(custom)
+
+    def _effect_metrics(self) -> dict[str, float]:
+        metrics = dict(self._last_metrics)
+        partial_score = self._last_task_feedback.get("partial_score")
+        if partial_score is not None:
+            metrics["partial_score"] = float(partial_score)
+        return metrics
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})
@@ -509,6 +541,11 @@ class HookedTransformerWorkerRuntime:
             "revertible": revertible,
             "step_size": None if metadata.get("step_size") is None else float(metadata["step_size"]),
             "edit_cost": None if metadata.get("edit_cost") is None else float(metadata["edit_cost"]),
+            "hypothesis": metadata.get("hypothesis"),
+            "expected_effect": metadata.get("expected_effect"),
+            "controller_confidence": None
+            if metadata.get("controller_confidence") is None
+            else float(metadata["controller_confidence"]),
             "budget_key": str(metadata.get("budget_key", str(edit_id).split(":", 1)[0])),
         }
 
@@ -537,6 +574,12 @@ class HookedTransformerWorkerRuntime:
             "edit_cost_left_total": max(0.0, self.max_total_edit_cost - spent_edit_cost),
             "active_patch_slots_left": max(0, self.max_active_patch_slots - active_patch_slots),
             "rollbackable_ids": [str(edit["edit_id"]) for edit in active_edits if bool(edit.get("revertible", True))],
+        }
+
+    def latest_effect_trace(self) -> dict[str, Any]:
+        return {
+            "completed_effects": [dict(effect) for effect in self._latest_completed_effects],
+            "summary": dict(self._recent_effect_summary),
         }
 
     def _record_trace_step(self, *, emitted_token_id: int | None) -> None:

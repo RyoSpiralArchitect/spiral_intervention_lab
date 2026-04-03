@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 import torch
 
@@ -149,25 +149,31 @@ def compile_command(
         return []
     if command_obj.decision == "rollback":
         return [_compile_rollback(rollback_id) for rollback_id in command_obj.rollback_ids]
-    return [compile_edit(edit, packet_obj, ctx) for edit in command_obj.edits]
+    return [compile_edit(edit, packet_obj, ctx, command_meta=command_obj.meta) for edit in command_obj.edits]
 
 
-def compile_edit(edit: Any, packet: ControllerObservationPacket, ctx: StepContext) -> CompiledEdit:
+def compile_edit(
+    edit: Any,
+    packet: ControllerObservationPacket,
+    ctx: StepContext,
+    *,
+    command_meta: Mapping[str, Any] | None = None,
+) -> CompiledEdit:
     surface = ctx.adapter.resolve_surface(packet, edit.target)
     op = edit.op
     if isinstance(op, ResidAddOp):
         if not isinstance(edit.source, VectorSource):
             raise ValueError("resid_add requires a vector source")
         expr_fn = compile_expr(dict(edit.source.expr))
-        return _compile_resid_add(edit, surface, expr_fn, ctx)
+        return _compile_resid_add(edit, surface, expr_fn, ctx, command_meta=command_meta)
     if isinstance(op, KvMixOp):
-        return _compile_kv_mix(edit, surface, ctx)
+        return _compile_kv_mix(edit, surface, ctx, command_meta=command_meta)
     if isinstance(op, Rank1PatchOp):
         if edit.source.dtype != "rank1":
             raise ValueError("rank1_patch requires a rank1 source")
         u_fn = compile_expr(dict(edit.source.u))
         v_fn = compile_expr(dict(edit.source.v))
-        return _compile_rank1_patch(edit, surface, u_fn, v_fn, ctx)
+        return _compile_rank1_patch(edit, surface, u_fn, v_fn, ctx, command_meta=command_meta)
     raise ValueError(f"unsupported op kind: {op.kind}")
 
 
@@ -208,13 +214,16 @@ def _runtime_budget(edit: Any, surface: Any) -> dict[str, Any]:
     }
 
 
-def _registration_metadata(edit: Any, surface: Any) -> dict[str, Any]:
+def _registration_metadata(edit: Any, surface: Any, command_meta: Mapping[str, Any] | None = None) -> dict[str, Any]:
     runtime_budget = _runtime_budget(edit, surface)
     metadata = {
         "surface_id": surface.surface_id,
         "op": edit.op.kind,
         "alpha": float(edit.op.alpha),
         "budget_key": edit.id,
+        "hypothesis": None if command_meta is None else command_meta.get("hypothesis"),
+        "controller_confidence": None if command_meta is None else command_meta.get("confidence"),
+        "expected_effect": edit.meta.get("expected_effect"),
     }
     metadata.update(
         budget_metadata(
@@ -228,10 +237,17 @@ def _registration_metadata(edit: Any, surface: Any) -> dict[str, Any]:
     return metadata
 
 
-def _compile_resid_add(edit: Any, surface: Any, expr_fn: TensorThunk, ctx: StepContext) -> CompiledEdit:
+def _compile_resid_add(
+    edit: Any,
+    surface: Any,
+    expr_fn: TensorThunk,
+    ctx: StepContext,
+    *,
+    command_meta: Mapping[str, Any] | None = None,
+) -> CompiledEdit:
     alpha = float(edit.op.alpha)
     budget = _runtime_budget(edit, surface)
-    metadata = _registration_metadata(edit, surface)
+    metadata = _registration_metadata(edit, surface, command_meta)
     hook_name, hook_fn = ctx.adapter.make_activation_hook(
         surface=surface,
         op_kind="resid_add",
@@ -264,10 +280,16 @@ def _compile_resid_add(edit: Any, surface: Any, expr_fn: TensorThunk, ctx: StepC
     )
 
 
-def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
+def _compile_kv_mix(
+    edit: Any,
+    surface: Any,
+    ctx: StepContext,
+    *,
+    command_meta: Mapping[str, Any] | None = None,
+) -> CompiledEdit:
     alpha = float(edit.op.alpha)
     budget = _runtime_budget(edit, surface)
-    metadata = _registration_metadata(edit, surface)
+    metadata = _registration_metadata(edit, surface, command_meta)
 
     if edit.op.which == "kv":
         if not isinstance(edit.source, CachePairSource) or edit.source.k is None or edit.source.v is None:
@@ -342,10 +364,18 @@ def _compile_kv_mix(edit: Any, surface: Any, ctx: StepContext) -> CompiledEdit:
     )
 
 
-def _compile_rank1_patch(edit: Any, surface: Any, u_fn: TensorThunk, v_fn: TensorThunk, ctx: StepContext) -> CompiledEdit:
+def _compile_rank1_patch(
+    edit: Any,
+    surface: Any,
+    u_fn: TensorThunk,
+    v_fn: TensorThunk,
+    ctx: StepContext,
+    *,
+    command_meta: Mapping[str, Any] | None = None,
+) -> CompiledEdit:
     alpha = float(edit.op.alpha)
     budget = _runtime_budget(edit, surface)
-    metadata = _registration_metadata(edit, surface)
+    metadata = _registration_metadata(edit, surface, command_meta)
 
     def apply(step_ctx: StepContext) -> None:
         step_ctx.adapter.set_step_context(step_ctx)

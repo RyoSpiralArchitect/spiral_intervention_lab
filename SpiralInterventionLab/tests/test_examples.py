@@ -167,6 +167,7 @@ class TestExamples(unittest.TestCase):
             self.assertTrue(Path(tmpdir, "b0.jsonl").exists())
             self.assertTrue(Path(tmpdir, "b1.jsonl").exists())
             self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "experiment_summary.json").exists())
 
     def test_run_digit_transform_sweep_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -191,6 +192,9 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(payload["seeds"], [3, 4])
             self.assertTrue(Path(tmpdir, "seed_3", "b0.jsonl").exists())
             self.assertTrue(Path(tmpdir, "seed_4", "c1.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "seed_3", "experiment_summary.json").exists())
+            self.assertTrue(Path(tmpdir, "seed_4", "experiment_summary.json").exists())
+            self.assertTrue(Path(tmpdir, "sweep_summary.json").exists())
 
     @patch("SpiralInterventionLab.examples.digit_transform_e2e._load_local_hooked_transformer_from_hf")
     @patch("SpiralInterventionLab.examples.digit_transform_e2e.AutoTokenizer")

@@ -352,6 +352,14 @@ def _logger_factory(log_dir: str | Path | None):
     return factory
 
 
+def _write_summary_artifact(log_dir: str | Path | None, filename: str, payload: Mapping[str, Any]) -> None:
+    if log_dir is None:
+        return
+    base = Path(log_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    (base / filename).write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
 @dataclass(frozen=True)
 class DigitTransformExperimentResult:
     seed: int
@@ -492,7 +500,7 @@ def run_digit_transform_experiment(
 
     worker = make_worker_runtime()
     surface_ids = tuple(surface["surface_id"] for surface in worker._surface_catalog_raw)
-    return DigitTransformExperimentResult(
+    result = DigitTransformExperimentResult(
         seed=seed,
         task_id=env.task_id,
         worker_model_name=worker_model_name,
@@ -501,6 +509,8 @@ def run_digit_transform_experiment(
         surface_ids=surface_ids,
         suite=suite,
     )
+    _write_summary_artifact(log_dir, "experiment_summary.json", result.to_dict())
+    return result
 
 
 def run_digit_transform_sweep(
@@ -572,7 +582,9 @@ def run_digit_transform_sweep(
                 worker_trust_remote_code=worker_trust_remote_code,
             )
         )
-    return DigitTransformSweepResult(seeds=resolved_seeds, runs=tuple(runs))
+    result = DigitTransformSweepResult(seeds=resolved_seeds, runs=tuple(runs))
+    _write_summary_artifact(log_dir, "sweep_summary.json", result.to_dict())
+    return result
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -145,10 +145,17 @@ class TestBackendsAndBridge(unittest.TestCase):
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=2)
 
         command = client.invoke({"step": 1})
+        trace = client.latest_trace()
 
         self.assertEqual(command.decision, "noop")
         self.assertEqual(len(provider.requests), 2)
         self.assertIn("Previous reply was invalid", provider.requests[-1].effective_system_prompt())
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["step"], 1)
+        self.assertEqual(len(trace["attempts"]), 2)
+        self.assertFalse(trace["attempts"][0]["parse_ok"])
+        self.assertTrue(trace["attempts"][1]["parse_ok"])
+        self.assertEqual(trace["decision"]["decision"], "noop")
 
     def test_provider_controller_client_backfills_missing_version(self):
         provider = _FakeProvider("{\"decision\":\"noop\"}")
@@ -242,8 +249,12 @@ class TestBackendsAndBridge(unittest.TestCase):
         controller = ProviderPromptHintController(provider, system_prompt="sys")
 
         hint = controller.invoke({"step": 2})
+        trace = controller.latest_trace()
 
         self.assertEqual(hint, "try the digit near the end")
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["step"], 2)
+        self.assertEqual(trace["decision"]["advice"], "try the digit near the end")
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
         client = _FakeOpenAIClient()
