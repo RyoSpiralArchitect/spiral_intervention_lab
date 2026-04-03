@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spiral-intervention-lab"
+version = "0.1.0"
+description = "Bounded internal intervention scaffold for controller-worker experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "RyoSpiralArchitect" }]
+license = "Apache-2.0"
+dependencies = ["torch>=2.1"]
+keywords = [
+  "llm",
+  "transformer-lens",
+  "activation-engineering",
+  "mechanistic-interpretability",
+  "runtime-intervention",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+tlens = ["transformer-lens>=2.0"]
+
+[project.urls]
+Repository = "https://github.com/RyoSpiralArchitect/spiral_intervention_lab"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["SpiralInterventionLab*"]
+
+[tool.setuptools.package-data]
+SpiralInterventionLab = ["prompts/*.txt"]
