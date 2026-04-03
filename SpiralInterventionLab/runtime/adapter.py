@@ -118,6 +118,16 @@ class ModelAdapter:
             return list(range(start, end))
         raise ValueError(f"unsupported token selector mode: {selector.mode}")
 
+    def _context_step(self, ctx: "StepContext") -> int | None:
+        packet = getattr(ctx, "packet", None)
+        if isinstance(packet, dict):
+            step = packet.get("step")
+        else:
+            step = getattr(packet, "step", None)
+        if step is None:
+            return None
+        return int(step)
+
     def _coerce_vector(self, value: torch.Tensor, width: int, *, device: torch.device, dtype: torch.dtype) -> torch.Tensor:
         vec = value.to(device=device, dtype=dtype).reshape(-1)
         if vec.shape[0] != width:
@@ -276,7 +286,13 @@ class HookedTransformerAdapter(ModelAdapter):
         scope = ref["scope"]
         if scope == "stats":
             return ctx.runtime_state.read_stat_tensor(ref)
-        cache = ctx.runtime_state.get_cache(scope, ref.get("trace_id"))
+        step = self._context_step(ctx)
+        if scope == "trace" and hasattr(ctx.runtime_state, "set_trace_alignment"):
+            ctx.runtime_state.set_trace_alignment(step)
+        try:
+            cache = ctx.runtime_state.get_cache(scope, ref.get("trace_id"), step=step)
+        except TypeError:
+            cache = ctx.runtime_state.get_cache(scope, ref.get("trace_id"))
         hook_name = self._hook_name_for_ref(ref["tensor"], ref["layer"])
         try:
             raw_tensor = cache[hook_name]

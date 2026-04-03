@@ -13,6 +13,7 @@ from SpiralInterventionLab.runtime.overlays import OverlayHandle
 from SpiralInterventionLab.runtime.policy import HarnessPolicy, PolicyViolation, validate_command_against_packet
 from SpiralInterventionLab.runtime.rank1_bridge import HybridRank1VectorBridge, Rank1Geometry
 from SpiralInterventionLab.runtime.tlens_runtime import HookedTransformerRuntimeState
+from SpiralInterventionLab.runtime.trace_recorder import StepAlignedTrace
 from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime
 from SpiralInterventionLab.runtime.schema import (
     ControllerCommand,
@@ -630,9 +631,9 @@ class TestRank1Bridge(unittest.TestCase):
 
 class DeterministicRuntimeState(FakeRuntimeState):
     HOOK_NAMES = {
-        "resid_pre": "blocks.11.hook_resid_pre",
-        "resid_post": "blocks.11.hook_resid_post",
-        "hidden": "blocks.11.hook_resid_post",
+        "resid_pre": "resid_pre:11",
+        "resid_post": "resid_post:11",
+        "hidden": "resid_post:11",
     }
 
     def __init__(self, codec):
@@ -647,6 +648,8 @@ class DeterministicRuntimeState(FakeRuntimeState):
         self.last_logits = None
         self.last_cache = None
         self.trace_caches = {}
+        self.trace_sequences = {}
+        self.trace_alignment_step = None
         self.running_stats = {}
 
     def _freeze_cache(self, cache):
@@ -665,6 +668,9 @@ class DeterministicRuntimeState(FakeRuntimeState):
                 resid_pre = record["hook_fn"](resid_pre, None)
 
         cache = {
+            "resid_pre:11": resid_pre,
+            "resid_post:11": resid_post,
+            "mlp_out:11": mlp_out,
             "blocks.11.hook_resid_pre": resid_pre,
             "blocks.11.hook_resid_post": resid_post,
             "blocks.11.hook_mlp_out": mlp_out,
@@ -691,15 +697,26 @@ class DeterministicRuntimeState(FakeRuntimeState):
     def put_trace_cache(self, trace_id, cache):
         self.trace_caches[trace_id] = self._freeze_cache(cache)
 
-    def get_cache(self, scope, trace_id=None):
+    def put_step_trace(self, trace_id, trace):
+        self.trace_sequences[trace_id] = trace
+
+    def set_trace_alignment(self, step):
+        self.trace_alignment_step = step
+
+    def get_cache(self, scope, trace_id=None, *, step=None):
         if scope == "runtime":
             return self.last_cache
         if scope == "trace":
+            if trace_id in self.trace_sequences:
+                aligned_step = self.trace_alignment_step if step is None else step
+                return self.trace_sequences[trace_id].aligned_cache(aligned_step)
             return self.trace_caches[trace_id]
         raise KeyError(scope)
 
-    def read_tensor(self, ref, _ctx):
-        cache = self.get_cache(ref["scope"], ref.get("trace_id"))
+    def read_tensor(self, ref, ctx):
+        packet = getattr(ctx, "packet", {}) or {}
+        step = packet.get("step") if isinstance(packet, dict) else getattr(packet, "step", None)
+        cache = self.get_cache(ref["scope"], ref.get("trace_id"), step=step)
         hook_name = self.HOOK_NAMES[ref["tensor"]]
         return cache[hook_name][0, -1].detach().clone()
 
@@ -778,6 +795,44 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["budget"]["edits_left_this_run"], 4)
         self.assertEqual(packet["surface_catalog"][0]["surface_id"], "s_resid_l11_last")
 
+    def test_worker_runtime_snapshot_trace_records_step_aligned_frames(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        for _ in range(3):
+            worker_runtime.step()
+
+        trace = worker_runtime.snapshot_trace("paired_baseline")
+
+        self.assertIsInstance(trace, StepAlignedTrace)
+        self.assertEqual(trace.step_count, 3)
+        self.assertIn("paired_baseline", worker_runtime.runtime_state.trace_sequences)
+        self.assertEqual(trace.aligned_frame(1).output_text, "a")
+        self.assertEqual(trace.aligned_frame(3).output_text, "aaa")
+        self.assertEqual(trace.aligned_cache(1)["resid_pre:11"].shape[1], 1)
+        self.assertEqual(trace.aligned_cache(3)["resid_pre:11"].shape[1], 3)
+
+    def test_probe_frames_use_step_aligned_baseline_trace(self):
+        baseline_worker = self._make_worker_runtime()
+        baseline_worker.reset("p")
+        for _ in range(3):
+            baseline_worker.step()
+        baseline_trace = baseline_worker.snapshot_trace("paired_baseline")
+
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.runtime_state.put_step_trace("paired_baseline", baseline_trace)
+        worker_runtime.reset("p")
+
+        worker_runtime.step()
+        packet_step1 = worker_runtime.build_controller_packet()
+        probe_step1 = packet_step1["probe_frames"][0]["stats"]["cosine_to_paired_baseline"]
+
+        worker_runtime.step()
+        packet_step2 = worker_runtime.build_controller_packet()
+        probe_step2 = packet_step2["probe_frames"][0]["stats"]["cosine_to_paired_baseline"]
+
+        self.assertAlmostEqual(probe_step1, 1.0, places=6)
+        self.assertAlmostEqual(probe_step2, 1.0, places=6)
+
     def test_b1_prompt_hints_affect_context_without_polluting_output(self):
         worker_runtime = self._make_worker_runtime()
         controller = _PromptHintController("b")
@@ -807,10 +862,16 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
     def test_minimal_baseline_suite_runs_b0_b1_c1_and_seeds_paired_trace(self):
         controller = _ResidEditController()
         hint_controller = _PromptHintController("b")
+        created_workers = []
+
+        def make_worker():
+            worker = self._make_worker_runtime()
+            created_workers.append(worker)
+            return worker
 
         suite = run_minimal_baseline_suite(
             _ThreeStepTaskEnv("c"),
-            make_worker_runtime=self._make_worker_runtime,
+            make_worker_runtime=make_worker,
             c1_controller=controller,
             b1_controller=hint_controller,
         )
@@ -821,6 +882,9 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(suite.b0.score, 0.0)
         self.assertEqual(suite.c1.score, 1.0)
         self.assertEqual(suite.paired_trace_id, "paired_baseline")
+        self.assertIn("paired_baseline", created_workers[1].runtime_state.trace_sequences)
+        self.assertIn("paired_baseline", created_workers[2].runtime_state.trace_sequences)
+        self.assertEqual(created_workers[1].runtime_state.trace_sequences["paired_baseline"].step_count, 3)
 
 
 @unittest.skipUnless(HAS_TRANSFORMER_LENS, "transformer_lens is not installed")

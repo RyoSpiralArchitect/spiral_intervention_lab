@@ -11,6 +11,7 @@ from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext
 from .effects import build_edit_effect
 from .schema import SurfaceInfo
+from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder
 
 
 @dataclass
@@ -57,6 +58,7 @@ class HookedTransformerWorkerRuntime:
         stop_checker: Callable[[str], bool] | None = None,
         trace_metadata: Mapping[str, Mapping[str, Any]] | None = None,
         task_feedback_fn: Callable[[str], Mapping[str, Any] | None] | None = None,
+        trace_recorder: StepAlignedTraceRecorder | None = None,
     ) -> None:
         self.runtime_state = runtime_state
         self.adapter = adapter
@@ -86,6 +88,10 @@ class HookedTransformerWorkerRuntime:
             surface if isinstance(surface, SurfaceInfo) else SurfaceInfo.from_dict(surface) for surface in surface_catalog
         )
         self._surface_catalog_raw = [self._surface_to_dict(surface) for surface in self.surface_catalog]
+        self.trace_recorder = trace_recorder or StepAlignedTraceRecorder(
+            surface_catalog=self.surface_catalog,
+            adapter=self.adapter,
+        )
 
         self.prompt = ""
         self._segments: list[_TokenSegment] = []
@@ -123,6 +129,7 @@ class HookedTransformerWorkerRuntime:
         self._steps += 1
         self._last_metrics = self._compute_metrics(next_logits)
         self._update_status()
+        self._record_trace_step(emitted_token_id=next_token)
         self._last_packet = None
 
     def done(self) -> bool:
@@ -144,6 +151,8 @@ class HookedTransformerWorkerRuntime:
         return True
 
     def build_controller_packet(self) -> dict[str, Any]:
+        if hasattr(self.runtime_state, "set_trace_alignment"):
+            self.runtime_state.set_trace_alignment(self._steps)
         active_edits = self._collect_active_edits()
         packet = {
             "version": "0.1",
@@ -216,6 +225,36 @@ class HookedTransformerWorkerRuntime:
     def current_tokens(self) -> torch.Tensor:
         return self._current_token_tensor().detach().clone()
 
+    def export_step_trace(
+        self,
+        trace_id: str,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> StepAlignedTrace | None:
+        if self.trace_recorder is None or self.trace_recorder.step_count == 0:
+            return None
+        merged_metadata = dict(self.trace_metadata.get(trace_id, {}))
+        merged_metadata.update(metadata or {})
+        return self.trace_recorder.snapshot(trace_id, metadata=merged_metadata)
+
+    def snapshot_trace(
+        self,
+        trace_id: str,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> StepAlignedTrace | Mapping[str, torch.Tensor] | None:
+        trace = self.export_step_trace(trace_id, metadata=metadata)
+        if trace is not None:
+            if hasattr(self.runtime_state, "put_step_trace"):
+                self.runtime_state.put_step_trace(trace_id, trace)
+            return trace
+        last_cache = getattr(self.runtime_state, "last_cache", None)
+        if last_cache is not None and hasattr(self.runtime_state, "put_trace_cache"):
+            frozen = {str(name): tensor.detach().clone() for name, tensor in last_cache.items()}
+            self.runtime_state.put_trace_cache(trace_id, frozen)
+            return frozen
+        return None
+
     def _clear_episode_state(self) -> None:
         if hasattr(self.runtime_state, "clear_edits"):
             self.runtime_state.clear_edits()
@@ -235,6 +274,8 @@ class HookedTransformerWorkerRuntime:
         self._spent_budget_alpha = {}
         self._last_packet = None
         self._no_progress_steps = 0
+        if self.trace_recorder is not None:
+            self.trace_recorder.reset()
 
     def _current_token_tensor(self) -> torch.Tensor:
         tokens: list[int] = []
@@ -319,16 +360,22 @@ class HookedTransformerWorkerRuntime:
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})
+        trace_sequences = getattr(self.runtime_state, "trace_sequences", {})
         trace_bank: list[dict[str, Any]] = []
-        for trace_id in sorted(trace_caches):
-            meta = self.trace_metadata.get(trace_id, {})
+        trace_ids = sorted(set(trace_caches) | set(trace_sequences))
+        for trace_id in trace_ids:
+            meta = dict(getattr(trace_sequences.get(trace_id), "metadata", {}) or {})
+            meta.update(self.trace_metadata.get(trace_id, {}))
+            tags = list(meta.get("tags", ()))
+            if trace_id in trace_sequences and "step_aligned" not in tags:
+                tags.append("step_aligned")
             trace_bank.append(
                 {
                     "trace_id": trace_id,
                     "origin": meta.get("origin", trace_id),
                     "compatible": bool(meta.get("compatible", True)),
                     "similarity_hint": meta.get("similarity_hint"),
-                    "tags": list(meta.get("tags", ())),
+                    "tags": tags,
                 }
             )
         return trace_bank
@@ -337,7 +384,9 @@ class HookedTransformerWorkerRuntime:
         if getattr(self.runtime_state, "last_cache", None) is None:
             return []
 
-        ctx = StepContext(packet={}, runtime_state=self.runtime_state, traces={}, stats={}, adapter=self.adapter, active_edits={})
+        if hasattr(self.runtime_state, "set_trace_alignment"):
+            self.runtime_state.set_trace_alignment(self._steps)
+        ctx = StepContext(packet={"step": self._steps}, runtime_state=self.runtime_state, traces={}, stats={}, adapter=self.adapter, active_edits={})
         frames: list[dict[str, Any]] = []
         trace_ids = {trace["trace_id"] for trace in self._build_trace_bank()}
 
@@ -462,6 +511,19 @@ class HookedTransformerWorkerRuntime:
             "active_patch_slots_left": max(0, self.max_active_patch_slots - active_patch_slots),
             "rollbackable_ids": [str(edit["edit_id"]) for edit in active_edits if bool(edit.get("revertible", True))],
         }
+
+    def _record_trace_step(self, *, emitted_token_id: int | None) -> None:
+        if self.trace_recorder is None:
+            return
+        self.trace_recorder.record_step(
+            runtime_state=self.runtime_state,
+            step=self._steps,
+            generated_tokens=len(self._output_token_ids()),
+            emitted_token_id=emitted_token_id,
+            output_text=self.final_text(),
+            telemetry=self._last_metrics,
+            active_edits=self._collect_active_edits(),
+        )
 
     def _surface_to_dict(self, surface: SurfaceInfo) -> dict[str, Any]:
         target = surface.target

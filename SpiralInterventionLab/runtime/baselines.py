@@ -6,6 +6,7 @@ from typing import Any, Callable, Protocol
 from .compiler import StepContext
 from .loop import EpisodeResult, StructuredLogger, TaskEnv, WorkerRuntime, run_episode
 from .policy import DenyTargetRule, HarnessPolicy
+from .trace_recorder import StepAlignedTrace
 
 
 class PromptControllerClient(Protocol):
@@ -114,20 +115,18 @@ def run_minimal_baseline_suite(
     paired_trace_id: str = "paired_baseline",
     c1_policy: HarnessPolicy | None = None,
 ) -> BaselineSuiteResult:
-    baseline_cache = None
-
     b0_worker = make_worker_runtime()
     b0 = run_b0(task_env, b0_worker, logger=_make_logger(logger_factory, "b0"), trace_snapshot_id=paired_trace_id)
-    baseline_cache = _freeze_last_cache(getattr(getattr(b0_worker, "runtime_state", None), "last_cache", None))
+    baseline_trace = _export_trace_artifact(b0_worker, paired_trace_id)
 
     b1 = None
     if b1_controller is not None:
         b1_worker = make_worker_runtime()
-        _seed_trace_cache(b1_worker, paired_trace_id, baseline_cache)
+        _seed_trace_artifact(b1_worker, paired_trace_id, baseline_trace)
         b1 = run_b1(task_env, b1_worker, b1_controller, logger=_make_logger(logger_factory, "b1"))
 
     c1_worker = make_worker_runtime()
-    _seed_trace_cache(c1_worker, paired_trace_id, baseline_cache)
+    _seed_trace_artifact(c1_worker, paired_trace_id, baseline_trace)
     c1 = run_c1(
         task_env,
         c1_worker,
@@ -167,10 +166,14 @@ def _run_promptless_episode(
     output = worker_runtime.final_text()
     score = task_env.score(output)
     if trace_snapshot_id is not None:
-        runtime_state = getattr(worker_runtime, "runtime_state", None)
-        if runtime_state is not None and getattr(runtime_state, "last_cache", None) is not None:
-            if hasattr(runtime_state, "snapshot_last_cache"):
-                runtime_state.snapshot_last_cache(trace_snapshot_id)
+        snapshot_trace = getattr(worker_runtime, "snapshot_trace", None)
+        if snapshot_trace is not None:
+            snapshot_trace(trace_snapshot_id)
+        else:
+            runtime_state = getattr(worker_runtime, "runtime_state", None)
+            if runtime_state is not None and getattr(runtime_state, "last_cache", None) is not None:
+                if hasattr(runtime_state, "snapshot_last_cache"):
+                    runtime_state.snapshot_last_cache(trace_snapshot_id)
 
     if logger is not None:
         logger.log(
@@ -206,13 +209,39 @@ def _freeze_last_cache(cache: Any) -> Any:
     return {str(name): tensor.detach().clone() for name, tensor in cache.items()}
 
 
-def _seed_trace_cache(worker_runtime: WorkerRuntime, trace_id: str, cache: Any) -> None:
-    if cache is None:
+def _export_trace_artifact(worker_runtime: WorkerRuntime, trace_id: str) -> StepAlignedTrace | Any | None:
+    export_step_trace = getattr(worker_runtime, "export_step_trace", None)
+    if export_step_trace is not None:
+        trace = export_step_trace(trace_id)
+        if trace is not None:
+            return trace
+    runtime_state = getattr(worker_runtime, "runtime_state", None)
+    if runtime_state is None:
+        return None
+    trace_sequences = getattr(runtime_state, "trace_sequences", {})
+    if trace_id in trace_sequences:
+        return trace_sequences[trace_id]
+    trace_caches = getattr(runtime_state, "trace_caches", {})
+    if trace_id in trace_caches:
+        return _freeze_last_cache(trace_caches[trace_id])
+    return _freeze_last_cache(getattr(runtime_state, "last_cache", None))
+
+
+def _seed_trace_artifact(worker_runtime: WorkerRuntime, trace_id: str, trace: StepAlignedTrace | Any | None) -> None:
+    if trace is None:
         return
     runtime_state = getattr(worker_runtime, "runtime_state", None)
-    if runtime_state is None or not hasattr(runtime_state, "put_trace_cache"):
+    if runtime_state is None:
         return
-    runtime_state.put_trace_cache(trace_id, cache)
+    if isinstance(trace, StepAlignedTrace):
+        if hasattr(runtime_state, "put_step_trace"):
+            runtime_state.put_step_trace(trace_id, trace)
+            return
+        if hasattr(runtime_state, "put_trace_cache"):
+            runtime_state.put_trace_cache(trace_id, trace.aligned_cache())
+            return
+    if hasattr(runtime_state, "put_trace_cache"):
+        runtime_state.put_trace_cache(trace_id, trace)
 
 
 def _make_logger(

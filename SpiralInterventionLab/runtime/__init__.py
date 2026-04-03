@@ -14,6 +14,7 @@ from .effects import build_edit_effect, classify_effect
 from .loop import EpisodeResult, InMemoryStructuredLogger, JSONLStructuredLogger, run_episode
 from .rank1_bridge import HybridRank1VectorBridge, Rank1Geometry, Rank1VectorBridge
 from .tlens_runtime import HookedTransformerRuntimeState
+from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder, StepTraceFrame
 from .worker import HookedTransformerWorkerRuntime
 from .policy import HarnessPolicy, PolicyViolation, validate_command_against_packet
 from .schema import (
@@ -67,7 +68,10 @@ __all__ = [
     "PromptControllerClient",
     "SchemaError",
     "Source",
+    "StepAlignedTrace",
+    "StepAlignedTraceRecorder",
     "StepContext",
+    "StepTraceFrame",
     "SurfaceInfo",
     "Target",
     "TargetRef",
