@@ -72,3 +72,23 @@ Output requirements:
 - if decision="rollback", include rollback_ids
 - include meta.hypothesis and meta.confidence when useful
 - keep JSON compact and valid
+
+Schema reminders:
+- Always include "version": "0.1" at the top level.
+- Each edit must use "id", not "edit_id".
+- Each edit must contain:
+  - "target": {"surface_id": "..."} or a full typed target object
+  - "source": a typed object such as {"dtype":"vector","expr":...}
+  - "op": a typed object such as {"kind":"resid_add","alpha":0.08}
+  - "budget": a typed object such as {"ttl_steps":1,"norm_clip":1.0,"revertible":true}
+- Do not invent fields like "vec", top-level edit "surface_id", or top-level edit "ttl_steps".
+- Allowed ref.tensor values are only: "hidden", "resid_pre", "resid_post", "mlp_out", "k_cache", "v_cache".
+- A ref must use only the typed fields from the schema, such as "scope", "worker", "trace_id", "tensor", "layer", "token", "head", and "stat".
+- Do not invent ref fields like "token_str", and do not use unavailable tensors like "embed" or "logits".
+
+Valid examples:
+{"version":"0.1","decision":"noop"}
+
+{"version":"0.1","decision":"rollback","rollback_ids":["e_resid_1"]}
+
+{"version":"0.1","decision":"apply","edits":[{"id":"e_resid_1","target":{"surface_id":"s_resid_l11_last"},"source":{"dtype":"vector","expr":{"fn":"clip_norm","max_norm":1.0,"arg":{"fn":"normalize","arg":{"ref":{"scope":"runtime","worker":"os_0","tensor":"hidden","layer":11,"token":{"mode":"last"}}}}}},"op":{"kind":"resid_add","alpha":0.08},"budget":{"ttl_steps":1,"norm_clip":1.0,"revertible":true}}],"meta":{"hypothesis":"small_rescue","confidence":0.42}}

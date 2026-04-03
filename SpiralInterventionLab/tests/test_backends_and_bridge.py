@@ -13,7 +13,11 @@ from SpiralInterventionLab.backends.base import (
 )
 from SpiralInterventionLab.backends.hf_transformers import HFTransformersBackend
 from SpiralInterventionLab.backends.mlx_lm import MLXLMBackend
-from SpiralInterventionLab.bridge.controller_clients import ProviderControllerClient, ProviderPromptHintController
+from SpiralInterventionLab.bridge.controller_clients import (
+    ProviderControllerClient,
+    ProviderPromptHintController,
+    _normalize_controller_payload,
+)
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.runtime.baselines import run_b1
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
@@ -130,6 +134,64 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.decision, "noop")
         self.assertEqual(len(provider.requests), 2)
         self.assertIn("Previous reply was invalid", provider.requests[-1].effective_system_prompt())
+
+    def test_provider_controller_client_backfills_missing_version(self):
+        provider = _FakeProvider("{\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+
+        self.assertEqual(command.version, "0.1")
+        self.assertEqual(command.decision, "noop")
+
+    def test_provider_controller_client_normalizes_common_edit_shorthand(self):
+        provider = _FakeProvider(
+            "{\"decision\":\"apply\",\"edits\":[{\"edit_id\":\"e1\",\"surface_id\":\"s_resid_l1_last\",\"source\":{\"dtype\":\"vector\",\"expr\":{\"fn\":\"sub\",\"a\":{\"ref\":{\"scope\":\"runtime\",\"worker\":\"os_0\",\"tensor\":\"hidden\",\"layer\":1,\"token\":{\"mode\":\"last\"}}},\"b\":{\"ref\":{\"scope\":\"runtime\",\"worker\":\"os_0\",\"tensor\":\"hidden\",\"layer\":1,\"token\":{\"mode\":\"last\"}}}}},\"op\":{\"kind\":\"resid_add\",\"alpha\":0.1},\"ttl_steps\":1}]}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+
+        self.assertEqual(command.version, "0.1")
+        self.assertEqual(command.decision, "apply")
+        self.assertEqual(command.edits[0].id, "e1")
+        self.assertEqual(command.edits[0].budget.ttl_steps, 1)
+
+    def test_normalize_controller_payload_keeps_target_surface_id_flat(self):
+        normalized = _normalize_controller_payload(
+            {
+                "version": "0.1",
+                "decision": "apply",
+                "edits": [
+                    {
+                        "id": "e1",
+                        "target": {"surface_id": "s_resid_l1_last"},
+                        "source": {
+                            "dtype": "vector",
+                            "expr": {
+                                "fn": "normalize",
+                                "arg": {
+                                    "ref": {
+                                        "scope": "runtime",
+                                        "worker": "os_0",
+                                        "tensor": "hidden",
+                                        "layer": 1,
+                                        "token": {"mode": "last"},
+                                    }
+                                },
+                            },
+                        },
+                        "op": {"kind": "resid_add", "alpha": 0.1},
+                        "budget": {"ttl_steps": 1, "revertible": True},
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(
+            normalized["edits"][0]["target"],
+            {"surface_id": "s_resid_l1_last"},
+        )
 
     def test_provider_prompt_hint_controller_trims_plain_text(self):
         provider = _FakeProvider("  try the digit near the end  \n")

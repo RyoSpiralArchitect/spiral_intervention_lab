@@ -36,6 +36,48 @@ def _extract_json_object(text: str) -> str:
     return stripped[start : end + 1]
 
 
+def _normalize_controller_payload(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_normalize_controller_payload(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {key: _normalize_controller_payload(item) for key, item in value.items()}
+
+    if "decision" in normalized and "version" not in normalized:
+        normalized["version"] = "0.1"
+
+    if "edit_id" in normalized and "id" not in normalized:
+        normalized["id"] = normalized.pop("edit_id")
+
+    if "surface_id" in normalized and "target" not in normalized and any(
+        key in normalized for key in ("id", "source", "op", "budget", "ttl_steps")
+    ):
+        normalized["target"] = {"surface_id": normalized.pop("surface_id")}
+
+    if isinstance(normalized.get("target"), str):
+        normalized["target"] = {"surface_id": normalized["target"]}
+    elif isinstance(normalized.get("target"), dict) and set(normalized["target"].keys()) == {"target"}:
+        inner_target = normalized["target"].get("target")
+        if isinstance(inner_target, dict):
+            normalized["target"] = inner_target
+
+    fn = normalized.get("fn")
+    if fn in {"add", "sub", "mean"} and "args" not in normalized:
+        if "a" in normalized and "b" in normalized:
+            normalized["args"] = [normalized.pop("a"), normalized.pop("b")]
+        elif "left" in normalized and "right" in normalized:
+            normalized["args"] = [normalized.pop("left"), normalized.pop("right")]
+
+    if "ttl_steps" in normalized and "budget" not in normalized and "op" in normalized:
+        normalized["budget"] = {
+            "ttl_steps": normalized.pop("ttl_steps"),
+            "revertible": True,
+        }
+
+    return normalized
+
+
 class ProviderControllerClient:
     def __init__(
         self,
@@ -69,7 +111,7 @@ class ProviderControllerClient:
                 )
             )
             try:
-                parsed = json.loads(_extract_json_object(response.text))
+                parsed = _normalize_controller_payload(json.loads(_extract_json_object(response.text)))
                 return parse_controller_command(parsed)
             except Exception as exc:
                 last_error = exc

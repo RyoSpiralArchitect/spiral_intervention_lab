@@ -7,6 +7,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import torch
+
 from ..bridge import ProviderControllerClient, ProviderPromptHintController
 from ..controllers.factory import create_controller_provider, normalize_provider_name, provider_api_env_var
 from ..runtime import (
@@ -124,6 +126,61 @@ def build_hooked_transformer_worker_runtime(
     )
 
 
+def _resolve_torch_dtype(dtype: str | torch.dtype) -> torch.dtype:
+    if isinstance(dtype, torch.dtype):
+        return dtype
+    if not hasattr(torch, dtype):
+        raise ValueError(f"Unsupported torch dtype string: {dtype}")
+    resolved = getattr(torch, dtype)
+    if not isinstance(resolved, torch.dtype):
+        raise ValueError(f"Unsupported torch dtype string: {dtype}")
+    return resolved
+
+
+def _load_local_hooked_transformer_from_hf(
+    *,
+    model_ref: str,
+    hf_model: Any,
+    tokenizer: Any,
+    device: str | None,
+    dtype: str | torch.dtype,
+    first_n_layers: int | None,
+    move_to_device: bool,
+    local_files_only: bool,
+    trust_remote_code: bool,
+) -> Any:
+    import transformer_lens.loading_from_pretrained as tl_loading
+
+    torch_dtype = _resolve_torch_dtype(dtype)
+    hf_cfg = hf_model.config.to_dict()
+    cfg = tl_loading.get_pretrained_model_config(
+        model_ref,
+        hf_cfg=hf_cfg,
+        device=device,
+        dtype=torch_dtype,
+        first_n_layers=first_n_layers,
+        local_files_only=local_files_only,
+        trust_remote_code=trust_remote_code,
+    )
+    state_dict = tl_loading.get_pretrained_state_dict(
+        model_ref,
+        cfg,
+        hf_model=hf_model,
+        dtype=torch_dtype,
+        local_files_only=local_files_only,
+        trust_remote_code=trust_remote_code,
+    )
+    model = HookedTransformer(
+        cfg,
+        tokenizer,
+        move_to_device=False,
+    )
+    model.load_and_process_state_dict(state_dict)
+    if move_to_device:
+        model.move_model_modules_to_device()
+    return model
+
+
 def load_worker_model(
     model_name: str,
     *,
@@ -157,8 +214,12 @@ def load_worker_model(
             trust_remote_code=trust_remote_code,
             local_files_only=local_files_only,
         )
-        return HookedTransformer.from_pretrained(
-            resolved_model_ref,
+        if not model_name:
+            raise ValueError(
+                "A TransformerLens-compatible --worker-model name is required when loading a local HF worker path"
+            )
+        return _load_local_hooked_transformer_from_hf(
+            model_ref=resolved_model_ref,
             hf_model=hf_model,
             tokenizer=tokenizer,
             device=device,
@@ -256,7 +317,7 @@ def run_digit_transform_experiment(
         model=controller_model_name,
         api_key=controller_api_key,
     )
-    c1_controller = ProviderControllerClient(provider, prompt_asset=controller_prompt_asset)
+    c1_controller = ProviderControllerClient(provider, prompt_asset=controller_prompt_asset, max_attempts=3)
     b1_controller = (
         ProviderPromptHintController(provider, prompt_asset=hint_prompt_asset)
         if include_prompt_baseline

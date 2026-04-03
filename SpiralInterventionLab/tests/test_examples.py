@@ -113,14 +113,14 @@ class TestExamples(unittest.TestCase):
             self.assertTrue(Path(tmpdir, "b1.jsonl").exists())
             self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
 
+    @patch("SpiralInterventionLab.examples.digit_transform_e2e._load_local_hooked_transformer_from_hf")
     @patch("SpiralInterventionLab.examples.digit_transform_e2e.AutoTokenizer")
     @patch("SpiralInterventionLab.examples.digit_transform_e2e.AutoModelForCausalLM")
-    @patch("SpiralInterventionLab.examples.digit_transform_e2e.HookedTransformer")
     def test_load_worker_model_uses_local_hf_path_offline(
         self,
-        hooked_transformer_cls,
         auto_model_cls,
         auto_tokenizer_cls,
+        load_local_hooked_transformer,
     ):
         local_dir = "/tmp/local-hf-worker"
         auto_model = object()
@@ -128,10 +128,10 @@ class TestExamples(unittest.TestCase):
         sentinel = object()
         auto_model_cls.from_pretrained.return_value = auto_model
         auto_tokenizer_cls.from_pretrained.return_value = tokenizer
-        hooked_transformer_cls.from_pretrained.return_value = sentinel
+        load_local_hooked_transformer.return_value = sentinel
 
         model = load_worker_model(
-            "unused-alias",
+            "gpt2",
             model_path=local_dir,
             tokenizer_path=local_dir,
             hf_offline=True,
@@ -150,12 +150,17 @@ class TestExamples(unittest.TestCase):
             trust_remote_code=True,
             local_files_only=True,
         )
-        hooked_transformer_cls.from_pretrained.assert_called_once()
-        args, kwargs = hooked_transformer_cls.from_pretrained.call_args
-        self.assertEqual(args[0], local_dir)
-        self.assertIs(kwargs["hf_model"], auto_model)
-        self.assertIs(kwargs["tokenizer"], tokenizer)
-        self.assertTrue(kwargs["local_files_only"])
+        load_local_hooked_transformer.assert_called_once_with(
+            model_ref=local_dir,
+            hf_model=auto_model,
+            tokenizer=tokenizer,
+            device="cpu",
+            dtype="float32",
+            first_n_layers=None,
+            move_to_device=True,
+            local_files_only=True,
+            trust_remote_code=True,
+        )
 
 
 if __name__ == "__main__":

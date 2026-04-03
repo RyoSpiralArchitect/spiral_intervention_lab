@@ -74,11 +74,14 @@ To force a fully local Hugging Face worker load:
 python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --provider openai \
   --controller-model gpt-4.1-mini \
-  --worker-model local-worker \
+  --worker-model gpt2 \
   --worker-model-path /absolute/path/to/hf-export \
   --worker-hf-offline \
   --seed 7
 ```
+
+When using `--worker-model-path`, keep `--worker-model` set to the matching
+TransformerLens-supported family name such as `gpt2`.
 
 or:
 

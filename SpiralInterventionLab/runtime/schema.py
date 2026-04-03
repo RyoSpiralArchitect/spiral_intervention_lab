@@ -281,6 +281,8 @@ TargetRef = SurfaceTargetRef | Target
 
 
 def parse_target_ref(value: Any) -> TargetRef:
+    if isinstance(value, str) and value:
+        return SurfaceTargetRef(surface_id=value)
     data = _as_mapping(value, "target")
     if "surface_id" in data:
         return SurfaceTargetRef.from_dict(data)
