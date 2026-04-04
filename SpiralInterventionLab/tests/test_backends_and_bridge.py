@@ -192,6 +192,39 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["task_feedback"]["partial_score"], 0.5)
         self.assertEqual(trace["observation"]["task_feedback"]["progress_label"], "progressing")
 
+    def test_provider_controller_client_observation_includes_controller_memory(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        client.invoke(
+            {
+                "step": 2,
+                "task_view": {"task_id": "toy_task", "mode": "redacted", "prompt_hash": "sha256:test"},
+                "worker_view": {"generated_tail": "12", "status": "acting"},
+                "task_feedback": {"done": False, "partial_score": 0.5, "progress_label": "progressing"},
+                "surface_catalog": [],
+                "trace_bank": [],
+                "active_edits": [],
+                "recent_effects": [],
+                "recent_effect_summary": {"window_size": 0},
+                "controller_memory": [
+                    {
+                        "hypothesis": "small_resid_loop_rescue",
+                        "observed_outcome": "harmful",
+                        "next_change": "prefer noop",
+                        "confidence": 0.74,
+                    }
+                ],
+                "telemetry": {},
+                "budget": {},
+            }
+        )
+        trace = client.latest_trace()
+
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["controller_memory"][0]["hypothesis"], "small_resid_loop_rescue")
+        self.assertEqual(trace["observation"]["controller_memory"][0]["observed_outcome"], "harmful")
+
     def test_provider_controller_client_normalizes_common_edit_shorthand(self):
         provider = _FakeProvider(
             "{\"decision\":\"apply\",\"edits\":[{\"edit_id\":\"e1\",\"surface_id\":\"s_resid_l1_last\",\"source\":{\"dtype\":\"vector\",\"expr\":{\"fn\":\"sub\",\"a\":{\"ref\":{\"scope\":\"runtime\",\"worker\":\"os_0\",\"tensor\":\"hidden\",\"layer\":1,\"token\":{\"mode\":\"last\"}}},\"b\":{\"ref\":{\"scope\":\"runtime\",\"worker\":\"os_0\",\"tensor\":\"hidden\",\"layer\":1,\"token\":{\"mode\":\"last\"}}}}},\"op\":{\"kind\":\"resid_add\",\"alpha\":0.1},\"ttl_steps\":1}]}"
@@ -204,6 +237,18 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.decision, "apply")
         self.assertEqual(command.edits[0].id, "e1")
         self.assertEqual(command.edits[0].budget.ttl_steps, 1)
+
+    def test_provider_controller_client_moves_controller_memory_into_meta(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"controller_memory\":{\"hypothesis\":\"rescue\",\"observed_outcome\":\"harmful\",\"next_change\":\"noop\",\"confidence\":0.5}}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["controller_memory"]["hypothesis"], "rescue")
+        self.assertEqual(trace["decision"]["controller_memory"]["observed_outcome"], "harmful")
 
     def test_normalize_controller_payload_keeps_target_surface_id_flat(self):
         normalized = _normalize_controller_payload(
@@ -326,6 +371,18 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("hypothesis_stats", prompt)
         self.assertIn("latest_effects", prompt)
         self.assertIn("partial_score", prompt)
+        self.assertIn("mean_progress_delta", prompt)
+        self.assertIn("after_is_looping", prompt)
+        self.assertIn("after_task_violation_count", prompt)
+        self.assertIn("edits_left_this_run", prompt)
+        self.assertIn("progress beats stability", prompt.lower())
+        self.assertIn("Safe v0 apply subset", prompt)
+        self.assertIn('the field name must be "by"', prompt)
+        self.assertIn('Do not use "ref.stat" in v0.', prompt)
+        self.assertIn('If none of the safe templates fit, choose noop', prompt)
+        self.assertIn("controller_memory", prompt)
+        self.assertIn("structured reflection", prompt.lower())
+        self.assertIn("decoder_rescue_active", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
         client = _FakeOpenAIClient()

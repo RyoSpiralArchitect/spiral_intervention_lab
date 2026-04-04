@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
@@ -12,6 +13,19 @@ from .compiler import StepContext
 from .effects import build_edit_effect, summarize_effects
 from .schema import SurfaceInfo
 from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder
+
+
+_CONTROLLER_REFLECTION_MODES = {"off", "structured"}
+_DECODER_CONTROL_MODES = {"off", "loop_aware"}
+_CONTROLLER_MEMORY_STRING_FIELDS = (
+    "hypothesis",
+    "expected_effect",
+    "observed_outcome",
+    "why_failed_or_helped",
+    "next_change",
+    "stop_condition",
+)
+_CONTROLLER_MEMORY_ALLOWED_OUTCOMES = {"unknown", "helpful", "harmful", "neutral", "mixed"}
 
 
 @dataclass
@@ -29,6 +43,62 @@ def _cosine_similarity(left: torch.Tensor, right: torch.Tensor) -> float | None:
         return None
     value = torch.dot(left, right) / ((left.norm() * right.norm()) + 1e-8)
     return float(value.item())
+
+
+def _normalize_controller_reflection_mode(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized not in _CONTROLLER_REFLECTION_MODES:
+        raise ValueError(
+            f"Unsupported controller reflection mode '{value}'; expected one of {sorted(_CONTROLLER_REFLECTION_MODES)}"
+        )
+    return normalized
+
+
+def _normalize_decoder_control_mode(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized not in _DECODER_CONTROL_MODES:
+        raise ValueError(
+            f"Unsupported decoder control mode '{value}'; expected one of {sorted(_DECODER_CONTROL_MODES)}"
+        )
+    return normalized
+
+
+def _clean_controller_memory_text(value: Any, *, limit: int = 160) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).split()).strip()
+    if not text:
+        return None
+    return text[:limit]
+
+
+def _normalize_controller_memory_entry(
+    value: Mapping[str, Any] | None,
+    *,
+    decision: str | None = None,
+    recorded_step: int | None = None,
+) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    entry: dict[str, Any] = {}
+    for key in _CONTROLLER_MEMORY_STRING_FIELDS:
+        text = _clean_controller_memory_text(value.get(key))
+        if text is not None:
+            if key == "observed_outcome":
+                normalized_outcome = text.lower().replace(" ", "_")
+                if normalized_outcome not in _CONTROLLER_MEMORY_ALLOWED_OUTCOMES:
+                    normalized_outcome = "mixed"
+                entry[key] = normalized_outcome
+            else:
+                entry[key] = text
+    confidence = value.get("confidence")
+    if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+        entry["confidence"] = max(0.0, min(1.0, float(confidence)))
+    if decision is not None:
+        entry["decision"] = str(decision)
+    if recorded_step is not None:
+        entry["recorded_step"] = int(recorded_step)
+    return entry or None
 
 
 class HookedTransformerWorkerRuntime:
@@ -62,6 +132,9 @@ class HookedTransformerWorkerRuntime:
         trace_metadata: Mapping[str, Mapping[str, Any]] | None = None,
         task_feedback_fn: Callable[[str], Mapping[str, Any] | None] | None = None,
         trace_recorder: StepAlignedTraceRecorder | None = None,
+        controller_reflection_mode: str = "off",
+        controller_memory_window: int = 3,
+        decoder_control_mode: str = "off",
     ) -> None:
         self.runtime_state = runtime_state
         self.adapter = adapter
@@ -89,6 +162,9 @@ class HookedTransformerWorkerRuntime:
         self.stop_checker = stop_checker
         self.trace_metadata = {str(trace_id): dict(meta) for trace_id, meta in (trace_metadata or {}).items()}
         self.task_feedback_fn = task_feedback_fn
+        self.controller_reflection_mode = _normalize_controller_reflection_mode(controller_reflection_mode)
+        self.controller_memory_window = max(1, int(controller_memory_window))
+        self.decoder_control_mode = _normalize_decoder_control_mode(decoder_control_mode)
 
         self.surface_catalog = tuple(
             surface if isinstance(surface, SurfaceInfo) else SurfaceInfo.from_dict(surface) for surface in surface_catalog
@@ -113,6 +189,12 @@ class HookedTransformerWorkerRuntime:
         self._recent_effects: list[dict[str, Any]] = []
         self._latest_completed_effects: list[dict[str, Any]] = []
         self._recent_effect_summary: dict[str, Any] = summarize_effects(())
+        self._controller_memory: list[dict[str, Any]] = []
+        self._last_decoder_control: dict[str, Any] = {
+            "mode": self.decoder_control_mode,
+            "active": False,
+            "loop_cycle_length": 0,
+        }
         self._pending_effects: list[dict[str, Any]] = []
         self._seen_registration_ids: set[str] = set()
         self._spent_budget_alpha: dict[str, float] = {}
@@ -134,9 +216,11 @@ class HookedTransformerWorkerRuntime:
         if not isinstance(logits, torch.Tensor) or logits.ndim != 3:
             raise ValueError(f"runtime_state.run_with_cache must return logits shaped [batch, pos, vocab], got {type(logits)!r}")
         next_logits = self._apply_token_constraints(logits[0, -1].detach())
+        next_logits, decoder_control = self._apply_decoder_control(next_logits)
         next_token = int(torch.argmax(next_logits).item())
         self._append_output_token(next_token)
         self._steps += 1
+        self._last_decoder_control = decoder_control
         self._last_metrics = self._compute_metrics(next_logits)
         self._update_status()
         self._last_task_feedback = self._compute_task_feedback()
@@ -181,7 +265,14 @@ class HookedTransformerWorkerRuntime:
             },
             "task_view": self._task_view(),
             "worker_view": self._worker_view(),
-            "telemetry": dict(self._last_metrics) | {"repeat_flag": self._repeat_flag(), "no_progress_steps": self._no_progress_steps},
+            "telemetry": dict(self._last_metrics)
+            | {
+                "repeat_flag": self._repeat_flag(),
+                "no_progress_steps": self._no_progress_steps,
+                "loop_cycle_length": int(self._loop_cycle_length() or 0),
+                "decoder_control_mode": self.decoder_control_mode,
+                "decoder_rescue_active": bool(self._last_decoder_control.get("active", False)),
+            },
             "surface_catalog": [dict(surface) for surface in self._surface_catalog_raw],
             "probe_frames": self._build_probe_frames(),
             "trace_bank": self._build_trace_bank(),
@@ -191,8 +282,21 @@ class HookedTransformerWorkerRuntime:
             "budget": self._budget_state(active_edits),
             "task_feedback": dict(self._last_task_feedback),
         }
+        if self.controller_reflection_mode != "off":
+            packet["controller_memory"] = [dict(entry) for entry in self._controller_memory]
         self._last_packet = packet
         return packet
+
+    def record_controller_memory(self, entry: Mapping[str, Any], *, decision: str | None = None) -> dict[str, Any] | None:
+        if self.controller_reflection_mode == "off":
+            return None
+        normalized = _normalize_controller_memory_entry(entry, decision=decision, recorded_step=self._steps)
+        if normalized is None:
+            return None
+        self._controller_memory.append(normalized)
+        self._controller_memory = self._controller_memory[-self.controller_memory_window :]
+        self._last_packet = None
+        return dict(normalized)
 
     def observe_recent_effects(self) -> None:
         current_metrics = self._effect_metrics()
@@ -302,6 +406,12 @@ class HookedTransformerWorkerRuntime:
         self._recent_effects = []
         self._latest_completed_effects = []
         self._recent_effect_summary = summarize_effects(())
+        self._controller_memory = []
+        self._last_decoder_control = {
+            "mode": self.decoder_control_mode,
+            "active": False,
+            "loop_cycle_length": 0,
+        }
         self._pending_effects = []
         self._seen_registration_ids = set()
         self._spent_budget_alpha = {}
@@ -315,7 +425,27 @@ class HookedTransformerWorkerRuntime:
         tokens: list[int] = []
         for segment in self._segments:
             tokens.extend(segment.token_ids)
-        return torch.tensor([tokens], dtype=torch.long)
+        tensor_kwargs: dict[str, Any] = {"dtype": torch.long}
+        device = self._model_device()
+        if device is not None:
+            tensor_kwargs["device"] = device
+        return torch.tensor([tokens], **tensor_kwargs)
+
+    def _model_device(self) -> torch.device | None:
+        model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
+        if model is None:
+            return None
+        cfg = getattr(model, "cfg", None)
+        cfg_device = getattr(cfg, "device", None)
+        if cfg_device is not None:
+            try:
+                return torch.device(cfg_device)
+            except Exception:
+                pass
+        try:
+            return next(model.parameters()).device
+        except Exception:
+            return None
 
     def _append_output_token(self, token_id: int) -> None:
         if self._segments and self._segments[-1].kind == "output":
@@ -333,6 +463,52 @@ class HookedTransformerWorkerRuntime:
         index = torch.tensor(allowed, dtype=torch.long, device=next_logits.device)
         masked[index] = next_logits[index]
         return masked
+
+    def _apply_decoder_control(self, next_logits: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        cycle_length = self._loop_cycle_length()
+        state = {
+            "mode": self.decoder_control_mode,
+            "active": False,
+            "loop_cycle_length": int(cycle_length or 0),
+        }
+        if self.decoder_control_mode == "off":
+            return next_logits, state
+
+        tokens = self._output_token_ids()
+        rescue_active = cycle_length is not None or self._repeat_flag() or self._no_progress_steps > 0
+        if not tokens or not rescue_active:
+            return next_logits, state
+
+        adjusted = next_logits.clone()
+        penalties: dict[int, float] = {}
+        for offset, token_id in enumerate(reversed(tokens[-6:]), start=1):
+            penalties[int(token_id)] = penalties.get(int(token_id), 0.0) + max(0.0, 1.8 - (0.2 * (offset - 1)))
+
+        blocked_token_ids: list[int] = []
+        if cycle_length is not None:
+            blocked_token_ids = [int(token_id) for token_id in dict.fromkeys(tokens[-cycle_length:])]
+            cycle_penalty = 8.0 if cycle_length == 1 else 6.0
+            for token_id in blocked_token_ids:
+                penalties[token_id] = penalties.get(token_id, 0.0) + cycle_penalty
+        elif tokens:
+            blocked_token_ids = [int(tokens[-1])]
+            penalties[blocked_token_ids[0]] = penalties.get(blocked_token_ids[0], 0.0) + 8.0
+
+        for token_id, penalty in penalties.items():
+            if 0 <= token_id < adjusted.shape[-1]:
+                adjusted[token_id] = adjusted[token_id] - penalty
+
+        valid_blocked = [token_id for token_id in blocked_token_ids if 0 <= token_id < adjusted.shape[-1]]
+        if valid_blocked:
+            blocked_index = torch.tensor(valid_blocked, dtype=torch.long, device=adjusted.device)
+            alternative_mask = torch.isfinite(adjusted)
+            alternative_mask[blocked_index] = False
+            if bool(alternative_mask.any()) and int(torch.argmax(adjusted).item()) in valid_blocked:
+                adjusted[blocked_index] = float("-inf")
+
+        state["active"] = True
+        state["blocked_token_ids"] = valid_blocked
+        return adjusted, state
 
     def _output_token_ids(self) -> list[int]:
         output_tokens: list[int] = []
@@ -364,7 +540,19 @@ class HookedTransformerWorkerRuntime:
         tokens = self._output_token_ids()
         if len(tokens) >= 3 and len(set(tokens[-3:])) == 1:
             return True
-        return self._repetition_score() >= 0.66
+        if self._loop_cycle_length() is not None:
+            return True
+        if len(tokens) >= 4 and self._repetition_score() >= 0.66:
+            return True
+        return False
+
+    def _loop_cycle_length(self, *, max_period: int = 4) -> int | None:
+        tokens = self._output_token_ids()
+        max_candidate = min(max_period, len(tokens) // 2)
+        for period in range(1, max_candidate + 1):
+            if tokens[-period:] == tokens[-2 * period : -period]:
+                return period
+        return None
 
     def _update_status(self) -> None:
         if self._repeat_flag():
@@ -408,10 +596,36 @@ class HookedTransformerWorkerRuntime:
 
     def _effect_metrics(self) -> dict[str, float]:
         metrics = dict(self._last_metrics)
+        metrics["repeat_flag"] = float(self._repeat_flag())
+        metrics["no_progress_steps"] = float(self._no_progress_steps)
         partial_score = self._last_task_feedback.get("partial_score")
         if partial_score is not None:
             metrics["partial_score"] = float(partial_score)
+        metrics["progress_score"] = self._progress_score(self._last_task_feedback)
+        metrics["task_violation_count"] = float(self._task_violation_count(self._last_task_feedback))
+        metrics["done"] = float(bool(self._last_task_feedback.get("done", False)))
         return metrics
+
+    def _progress_score(self, feedback: Mapping[str, Any]) -> float:
+        if bool(feedback.get("done", False)):
+            return 1.0
+        label = str(feedback.get("progress_label", "") or "").strip().lower()
+        if label == "progressing":
+            return 0.25
+        if label == "regressing":
+            return -0.5
+        return 0.0
+
+    def _task_violation_count(self, feedback: Mapping[str, Any]) -> int:
+        total = 0
+        violations = feedback.get("constraint_violations")
+        if isinstance(violations, SequenceABC) and not isinstance(violations, (str, bytes, bytearray)):
+            total += sum(1 for item in violations if item)
+        for key in ("missing_required_terms", "forbidden_terms_present", "missing_keywords", "missing_summary_terms"):
+            detail = feedback.get(key)
+            if isinstance(detail, SequenceABC) and not isinstance(detail, (str, bytes, bytearray)):
+                total += sum(1 for item in detail if item)
+        return total
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})

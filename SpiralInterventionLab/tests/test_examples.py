@@ -15,9 +15,20 @@ from SpiralInterventionLab.examples import (
     run_digit_transform_experiment,
     run_digit_transform_sweep,
 )
-from SpiralInterventionLab.examples.digit_transform_e2e import _infer_tlens_model_ref
+from SpiralInterventionLab.examples.digit_transform_e2e import (
+    _configure_torch_default_device_for_worker,
+    _infer_tlens_model_ref,
+    _resolve_worker_device,
+)
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
-from SpiralInterventionLab.tasks import SpiralDigitCopyEnv, SpiralDigitTransformEnv
+from SpiralInterventionLab.tasks import (
+    SpiralConstrainedRewriteEnv,
+    SpiralDigitCopyEnv,
+    SpiralDigitTransformEnv,
+    SpiralEntailmentReasoningEnv,
+    SpiralSentenceOrderingEnv,
+    SpiralStructuredSummaryEnv,
+)
 
 HAS_TRANSFORMER_LENS = bool(find_spec("transformer_lens"))
 if HAS_TRANSFORMER_LENS:
@@ -120,6 +131,65 @@ class TestExamples(unittest.TestCase):
         self.assertIn("step_size", packet["surface_catalog"][0]["caps"])
         self.assertTrue(runtime.allowed_token_ids)
 
+    def test_build_hooked_transformer_worker_runtime_with_structured_reflection(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralDigitTransformEnv(min_digits=4, max_digits=4)
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=5,
+            codec=codec,
+            controller_reflection_mode="structured",
+            controller_memory_window=2,
+        )
+
+        runtime.record_controller_memory(
+            {
+                "hypothesis": "small_rescue",
+                "observed_outcome": "harmful",
+                "next_change": "prefer noop",
+                "confidence": 0.4,
+            },
+            decision="apply",
+        )
+        prompt = env.reset(5)
+        runtime.reset(prompt)
+        runtime.record_controller_memory(
+            {
+                "hypothesis": "small_rescue",
+                "observed_outcome": "harmful",
+                "next_change": "prefer noop",
+                "confidence": 0.4,
+            },
+            decision="apply",
+        )
+        runtime.step()
+        packet = runtime.build_controller_packet()
+
+        self.assertIn("controller_memory", packet)
+        self.assertEqual(packet["controller_memory"][0]["hypothesis"], "small_rescue")
+        self.assertEqual(packet["controller_memory"][0]["decision"], "apply")
+
+    def test_build_hooked_transformer_worker_runtime_with_loop_aware_decoder_control(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralDigitTransformEnv(min_digits=4, max_digits=4)
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=5,
+            codec=codec,
+            worker_decoder_control_mode="loop_aware",
+        )
+
+        prompt = env.reset(5)
+        runtime.reset(prompt)
+        runtime.step()
+        packet = runtime.build_controller_packet()
+
+        self.assertEqual(runtime.decoder_control_mode, "loop_aware")
+        self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware")
+        self.assertIn("decoder_rescue_active", packet["telemetry"])
+
     def test_build_allowed_token_ids_for_digit_constraint(self):
         codec = CharacterCodec(" 12a")
         model = type("FakeModel", (), {"cfg": type("Cfg", (), {"d_vocab": 4})()})()
@@ -142,6 +212,10 @@ class TestExamples(unittest.TestCase):
     def test_create_task_env_supports_copy_and_transform(self):
         self.assertIsInstance(create_task_env("digit_transform"), SpiralDigitTransformEnv)
         self.assertIsInstance(create_task_env("digit_copy"), SpiralDigitCopyEnv)
+        self.assertIsInstance(create_task_env("sentence_ordering"), SpiralSentenceOrderingEnv)
+        self.assertIsInstance(create_task_env("entailment_reasoning"), SpiralEntailmentReasoningEnv)
+        self.assertIsInstance(create_task_env("constrained_rewrite"), SpiralConstrainedRewriteEnv)
+        self.assertIsInstance(create_task_env("structured_summary"), SpiralStructuredSummaryEnv)
 
     def test_run_digit_transform_experiment_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -166,6 +240,8 @@ class TestExamples(unittest.TestCase):
             payload = result.to_dict()
             self.assertEqual(payload["controller_provider"], "openai")
             self.assertEqual(payload["task_id"], env.task_id)
+            self.assertEqual(payload["controller_reflection_mode"], "off")
+            self.assertEqual(payload["worker_decoder_control_mode"], "off")
             self.assertIn("b0", payload)
             self.assertIn("b1", payload)
             self.assertIn("c1", payload)
@@ -193,11 +269,15 @@ class TestExamples(unittest.TestCase):
                     task_env=env,
                     codec=codec,
                     log_dir=tmpdir,
+                    controller_reflection_mode="structured",
+                    worker_decoder_control_mode="loop_aware",
                 )
 
             payload = result.to_dict()
             self.assertEqual(payload["suite_mode"], "c1_only")
             self.assertEqual(payload["task_id"], env.task_id)
+            self.assertEqual(payload["controller_reflection_mode"], "structured")
+            self.assertEqual(payload["worker_decoder_control_mode"], "loop_aware")
             self.assertIsNone(payload["b0"])
             self.assertIsNone(payload["b1"])
             self.assertIn("c1", payload)
@@ -281,6 +361,20 @@ class TestExamples(unittest.TestCase):
             local_files_only=True,
             trust_remote_code=True,
         )
+
+    def test_resolve_worker_device_promotes_explicit_mps_in_conservative_mode(self):
+        with patch("SpiralInterventionLab.examples.digit_transform_e2e.torch.backends.mps.is_available", return_value=True):
+            self.assertIsNone(_resolve_worker_device(device=None, mps_mode="auto"))
+            self.assertEqual(_resolve_worker_device(device=None, mps_mode="conservative"), "mps")
+
+    @patch("SpiralInterventionLab.examples.digit_transform_e2e.torch.set_default_device")
+    @patch("SpiralInterventionLab.examples.digit_transform_e2e.torch.get_default_device", return_value="mps:0")
+    def test_configure_torch_default_device_for_worker_relaxes_auto_mps(self, get_default_device, set_default_device):
+        changed = _configure_torch_default_device_for_worker(target_device="mps", mps_mode="conservative")
+
+        self.assertTrue(changed)
+        get_default_device.assert_called_once_with()
+        set_default_device.assert_called_once_with("cpu")
 
 
 if __name__ == "__main__":

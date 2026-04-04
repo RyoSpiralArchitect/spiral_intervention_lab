@@ -715,6 +715,7 @@ class ControllerObservationPacket:
     recent_effects: tuple[EditEffect, ...]
     budget: BudgetState
     recent_effect_summary: Mapping[str, Any] | None = None
+    controller_memory: tuple[Mapping[str, Any], ...] = ()
     task_feedback: Mapping[str, Any] | None = None
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -740,6 +741,7 @@ class ControllerObservationPacket:
             recent_effect_summary=_as_mapping(data["recent_effect_summary"], "packet.recent_effect_summary")
             if data.get("recent_effect_summary") is not None
             else None,
+            controller_memory=tuple(_as_mapping(item, "packet.controller_memory[]") for item in data.get("controller_memory", [])),
             budget=BudgetState.from_dict(_require_key(data, "budget", "packet")),
             task_feedback=_as_mapping(data["task_feedback"], "packet.task_feedback") if data.get("task_feedback") is not None else None,
             raw=data,

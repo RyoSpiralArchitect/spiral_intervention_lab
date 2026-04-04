@@ -70,6 +70,39 @@ def _list_of_ids(items: Any, key: str) -> list[str]:
     return values
 
 
+def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in (
+        "hypothesis",
+        "expected_effect",
+        "observed_outcome",
+        "why_failed_or_helped",
+        "next_change",
+        "stop_condition",
+        "decision",
+        "recorded_step",
+    ):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    confidence = value.get("confidence")
+    if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
+        summary["confidence"] = float(confidence)
+    return summary or None
+
+
+def _controller_memory_summaries(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        summary = _compact_controller_memory(item)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
 def _recent_effect_summaries(items: Any) -> list[dict[str, Any]]:
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
         return []
@@ -125,6 +158,7 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
             "recent_effect_summary": dict(payload.get("recent_effect_summary", {}))
             if isinstance(payload.get("recent_effect_summary"), Mapping)
             else {},
+            "controller_memory": _controller_memory_summaries(payload.get("controller_memory")),
         }
     )
     return summary
@@ -159,7 +193,14 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
     total_edit_cost = 0.0
 
     meta = getattr(command, "meta", None)
-    if meta is not None:
+    controller_memory = None
+    if isinstance(meta, Mapping):
+        if meta.get("hypothesis"):
+            hypotheses.append(str(meta["hypothesis"]))
+        if meta.get("confidence") is not None:
+            confidences.append(float(meta["confidence"]))
+        controller_memory = meta.get("controller_memory")
+    elif meta is not None:
         if getattr(meta, "hypothesis", None):
             hypotheses.append(str(meta.hypothesis))
         if getattr(meta, "confidence", None) is not None:
@@ -185,7 +226,7 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
             rank_cap=edit.budget.rank_cap,
         )
 
-    return {
+    summary = {
         "decision": command.decision,
         "hypothesis": hypotheses[0] if hypotheses else None,
         "confidence": confidences[0] if confidences else None,
@@ -197,6 +238,10 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
         "total_alpha": total_alpha,
         "total_edit_cost": total_edit_cost,
     }
+    compact_memory = _compact_controller_memory(controller_memory)
+    if compact_memory is not None:
+        summary["controller_memory"] = compact_memory
+    return summary
 
 
 def _extract_json_object(text: str) -> str:
@@ -228,6 +273,21 @@ def _normalize_controller_payload(value: Any) -> Any:
 
     if "edit_id" in normalized and "id" not in normalized:
         normalized["id"] = normalized.pop("edit_id")
+
+    command_like = any(key in normalized for key in ("decision", "edits", "rollback_ids"))
+    meta = normalized.get("meta")
+    if command_like:
+        if meta is None:
+            meta = {}
+        if isinstance(meta, dict):
+            if "controller_memory" in normalized and "controller_memory" not in meta:
+                meta["controller_memory"] = normalized.pop("controller_memory")
+            if "reflection_log" in normalized and "controller_memory" not in meta:
+                meta["controller_memory"] = normalized.pop("reflection_log")
+            if "reflection_log" in meta and "controller_memory" not in meta:
+                meta["controller_memory"] = meta.pop("reflection_log")
+            if meta:
+                normalized["meta"] = meta
 
     if "surface_id" in normalized and "target" not in normalized and any(
         key in normalized for key in ("id", "source", "op", "budget", "ttl_steps")

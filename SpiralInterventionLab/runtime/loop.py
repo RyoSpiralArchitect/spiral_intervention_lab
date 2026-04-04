@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence as SequenceABC
 from dataclasses import asdict, is_dataclass
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -164,6 +165,79 @@ def _log_effect_trace(
         logger.log({"event": "controller_effect_summary", "step": step, **dict(summary)})
 
 
+def _guard_exhausted_apply_command(
+    command: Any,
+    packet: Mapping[str, Any],
+) -> tuple[Any, dict[str, Any] | None]:
+    if not isinstance(command, Mapping):
+        return command, None
+    decision = str(command.get("decision", "") or "").strip().lower()
+    if decision != "apply":
+        return command, None
+    budget = packet.get("budget")
+    if not isinstance(budget, Mapping):
+        return command, None
+    edits_left_this_run = budget.get("edits_left_this_run")
+    try:
+        edits_left_this_run = int(edits_left_this_run)
+    except Exception:
+        return command, None
+    if edits_left_this_run > 0:
+        return command, None
+    guarded_command = {
+        "version": str(command.get("version", "0.1") or "0.1"),
+        "decision": "noop",
+        "edits": [],
+        "rollback_ids": [],
+    }
+    if isinstance(command.get("meta"), Mapping):
+        guarded_command["meta"] = dict(command["meta"])
+    return guarded_command, {
+        "reason": "edits_left_this_run_exhausted",
+        "original_decision": decision,
+        "edits_left_this_run": edits_left_this_run,
+        "requested_edit_count": len(command.get("edits", ()))
+        if isinstance(command.get("edits"), SequenceABC)
+        else 0,
+    }
+
+
+def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, str | None]:
+    if isinstance(command, Mapping):
+        meta = command.get("meta")
+        decision = command.get("decision")
+    else:
+        meta = getattr(command, "meta", None)
+        decision = getattr(command, "decision", None)
+    if not isinstance(meta, Mapping):
+        return None, None if decision is None else str(decision)
+    entry = meta.get("controller_memory")
+    if not isinstance(entry, Mapping):
+        return None, None if decision is None else str(decision)
+    return entry, None if decision is None else str(decision)
+
+
+def _record_controller_memory(
+    worker_runtime: Any,
+    command: Any,
+    *,
+    step: int,
+    logger: StructuredLogger | None = None,
+) -> None:
+    recorder = getattr(worker_runtime, "record_controller_memory", None)
+    if not callable(recorder):
+        return
+    entry, decision = _extract_controller_memory(command)
+    if entry is None:
+        return
+    try:
+        recorded = recorder(entry, decision=decision)
+    except TypeError:
+        recorded = recorder(entry)
+    if logger is not None and isinstance(recorded, Mapping):
+        logger.log({"event": "controller_memory", "step": step, **dict(recorded)})
+
+
 def run_episode(
     task_env: TaskEnv,
     worker_runtime: WorkerRuntime,
@@ -190,10 +264,14 @@ def run_episode(
                 logger.log({"event": "controller_error", "step": step_count, "phase": "invoke", "error": str(exc)})
             raise
 
+        command, guard_event = _guard_exhausted_apply_command(command, packet)
         _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
+            if guard_event is not None:
+                logger.log({"event": "controller_guardrail", "step": step_count, **guard_event})
             logger.log({"event": "controller_command", "step": step_count, "command": command})
+        _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

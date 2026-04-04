@@ -1,6 +1,13 @@
 import unittest
 
-from SpiralInterventionLab.tasks import SpiralDigitCopyEnv, SpiralDigitTransformEnv
+from SpiralInterventionLab.tasks import (
+    SpiralConstrainedRewriteEnv,
+    SpiralDigitCopyEnv,
+    SpiralDigitTransformEnv,
+    SpiralEntailmentReasoningEnv,
+    SpiralSentenceOrderingEnv,
+    SpiralStructuredSummaryEnv,
+)
 
 
 class TestSpiralDigitTransformEnv(unittest.TestCase):
@@ -104,6 +111,85 @@ class TestSpiralDigitCopyEnv(unittest.TestCase):
         self.assertEqual(kwargs["max_generated_tokens"], len(target))
         self.assertEqual(kwargs["decode_constraint"], "digits_only")
         self.assertEqual(kwargs["task_feedback_fn"](target)["partial_score"], 1.0)
+
+
+class TestSpiralSentenceOrderingEnv(unittest.TestCase):
+    def test_ordering_feedback_and_runtime_kwargs(self):
+        env = SpiralSentenceOrderingEnv()
+        env.reset(7)
+        self.assertIsNotNone(env.current_episode)
+        target = env.current_episode.target_text
+        partial = target[:2]
+
+        self.assertEqual(env.score(target), 1.0)
+        self.assertAlmostEqual(env.score(partial), 2 / 3)
+        self.assertTrue(env.done(target))
+        self.assertFalse(env.done(partial))
+        self.assertAlmostEqual(env.task_feedback(partial)["partial_score"], 2 / 3)
+        self.assertEqual(env.task_feedback(partial)["progress_label"], "progressing")
+        self.assertTrue(env.stop_checker(target))
+
+        kwargs = env.worker_runtime_kwargs()
+        self.assertEqual(kwargs["task_id"], env.task_id)
+        self.assertEqual(kwargs["decode_constraint"], "digits_only")
+        self.assertEqual(kwargs["max_generated_tokens"], 3)
+
+
+class TestSpiralEntailmentReasoningEnv(unittest.TestCase):
+    def test_entailment_feedback_and_runtime_kwargs(self):
+        env = SpiralEntailmentReasoningEnv()
+        env.reset(5)
+        self.assertIsNotNone(env.current_episode)
+        target = f"{env.current_episode.label_digit}{env.current_episode.reason_digit}"
+        partial = target[:1]
+        wrong_reason = f"{target[0]}9"
+
+        self.assertEqual(env.score(target), 1.0)
+        self.assertAlmostEqual(env.score(partial), 0.6)
+        self.assertAlmostEqual(env.score(wrong_reason), 0.6)
+        self.assertTrue(env.done(target))
+        self.assertFalse(env.done(partial))
+        self.assertEqual(env.task_feedback(partial)["progress_label"], "progressing")
+        self.assertEqual(env.worker_runtime_kwargs()["decode_constraint"], "digits_only")
+        self.assertEqual(env.worker_runtime_kwargs()["max_generated_tokens"], 2)
+
+
+class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
+    def test_rewrite_feedback_and_runtime_kwargs(self):
+        env = SpiralConstrainedRewriteEnv()
+        env.reset(3)
+        self.assertIsNotNone(env.current_episode)
+        episode = env.current_episode
+        candidate = " ".join(episode.required_terms) + "."
+        bad_candidate = f"{candidate} {episode.forbidden_terms[0]}"
+
+        self.assertEqual(env.score(candidate), 1.0)
+        self.assertEqual(env.done(candidate), True)
+        self.assertLess(env.score(bad_candidate), 1.0)
+        self.assertIn("forbidden_terms_present", env.task_feedback(bad_candidate)["constraint_violations"])
+        kwargs = env.worker_runtime_kwargs()
+        self.assertGreater(kwargs["max_generated_tokens"], episode.max_words)
+        self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)
+
+
+class TestSpiralStructuredSummaryEnv(unittest.TestCase):
+    def test_summary_feedback_and_runtime_kwargs(self):
+        env = SpiralStructuredSummaryEnv()
+        env.reset(9)
+        self.assertIsNotNone(env.current_episode)
+        episode = env.current_episode
+        summary_line = f"summary: {' '.join(episode.required_summary_terms)}."
+        keywords_line = f"keywords: {episode.required_keywords[0]}, {episode.required_keywords[1]}"
+        candidate = f"{summary_line}\n{keywords_line}"
+        partial = summary_line
+
+        self.assertEqual(env.score(candidate), 1.0)
+        self.assertTrue(env.done(candidate))
+        self.assertLess(env.score(partial), 1.0)
+        self.assertIn("missing_keywords_line", env.task_feedback(partial)["constraint_violations"])
+        kwargs = env.worker_runtime_kwargs()
+        self.assertGreater(kwargs["max_generated_tokens"], episode.max_summary_words)
+        self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)
 
 
 if __name__ == "__main__":

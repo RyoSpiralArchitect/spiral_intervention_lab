@@ -2,6 +2,18 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
+_DELTA_KEYS = (
+    "entropy",
+    "top1_margin",
+    "repetition_score",
+    "partial_score",
+    "repeat_flag",
+    "no_progress_steps",
+    "progress_score",
+    "task_violation_count",
+    "done",
+)
+
 
 def _coerce_metric(metrics: Mapping[str, Any], key: str) -> float | None:
     value = metrics.get(key)
@@ -10,9 +22,20 @@ def _coerce_metric(metrics: Mapping[str, Any], key: str) -> float | None:
     return float(value)
 
 
+def _metric(metrics: Mapping[str, Any] | None, key: str, default: float = 0.0) -> float:
+    if not isinstance(metrics, Mapping):
+        return default
+    value = _coerce_metric(metrics, key)
+    return default if value is None else value
+
+
+def _after_is_looping(after: Mapping[str, Any] | None) -> bool:
+    return _metric(after, "repeat_flag") > 0.5 or _metric(after, "no_progress_steps") >= 3.0
+
+
 def compute_metric_delta(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[str, float]:
     delta: dict[str, float] = {}
-    for key in ("entropy", "top1_margin", "repetition_score", "partial_score"):
+    for key in _DELTA_KEYS:
         before_value = _coerce_metric(before, key)
         after_value = _coerce_metric(after, key)
         if before_value is None or after_value is None:
@@ -21,15 +44,44 @@ def compute_metric_delta(before: Mapping[str, Any], after: Mapping[str, Any]) ->
     return delta
 
 
-def classify_effect(delta: Mapping[str, float]) -> str:
-    score = 0.0
-    score += delta.get("top1_margin", 0.0)
-    score += delta.get("partial_score", 0.0)
-    score -= delta.get("entropy", 0.0)
-    score -= delta.get("repetition_score", 0.0)
-    if score > 0.02:
+def classify_effect(
+    delta: Mapping[str, float],
+    *,
+    before: Mapping[str, Any] | None = None,
+    after: Mapping[str, Any] | None = None,
+) -> str:
+    partial_delta = float(delta.get("partial_score", 0.0) or 0.0)
+    progress_delta = float(delta.get("progress_score", 0.0) or 0.0)
+    repetition_delta = float(delta.get("repetition_score", 0.0) or 0.0)
+    repeat_flag_delta = float(delta.get("repeat_flag", 0.0) or 0.0)
+    no_progress_delta = float(delta.get("no_progress_steps", 0.0) or 0.0)
+    violation_delta = float(delta.get("task_violation_count", 0.0) or 0.0)
+    done_delta = float(delta.get("done", 0.0) or 0.0)
+    entropy_delta = float(delta.get("entropy", 0.0) or 0.0)
+    margin_delta = float(delta.get("top1_margin", 0.0) or 0.0)
+
+    made_task_progress = partial_delta > 1e-6 or progress_delta > 0.2 or done_delta > 0.5 or _metric(after, "done") > 0.5
+    lost_task_progress = partial_delta < -1e-6 or progress_delta < -0.2
+    loop_worsened = (
+        repetition_delta > 0.05
+        or repeat_flag_delta > 0.5
+        or no_progress_delta > 0.5
+        or (_after_is_looping(after) and partial_delta <= 1e-6 and progress_delta <= 0.0 and _metric(after, "done") < 0.5)
+    )
+    loop_relieved = repetition_delta < -0.05 or repeat_flag_delta < -0.5 or no_progress_delta < -0.5
+    telemetry_support = (-entropy_delta) + margin_delta
+
+    if made_task_progress:
         return "helpful"
-    if score < -0.02:
+    if lost_task_progress or violation_delta > 0.5:
+        return "harmful"
+    if loop_worsened and partial_delta <= 1e-6 and progress_delta <= 0.0:
+        return "harmful"
+    if loop_relieved and violation_delta <= 0.0:
+        return "helpful"
+    if violation_delta < -0.5 and not _after_is_looping(after):
+        return "helpful"
+    if telemetry_support < -0.2 and partial_delta <= 1e-6 and progress_delta <= 0.0:
         return "harmful"
     return "neutral"
 
@@ -56,7 +108,7 @@ def build_edit_effect(
         "before": dict(before),
         "after": dict(after),
         "delta": delta,
-        "verdict": classify_effect(delta) if delta else "unknown",
+        "verdict": classify_effect(delta, before=before, after=after) if delta else "unknown",
     }
     if hypothesis is not None:
         effect["hypothesis"] = str(hypothesis)
@@ -97,6 +149,9 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "sum_top1_margin_delta": 0.0,
                 "sum_repetition_delta": 0.0,
                 "sum_partial_score_delta": 0.0,
+                "sum_progress_delta": 0.0,
+                "sum_no_progress_delta": 0.0,
+                "sum_task_violation_delta": 0.0,
                 "last_expected_effect": None,
             },
         )
@@ -109,9 +164,14 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             stats["sum_top1_margin_delta"] += float(delta.get("top1_margin", 0.0) or 0.0)
             stats["sum_repetition_delta"] += float(delta.get("repetition_score", 0.0) or 0.0)
             stats["sum_partial_score_delta"] += float(delta.get("partial_score", 0.0) or 0.0)
+            stats["sum_progress_delta"] += float(delta.get("progress_score", 0.0) or 0.0)
+            stats["sum_no_progress_delta"] += float(delta.get("no_progress_steps", 0.0) or 0.0)
+            stats["sum_task_violation_delta"] += float(delta.get("task_violation_count", 0.0) or 0.0)
         if effect.get("expected_effect") is not None:
             stats["last_expected_effect"] = str(effect["expected_effect"])
 
+        effect_delta = effect.get("delta", {})
+        effect_after = effect.get("after", {})
         latest.append(
             {
                 "edit_id": effect.get("edit_id"),
@@ -119,6 +179,23 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "hypothesis": effect.get("hypothesis"),
                 "expected_effect": effect.get("expected_effect"),
                 "verdict": verdict,
+                "partial_score_delta": float(effect_delta.get("partial_score", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "progress_delta": float(effect_delta.get("progress_score", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "repetition_delta": float(effect_delta.get("repetition_score", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "task_violation_delta": float(effect_delta.get("task_violation_count", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "after_is_looping": _after_is_looping(effect_after if isinstance(effect_after, Mapping) else None),
+                "after_no_progress_steps": int(_metric(effect_after if isinstance(effect_after, Mapping) else None, "no_progress_steps")),
+                "after_task_violation_count": int(
+                    _metric(effect_after if isinstance(effect_after, Mapping) else None, "task_violation_count")
+                ),
             }
         )
 
@@ -137,6 +214,9 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "mean_top1_margin_delta": stats["sum_top1_margin_delta"] / attempts,
                 "mean_repetition_delta": stats["sum_repetition_delta"] / attempts,
                 "mean_partial_score_delta": stats["sum_partial_score_delta"] / attempts,
+                "mean_progress_delta": stats["sum_progress_delta"] / attempts,
+                "mean_no_progress_delta": stats["sum_no_progress_delta"] / attempts,
+                "mean_task_violation_delta": stats["sum_task_violation_delta"] / attempts,
                 "last_expected_effect": stats["last_expected_effect"],
             }
         )
