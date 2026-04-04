@@ -131,6 +131,65 @@ class TestExamples(unittest.TestCase):
         self.assertIn("step_size", packet["surface_catalog"][0]["caps"])
         self.assertTrue(runtime.allowed_token_ids)
 
+    def test_build_hooked_transformer_worker_runtime_with_structured_reflection(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralDigitTransformEnv(min_digits=4, max_digits=4)
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=5,
+            codec=codec,
+            controller_reflection_mode="structured",
+            controller_memory_window=2,
+        )
+
+        runtime.record_controller_memory(
+            {
+                "hypothesis": "small_rescue",
+                "observed_outcome": "harmful",
+                "next_change": "prefer noop",
+                "confidence": 0.4,
+            },
+            decision="apply",
+        )
+        prompt = env.reset(5)
+        runtime.reset(prompt)
+        runtime.record_controller_memory(
+            {
+                "hypothesis": "small_rescue",
+                "observed_outcome": "harmful",
+                "next_change": "prefer noop",
+                "confidence": 0.4,
+            },
+            decision="apply",
+        )
+        runtime.step()
+        packet = runtime.build_controller_packet()
+
+        self.assertIn("controller_memory", packet)
+        self.assertEqual(packet["controller_memory"][0]["hypothesis"], "small_rescue")
+        self.assertEqual(packet["controller_memory"][0]["decision"], "apply")
+
+    def test_build_hooked_transformer_worker_runtime_with_loop_aware_decoder_control(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralDigitTransformEnv(min_digits=4, max_digits=4)
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=5,
+            codec=codec,
+            worker_decoder_control_mode="loop_aware",
+        )
+
+        prompt = env.reset(5)
+        runtime.reset(prompt)
+        runtime.step()
+        packet = runtime.build_controller_packet()
+
+        self.assertEqual(runtime.decoder_control_mode, "loop_aware")
+        self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware")
+        self.assertIn("decoder_rescue_active", packet["telemetry"])
+
     def test_build_allowed_token_ids_for_digit_constraint(self):
         codec = CharacterCodec(" 12a")
         model = type("FakeModel", (), {"cfg": type("Cfg", (), {"d_vocab": 4})()})()
@@ -181,6 +240,8 @@ class TestExamples(unittest.TestCase):
             payload = result.to_dict()
             self.assertEqual(payload["controller_provider"], "openai")
             self.assertEqual(payload["task_id"], env.task_id)
+            self.assertEqual(payload["controller_reflection_mode"], "off")
+            self.assertEqual(payload["worker_decoder_control_mode"], "off")
             self.assertIn("b0", payload)
             self.assertIn("b1", payload)
             self.assertIn("c1", payload)
@@ -208,11 +269,15 @@ class TestExamples(unittest.TestCase):
                     task_env=env,
                     codec=codec,
                     log_dir=tmpdir,
+                    controller_reflection_mode="structured",
+                    worker_decoder_control_mode="loop_aware",
                 )
 
             payload = result.to_dict()
             self.assertEqual(payload["suite_mode"], "c1_only")
             self.assertEqual(payload["task_id"], env.task_id)
+            self.assertEqual(payload["controller_reflection_mode"], "structured")
+            self.assertEqual(payload["worker_decoder_control_mode"], "loop_aware")
             self.assertIsNone(payload["b0"])
             self.assertIsNone(payload["b1"])
             self.assertIn("c1", payload)

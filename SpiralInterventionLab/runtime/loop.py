@@ -190,6 +190,8 @@ def _guard_exhausted_apply_command(
         "edits": [],
         "rollback_ids": [],
     }
+    if isinstance(command.get("meta"), Mapping):
+        guarded_command["meta"] = dict(command["meta"])
     return guarded_command, {
         "reason": "edits_left_this_run_exhausted",
         "original_decision": decision,
@@ -198,6 +200,42 @@ def _guard_exhausted_apply_command(
         if isinstance(command.get("edits"), SequenceABC)
         else 0,
     }
+
+
+def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, str | None]:
+    if isinstance(command, Mapping):
+        meta = command.get("meta")
+        decision = command.get("decision")
+    else:
+        meta = getattr(command, "meta", None)
+        decision = getattr(command, "decision", None)
+    if not isinstance(meta, Mapping):
+        return None, None if decision is None else str(decision)
+    entry = meta.get("controller_memory")
+    if not isinstance(entry, Mapping):
+        return None, None if decision is None else str(decision)
+    return entry, None if decision is None else str(decision)
+
+
+def _record_controller_memory(
+    worker_runtime: Any,
+    command: Any,
+    *,
+    step: int,
+    logger: StructuredLogger | None = None,
+) -> None:
+    recorder = getattr(worker_runtime, "record_controller_memory", None)
+    if not callable(recorder):
+        return
+    entry, decision = _extract_controller_memory(command)
+    if entry is None:
+        return
+    try:
+        recorded = recorder(entry, decision=decision)
+    except TypeError:
+        recorded = recorder(entry)
+    if logger is not None and isinstance(recorded, Mapping):
+        logger.log({"event": "controller_memory", "step": step, **dict(recorded)})
 
 
 def run_episode(
@@ -233,6 +271,7 @@ def run_episode(
             if guard_event is not None:
                 logger.log({"event": "controller_guardrail", "step": step_count, **guard_event})
             logger.log({"event": "controller_command", "step": step_count, "command": command})
+        _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

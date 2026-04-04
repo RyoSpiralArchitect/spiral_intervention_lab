@@ -200,6 +200,22 @@ def _resid_command():
     }
 
 
+def _resid_command_with_memory():
+    command = _resid_command()
+    command["meta"] = dict(command["meta"]) | {
+        "controller_memory": {
+            "hypothesis": "small_rescue",
+            "expected_effect": "break_loop",
+            "observed_outcome": "unknown",
+            "why_failed_or_helped": "first attempt; no effect observed yet",
+            "next_change": "wait for effect before stacking",
+            "stop_condition": "if no progress improves, stop",
+            "confidence": 0.55,
+        }
+    }
+    return command
+
+
 def _rank1_command():
     return {
         "version": "0.1",
@@ -581,6 +597,7 @@ class _ToyController:
                 "step": packet["step"],
                 "worker_status": packet["worker_view"]["status"],
                 "surface_ids": [surface["surface_id"] for surface in packet["surface_catalog"]],
+                "controller_memory": list(packet.get("controller_memory", [])),
             },
             "attempts": [
                 {
@@ -612,11 +629,13 @@ class _ToyWorkerRuntime:
         self.output = ""
         self.steps = 0
         self._latest_effect_trace = {"completed_effects": [], "summary": {"window_size": 0, "verdict_counts": {}, "hypothesis_stats": [], "latest_effects": []}}
+        self._controller_memory = []
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
         self.output = "base"
         self.steps = 0
+        self._controller_memory = []
 
     def step(self) -> None:
         self.steps += 1
@@ -630,7 +649,9 @@ class _ToyWorkerRuntime:
 
     def build_controller_packet(self):
         rollbackable_ids = list(self.runtime_state.hooks) + list(self.runtime_state.overlays)
-        return _make_packet(rollbackable_ids=rollbackable_ids)
+        packet = _make_packet(rollbackable_ids=rollbackable_ids)
+        packet["controller_memory"] = [dict(entry) for entry in self._controller_memory]
+        return packet
 
     def observe_recent_effects(self) -> None:
         if self.steps >= 2 and self.runtime_state.has_edit("e_rescue"):
@@ -665,12 +686,28 @@ class _ToyWorkerRuntime:
     def latest_effect_trace(self):
         return self._latest_effect_trace
 
+    def record_controller_memory(self, entry, *, decision=None):
+        stored = dict(entry)
+        if decision is not None:
+            stored["decision"] = decision
+        self._controller_memory.append(stored)
+        self._controller_memory = self._controller_memory[-3:]
+        return stored
+
 
 class _BudgetExhaustedToyWorkerRuntime(_ToyWorkerRuntime):
     def build_controller_packet(self):
         packet = super().build_controller_packet()
         packet["budget"]["edits_left_this_run"] = 0
         return packet
+
+
+class _MemoryToyController(_ToyController):
+    def invoke(self, packet):
+        response = super().invoke(packet)
+        if self.calls == 1:
+            return _resid_command_with_memory()
+        return response
 
 
 class TestLoopAndEffects(unittest.TestCase):
@@ -773,6 +810,28 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertFalse(any(event["event"] == "compiled_edit" for event in logger.events))
         first_command = next(event for event in logger.events if event["event"] == "controller_command")
         self.assertEqual(first_command["command"]["decision"], "noop")
+
+    def test_run_episode_records_controller_memory(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        worker = _ToyWorkerRuntime(runtime_state)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            worker,
+            _MemoryToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertEqual(worker._controller_memory[0]["hypothesis"], "small_rescue")
+        self.assertEqual(worker._controller_memory[0]["decision"], "apply")
+        self.assertTrue(any(event["event"] == "controller_memory" for event in logger.events))
+        observations = [event for event in logger.events if event["event"] == "controller_observation"]
+        self.assertEqual(observations[-1]["controller_memory"][0]["hypothesis"], "small_rescue")
 
 
 class TestRank1Bridge(unittest.TestCase):
@@ -958,7 +1017,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
     def _surface_catalog(self):
         return [_make_packet()["surface_catalog"][0]]
 
-    def _make_worker_runtime(self):
+    def _make_worker_runtime(self, *, decoder_control_mode: str = "off"):
         codec = CharacterCodec("pabc!? ")
         runtime_state = DeterministicRuntimeState(codec)
         adapter = FakeAdapter()
@@ -975,6 +1034,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             max_total_alpha=0.5,
             max_active_patch_slots=1,
             stop_checker=lambda output: len(output) >= 3,
+            decoder_control_mode=decoder_control_mode,
         )
 
     def test_worker_runtime_packet_is_schema_shaped(self):
@@ -1048,6 +1108,29 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(summary["window_size"], 1)
         self.assertEqual(summary["hypothesis_stats"][0]["hypothesis"], "rescue")
         self.assertEqual(summary["hypothesis_stats"][0]["last_expected_effect"], "break_loop")
+
+    def test_worker_runtime_loop_cycle_detection_marks_alternating_suffix(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(worker_runtime.runtime_state.base_token)
+        worker_runtime._append_output_token(worker_runtime.runtime_state.hint_token)
+        worker_runtime._append_output_token(worker_runtime.runtime_state.base_token)
+        worker_runtime._append_output_token(worker_runtime.runtime_state.hint_token)
+
+        self.assertEqual(worker_runtime._loop_cycle_length(), 2)
+        self.assertTrue(worker_runtime._repeat_flag())
+
+    def test_worker_runtime_loop_aware_decoder_control_breaks_repeated_argmax_loop(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="loop_aware")
+        worker_runtime.reset("p")
+
+        for _ in range(3):
+            worker_runtime.step()
+
+        self.assertEqual(worker_runtime.final_text(), "aab")
+        packet = worker_runtime.build_controller_packet()
+        self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware")
+        self.assertTrue(packet["telemetry"]["decoder_rescue_active"])
 
     def test_probe_frames_use_step_aligned_baseline_trace(self):
         baseline_worker = self._make_worker_runtime()

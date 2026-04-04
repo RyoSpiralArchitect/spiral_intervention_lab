@@ -46,6 +46,8 @@ except Exception:  # pragma: no cover - optional dependency at import time
 
 _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
 _WORKER_MPS_MODES = ("auto", "conservative")
+_CONTROLLER_REFLECTION_MODES = ("off", "structured")
+_WORKER_DECODER_CONTROL_MODES = ("off", "loop_aware")
 
 ExperimentTaskEnv = (
     SpiralDigitTransformEnv
@@ -171,6 +173,9 @@ def build_hooked_transformer_worker_runtime(
     max_edits_per_run: int = 4,
     max_total_alpha: float = 0.5,
     max_active_patch_slots: int = 1,
+    controller_reflection_mode: str = "off",
+    controller_memory_window: int = 3,
+    worker_decoder_control_mode: str = "off",
 ) -> HookedTransformerWorkerRuntime:
     runtime_state = HookedTransformerRuntimeState(model, seed=seed)
     adapter = HookedTransformerAdapter(model)
@@ -209,6 +214,9 @@ def build_hooked_transformer_worker_runtime(
         max_edits_per_run=max_edits_per_run,
         max_total_alpha=max_total_alpha,
         max_active_patch_slots=max_active_patch_slots,
+        controller_reflection_mode=controller_reflection_mode,
+        controller_memory_window=controller_memory_window,
+        decoder_control_mode=worker_decoder_control_mode,
         allowed_token_ids=allowed_token_ids,
         trace_metadata={
             "paired_baseline": {
@@ -458,6 +466,8 @@ class DigitTransformExperimentResult:
     worker_model_name: str
     controller_provider: str
     controller_model_name: str
+    controller_reflection_mode: str
+    worker_decoder_control_mode: str
     surface_ids: tuple[str, ...]
     suite: BaselineSuiteResult
 
@@ -469,6 +479,8 @@ class DigitTransformExperimentResult:
             "worker_model_name": self.worker_model_name,
             "controller_provider": self.controller_provider,
             "controller_model_name": self.controller_model_name,
+            "controller_reflection_mode": self.controller_reflection_mode,
+            "worker_decoder_control_mode": self.worker_decoder_control_mode,
             "surface_ids": list(self.surface_ids),
             "paired_trace_id": self.suite.paired_trace_id,
             "b0": asdict(self.suite.b0),
@@ -484,6 +496,8 @@ class DigitTransformC1OnlyExperimentResult:
     worker_model_name: str
     controller_provider: str
     controller_model_name: str
+    controller_reflection_mode: str
+    worker_decoder_control_mode: str
     surface_ids: tuple[str, ...]
     c1: EpisodeResult
 
@@ -495,6 +509,8 @@ class DigitTransformC1OnlyExperimentResult:
             "worker_model_name": self.worker_model_name,
             "controller_provider": self.controller_provider,
             "controller_model_name": self.controller_model_name,
+            "controller_reflection_mode": self.controller_reflection_mode,
+            "worker_decoder_control_mode": self.worker_decoder_control_mode,
             "surface_ids": list(self.surface_ids),
             "paired_trace_id": None,
             "b0": None,
@@ -575,6 +591,9 @@ def run_digit_transform_experiment(
     worker_hf_offline: bool = False,
     worker_trust_remote_code: bool = False,
     worker_mps_mode: str = "auto",
+    controller_reflection_mode: str = "off",
+    controller_memory_window: int = 3,
+    worker_decoder_control_mode: str = "off",
 ) -> DigitTransformExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -608,6 +627,9 @@ def run_digit_transform_experiment(
             task_view_mode=task_view_mode,
             surface_catalog=surface_catalog,
             codec=codec,
+            controller_reflection_mode=controller_reflection_mode,
+            controller_memory_window=controller_memory_window,
+            worker_decoder_control_mode=worker_decoder_control_mode,
         )
 
     suite = run_minimal_baseline_suite(
@@ -626,6 +648,8 @@ def run_digit_transform_experiment(
         worker_model_name=worker_model_name,
         controller_provider=normalize_provider_name(provider_name),
         controller_model_name=controller_model_name,
+        controller_reflection_mode=controller_reflection_mode,
+        worker_decoder_control_mode=worker_decoder_control_mode,
         surface_ids=surface_ids,
         suite=suite,
     )
@@ -655,6 +679,9 @@ def run_digit_transform_c1_only_experiment(
     worker_hf_offline: bool = False,
     worker_trust_remote_code: bool = False,
     worker_mps_mode: str = "auto",
+    controller_reflection_mode: str = "off",
+    controller_memory_window: int = 3,
+    worker_decoder_control_mode: str = "off",
 ) -> DigitTransformC1OnlyExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -681,6 +708,9 @@ def run_digit_transform_c1_only_experiment(
         task_view_mode=task_view_mode,
         surface_catalog=surface_catalog,
         codec=codec,
+        controller_reflection_mode=controller_reflection_mode,
+        controller_memory_window=controller_memory_window,
+        worker_decoder_control_mode=worker_decoder_control_mode,
     )
     logger_factory = _logger_factory(log_dir)
     c1 = run_c1(
@@ -696,6 +726,8 @@ def run_digit_transform_c1_only_experiment(
         worker_model_name=worker_model_name,
         controller_provider=normalize_provider_name(provider_name),
         controller_model_name=controller_model_name,
+        controller_reflection_mode=controller_reflection_mode,
+        worker_decoder_control_mode=worker_decoder_control_mode,
         surface_ids=surface_ids,
         c1=c1,
     )
@@ -727,6 +759,9 @@ def run_digit_transform_sweep(
     worker_hf_offline: bool = False,
     worker_trust_remote_code: bool = False,
     worker_mps_mode: str = "auto",
+    controller_reflection_mode: str = "off",
+    controller_memory_window: int = 3,
+    worker_decoder_control_mode: str = "off",
 ) -> DigitTransformSweepResult:
     resolved_seeds = tuple(int(seed) for seed in seeds)
     if not resolved_seeds:
@@ -767,13 +802,16 @@ def run_digit_transform_sweep(
                 surface_catalog=surface_catalog,
                 worker_model_path=worker_model_path,
                 worker_tokenizer_path=worker_tokenizer_path,
-                    worker_device=worker_device,
-                    worker_dtype=worker_dtype,
-                    worker_first_n_layers=worker_first_n_layers,
-                    worker_hf_offline=worker_hf_offline,
-                    worker_trust_remote_code=worker_trust_remote_code,
-                    worker_mps_mode=worker_mps_mode,
-                )
+                worker_device=worker_device,
+                worker_dtype=worker_dtype,
+                worker_first_n_layers=worker_first_n_layers,
+                worker_hf_offline=worker_hf_offline,
+                worker_trust_remote_code=worker_trust_remote_code,
+                worker_mps_mode=worker_mps_mode,
+                controller_reflection_mode=controller_reflection_mode,
+                controller_memory_window=controller_memory_window,
+                worker_decoder_control_mode=worker_decoder_control_mode,
+            )
             )
     result = DigitTransformSweepResult(seeds=resolved_seeds, runs=tuple(runs))
     _write_summary_artifact(log_dir, "sweep_summary.json", result.to_dict())
@@ -818,6 +856,24 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=list(_WORKER_MPS_MODES),
         help="MPS worker loading mode: auto keeps current defaults, conservative keeps MPS execution but resets torch default-device auto-placement to CPU",
     )
+    parser.add_argument(
+        "--controller-reflection-mode",
+        default="off",
+        choices=list(_CONTROLLER_REFLECTION_MODES),
+        help="Whether the controller can write structured controller_memory entries that are fed back on later steps",
+    )
+    parser.add_argument(
+        "--controller-memory-window",
+        type=int,
+        default=3,
+        help="How many recent controller_memory entries to retain in the observation packet when reflection mode is enabled",
+    )
+    parser.add_argument(
+        "--worker-decoder-control-mode",
+        default="off",
+        choices=list(_WORKER_DECODER_CONTROL_MODES),
+        help="Optional worker-side decoder rescue mode; loop_aware applies task-agnostic anti-loop logit shaping without adding task-specific token bias",
+    )
     return parser
 
 
@@ -826,6 +882,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.num_seeds <= 0:
         parser.error("--num-seeds must be >= 1")
+    if args.controller_memory_window <= 0:
+        parser.error("--controller-memory-window must be >= 1")
     if args.c1_only and args.num_seeds != 1:
         parser.error("--c1-only currently supports only --num-seeds 1")
     if args.controller_api_key is None:
@@ -851,6 +909,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_hf_offline=args.worker_hf_offline,
             worker_trust_remote_code=args.worker_trust_remote_code,
             worker_mps_mode=args.worker_mps_mode,
+            controller_reflection_mode=args.controller_reflection_mode,
+            controller_memory_window=args.controller_memory_window,
+            worker_decoder_control_mode=args.worker_decoder_control_mode,
         )
         payload = result.to_dict()
     elif args.num_seeds == 1:
@@ -872,6 +933,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_hf_offline=args.worker_hf_offline,
             worker_trust_remote_code=args.worker_trust_remote_code,
             worker_mps_mode=args.worker_mps_mode,
+            controller_reflection_mode=args.controller_reflection_mode,
+            controller_memory_window=args.controller_memory_window,
+            worker_decoder_control_mode=args.worker_decoder_control_mode,
         )
         payload = result.to_dict()
     else:
@@ -893,6 +957,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_hf_offline=args.worker_hf_offline,
             worker_trust_remote_code=args.worker_trust_remote_code,
             worker_mps_mode=args.worker_mps_mode,
+            controller_reflection_mode=args.controller_reflection_mode,
+            controller_memory_window=args.controller_memory_window,
+            worker_decoder_control_mode=args.worker_decoder_control_mode,
         )
         payload = sweep.to_dict()
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
