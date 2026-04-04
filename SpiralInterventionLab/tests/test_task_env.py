@@ -162,11 +162,18 @@ class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
         episode = env.current_episode
         candidate = " ".join(episode.required_terms) + "."
         bad_candidate = f"{candidate} {episode.forbidden_terms[0]}"
+        partial_candidate = " ".join(episode.required_terms[:2])
 
         self.assertEqual(env.score(candidate), 1.0)
         self.assertEqual(env.done(candidate), True)
         self.assertLess(env.score(bad_candidate), 1.0)
         self.assertIn("forbidden_terms_present", env.task_feedback(bad_candidate)["constraint_violations"])
+        feedback = env.task_feedback(partial_candidate)
+        self.assertEqual(feedback["required_term_recall"], 2 / len(episode.required_terms))
+        self.assertEqual(feedback["forbidden_term_clean"], 1.0)
+        self.assertTrue(feedback["budget_ok"])
+        self.assertEqual(feedback["word_budget_score"], 1.0)
+        self.assertEqual(feedback["required_terms_present"], list(episode.required_terms[:2]))
         kwargs = env.worker_runtime_kwargs()
         self.assertGreater(kwargs["max_generated_tokens"], episode.max_words)
         self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)

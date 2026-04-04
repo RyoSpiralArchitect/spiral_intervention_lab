@@ -364,22 +364,7 @@ class SpiralConstrainedRewriteEnv:
         if not candidate:
             return 0.0
         episode = self._episode()
-        required_score = _fraction(
-            sum(1 for term in episode.required_terms if _contains_term(candidate, term)),
-            len(episode.required_terms),
-        )
-        forbidden_score = _fraction(
-            sum(1 for term in episode.forbidden_terms if not _contains_term(candidate, term)),
-            len(episode.forbidden_terms),
-        )
-        word_count = _word_count(candidate)
-        if word_count == 0:
-            budget_score = 0.0
-        elif word_count <= episode.max_words:
-            budget_score = 1.0
-        else:
-            overflow = word_count - episode.max_words
-            budget_score = max(0.0, 1.0 - (overflow / max(1, episode.max_words)))
+        required_score, forbidden_score, budget_score = self._component_scores(candidate)
         return round((0.55 * required_score) + (0.25 * forbidden_score) + (0.20 * budget_score), 6)
 
     def done(self, output: str) -> bool:
@@ -399,6 +384,9 @@ class SpiralConstrainedRewriteEnv:
         violations: list[str] = []
         missing_required = [term for term in episode.required_terms if candidate and not _contains_term(candidate, term)]
         forbidden_present = [term for term in episode.forbidden_terms if candidate and _contains_term(candidate, term)]
+        required_score, forbidden_score, budget_score = self._component_scores(candidate)
+        required_present = [term for term in episode.required_terms if candidate and _contains_term(candidate, term)]
+        budget_ok = bool(candidate) and _word_count(candidate) <= episode.max_words
         if not candidate:
             violations.append("empty_output")
         if missing_required:
@@ -412,6 +400,11 @@ class SpiralConstrainedRewriteEnv:
             "done": self.done(output),
             "partial_score": partial_score,
             "progress_label": _progress_label(done=self.done(output), candidate=candidate, partial_score=partial_score),
+            "required_term_recall": required_score,
+            "required_terms_present": required_present,
+            "forbidden_term_clean": forbidden_score,
+            "budget_ok": budget_ok,
+            "word_budget_score": budget_score,
             "constraint_violations": violations,
             "missing_required_terms": missing_required,
             "forbidden_terms_present": forbidden_present,
@@ -441,6 +434,26 @@ class SpiralConstrainedRewriteEnv:
         if self.current_episode is None:
             raise RuntimeError("reset(seed=...) must be called before scoring or feedback")
         return self.current_episode
+
+    def _component_scores(self, candidate: str) -> tuple[float, float, float]:
+        episode = self._episode()
+        required_score = _fraction(
+            sum(1 for term in episode.required_terms if _contains_term(candidate, term)),
+            len(episode.required_terms),
+        )
+        forbidden_score = _fraction(
+            sum(1 for term in episode.forbidden_terms if not _contains_term(candidate, term)),
+            len(episode.forbidden_terms),
+        )
+        word_count = _word_count(candidate)
+        if word_count == 0:
+            budget_score = 0.0
+        elif word_count <= episode.max_words:
+            budget_score = 1.0
+        else:
+            overflow = word_count - episode.max_words
+            budget_score = max(0.0, 1.0 - (overflow / max(1, episode.max_words)))
+        return required_score, forbidden_score, budget_score
 
 
 @dataclass(frozen=True)

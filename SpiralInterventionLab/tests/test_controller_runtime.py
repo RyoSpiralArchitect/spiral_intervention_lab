@@ -161,6 +161,10 @@ def _make_packet(*, rollbackable_ids=None):
             "edits_left_this_step": 1,
             "edits_left_this_run": 4,
             "alpha_left_total": 0.5,
+            "edit_cost_left_total": 0.5,
+            "loop_rescue_edits_left_this_run": 0,
+            "loop_rescue_alpha_left_total": 0.0,
+            "loop_rescue_edit_cost_left_total": 0.0,
             "active_patch_slots_left": 2,
             "rollbackable_ids": rollbackable_ids,
         },
@@ -194,6 +198,35 @@ def _resid_command():
                 },
                 "op": {"kind": "resid_add", "alpha": 0.2},
                 "budget": {"ttl_steps": 2, "norm_clip": 1.5, "revertible": True},
+                "meta": {"expected_effect": "break_loop"},
+            }
+        ],
+    }
+
+
+def _loop_rescue_command(*, alpha: float = 0.06, step_size: float = 0.06, edit_id: str = "e_loop_rescue"):
+    return {
+        "version": "0.1",
+        "decision": "apply",
+        "meta": {"hypothesis": "small_loop_rescue", "confidence": 0.6},
+        "edits": [
+            {
+                "id": edit_id,
+                "target": {"surface_id": "s_resid_l11_last"},
+                "source": {
+                    "dtype": "vector",
+                    "expr": {
+                        "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "hidden",
+                            "layer": 11,
+                            "token": {"mode": "last"},
+                        }
+                    },
+                },
+                "op": {"kind": "resid_add", "alpha": alpha},
+                "budget": {"ttl_steps": 1, "norm_clip": 1.5, "step_size": step_size, "revertible": True},
                 "meta": {"expected_effect": "break_loop"},
             }
         ],
@@ -502,6 +535,17 @@ class TestSchemaAndPolicy(unittest.TestCase):
         with self.assertRaises(PolicyViolation):
             validate_command_against_packet(command, packet)
 
+    def test_policy_allows_loop_rescue_edit_when_main_run_budget_is_exhausted(self):
+        packet = _make_packet()
+        packet["budget"]["edits_left_this_run"] = 0
+        packet["budget"]["alpha_left_total"] = 0.0
+        packet["budget"]["edit_cost_left_total"] = 0.0
+        packet["budget"]["loop_rescue_edits_left_this_run"] = 2
+        packet["budget"]["loop_rescue_alpha_left_total"] = 0.12
+        packet["budget"]["loop_rescue_edit_cost_left_total"] = 0.12
+
+        validate_command_against_packet(_loop_rescue_command(), packet)
+
 
 class TestCompiler(unittest.TestCase):
     def test_compile_resid_add_registers_hook(self):
@@ -567,6 +611,23 @@ class TestCompiler(unittest.TestCase):
         out = hook_record["hook_fn"](act, None)
         self.assertLessEqual(float(out[0, -1].norm().item()), 0.1001)
 
+    def test_compile_loop_rescue_resid_add_records_loop_rescue_budget_pool(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet_payload = _make_packet()
+        packet_payload["budget"]["loop_rescue_edits_left_this_run"] = 2
+        packet_payload["budget"]["loop_rescue_alpha_left_total"] = 0.12
+        packet_payload["budget"]["loop_rescue_edit_cost_left_total"] = 0.12
+        packet_payload["surface_catalog"][0]["caps"]["step_size"] = 0.06
+        packet = parse_observation_packet(packet_payload)
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+
+        compiled = compile_command(_loop_rescue_command(), packet, ctx)
+        compiled[0].apply(ctx)
+
+        hook_record = runtime_state.hooks["e_loop_rescue"]
+        self.assertEqual(hook_record["metadata"]["budget_pool"], "loop_rescue")
+
 
 class _ToyTaskEnv:
     def reset(self, seed: int) -> str:
@@ -621,6 +682,84 @@ class _ToyController:
         if self.calls == 1:
             return _resid_command()
         return {"version": "0.1", "decision": "noop"}
+
+
+class _LoopRescueToyController(_ToyController):
+    def invoke(self, packet):
+        self.calls += 1
+        self._last_trace = {
+            "provider": "fake",
+            "model": "toy-controller",
+            "observation": {
+                "step": packet["step"],
+                "worker_status": packet["worker_view"]["status"],
+            },
+            "attempts": [
+                {
+                    "attempt": 1,
+                    "provider": "fake",
+                    "model": "toy-controller",
+                    "latency_ms": 1.0,
+                    "parse_ok": True,
+                    "response_text": "{\"version\":\"0.1\",\"decision\":\"apply\"}",
+                }
+            ],
+            "decision": {
+                "decision": "apply" if self.calls == 1 else "noop",
+                "edit_ids": ["e_loop_rescue"] if self.calls == 1 else [],
+                "ops": ["resid_add"] if self.calls == 1 else [],
+            },
+            "success": True,
+        }
+        if self.calls == 1:
+            return _loop_rescue_command()
+        return {"version": "0.1", "decision": "noop"}
+
+
+class _OverBudgetLoopRescueToyController(_ToyController):
+    def invoke(self, packet):
+        self.calls += 1
+        self._last_trace = {
+            "provider": "fake",
+            "model": "toy-controller",
+            "observation": {
+                "step": packet["step"],
+                "worker_status": packet["worker_view"]["status"],
+            },
+            "attempts": [
+                {
+                    "attempt": 1,
+                    "provider": "fake",
+                    "model": "toy-controller",
+                    "latency_ms": 1.0,
+                    "parse_ok": True,
+                    "response_text": "{\"version\":\"0.1\",\"decision\":\"apply\"}",
+                }
+            ],
+            "decision": {
+                "decision": "apply" if self.calls == 1 else "noop",
+                "edit_ids": ["e_loop_rescue_overbudget"] if self.calls == 1 else [],
+                "ops": ["resid_add"] if self.calls == 1 else [],
+            },
+            "success": True,
+        }
+        if self.calls == 1:
+            return _loop_rescue_command(alpha=0.08, step_size=0.08, edit_id="e_loop_rescue_overbudget")
+        return {"version": "0.1", "decision": "noop"}
+
+
+class _ParsedCommandController:
+    def __init__(self, inner):
+        self.inner = inner
+
+    def latest_trace(self):
+        return self.inner.latest_trace()
+
+    def invoke(self, packet):
+        command = self.inner.invoke(packet)
+        if isinstance(command, ControllerCommand):
+            return command
+        return parse_controller_command(command)
 
 
 class _ToyWorkerRuntime:
@@ -702,6 +841,30 @@ class _BudgetExhaustedToyWorkerRuntime(_ToyWorkerRuntime):
         return packet
 
 
+class _LoopRescueBudgetToyWorkerRuntime(_ToyWorkerRuntime):
+    def build_controller_packet(self):
+        packet = super().build_controller_packet()
+        packet["budget"]["edits_left_this_run"] = 0
+        packet["budget"]["alpha_left_total"] = 0.0
+        packet["budget"]["edit_cost_left_total"] = 0.0
+        packet["budget"]["loop_rescue_edits_left_this_run"] = 2
+        packet["budget"]["loop_rescue_alpha_left_total"] = 0.12
+        packet["budget"]["loop_rescue_edit_cost_left_total"] = 0.12
+        return packet
+
+
+class _LowAlphaLoopRescueBudgetToyWorkerRuntime(_ToyWorkerRuntime):
+    def build_controller_packet(self):
+        packet = super().build_controller_packet()
+        packet["budget"]["edits_left_this_run"] = 0
+        packet["budget"]["alpha_left_total"] = 0.0
+        packet["budget"]["edit_cost_left_total"] = 0.0
+        packet["budget"]["loop_rescue_edits_left_this_run"] = 1
+        packet["budget"]["loop_rescue_alpha_left_total"] = 0.04
+        packet["budget"]["loop_rescue_edit_cost_left_total"] = 0.04
+        return packet
+
+
 class _MemoryToyController(_ToyController):
     def invoke(self, packet):
         response = super().invoke(packet)
@@ -716,8 +879,24 @@ class TestLoopAndEffects(unittest.TestCase):
             edit_id="e1",
             surface_id="s1",
             observed_window_steps=1,
-            before={"entropy": 2.5, "top1_margin": 0.05, "repetition_score": 0.4},
-            after={"entropy": 2.1, "top1_margin": 0.09, "repetition_score": 0.2},
+            before={
+                "entropy": 2.5,
+                "top1_margin": 0.05,
+                "repetition_score": 0.4,
+                "required_term_recall": 0.0,
+                "forbidden_term_clean": 1.0,
+                "word_budget_score": 1.0,
+                "budget_ok": 1.0,
+            },
+            after={
+                "entropy": 2.1,
+                "top1_margin": 0.09,
+                "repetition_score": 0.2,
+                "required_term_recall": 0.25,
+                "forbidden_term_clean": 1.0,
+                "word_budget_score": 1.0,
+                "budget_ok": 1.0,
+            },
             hypothesis="rescue",
             expected_effect="break_loop",
         )
@@ -728,6 +907,8 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertEqual(summary["verdict_counts"]["helpful"], 1)
         self.assertIn("mean_progress_delta", summary["hypothesis_stats"][0])
         self.assertIn("progress_delta", summary["latest_effects"][0])
+        self.assertIn("mean_required_term_recall_delta", summary["hypothesis_stats"][0])
+        self.assertIn("required_term_recall_delta", summary["latest_effects"][0])
 
     def test_build_edit_effect_marks_looping_without_progress_as_harmful(self):
         effect = build_edit_effect(
@@ -810,6 +991,101 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertFalse(any(event["event"] == "compiled_edit" for event in logger.events))
         first_command = next(event for event in logger.events if event["event"] == "controller_command")
         self.assertEqual(first_command["command"]["decision"], "noop")
+
+    def test_run_episode_guards_apply_when_run_budget_is_exhausted_for_parsed_command(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        result = run_episode(
+            _ToyTaskEnv(),
+            _BudgetExhaustedToyWorkerRuntime(runtime_state),
+            _ParsedCommandController(_ToyController()),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertEqual(result.output, "base")
+        self.assertEqual(result.score, 0.0)
+        self.assertTrue(any(event["event"] == "controller_guardrail" for event in logger.events))
+        self.assertFalse(any(event["event"] == "compiled_edit" for event in logger.events))
+        first_command = next(event for event in logger.events if event["event"] == "controller_command")
+        self.assertEqual(first_command["command"]["decision"], "noop")
+
+    def test_run_episode_allows_loop_rescue_when_loop_rescue_budget_remains(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        result = run_episode(
+            _ToyTaskEnv(),
+            _LoopRescueBudgetToyWorkerRuntime(runtime_state),
+            _LoopRescueToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertEqual(result.output, "base")
+        self.assertFalse(any(event["event"] == "controller_guardrail" for event in logger.events))
+        self.assertTrue(any(event["event"] == "compiled_edit" for event in logger.events))
+        first_command = next(event for event in logger.events if event["event"] == "controller_command")
+        self.assertEqual(first_command["command"]["decision"], "apply")
+
+    def test_run_episode_guards_over_budget_loop_rescue_apply(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        result = run_episode(
+            _ToyTaskEnv(),
+            _LowAlphaLoopRescueBudgetToyWorkerRuntime(runtime_state),
+            _OverBudgetLoopRescueToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertEqual(result.output, "base")
+        self.assertEqual(result.score, 0.0)
+        self.assertTrue(any(event["event"] == "controller_guardrail" for event in logger.events))
+        self.assertFalse(any(event["event"] == "controller_error" for event in logger.events))
+        self.assertFalse(any(event["event"] == "compiled_edit" for event in logger.events))
+        first_guard = next(event for event in logger.events if event["event"] == "controller_guardrail")
+        self.assertEqual(first_guard["reason"], "command exceeds packet loop_rescue alpha budget")
+        first_command = next(event for event in logger.events if event["event"] == "controller_command")
+        self.assertEqual(first_command["command"]["decision"], "noop")
+        self.assertEqual(logger.events[-1]["event"], "episode_end")
+
+    def test_run_episode_guards_over_budget_loop_rescue_apply_for_parsed_command(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        result = run_episode(
+            _ToyTaskEnv(),
+            _LowAlphaLoopRescueBudgetToyWorkerRuntime(runtime_state),
+            _ParsedCommandController(_OverBudgetLoopRescueToyController()),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertEqual(result.output, "base")
+        self.assertEqual(result.score, 0.0)
+        self.assertTrue(any(event["event"] == "controller_guardrail" for event in logger.events))
+        self.assertFalse(any(event["event"] == "controller_error" for event in logger.events))
+        self.assertFalse(any(event["event"] == "compiled_edit" for event in logger.events))
+        first_guard = next(event for event in logger.events if event["event"] == "controller_guardrail")
+        self.assertEqual(first_guard["reason"], "command exceeds packet loop_rescue alpha budget")
+        first_command = next(event for event in logger.events if event["event"] == "controller_command")
+        self.assertEqual(first_command["command"]["decision"], "noop")
+        self.assertEqual(logger.events[-1]["event"], "episode_end")
 
     def test_run_episode_records_controller_memory(self):
         adapter = FakeAdapter()
@@ -1131,6 +1407,47 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         packet = worker_runtime.build_controller_packet()
         self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware")
         self.assertTrue(packet["telemetry"]["decoder_rescue_active"])
+
+    def test_worker_runtime_loop_aware_prune_demotes_stalled_top_token(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="loop_aware_prune")
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(worker_runtime.runtime_state.base_token)
+        worker_runtime._no_progress_steps = 2
+
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[worker_runtime.runtime_state.base_token] = 1.0
+        logits[worker_runtime.runtime_state.hint_token] = 2.0
+        logits[worker_runtime.runtime_state.edit_token] = 1.8
+
+        adjusted, state = worker_runtime._apply_decoder_control(logits)
+
+        self.assertEqual(int(torch.argmax(adjusted).item()), worker_runtime.runtime_state.edit_token)
+        self.assertTrue(state["candidate_prune_active"])
+        self.assertEqual(state["track"], "auxiliary")
+
+    def test_worker_runtime_loop_aware_constraint_biases_missing_term_token(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="loop_aware_constraint")
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(worker_runtime.runtime_state.base_token)
+        worker_runtime._no_progress_steps = 1
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["b"],
+        }
+
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[worker_runtime.runtime_state.base_token] = 1.0
+        logits[worker_runtime.runtime_state.hint_token] = 0.2
+        logits[worker_runtime.runtime_state.edit_token] = 0.7
+
+        adjusted, state = worker_runtime._apply_decoder_control(logits)
+
+        self.assertEqual(int(torch.argmax(adjusted).item()), worker_runtime.runtime_state.hint_token)
+        self.assertEqual(state["constraint_target_terms"], ["b"])
+        self.assertGreaterEqual(state["constraint_target_count"], 1)
+        self.assertEqual(state["track"], "auxiliary")
 
     def test_probe_frames_use_step_aligned_baseline_trace(self):
         baseline_worker = self._make_worker_runtime()

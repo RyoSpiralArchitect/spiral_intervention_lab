@@ -7,6 +7,10 @@ _DELTA_KEYS = (
     "top1_margin",
     "repetition_score",
     "partial_score",
+    "required_term_recall",
+    "forbidden_term_clean",
+    "word_budget_score",
+    "budget_ok",
     "repeat_flag",
     "no_progress_steps",
     "progress_score",
@@ -51,6 +55,10 @@ def classify_effect(
     after: Mapping[str, Any] | None = None,
 ) -> str:
     partial_delta = float(delta.get("partial_score", 0.0) or 0.0)
+    required_delta = float(delta.get("required_term_recall", 0.0) or 0.0)
+    forbidden_clean_delta = float(delta.get("forbidden_term_clean", 0.0) or 0.0)
+    budget_ok_delta = float(delta.get("budget_ok", 0.0) or 0.0)
+    budget_score_delta = float(delta.get("word_budget_score", 0.0) or 0.0)
     progress_delta = float(delta.get("progress_score", 0.0) or 0.0)
     repetition_delta = float(delta.get("repetition_score", 0.0) or 0.0)
     repeat_flag_delta = float(delta.get("repeat_flag", 0.0) or 0.0)
@@ -60,8 +68,24 @@ def classify_effect(
     entropy_delta = float(delta.get("entropy", 0.0) or 0.0)
     margin_delta = float(delta.get("top1_margin", 0.0) or 0.0)
 
-    made_task_progress = partial_delta > 1e-6 or progress_delta > 0.2 or done_delta > 0.5 or _metric(after, "done") > 0.5
-    lost_task_progress = partial_delta < -1e-6 or progress_delta < -0.2
+    made_task_progress = (
+        required_delta > 1e-6
+        or partial_delta > 1e-6
+        or forbidden_clean_delta > 1e-6
+        or budget_ok_delta > 0.5
+        or budget_score_delta > 1e-6
+        or progress_delta > 0.2
+        or done_delta > 0.5
+        or _metric(after, "done") > 0.5
+    )
+    lost_task_progress = (
+        required_delta < -1e-6
+        or partial_delta < -1e-6
+        or forbidden_clean_delta < -1e-6
+        or budget_ok_delta < -0.5
+        or budget_score_delta < -1e-6
+        or progress_delta < -0.2
+    )
     loop_worsened = (
         repetition_delta > 0.05
         or repeat_flag_delta > 0.5
@@ -149,6 +173,10 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "sum_top1_margin_delta": 0.0,
                 "sum_repetition_delta": 0.0,
                 "sum_partial_score_delta": 0.0,
+                "sum_required_term_recall_delta": 0.0,
+                "sum_forbidden_term_clean_delta": 0.0,
+                "sum_word_budget_score_delta": 0.0,
+                "sum_budget_ok_delta": 0.0,
                 "sum_progress_delta": 0.0,
                 "sum_no_progress_delta": 0.0,
                 "sum_task_violation_delta": 0.0,
@@ -164,6 +192,10 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             stats["sum_top1_margin_delta"] += float(delta.get("top1_margin", 0.0) or 0.0)
             stats["sum_repetition_delta"] += float(delta.get("repetition_score", 0.0) or 0.0)
             stats["sum_partial_score_delta"] += float(delta.get("partial_score", 0.0) or 0.0)
+            stats["sum_required_term_recall_delta"] += float(delta.get("required_term_recall", 0.0) or 0.0)
+            stats["sum_forbidden_term_clean_delta"] += float(delta.get("forbidden_term_clean", 0.0) or 0.0)
+            stats["sum_word_budget_score_delta"] += float(delta.get("word_budget_score", 0.0) or 0.0)
+            stats["sum_budget_ok_delta"] += float(delta.get("budget_ok", 0.0) or 0.0)
             stats["sum_progress_delta"] += float(delta.get("progress_score", 0.0) or 0.0)
             stats["sum_no_progress_delta"] += float(delta.get("no_progress_steps", 0.0) or 0.0)
             stats["sum_task_violation_delta"] += float(delta.get("task_violation_count", 0.0) or 0.0)
@@ -180,6 +212,18 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "expected_effect": effect.get("expected_effect"),
                 "verdict": verdict,
                 "partial_score_delta": float(effect_delta.get("partial_score", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "required_term_recall_delta": float(effect_delta.get("required_term_recall", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "forbidden_term_clean_delta": float(effect_delta.get("forbidden_term_clean", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "word_budget_score_delta": float(effect_delta.get("word_budget_score", 0.0) or 0.0)
+                if isinstance(effect_delta, Mapping)
+                else 0.0,
+                "budget_ok_delta": float(effect_delta.get("budget_ok", 0.0) or 0.0)
                 if isinstance(effect_delta, Mapping)
                 else 0.0,
                 "progress_delta": float(effect_delta.get("progress_score", 0.0) or 0.0)
@@ -214,6 +258,10 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "mean_top1_margin_delta": stats["sum_top1_margin_delta"] / attempts,
                 "mean_repetition_delta": stats["sum_repetition_delta"] / attempts,
                 "mean_partial_score_delta": stats["sum_partial_score_delta"] / attempts,
+                "mean_required_term_recall_delta": stats["sum_required_term_recall_delta"] / attempts,
+                "mean_forbidden_term_clean_delta": stats["sum_forbidden_term_clean_delta"] / attempts,
+                "mean_word_budget_score_delta": stats["sum_word_budget_score_delta"] / attempts,
+                "mean_budget_ok_delta": stats["sum_budget_ok_delta"] / attempts,
                 "mean_progress_delta": stats["sum_progress_delta"] / attempts,
                 "mean_no_progress_delta": stats["sum_no_progress_delta"] / attempts,
                 "mean_task_violation_delta": stats["sum_task_violation_delta"] / attempts,

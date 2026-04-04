@@ -680,6 +680,9 @@ class BudgetState:
     active_patch_slots_left: int
     rollbackable_ids: tuple[str, ...] = ()
     edit_cost_left_total: float | None = None
+    loop_rescue_edits_left_this_run: int = 0
+    loop_rescue_alpha_left_total: float = 0.0
+    loop_rescue_edit_cost_left_total: float = 0.0
 
     @classmethod
     def from_dict(cls, value: Any) -> "BudgetState":
@@ -689,6 +692,21 @@ class BudgetState:
             edits_left_this_run=_require_int(_require_key(data, "edits_left_this_run", "budget"), "budget.edits_left_this_run"),
             alpha_left_total=_require_float(_require_key(data, "alpha_left_total", "budget"), "budget.alpha_left_total"),
             edit_cost_left_total=_optional_float(data.get("edit_cost_left_total"), "budget.edit_cost_left_total"),
+            loop_rescue_edits_left_this_run=_optional_int(
+                data.get("loop_rescue_edits_left_this_run"),
+                "budget.loop_rescue_edits_left_this_run",
+            )
+            or 0,
+            loop_rescue_alpha_left_total=_optional_float(
+                data.get("loop_rescue_alpha_left_total"),
+                "budget.loop_rescue_alpha_left_total",
+            )
+            or 0.0,
+            loop_rescue_edit_cost_left_total=_optional_float(
+                data.get("loop_rescue_edit_cost_left_total"),
+                "budget.loop_rescue_edit_cost_left_total",
+            )
+            or 0.0,
             active_patch_slots_left=_require_int(
                 _require_key(data, "active_patch_slots_left", "budget"),
                 "budget.active_patch_slots_left",

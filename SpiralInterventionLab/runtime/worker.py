@@ -10,13 +10,32 @@ import torch
 from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext
+from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
 from .effects import build_edit_effect, summarize_effects
 from .schema import SurfaceInfo
 from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder
 
 
 _CONTROLLER_REFLECTION_MODES = {"off", "structured"}
-_DECODER_CONTROL_MODES = {"off", "loop_aware"}
+_DECODER_CONTROL_MODE_SPECS = {
+    "off": {
+        "track": "baseline",
+        "objective": "No worker-side decoder shaping; internal edits remain the primary control path.",
+    },
+    "loop_aware": {
+        "track": "auxiliary",
+        "objective": "Apply task-agnostic anti-loop penalties to reduce short local attractors.",
+    },
+    "loop_aware_prune": {
+        "track": "auxiliary",
+        "objective": "Break local attractors, then demote the current overconfident top token to widen search.",
+    },
+    "loop_aware_constraint": {
+        "track": "auxiliary",
+        "objective": "Break local attractors, then softly bias toward explicitly missing constraint tokens without forcing output.",
+    },
+}
+_DECODER_CONTROL_MODES = set(_DECODER_CONTROL_MODE_SPECS)
 _CONTROLLER_MEMORY_STRING_FIELDS = (
     "hypothesis",
     "expected_effect",
@@ -26,6 +45,7 @@ _CONTROLLER_MEMORY_STRING_FIELDS = (
     "stop_condition",
 )
 _CONTROLLER_MEMORY_ALLOWED_OUTCOMES = {"unknown", "helpful", "harmful", "neutral", "mixed"}
+_SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 
 
 @dataclass
@@ -61,6 +81,11 @@ def _normalize_decoder_control_mode(value: str) -> str:
             f"Unsupported decoder control mode '{value}'; expected one of {sorted(_DECODER_CONTROL_MODES)}"
         )
     return normalized
+
+
+def _decoder_control_spec(mode: str) -> Mapping[str, str]:
+    normalized = _normalize_decoder_control_mode(mode)
+    return _DECODER_CONTROL_MODE_SPECS[normalized]
 
 
 def _clean_controller_memory_text(value: Any, *, limit: int = 160) -> str | None:
@@ -123,6 +148,9 @@ class HookedTransformerWorkerRuntime:
         max_edits_per_run: int = 4,
         max_total_alpha: float = 0.5,
         max_total_edit_cost: float | None = None,
+        max_loop_rescue_edits_per_run: int = 0,
+        max_loop_rescue_alpha: float = 0.0,
+        max_loop_rescue_edit_cost: float | None = None,
         max_active_patch_slots: int = 1,
         generated_tail_chars: int = 80,
         recent_token_count: int = 6,
@@ -154,6 +182,11 @@ class HookedTransformerWorkerRuntime:
         self.max_edits_per_run = max_edits_per_run
         self.max_total_alpha = max_total_alpha
         self.max_total_edit_cost = float(max_total_edit_cost if max_total_edit_cost is not None else max_total_alpha)
+        self.max_loop_rescue_edits_per_run = max(0, int(max_loop_rescue_edits_per_run))
+        self.max_loop_rescue_alpha = max(0.0, float(max_loop_rescue_alpha))
+        self.max_loop_rescue_edit_cost = float(
+            max_loop_rescue_edit_cost if max_loop_rescue_edit_cost is not None else self.max_loop_rescue_alpha
+        )
         self.max_active_patch_slots = max_active_patch_slots
         self.generated_tail_chars = generated_tail_chars
         self.recent_token_count = recent_token_count
@@ -192,6 +225,7 @@ class HookedTransformerWorkerRuntime:
         self._controller_memory: list[dict[str, Any]] = []
         self._last_decoder_control: dict[str, Any] = {
             "mode": self.decoder_control_mode,
+            "track": _decoder_control_spec(self.decoder_control_mode)["track"],
             "active": False,
             "loop_cycle_length": 0,
         }
@@ -199,6 +233,8 @@ class HookedTransformerWorkerRuntime:
         self._seen_registration_ids: set[str] = set()
         self._spent_budget_alpha: dict[str, float] = {}
         self._spent_budget_cost: dict[str, float] = {}
+        self._spent_loop_rescue_alpha: dict[str, float] = {}
+        self._spent_loop_rescue_cost: dict[str, float] = {}
         self._last_packet: dict[str, Any] | None = None
         self._no_progress_steps = 0
 
@@ -271,7 +307,10 @@ class HookedTransformerWorkerRuntime:
                 "no_progress_steps": self._no_progress_steps,
                 "loop_cycle_length": int(self._loop_cycle_length() or 0),
                 "decoder_control_mode": self.decoder_control_mode,
+                "decoder_control_track": str(self._last_decoder_control.get("track", "baseline")),
                 "decoder_rescue_active": bool(self._last_decoder_control.get("active", False)),
+                "decoder_candidate_prune_active": bool(self._last_decoder_control.get("candidate_prune_active", False)),
+                "decoder_constraint_target_count": int(self._last_decoder_control.get("constraint_target_count", 0) or 0),
             },
             "surface_catalog": [dict(surface) for surface in self._surface_catalog_raw],
             "probe_frames": self._build_probe_frames(),
@@ -329,8 +368,13 @@ class HookedTransformerWorkerRuntime:
                 continue
             self._seen_registration_ids.add(edit_id)
             budget_key = str(active.get("budget_key", edit_id.split(":", 1)[0]))
-            self._spent_budget_alpha.setdefault(budget_key, float(active["alpha"]))
-            self._spent_budget_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
+            budget_pool = str(active.get("budget_pool", MAIN_EDIT_BUDGET_POOL) or MAIN_EDIT_BUDGET_POOL)
+            if budget_pool == LOOP_RESCUE_EDIT_BUDGET_POOL:
+                self._spent_loop_rescue_alpha.setdefault(budget_key, float(active["alpha"]))
+                self._spent_loop_rescue_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
+            else:
+                self._spent_budget_alpha.setdefault(budget_key, float(active["alpha"]))
+                self._spent_budget_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
             self._pending_effects.append(
                 {
                     "edit_id": edit_id,
@@ -409,6 +453,7 @@ class HookedTransformerWorkerRuntime:
         self._controller_memory = []
         self._last_decoder_control = {
             "mode": self.decoder_control_mode,
+            "track": _decoder_control_spec(self.decoder_control_mode)["track"],
             "active": False,
             "loop_cycle_length": 0,
         }
@@ -416,6 +461,8 @@ class HookedTransformerWorkerRuntime:
         self._seen_registration_ids = set()
         self._spent_budget_alpha = {}
         self._spent_budget_cost = {}
+        self._spent_loop_rescue_alpha = {}
+        self._spent_loop_rescue_cost = {}
         self._last_packet = None
         self._no_progress_steps = 0
         if self.trace_recorder is not None:
@@ -466,10 +513,15 @@ class HookedTransformerWorkerRuntime:
 
     def _apply_decoder_control(self, next_logits: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
         cycle_length = self._loop_cycle_length()
+        spec = _decoder_control_spec(self.decoder_control_mode)
         state = {
             "mode": self.decoder_control_mode,
+            "track": spec["track"],
+            "objective": spec["objective"],
             "active": False,
             "loop_cycle_length": int(cycle_length or 0),
+            "candidate_prune_active": False,
+            "constraint_target_count": 0,
         }
         if self.decoder_control_mode == "off":
             return next_logits, state
@@ -479,8 +531,33 @@ class HookedTransformerWorkerRuntime:
         if not tokens or not rescue_active:
             return next_logits, state
 
-        adjusted = next_logits.clone()
+        adjusted, loop_state = self._apply_loop_aware_penalties(next_logits.clone(), cycle_length=cycle_length)
+        state.update(loop_state)
+        state["active"] = bool(loop_state.get("active", False))
+
+        if self.decoder_control_mode == "loop_aware_prune":
+            adjusted, prune_state = self._apply_candidate_prune(adjusted)
+            state.update(prune_state)
+            state["active"] = state["active"] or bool(prune_state.get("candidate_prune_active", False))
+            return adjusted, state
+
+        if self.decoder_control_mode == "loop_aware_constraint":
+            adjusted, constraint_state = self._apply_soft_constraint_bias(adjusted)
+            state.update(constraint_state)
+            state["active"] = state["active"] or bool(constraint_state.get("constraint_bias_active", False))
+            return adjusted, state
+
+        return adjusted, state
+
+    def _apply_loop_aware_penalties(
+        self,
+        adjusted: torch.Tensor,
+        *,
+        cycle_length: int | None,
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
         penalties: dict[int, float] = {}
+        state: dict[str, Any] = {"active": False}
+        tokens = self._output_token_ids()
         for offset, token_id in enumerate(reversed(tokens[-6:]), start=1):
             penalties[int(token_id)] = penalties.get(int(token_id), 0.0) + max(0.0, 1.8 - (0.2 * (offset - 1)))
 
@@ -509,6 +586,98 @@ class HookedTransformerWorkerRuntime:
         state["active"] = True
         state["blocked_token_ids"] = valid_blocked
         return adjusted, state
+
+    def _apply_candidate_prune(self, adjusted: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        finite_indices = torch.nonzero(torch.isfinite(adjusted), as_tuple=False).reshape(-1)
+        if finite_indices.numel() < 2:
+            return adjusted, {"candidate_prune_active": False}
+        top_values, top_indices = torch.topk(adjusted, k=2, dim=-1)
+        gap = float((top_values[0] - top_values[1]).item())
+        if gap <= 0.0:
+            return adjusted, {"candidate_prune_active": False}
+        prune_penalty = gap + 0.05
+        adjusted[int(top_indices[0].item())] = adjusted[int(top_indices[0].item())] - prune_penalty
+        return adjusted, {
+            "candidate_prune_active": True,
+            "pruned_token_id": int(top_indices[0].item()),
+            "promoted_alternative_token_id": int(top_indices[1].item()),
+            "candidate_prune_gap": gap,
+        }
+
+    def _apply_soft_constraint_bias(self, adjusted: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        target_token_ids, target_terms = self._soft_constraint_target_token_ids(vocab_size=int(adjusted.shape[-1]))
+        if not target_token_ids:
+            return adjusted, {"constraint_bias_active": False, "constraint_target_count": 0}
+
+        bias = min(1.4, 0.6 + (0.2 * max(1, self._no_progress_steps)))
+        applied_ids: list[int] = []
+        for token_id in target_token_ids:
+            if 0 <= token_id < adjusted.shape[-1] and torch.isfinite(adjusted[token_id]):
+                adjusted[token_id] = adjusted[token_id] + bias
+                applied_ids.append(int(token_id))
+        if not applied_ids:
+            return adjusted, {"constraint_bias_active": False, "constraint_target_count": 0}
+        return adjusted, {
+            "constraint_bias_active": True,
+            "constraint_bias": float(bias),
+            "constraint_target_count": len(applied_ids),
+            "constraint_target_terms": list(target_terms),
+            "constraint_target_token_ids": applied_ids,
+        }
+
+    def _soft_constraint_target_token_ids(self, *, vocab_size: int) -> tuple[list[int], list[str]]:
+        if bool(self._last_task_feedback.get("done", False)):
+            return [], []
+        terms: list[str] = []
+        seen_terms: set[str] = set()
+        for key in _SOFT_CONSTRAINT_FEEDBACK_KEYS:
+            value = self._last_task_feedback.get(key)
+            if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
+                continue
+            for item in value:
+                term = " ".join(str(item).split()).strip()
+                if not term or term in seen_terms:
+                    continue
+                seen_terms.add(term)
+                terms.append(term)
+        if not terms:
+            return [], []
+
+        token_ids: list[int] = []
+        seen_token_ids: set[int] = set()
+        for term in terms:
+            for variant in self._constraint_token_variants(term):
+                try:
+                    encoded = self.codec.encode(variant).detach().reshape(-1).to(dtype=torch.long).tolist()
+                except Exception:
+                    continue
+                if not encoded:
+                    continue
+                token_id = int(encoded[0])
+                if token_id in seen_token_ids or not (0 <= token_id < vocab_size):
+                    continue
+                try:
+                    token_text = self.codec.decode([token_id])
+                except Exception:
+                    token_text = str(variant)
+                if not str(token_text).strip():
+                    continue
+                seen_token_ids.add(token_id)
+                token_ids.append(token_id)
+        return token_ids, terms[:6]
+
+    def _constraint_token_variants(self, term: str) -> tuple[str, ...]:
+        stripped = " ".join(str(term).split()).strip()
+        variants: list[str] = []
+        for candidate in (
+            stripped,
+            stripped.lower(),
+            f" {stripped}",
+            f" {stripped.lower()}",
+        ):
+            if candidate not in variants:
+                variants.append(candidate)
+        return tuple(variants)
 
     def _output_token_ids(self) -> list[int]:
         output_tokens: list[int] = []
@@ -601,6 +770,13 @@ class HookedTransformerWorkerRuntime:
         partial_score = self._last_task_feedback.get("partial_score")
         if partial_score is not None:
             metrics["partial_score"] = float(partial_score)
+        for key in ("required_term_recall", "forbidden_term_clean", "word_budget_score"):
+            value = self._last_task_feedback.get(key)
+            if value is not None:
+                metrics[key] = float(value)
+        budget_ok = self._last_task_feedback.get("budget_ok")
+        if budget_ok is not None:
+            metrics["budget_ok"] = float(bool(budget_ok))
         metrics["progress_score"] = self._progress_score(self._last_task_feedback)
         metrics["task_violation_count"] = float(self._task_violation_count(self._last_task_feedback))
         metrics["done"] = float(bool(self._last_task_feedback.get("done", False)))
@@ -761,6 +937,7 @@ class HookedTransformerWorkerRuntime:
             if metadata.get("controller_confidence") is None
             else float(metadata["controller_confidence"]),
             "budget_key": str(metadata.get("budget_key", str(edit_id).split(":", 1)[0])),
+            "budget_pool": str(metadata.get("budget_pool", MAIN_EDIT_BUDGET_POOL) or MAIN_EDIT_BUDGET_POOL),
         }
 
     def _registration_field(self, registration: Any, field_name: str, *, default: Any) -> Any:
@@ -781,11 +958,22 @@ class HookedTransformerWorkerRuntime:
         active_patch_slots = sum(1 for edit in active_edits if edit.get("op") == "rank1_patch")
         spent_alpha = sum(self._spent_budget_alpha.values())
         spent_edit_cost = sum(self._spent_budget_cost.values())
+        spent_loop_rescue_alpha = sum(self._spent_loop_rescue_alpha.values())
+        spent_loop_rescue_edit_cost = sum(self._spent_loop_rescue_cost.values())
         return {
             "edits_left_this_step": self.max_edits_per_step,
             "edits_left_this_run": max(0, self.max_edits_per_run - len(self._spent_budget_alpha)),
             "alpha_left_total": max(0.0, self.max_total_alpha - spent_alpha),
             "edit_cost_left_total": max(0.0, self.max_total_edit_cost - spent_edit_cost),
+            "loop_rescue_edits_left_this_run": max(
+                0,
+                self.max_loop_rescue_edits_per_run - len(self._spent_loop_rescue_alpha),
+            ),
+            "loop_rescue_alpha_left_total": max(0.0, self.max_loop_rescue_alpha - spent_loop_rescue_alpha),
+            "loop_rescue_edit_cost_left_total": max(
+                0.0,
+                self.max_loop_rescue_edit_cost - spent_loop_rescue_edit_cost,
+            ),
             "active_patch_slots_left": max(0, self.max_active_patch_slots - active_patch_slots),
             "rollbackable_ids": [str(edit["edit_id"]) for edit in active_edits if bool(edit.get("revertible", True))],
         }

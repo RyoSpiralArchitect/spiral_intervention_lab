@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 from .compiler import StepContext, compile_command
+from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
+from .policy import budget_violation_reason, command_budget_usage
 
 
 class TaskEnv(Protocol):
@@ -165,13 +167,48 @@ def _log_effect_trace(
         logger.log({"event": "controller_effect_summary", "step": step, **dict(summary)})
 
 
+def _command_field(command: Any, name: str) -> Any:
+    if isinstance(command, Mapping):
+        return command.get(name)
+    return getattr(command, name, None)
+
+
+def _command_decision(command: Any) -> str:
+    return str(_command_field(command, "decision") or "").strip().lower()
+
+
+def _command_meta(command: Any) -> dict[str, Any] | None:
+    meta = _command_field(command, "meta")
+    if not isinstance(meta, Mapping):
+        return None
+    return dict(meta)
+
+
+def _command_edit_count(command: Any) -> int:
+    edits = _command_field(command, "edits")
+    if isinstance(edits, SequenceABC) and not isinstance(edits, (str, bytes, bytearray)):
+        return len(edits)
+    return 0
+
+
+def _guarded_noop_command(command: Any) -> dict[str, Any]:
+    guarded_command = {
+        "version": str(_command_field(command, "version") or "0.1"),
+        "decision": "noop",
+        "edits": [],
+        "rollback_ids": [],
+    }
+    meta = _command_meta(command)
+    if meta is not None:
+        guarded_command["meta"] = meta
+    return guarded_command
+
+
 def _guard_exhausted_apply_command(
     command: Any,
     packet: Mapping[str, Any],
 ) -> tuple[Any, dict[str, Any] | None]:
-    if not isinstance(command, Mapping):
-        return command, None
-    decision = str(command.get("decision", "") or "").strip().lower()
+    decision = _command_decision(command)
     if decision != "apply":
         return command, None
     budget = packet.get("budget")
@@ -184,21 +221,58 @@ def _guard_exhausted_apply_command(
         return command, None
     if edits_left_this_run > 0:
         return command, None
-    guarded_command = {
-        "version": str(command.get("version", "0.1") or "0.1"),
-        "decision": "noop",
-        "edits": [],
-        "rollback_ids": [],
-    }
-    if isinstance(command.get("meta"), Mapping):
-        guarded_command["meta"] = dict(command["meta"])
+    try:
+        usage = command_budget_usage(command, packet)
+    except Exception:
+        usage = {
+            MAIN_EDIT_BUDGET_POOL: {"edit_count": 1.0},
+            LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0},
+        }
+    loop_rescue_edits_left_this_run = budget.get("loop_rescue_edits_left_this_run")
+    try:
+        loop_rescue_edits_left_this_run = int(loop_rescue_edits_left_this_run)
+    except Exception:
+        loop_rescue_edits_left_this_run = 0
+    if (
+        int(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) == 0
+        and int(usage.get(LOOP_RESCUE_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) > 0
+        and loop_rescue_edits_left_this_run > 0
+    ):
+        return command, None
+    guarded_command = _guarded_noop_command(command)
     return guarded_command, {
         "reason": "edits_left_this_run_exhausted",
         "original_decision": decision,
         "edits_left_this_run": edits_left_this_run,
-        "requested_edit_count": len(command.get("edits", ()))
-        if isinstance(command.get("edits"), SequenceABC)
-        else 0,
+        "requested_edit_count": _command_edit_count(command),
+    }
+
+
+def _guard_budget_violating_apply_command(
+    command: Any,
+    packet: Mapping[str, Any],
+    *,
+    policy: Any | None = None,
+) -> tuple[Any, dict[str, Any] | None]:
+    decision = _command_decision(command)
+    if decision != "apply":
+        return command, None
+    try:
+        usage = command_budget_usage(command, packet, policy=policy)
+        reason = budget_violation_reason(command, packet, policy=policy, usage=usage)
+    except Exception:
+        return command, None
+    if reason is None:
+        return command, None
+    guarded_command = _guarded_noop_command(command)
+    return guarded_command, {
+        "reason": reason,
+        "original_decision": decision,
+        "requested_edit_count": _command_edit_count(command),
+        "requested_main_alpha": float(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0),
+        "requested_loop_rescue_alpha": float(
+            usage.get(LOOP_RESCUE_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0
+        ),
     }
 
 
@@ -265,11 +339,14 @@ def run_episode(
             raise
 
         command, guard_event = _guard_exhausted_apply_command(command, packet)
+        command, budget_guard_event = _guard_budget_violating_apply_command(command, packet, policy=policy)
         _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
             if guard_event is not None:
                 logger.log({"event": "controller_guardrail", "step": step_count, **guard_event})
+            if budget_guard_event is not None:
+                logger.log({"event": "controller_guardrail", "step": step_count, **budget_guard_event})
             logger.log({"event": "controller_command", "step": step_count, "command": command})
         _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
 

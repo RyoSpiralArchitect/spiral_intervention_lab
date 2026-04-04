@@ -179,6 +179,8 @@ class TestExamples(unittest.TestCase):
             seed=5,
             codec=codec,
             worker_decoder_control_mode="loop_aware",
+            worker_loop_rescue_edits_per_run=2,
+            worker_loop_rescue_total_alpha=0.12,
         )
 
         prompt = env.reset(5)
@@ -189,6 +191,29 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(runtime.decoder_control_mode, "loop_aware")
         self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware")
         self.assertIn("decoder_rescue_active", packet["telemetry"])
+        self.assertEqual(packet["budget"]["loop_rescue_edits_left_this_run"], 2)
+
+    def test_build_hooked_transformer_worker_runtime_with_loop_aware_constraint_decoder_control(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralConstrainedRewriteEnv()
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=7,
+            codec=codec,
+            worker_decoder_control_mode="loop_aware_constraint",
+            worker_loop_rescue_edits_per_run=2,
+            worker_loop_rescue_total_alpha=0.12,
+        )
+
+        prompt = env.reset(7)
+        runtime.reset(prompt)
+        packet = runtime.build_controller_packet()
+
+        self.assertEqual(runtime.decoder_control_mode, "loop_aware_constraint")
+        self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware_constraint")
+        self.assertEqual(packet["telemetry"]["decoder_control_track"], "auxiliary")
+        self.assertIn("decoder_constraint_target_count", packet["telemetry"])
 
     def test_build_allowed_token_ids_for_digit_constraint(self):
         codec = CharacterCodec(" 12a")
@@ -242,6 +267,7 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(payload["task_id"], env.task_id)
             self.assertEqual(payload["controller_reflection_mode"], "off")
             self.assertEqual(payload["worker_decoder_control_mode"], "off")
+            self.assertEqual(payload["worker_loop_rescue_edits_per_run"], 0)
             self.assertIn("b0", payload)
             self.assertIn("b1", payload)
             self.assertIn("c1", payload)
@@ -271,6 +297,8 @@ class TestExamples(unittest.TestCase):
                     log_dir=tmpdir,
                     controller_reflection_mode="structured",
                     worker_decoder_control_mode="loop_aware",
+                    worker_loop_rescue_edits_per_run=2,
+                    worker_loop_rescue_total_alpha=0.12,
                 )
 
             payload = result.to_dict()
@@ -278,6 +306,8 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(payload["task_id"], env.task_id)
             self.assertEqual(payload["controller_reflection_mode"], "structured")
             self.assertEqual(payload["worker_decoder_control_mode"], "loop_aware")
+            self.assertEqual(payload["worker_loop_rescue_edits_per_run"], 2)
+            self.assertAlmostEqual(payload["worker_loop_rescue_total_alpha"], 0.12)
             self.assertIsNone(payload["b0"])
             self.assertIsNone(payload["b1"])
             self.assertIn("c1", payload)

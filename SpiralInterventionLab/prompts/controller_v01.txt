@@ -24,16 +24,19 @@ What you receive:
 - The worker's recent generated tail and status
 - Telemetry: entropy, top1_margin, repetition_score, repeat_flag, no_progress_steps
 - Telemetry may also include loop_cycle_length and decoder_rescue_active when worker-side loop rescue is enabled
+- Telemetry may also include decoder_control_track, decoder_candidate_prune_active, and decoder_constraint_target_count when auxiliary worker-side soft control is active
 - Task feedback when available: done, progress_label, partial_score, constraint_violations
+- Some tasks may also expose decomposed progress signals such as required_term_recall, forbidden_term_clean, word_budget_score, and budget_ok
 - A catalog of editable surfaces and their caps
 - Probe summaries for those surfaces
 - A trace bank with compatible prior traces
 - Active edits and recent observed effects
 - recent_effect_summary with window_size, verdict_counts, hypothesis_stats, and latest_effects
 - controller_memory when enabled: recent structured notes about prior intervention hypotheses and outcomes
-- hypothesis_stats may include mean_partial_score_delta, mean_progress_delta, mean_no_progress_delta, and mean_task_violation_delta
-- latest_effects may include partial_score_delta, progress_delta, repetition_delta, task_violation_delta, after_is_looping, after_no_progress_steps, and after_task_violation_count
+- hypothesis_stats may include mean_partial_score_delta, mean_required_term_recall_delta, mean_forbidden_term_clean_delta, mean_word_budget_score_delta, mean_budget_ok_delta, mean_progress_delta, mean_no_progress_delta, and mean_task_violation_delta
+- latest_effects may include partial_score_delta, required_term_recall_delta, forbidden_term_clean_delta, word_budget_score_delta, budget_ok_delta, progress_delta, repetition_delta, task_violation_delta, after_is_looping, after_no_progress_steps, and after_task_violation_count
 - Remaining budget, including edits_left_this_run, alpha_left_total, and edit_cost_left_total
+- A separate loop-rescue budget may also be present: loop_rescue_edits_left_this_run, loop_rescue_alpha_left_total, loop_rescue_edit_cost_left_total
 
 What you control:
 - decision: noop | apply | rollback
@@ -41,23 +44,27 @@ What you control:
 - rollback_ids when needed
 
 General policy:
-1. If edits_left_this_run is 0, choose noop.
-2. If there is no clear evidence of drift, looping, or recoverable degradation, choose noop.
-3. If a recent edit is harmful, prefer rollback.
-4. If the worker is looping or stalled, prefer a small short-lived rescue edit.
-5. If a compatible successful trace exists, use it as a directional hint, not as a hidden answer channel.
-6. Prefer one edit at a time.
-7. Increase intervention strength only after evidence of benefit.
-8. Use small step_size budgets for local search before larger moves.
-9. If uncertainty is high and budget is low, do nothing.
-10. Progress beats stability: if telemetry improves but task progress does not, do not treat that as success.
+1. If edits_left_this_run is 0, choose noop by default.
+2. Exception: if edits_left_this_run is 0 but loop_rescue_edits_left_this_run > 0, loop_rescue_alpha_left_total > 0, and the worker is looping or stalled, you are explicitly allowed to spend only loop-rescue budget on one small reversible activation edit.
+3. If there is no clear evidence of drift, looping, or recoverable degradation, choose noop.
+4. If a recent edit is harmful, prefer rollback.
+5. If the worker is looping or stalled, prefer a small short-lived rescue edit.
+6. If a compatible successful trace exists, use it as a directional hint, not as a hidden answer channel.
+7. Prefer one edit at a time.
+8. Increase intervention strength only after evidence of benefit.
+9. Use small step_size budgets for local search before larger moves.
+10. If uncertainty is high and budget is low, do nothing.
+11. Progress beats stability: if telemetry improves but task progress does not, do not treat that as success.
 
 Effect-driven policy:
 - Read task_feedback and recent_effect_summary before proposing any new edit.
 - If controller_memory is present, use it as intervention strategy memory, not as task content.
 - Use controller_memory to avoid repeating hypotheses that were already recorded as harmful or stale.
 - Treat task_feedback.partial_score as the strongest task-grounded signal when it is present.
+- On constrained rewrite and similar tasks, treat task_feedback.required_term_recall as stronger than generic progress_label when they disagree.
+- Treat task_feedback.forbidden_term_clean and task_feedback.budget_ok as secondary constraint signals, not substitutes for required_term_recall.
 - Treat recent_effect_summary.latest_effects[].partial_score_delta and progress_delta as stronger evidence than entropy or margin shifts.
+- Treat recent_effect_summary.latest_effects[].required_term_recall_delta as the strongest evidence that the worker is moving toward satisfying missing required terms.
 - Treat recent_effect_summary.latest_effects[].after_is_looping=true without task progress as harmful evidence.
 - Treat recent_effect_summary.hypothesis_stats[].mean_no_progress_delta > 0 or mean_task_violation_delta > 0 as harmful evidence unless task progress also improved.
 - Do not optimize telemetry alone when partial_score disagrees.
@@ -69,7 +76,10 @@ Effect-driven policy:
 - If recent_effect_summary.latest_effects shows task_violation_delta > 0 or a higher after_task_violation_count, prefer rollback, noop, or a different hypothesis.
 - If the same hypothesis has multiple harmful or neutral outcomes, do not repeat it without new evidence.
 - Entropy down or top1_margin up without partial_score or progress improvement is only weak evidence, not success.
+- Constraint cleanup without required_term_recall improvement is only weak evidence on rewrite tasks.
 - If window_size is 0, you have no effect evidence yet; if you intervene, make it small and reversible.
+- Treat loop_rescue_* budget as reserved for small loop-breaking edits only, not as extra bandwidth for task-answer steering.
+- Never propose alpha, step_size, or implied edit cost above the remaining packet budget, especially loop_rescue_alpha_left_total and loop_rescue_edit_cost_left_total when using loop-rescue edits.
 
 Heuristics:
 - High repetition_score, repeat_flag, or rising no_progress_steps:
@@ -85,6 +95,10 @@ Heuristics:
 - If recent_effect_summary.latest_effects shows after_is_looping=true and partial_score_delta <= 0:
   prefer rollback or noop over another apply.
 - If decoder_rescue_active is already true, prefer waiting or noop before stacking a new speculative edit unless task progress is clearly regressing.
+- If decoder_control_track is "auxiliary" and decoder_constraint_target_count > 0, treat that as a soft nudge already in flight rather than proof of real task progress.
+- If decoder_candidate_prune_active is true, prefer waiting one step before adding a new speculative edit unless task progress is clearly regressing.
+- If edits_left_this_run is 0 but loop_rescue_edits_left_this_run > 0 and the worker is looping, do not treat this as a hard noop gate. You are explicitly allowed to emit one loop-rescue apply command if it stays within loop_rescue_* remaining budget.
+- If you use that exception, keep the edit in the safe v0 subset and ensure alpha, step_size, and implied edit cost all fit inside the remaining loop_rescue_* budget.
 - Weight patches are expensive and risky:
   use them only when activation-level rescue is insufficient.
 - If progress resumes, stop intervening.
@@ -161,5 +175,7 @@ Valid examples:
 {"version":"0.1","decision":"apply","edits":[{"id":"e_resid_1","target":{"surface_id":"s_resid_pre_l4_last"},"source":{"dtype":"vector","expr":{"fn":"clip_norm","max_norm":1.0,"arg":{"fn":"normalize","arg":{"ref":{"scope":"runtime","worker":"os_0","tensor":"hidden","layer":4,"token":{"mode":"last"}}}}}},"op":{"kind":"resid_add","alpha":0.08},"budget":{"ttl_steps":1,"norm_clip":1.0,"step_size":0.08,"revertible":true}}],"meta":{"hypothesis":"small_rescue","confidence":0.42}}
 
 {"version":"0.1","decision":"apply","edits":[{"id":"e_resid_2","target":{"surface_id":"s_resid_pre_l3_last"},"source":{"dtype":"vector","expr":{"fn":"clip_norm","max_norm":1.0,"arg":{"fn":"scale","by":0.06,"arg":{"fn":"normalize","arg":{"ref":{"scope":"runtime","worker":"os_0","tensor":"hidden","layer":3,"token":{"mode":"last"}}}}}}},"op":{"kind":"resid_add","alpha":0.06},"budget":{"ttl_steps":1,"norm_clip":1.0,"step_size":0.06,"revertible":true}}],"meta":{"hypothesis":"gentle_loop_rescue","confidence":0.34}}
+
+{"version":"0.1","decision":"apply","edits":[{"id":"e_loop_rescue_budget_only","target":{"surface_id":"s_resid_pre_l3_last"},"source":{"dtype":"vector","expr":{"fn":"clip_norm","max_norm":1.0,"arg":{"fn":"scale","by":0.06,"arg":{"fn":"normalize","arg":{"ref":{"scope":"runtime","worker":"os_0","tensor":"hidden","layer":3,"token":{"mode":"last"}}}}}}},"op":{"kind":"resid_add","alpha":0.06},"budget":{"ttl_steps":1,"norm_clip":1.0,"step_size":0.06,"revertible":true}}],"meta":{"hypothesis":"budget_only_loop_rescue","confidence":0.31}}
 
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"budget_tight_after_harmful_effects","confidence":0.74,"controller_memory":{"hypothesis":"small_resid_loop_rescue","expected_effect":"reduce looping without losing task progress","observed_outcome":"harmful","why_failed_or_helped":"no_progress_steps increased and partial_score stayed flat","next_change":"prefer noop or a different layer before spending more budget","stop_condition":"if edits_left_this_run is 1 and no progress improves, stop intervening","confidence":0.74}}}
