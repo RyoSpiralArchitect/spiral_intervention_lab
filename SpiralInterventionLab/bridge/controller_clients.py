@@ -116,6 +116,7 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
             "worker_status": worker_view.get("status"),
             "generated_tail": worker_view.get("generated_tail"),
             "telemetry": dict(payload.get("telemetry", {})) if isinstance(payload.get("telemetry"), Mapping) else {},
+            "task_feedback": dict(payload.get("task_feedback", {})) if isinstance(payload.get("task_feedback"), Mapping) else {},
             "budget": dict(payload.get("budget", {})) if isinstance(payload.get("budget"), Mapping) else {},
             "surface_ids": _list_of_ids(payload.get("surface_catalog"), "surface_id"),
             "trace_ids": _list_of_ids(payload.get("trace_bank"), "trace_id"),
@@ -275,6 +276,21 @@ def _normalize_controller_payload(value: Any) -> Any:
             normalized.setdefault("trace_id", scope)
         elif scope == "running_stats":
             normalized["scope"] = "stats"
+
+    if normalized.get("fn") == "scale" and "by" not in normalized:
+        for alias in ("alpha", "factor", "weight"):
+            if alias in normalized:
+                normalized["by"] = normalized.pop(alias)
+                break
+
+    token = normalized.get("token")
+    if isinstance(token, dict):
+        mode = token.get("mode")
+        if mode in {"prev", "previous"}:
+            token["mode"] = "index"
+            token.setdefault("value", -2)
+        elif mode == "current":
+            token["mode"] = "last"
 
     return normalized
 

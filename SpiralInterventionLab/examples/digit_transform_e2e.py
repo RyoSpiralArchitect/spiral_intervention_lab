@@ -14,14 +14,16 @@ from ..bridge import ProviderControllerClient, ProviderPromptHintController
 from ..controllers.factory import create_controller_provider, normalize_provider_name, provider_api_env_var
 from ..runtime import (
     BaselineSuiteResult,
+    EpisodeResult,
     HookedTransformerAdapter,
     HookedTransformerRuntimeState,
     HookedTransformerWorkerRuntime,
     JSONLStructuredLogger,
     resolve_text_codec,
+    run_c1,
     run_minimal_baseline_suite,
 )
-from ..tasks import SpiralDigitTransformEnv
+from ..tasks import SpiralDigitCopyEnv, SpiralDigitTransformEnv
 
 try:
     from transformer_lens import HookedTransformer
@@ -36,6 +38,8 @@ except Exception:  # pragma: no cover - optional dependency at import time
 
 
 _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
+
+DigitTaskEnv = SpiralDigitTransformEnv | SpiralDigitCopyEnv
 
 
 def _default_surface_layers(model: Any) -> tuple[int, ...]:
@@ -360,6 +364,15 @@ def _write_summary_artifact(log_dir: str | Path | None, filename: str, payload: 
     (base / filename).write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def create_task_env(task_name: str) -> DigitTaskEnv:
+    normalized = str(task_name).strip().lower().replace("-", "_")
+    if normalized in {"digit_transform", "transform"}:
+        return SpiralDigitTransformEnv()
+    if normalized in {"digit_copy", "copy", "echo"}:
+        return SpiralDigitCopyEnv()
+    raise ValueError(f"unknown task '{task_name}'")
+
+
 @dataclass(frozen=True)
 class DigitTransformExperimentResult:
     seed: int
@@ -372,6 +385,7 @@ class DigitTransformExperimentResult:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "suite_mode": "minimal_baseline_suite",
             "seed": self.seed,
             "task_id": self.task_id,
             "worker_model_name": self.worker_model_name,
@@ -382,6 +396,32 @@ class DigitTransformExperimentResult:
             "b0": asdict(self.suite.b0),
             "b1": None if self.suite.b1 is None else asdict(self.suite.b1),
             "c1": asdict(self.suite.c1),
+        }
+
+
+@dataclass(frozen=True)
+class DigitTransformC1OnlyExperimentResult:
+    seed: int
+    task_id: str
+    worker_model_name: str
+    controller_provider: str
+    controller_model_name: str
+    surface_ids: tuple[str, ...]
+    c1: EpisodeResult
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "suite_mode": "c1_only",
+            "seed": self.seed,
+            "task_id": self.task_id,
+            "worker_model_name": self.worker_model_name,
+            "controller_provider": self.controller_provider,
+            "controller_model_name": self.controller_model_name,
+            "surface_ids": list(self.surface_ids),
+            "paired_trace_id": None,
+            "b0": None,
+            "b1": None,
+            "c1": asdict(self.c1),
         }
 
 
@@ -441,7 +481,7 @@ def run_digit_transform_experiment(
     seed: int = 0,
     controller_api_key: str | None = None,
     worker_model: Any | None = None,
-    task_env: SpiralDigitTransformEnv | None = None,
+    task_env: DigitTaskEnv | None = None,
     include_prompt_baseline: bool = True,
     controller_prompt_asset: str = "controller_v01.txt",
     hint_prompt_asset: str = "prompt_hint_v01.txt",
@@ -513,6 +553,74 @@ def run_digit_transform_experiment(
     return result
 
 
+def run_digit_transform_c1_only_experiment(
+    *,
+    provider_name: str,
+    controller_model_name: str,
+    worker_model_name: str,
+    seed: int = 0,
+    controller_api_key: str | None = None,
+    worker_model: Any | None = None,
+    task_env: DigitTaskEnv | None = None,
+    controller_prompt_asset: str = "controller_v01.txt",
+    task_view_mode: str = "redacted",
+    log_dir: str | Path | None = None,
+    codec: Any | None = None,
+    surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    worker_model_path: str | Path | None = None,
+    worker_tokenizer_path: str | Path | None = None,
+    worker_device: str | None = None,
+    worker_dtype: str = "float32",
+    worker_first_n_layers: int | None = None,
+    worker_hf_offline: bool = False,
+    worker_trust_remote_code: bool = False,
+) -> DigitTransformC1OnlyExperimentResult:
+    env = task_env or SpiralDigitTransformEnv()
+    model = worker_model or load_worker_model(
+        worker_model_name,
+        model_path=worker_model_path,
+        tokenizer_path=worker_tokenizer_path,
+        device=worker_device,
+        dtype=worker_dtype,
+        first_n_layers=worker_first_n_layers,
+        hf_offline=worker_hf_offline,
+        trust_remote_code=worker_trust_remote_code,
+    )
+    provider = create_controller_provider(
+        provider_name,
+        model=controller_model_name,
+        api_key=controller_api_key,
+    )
+    c1_controller = ProviderControllerClient(provider, prompt_asset=controller_prompt_asset, max_attempts=3)
+    worker = build_hooked_transformer_worker_runtime(
+        model,
+        env,
+        seed=seed,
+        task_view_mode=task_view_mode,
+        surface_catalog=surface_catalog,
+        codec=codec,
+    )
+    logger_factory = _logger_factory(log_dir)
+    c1 = run_c1(
+        env,
+        worker,
+        c1_controller,
+        logger=None if logger_factory is None else logger_factory("c1"),
+    )
+    surface_ids = tuple(surface["surface_id"] for surface in worker._surface_catalog_raw)
+    result = DigitTransformC1OnlyExperimentResult(
+        seed=seed,
+        task_id=env.task_id,
+        worker_model_name=worker_model_name,
+        controller_provider=normalize_provider_name(provider_name),
+        controller_model_name=controller_model_name,
+        surface_ids=surface_ids,
+        c1=c1,
+    )
+    _write_summary_artifact(log_dir, "experiment_summary.json", result.to_dict())
+    return result
+
+
 def run_digit_transform_sweep(
     *,
     provider_name: str,
@@ -521,7 +629,7 @@ def run_digit_transform_sweep(
     seeds: Sequence[int],
     controller_api_key: str | None = None,
     worker_model: Any | None = None,
-    task_env_factory: Callable[[], SpiralDigitTransformEnv] | None = None,
+    task_env_factory: Callable[[], DigitTaskEnv] | None = None,
     include_prompt_baseline: bool = True,
     controller_prompt_asset: str = "controller_v01.txt",
     hint_prompt_asset: str = "prompt_hint_v01.txt",
@@ -592,12 +700,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--provider", required=True, help="Controller provider: openai, anthropic, mistral, or google")
     parser.add_argument("--controller-model", required=True, help="Black-box controller model name")
     parser.add_argument("--worker-model", default="gpt2-small", help="HookedTransformer worker model name or alias")
+    parser.add_argument(
+        "--task",
+        default="digit_transform",
+        choices=["digit_transform", "digit_copy"],
+        help="Task environment to run",
+    )
     parser.add_argument("--worker-model-path", default=None, help="Optional local Hugging Face model directory for offline worker loading")
     parser.add_argument("--worker-tokenizer-path", default=None, help="Optional local tokenizer directory; defaults to --worker-model-path")
     parser.add_argument("--seed", type=int, default=0, help="Episode seed")
     parser.add_argument("--num-seeds", type=int, default=1, help="Run a consecutive multi-seed sweep starting at --seed")
     parser.add_argument("--controller-api-key", default=None, help="Optional API key override for the controller provider")
     parser.add_argument("--no-b1", action="store_true", help="Disable the prompt-hint baseline; B1 runs by default")
+    parser.add_argument("--c1-only", action="store_true", help="Run only the C1 controller loop without B0/B1 baselines")
     parser.add_argument("--task-view-mode", default="redacted", choices=["redacted", "full"], help="Controller task view mode")
     parser.add_argument("--log-dir", default=None, help="Optional directory for baseline JSONL logs")
     parser.add_argument("--worker-device", default=None, help="Optional worker device override, e.g. mps or cpu")
@@ -613,18 +728,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.num_seeds <= 0:
         parser.error("--num-seeds must be >= 1")
+    if args.c1_only and args.num_seeds != 1:
+        parser.error("--c1-only currently supports only --num-seeds 1")
     if args.controller_api_key is None:
         env_var = provider_api_env_var(args.provider)
         if os.getenv(env_var) is None:
             parser.error(f"{env_var} is not set and --controller-api-key was not provided")
 
-    if args.num_seeds == 1:
+    if args.c1_only:
+        result = run_digit_transform_c1_only_experiment(
+            provider_name=args.provider,
+            controller_model_name=args.controller_model,
+            worker_model_name=args.worker_model,
+            seed=args.seed,
+            controller_api_key=args.controller_api_key,
+            task_env=create_task_env(args.task),
+            task_view_mode=args.task_view_mode,
+            log_dir=args.log_dir,
+            worker_model_path=args.worker_model_path,
+            worker_tokenizer_path=args.worker_tokenizer_path,
+            worker_device=args.worker_device,
+            worker_dtype=args.worker_dtype,
+            worker_first_n_layers=args.worker_first_n_layers,
+            worker_hf_offline=args.worker_hf_offline,
+            worker_trust_remote_code=args.worker_trust_remote_code,
+        )
+        payload = result.to_dict()
+    elif args.num_seeds == 1:
         result = run_digit_transform_experiment(
             provider_name=args.provider,
             controller_model_name=args.controller_model,
             worker_model_name=args.worker_model,
             seed=args.seed,
             controller_api_key=args.controller_api_key,
+            task_env=create_task_env(args.task),
             include_prompt_baseline=not args.no_b1,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
@@ -644,6 +781,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_model_name=args.worker_model,
             seeds=tuple(range(args.seed, args.seed + args.num_seeds)),
             controller_api_key=args.controller_api_key,
+            task_env_factory=lambda: create_task_env(args.task),
             include_prompt_baseline=not args.no_b1,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
