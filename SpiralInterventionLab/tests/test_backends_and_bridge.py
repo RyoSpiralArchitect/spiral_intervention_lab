@@ -326,6 +326,15 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("hypothesis_stats", prompt)
         self.assertIn("latest_effects", prompt)
         self.assertIn("partial_score", prompt)
+        self.assertIn("mean_progress_delta", prompt)
+        self.assertIn("after_is_looping", prompt)
+        self.assertIn("after_task_violation_count", prompt)
+        self.assertIn("edits_left_this_run", prompt)
+        self.assertIn("progress beats stability", prompt.lower())
+        self.assertIn("Safe v0 apply subset", prompt)
+        self.assertIn('the field name must be "by"', prompt)
+        self.assertIn('Do not use "ref.stat" in v0.', prompt)
+        self.assertIn('If none of the safe templates fit, choose noop', prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
         client = _FakeOpenAIClient()

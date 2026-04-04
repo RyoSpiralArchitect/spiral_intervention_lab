@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
@@ -315,7 +316,27 @@ class HookedTransformerWorkerRuntime:
         tokens: list[int] = []
         for segment in self._segments:
             tokens.extend(segment.token_ids)
-        return torch.tensor([tokens], dtype=torch.long)
+        tensor_kwargs: dict[str, Any] = {"dtype": torch.long}
+        device = self._model_device()
+        if device is not None:
+            tensor_kwargs["device"] = device
+        return torch.tensor([tokens], **tensor_kwargs)
+
+    def _model_device(self) -> torch.device | None:
+        model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
+        if model is None:
+            return None
+        cfg = getattr(model, "cfg", None)
+        cfg_device = getattr(cfg, "device", None)
+        if cfg_device is not None:
+            try:
+                return torch.device(cfg_device)
+            except Exception:
+                pass
+        try:
+            return next(model.parameters()).device
+        except Exception:
+            return None
 
     def _append_output_token(self, token_id: int) -> None:
         if self._segments and self._segments[-1].kind == "output":
@@ -408,10 +429,36 @@ class HookedTransformerWorkerRuntime:
 
     def _effect_metrics(self) -> dict[str, float]:
         metrics = dict(self._last_metrics)
+        metrics["repeat_flag"] = float(self._repeat_flag())
+        metrics["no_progress_steps"] = float(self._no_progress_steps)
         partial_score = self._last_task_feedback.get("partial_score")
         if partial_score is not None:
             metrics["partial_score"] = float(partial_score)
+        metrics["progress_score"] = self._progress_score(self._last_task_feedback)
+        metrics["task_violation_count"] = float(self._task_violation_count(self._last_task_feedback))
+        metrics["done"] = float(bool(self._last_task_feedback.get("done", False)))
         return metrics
+
+    def _progress_score(self, feedback: Mapping[str, Any]) -> float:
+        if bool(feedback.get("done", False)):
+            return 1.0
+        label = str(feedback.get("progress_label", "") or "").strip().lower()
+        if label == "progressing":
+            return 0.25
+        if label == "regressing":
+            return -0.5
+        return 0.0
+
+    def _task_violation_count(self, feedback: Mapping[str, Any]) -> int:
+        total = 0
+        violations = feedback.get("constraint_violations")
+        if isinstance(violations, SequenceABC) and not isinstance(violations, (str, bytes, bytearray)):
+            total += sum(1 for item in violations if item)
+        for key in ("missing_required_terms", "forbidden_terms_present", "missing_keywords", "missing_summary_terms"):
+            detail = feedback.get(key)
+            if isinstance(detail, SequenceABC) and not isinstance(detail, (str, bytes, bytearray)):
+                total += sum(1 for item in detail if item)
+        return total
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})

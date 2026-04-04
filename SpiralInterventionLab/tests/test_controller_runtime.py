@@ -1,5 +1,6 @@
 import unittest
 from importlib.util import find_spec
+from unittest.mock import patch
 
 import torch
 
@@ -665,6 +666,13 @@ class _ToyWorkerRuntime:
         return self._latest_effect_trace
 
 
+class _BudgetExhaustedToyWorkerRuntime(_ToyWorkerRuntime):
+    def build_controller_packet(self):
+        packet = super().build_controller_packet()
+        packet["budget"]["edits_left_this_run"] = 0
+        return packet
+
+
 class TestLoopAndEffects(unittest.TestCase):
     def test_build_edit_effect_marks_helpful(self):
         effect = build_edit_effect(
@@ -681,6 +689,43 @@ class TestLoopAndEffects(unittest.TestCase):
         summary = summarize_effects([effect])
         self.assertEqual(summary["hypothesis_stats"][0]["hypothesis"], "rescue")
         self.assertEqual(summary["verdict_counts"]["helpful"], 1)
+        self.assertIn("mean_progress_delta", summary["hypothesis_stats"][0])
+        self.assertIn("progress_delta", summary["latest_effects"][0])
+
+    def test_build_edit_effect_marks_looping_without_progress_as_harmful(self):
+        effect = build_edit_effect(
+            edit_id="e_loop",
+            surface_id="s1",
+            observed_window_steps=1,
+            before={
+                "entropy": 10.1,
+                "top1_margin": 0.01,
+                "repetition_score": 0.0,
+                "partial_score": 0.45,
+                "repeat_flag": 0.0,
+                "no_progress_steps": 0.0,
+                "progress_score": 0.25,
+                "task_violation_count": 4.0,
+                "done": 0.0,
+            },
+            after={
+                "entropy": 7.8,
+                "top1_margin": 0.29,
+                "repetition_score": 1.0,
+                "partial_score": 0.45,
+                "repeat_flag": 1.0,
+                "no_progress_steps": 3.0,
+                "progress_score": 0.25,
+                "task_violation_count": 4.0,
+                "done": 0.0,
+            },
+            hypothesis="bad_reward",
+        )
+
+        self.assertEqual(effect["verdict"], "harmful")
+        summary = summarize_effects([effect])
+        self.assertEqual(summary["verdict_counts"]["harmful"], 1)
+        self.assertTrue(summary["latest_effects"][0]["after_is_looping"])
 
     def test_run_episode_smoke(self):
         adapter = FakeAdapter()
@@ -706,6 +751,28 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertTrue(any(event["event"] == "controller_effect_summary" for event in logger.events))
         self.assertTrue(any(event["event"] == "compiled_edit" for event in logger.events))
         self.assertEqual(logger.events[-1]["event"], "episode_end")
+
+    def test_run_episode_guards_apply_when_run_budget_is_exhausted(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        result = run_episode(
+            _ToyTaskEnv(),
+            _BudgetExhaustedToyWorkerRuntime(runtime_state),
+            _ToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertEqual(result.output, "base")
+        self.assertEqual(result.score, 0.0)
+        self.assertTrue(any(event["event"] == "controller_guardrail" for event in logger.events))
+        self.assertFalse(any(event["event"] == "compiled_edit" for event in logger.events))
+        first_command = next(event for event in logger.events if event["event"] == "controller_command")
+        self.assertEqual(first_command["command"]["decision"], "noop")
 
 
 class TestRank1Bridge(unittest.TestCase):
@@ -924,6 +991,17 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["budget"]["edit_cost_left_total"], 0.5)
         self.assertEqual(packet["surface_catalog"][0]["surface_id"], "s_resid_l11_last")
         self.assertEqual(packet["recent_effect_summary"]["window_size"], 0)
+
+    def test_worker_runtime_current_tokens_use_model_device_when_available(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.model = type("FakeModel", (), {"cfg": type("Cfg", (), {"device": "cpu"})()})()
+        worker_runtime.reset("p")
+
+        with patch("SpiralInterventionLab.runtime.worker.torch.tensor", return_value=torch.zeros((1, 1), dtype=torch.long)) as tensor_mock:
+            worker_runtime._current_token_tensor()
+
+        self.assertEqual(tensor_mock.call_args.kwargs["dtype"], torch.long)
+        self.assertEqual(tensor_mock.call_args.kwargs["device"], torch.device("cpu"))
 
     def test_worker_runtime_snapshot_trace_records_step_aligned_frames(self):
         worker_runtime = self._make_worker_runtime()

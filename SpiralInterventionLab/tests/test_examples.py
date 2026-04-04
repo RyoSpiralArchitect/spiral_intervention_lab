@@ -15,9 +15,20 @@ from SpiralInterventionLab.examples import (
     run_digit_transform_experiment,
     run_digit_transform_sweep,
 )
-from SpiralInterventionLab.examples.digit_transform_e2e import _infer_tlens_model_ref
+from SpiralInterventionLab.examples.digit_transform_e2e import (
+    _configure_torch_default_device_for_worker,
+    _infer_tlens_model_ref,
+    _resolve_worker_device,
+)
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
-from SpiralInterventionLab.tasks import SpiralDigitCopyEnv, SpiralDigitTransformEnv
+from SpiralInterventionLab.tasks import (
+    SpiralConstrainedRewriteEnv,
+    SpiralDigitCopyEnv,
+    SpiralDigitTransformEnv,
+    SpiralEntailmentReasoningEnv,
+    SpiralSentenceOrderingEnv,
+    SpiralStructuredSummaryEnv,
+)
 
 HAS_TRANSFORMER_LENS = bool(find_spec("transformer_lens"))
 if HAS_TRANSFORMER_LENS:
@@ -142,6 +153,10 @@ class TestExamples(unittest.TestCase):
     def test_create_task_env_supports_copy_and_transform(self):
         self.assertIsInstance(create_task_env("digit_transform"), SpiralDigitTransformEnv)
         self.assertIsInstance(create_task_env("digit_copy"), SpiralDigitCopyEnv)
+        self.assertIsInstance(create_task_env("sentence_ordering"), SpiralSentenceOrderingEnv)
+        self.assertIsInstance(create_task_env("entailment_reasoning"), SpiralEntailmentReasoningEnv)
+        self.assertIsInstance(create_task_env("constrained_rewrite"), SpiralConstrainedRewriteEnv)
+        self.assertIsInstance(create_task_env("structured_summary"), SpiralStructuredSummaryEnv)
 
     def test_run_digit_transform_experiment_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -281,6 +296,20 @@ class TestExamples(unittest.TestCase):
             local_files_only=True,
             trust_remote_code=True,
         )
+
+    def test_resolve_worker_device_promotes_explicit_mps_in_conservative_mode(self):
+        with patch("SpiralInterventionLab.examples.digit_transform_e2e.torch.backends.mps.is_available", return_value=True):
+            self.assertIsNone(_resolve_worker_device(device=None, mps_mode="auto"))
+            self.assertEqual(_resolve_worker_device(device=None, mps_mode="conservative"), "mps")
+
+    @patch("SpiralInterventionLab.examples.digit_transform_e2e.torch.set_default_device")
+    @patch("SpiralInterventionLab.examples.digit_transform_e2e.torch.get_default_device", return_value="mps:0")
+    def test_configure_torch_default_device_for_worker_relaxes_auto_mps(self, get_default_device, set_default_device):
+        changed = _configure_torch_default_device_for_worker(target_device="mps", mps_mode="conservative")
+
+        self.assertTrue(changed)
+        get_default_device.assert_called_once_with()
+        set_default_device.assert_called_once_with("cpu")
 
 
 if __name__ == "__main__":

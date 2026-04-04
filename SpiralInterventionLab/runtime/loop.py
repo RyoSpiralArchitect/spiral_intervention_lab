@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence as SequenceABC
 from dataclasses import asdict, is_dataclass
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -164,6 +165,41 @@ def _log_effect_trace(
         logger.log({"event": "controller_effect_summary", "step": step, **dict(summary)})
 
 
+def _guard_exhausted_apply_command(
+    command: Any,
+    packet: Mapping[str, Any],
+) -> tuple[Any, dict[str, Any] | None]:
+    if not isinstance(command, Mapping):
+        return command, None
+    decision = str(command.get("decision", "") or "").strip().lower()
+    if decision != "apply":
+        return command, None
+    budget = packet.get("budget")
+    if not isinstance(budget, Mapping):
+        return command, None
+    edits_left_this_run = budget.get("edits_left_this_run")
+    try:
+        edits_left_this_run = int(edits_left_this_run)
+    except Exception:
+        return command, None
+    if edits_left_this_run > 0:
+        return command, None
+    guarded_command = {
+        "version": str(command.get("version", "0.1") or "0.1"),
+        "decision": "noop",
+        "edits": [],
+        "rollback_ids": [],
+    }
+    return guarded_command, {
+        "reason": "edits_left_this_run_exhausted",
+        "original_decision": decision,
+        "edits_left_this_run": edits_left_this_run,
+        "requested_edit_count": len(command.get("edits", ()))
+        if isinstance(command.get("edits"), SequenceABC)
+        else 0,
+    }
+
+
 def run_episode(
     task_env: TaskEnv,
     worker_runtime: WorkerRuntime,
@@ -190,9 +226,12 @@ def run_episode(
                 logger.log({"event": "controller_error", "step": step_count, "phase": "invoke", "error": str(exc)})
             raise
 
+        command, guard_event = _guard_exhausted_apply_command(command, packet)
         _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
+            if guard_event is not None:
+                logger.log({"event": "controller_guardrail", "step": step_count, **guard_event})
             logger.log({"event": "controller_command", "step": step_count, "command": command})
 
         try:
