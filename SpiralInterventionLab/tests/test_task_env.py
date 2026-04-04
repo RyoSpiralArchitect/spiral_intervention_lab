@@ -1,6 +1,6 @@
 import unittest
 
-from SpiralInterventionLab.tasks import SpiralDigitTransformEnv
+from SpiralInterventionLab.tasks import SpiralDigitCopyEnv, SpiralDigitTransformEnv
 
 
 class TestSpiralDigitTransformEnv(unittest.TestCase):
@@ -63,6 +63,46 @@ class TestSpiralDigitTransformEnv(unittest.TestCase):
         self.assertEqual(kwargs["max_generated_tokens"], len(target))
         self.assertEqual(kwargs["decode_constraint"], "digits_only")
         self.assertTrue(kwargs["stop_checker"](target))
+        self.assertEqual(kwargs["task_feedback_fn"](target)["partial_score"], 1.0)
+
+
+class TestSpiralDigitCopyEnv(unittest.TestCase):
+    def test_reset_is_seed_reproducible(self):
+        env = SpiralDigitCopyEnv(min_digits=5, max_digits=5)
+
+        prompt_a = env.reset(17)
+        episode_a = env.current_episode
+        prompt_b = env.reset(17)
+        episode_b = env.current_episode
+
+        self.assertIsNotNone(episode_a)
+        self.assertIsNotNone(episode_b)
+        self.assertEqual(prompt_a, prompt_b)
+        self.assertEqual(episode_a.source_text, episode_b.source_text)
+        self.assertEqual(episode_a.target_text, episode_b.target_text)
+
+    def test_score_feedback_and_worker_runtime_kwargs(self):
+        env = SpiralDigitCopyEnv(min_digits=4, max_digits=4)
+        env.reset(29)
+        self.assertIsNotNone(env.current_episode)
+        target = env.current_episode.target_text
+        partial = target[:2]
+        wrong = f"{target[:2]}x"
+
+        self.assertEqual(env.score(target), 1.0)
+        self.assertFalse(env.done(target[:-1]))
+        self.assertTrue(env.done(target))
+        self.assertAlmostEqual(env.task_feedback(partial)["partial_score"], 2 / len(target))
+        self.assertEqual(env.task_feedback(partial)["progress_label"], "progressing")
+        self.assertEqual(env.task_feedback(wrong)["progress_label"], "regressing")
+        self.assertIn("non_digit_output", env.task_feedback(wrong)["constraint_violations"])
+        self.assertFalse(env.stop_checker(target[:-1]))
+        self.assertTrue(env.stop_checker(target))
+
+        kwargs = env.worker_runtime_kwargs()
+        self.assertEqual(kwargs["task_id"], env.task_id)
+        self.assertEqual(kwargs["max_generated_tokens"], len(target))
+        self.assertEqual(kwargs["decode_constraint"], "digits_only")
         self.assertEqual(kwargs["task_feedback_fn"](target)["partial_score"], 1.0)
 
 

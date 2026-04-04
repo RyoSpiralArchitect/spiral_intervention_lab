@@ -8,7 +8,7 @@ from SpiralInterventionLab.runtime.baselines import run_b0, run_b1, run_c1, run_
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.compiler import StepContext, compile_command
 from SpiralInterventionLab.runtime.edit_budget import prepare_direction
-from SpiralInterventionLab.runtime.effects import build_edit_effect
+from SpiralInterventionLab.runtime.effects import build_edit_effect, summarize_effects
 from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
 from SpiralInterventionLab.runtime.policy import HarnessPolicy, PolicyViolation, validate_command_against_packet
@@ -193,6 +193,7 @@ def _resid_command():
                 },
                 "op": {"kind": "resid_add", "alpha": 0.2},
                 "budget": {"ttl_steps": 2, "norm_clip": 1.5, "revertible": True},
+                "meta": {"expected_effect": "break_loop"},
             }
         ],
     }
@@ -565,9 +566,40 @@ class _ToyTaskEnv:
 class _ToyController:
     def __init__(self):
         self.calls = 0
+        self._last_trace = None
+
+    def latest_trace(self):
+        return self._last_trace
 
     def invoke(self, packet):
         self.calls += 1
+        self._last_trace = {
+            "provider": "fake",
+            "model": "toy-controller",
+            "observation": {
+                "step": packet["step"],
+                "worker_status": packet["worker_view"]["status"],
+                "surface_ids": [surface["surface_id"] for surface in packet["surface_catalog"]],
+            },
+            "attempts": [
+                {
+                    "attempt": 1,
+                    "provider": "fake",
+                    "model": "toy-controller",
+                    "latency_ms": 1.0,
+                    "parse_ok": True,
+                    "response_text": "{\"version\":\"0.1\",\"decision\":\"apply\"}",
+                }
+            ],
+            "decision": {
+                "decision": "apply" if self.calls == 1 else "noop",
+                "edit_ids": ["e_rescue"] if self.calls == 1 else [],
+                "ops": ["resid_add"] if self.calls == 1 else [],
+                "step_sizes": [0.1] if self.calls == 1 else [],
+                "total_edit_cost": 0.1 if self.calls == 1 else 0.0,
+            },
+            "success": True,
+        }
         if self.calls == 1:
             return _resid_command()
         return {"version": "0.1", "decision": "noop"}
@@ -578,6 +610,7 @@ class _ToyWorkerRuntime:
         self.runtime_state = runtime_state
         self.output = ""
         self.steps = 0
+        self._latest_effect_trace = {"completed_effects": [], "summary": {"window_size": 0, "verdict_counts": {}, "hypothesis_stats": [], "latest_effects": []}}
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
@@ -599,6 +632,24 @@ class _ToyWorkerRuntime:
         return _make_packet(rollbackable_ids=rollbackable_ids)
 
     def observe_recent_effects(self) -> None:
+        if self.steps >= 2 and self.runtime_state.has_edit("e_rescue"):
+            effect = {
+                "edit_id": "e_rescue",
+                "surface_id": "s_resid_l11_last",
+                "observed_window_steps": 1,
+                "before": {"entropy": 2.5, "top1_margin": 0.05, "repetition_score": 0.4},
+                "after": {"entropy": 2.0, "top1_margin": 0.08, "repetition_score": 0.2},
+                "delta": {"entropy": -0.5, "top1_margin": 0.03, "repetition_score": -0.2},
+                "verdict": "helpful",
+                "hypothesis": "rescue",
+                "expected_effect": "break_loop",
+            }
+            self._latest_effect_trace = {
+                "completed_effects": [effect],
+                "summary": summarize_effects([effect]),
+            }
+            return None
+        self._latest_effect_trace = {"completed_effects": [], "summary": summarize_effects(())}
         return None
 
     def tick_ttl(self) -> None:
@@ -610,6 +661,9 @@ class _ToyWorkerRuntime:
     def final_text(self) -> str:
         return self.output
 
+    def latest_effect_trace(self):
+        return self._latest_effect_trace
+
 
 class TestLoopAndEffects(unittest.TestCase):
     def test_build_edit_effect_marks_helpful(self):
@@ -619,8 +673,14 @@ class TestLoopAndEffects(unittest.TestCase):
             observed_window_steps=1,
             before={"entropy": 2.5, "top1_margin": 0.05, "repetition_score": 0.4},
             after={"entropy": 2.1, "top1_margin": 0.09, "repetition_score": 0.2},
+            hypothesis="rescue",
+            expected_effect="break_loop",
         )
         self.assertEqual(effect["verdict"], "helpful")
+        self.assertEqual(effect["hypothesis"], "rescue")
+        summary = summarize_effects([effect])
+        self.assertEqual(summary["hypothesis_stats"][0]["hypothesis"], "rescue")
+        self.assertEqual(summary["verdict_counts"]["helpful"], 1)
 
     def test_run_episode_smoke(self):
         adapter = FakeAdapter()
@@ -639,6 +699,11 @@ class TestLoopAndEffects(unittest.TestCase):
 
         self.assertEqual(result.score, 1.0)
         self.assertEqual(result.output, "patched")
+        self.assertTrue(any(event["event"] == "controller_observation" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_provider_attempt" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_decision" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_effect" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_effect_summary" for event in logger.events))
         self.assertTrue(any(event["event"] == "compiled_edit" for event in logger.events))
         self.assertEqual(logger.events[-1]["event"], "episode_end")
 
@@ -779,9 +844,33 @@ class _PromptHintController:
     def __init__(self, hint):
         self.hint = hint
         self.calls = 0
+        self._last_trace = None
 
-    def invoke(self, _packet):
+    def latest_trace(self):
+        return self._last_trace
+
+    def invoke(self, packet):
         self.calls += 1
+        self._last_trace = {
+            "provider": "fake",
+            "model": "prompt-hint",
+            "observation": {
+                "step": packet["step"],
+                "worker_status": packet["worker_view"]["status"],
+            },
+            "attempts": [
+                {
+                    "attempt": 1,
+                    "provider": "fake",
+                    "model": "prompt-hint",
+                    "latency_ms": 1.0,
+                    "parse_ok": True,
+                    "response_text": self.hint,
+                }
+            ],
+            "decision": {"advice": self.hint if self.calls == 1 else None, "advice_length": len(self.hint) if self.calls == 1 else 0},
+            "success": True,
+        }
         if self.calls == 1:
             return self.hint
         return None
@@ -834,6 +923,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["budget"]["edits_left_this_run"], 4)
         self.assertEqual(packet["budget"]["edit_cost_left_total"], 0.5)
         self.assertEqual(packet["surface_catalog"][0]["surface_id"], "s_resid_l11_last")
+        self.assertEqual(packet["recent_effect_summary"]["window_size"], 0)
 
     def test_worker_runtime_snapshot_trace_records_step_aligned_frames(self):
         worker_runtime = self._make_worker_runtime()
@@ -850,6 +940,36 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(trace.aligned_frame(3).output_text, "aaa")
         self.assertEqual(trace.aligned_cache(1)["resid_pre:11"].shape[1], 1)
         self.assertEqual(trace.aligned_cache(3)["resid_pre:11"].shape[1], 3)
+
+    def test_worker_runtime_recent_effect_summary_tracks_hypothesis(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime.step()
+
+        packet = worker_runtime.build_controller_packet()
+        ctx = StepContext(
+            packet=parse_observation_packet(packet),
+            runtime_state=worker_runtime.runtime_state,
+            traces={},
+            stats={},
+            adapter=worker_runtime.adapter,
+        )
+        compiled = compile_command(_resid_command(), packet, ctx)
+        compiled[0].apply(ctx)
+
+        worker_runtime.observe_recent_effects()
+        worker_runtime.step()
+        worker_runtime.observe_recent_effects()
+
+        effect_trace = worker_runtime.latest_effect_trace()
+        self.assertEqual(effect_trace["completed_effects"][0]["hypothesis"], "rescue")
+        self.assertEqual(effect_trace["completed_effects"][0]["expected_effect"], "break_loop")
+
+        packet_after = worker_runtime.build_controller_packet()
+        summary = packet_after["recent_effect_summary"]
+        self.assertEqual(summary["window_size"], 1)
+        self.assertEqual(summary["hypothesis_stats"][0]["hypothesis"], "rescue")
+        self.assertEqual(summary["hypothesis_stats"][0]["last_expected_effect"], "break_loop")
 
     def test_probe_frames_use_step_aligned_baseline_trace(self):
         baseline_worker = self._make_worker_runtime()
@@ -889,6 +1009,8 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(result.output, "abb")
         self.assertEqual(result.score, 1.0)
         self.assertTrue(any(event["event"] == "prompt_advice" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_provider_attempt" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_decision" for event in logger.events))
 
     def test_c1_runner_uses_activation_only_edit_path(self):
         worker_runtime = self._make_worker_runtime()

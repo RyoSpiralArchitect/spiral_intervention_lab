@@ -25,6 +25,27 @@ except Exception:  # pragma: no cover - optional dependency at import time
     genai = None  # type: ignore[assignment]
 
 
+def _coerce_metadata_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        return {str(key): _coerce_metadata_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_coerce_metadata_value(item) for item in value]
+    try:
+        return {str(key): _coerce_metadata_value(item) for key, item in vars(value).items()}
+    except Exception:
+        return str(value)
+
+
+def _compact_metadata(**items: Any) -> Mapping[str, Any]:
+    return {
+        key: _coerce_metadata_value(value)
+        for key, value in items.items()
+        if value is not None and value != {}
+    }
+
+
 def _usage_dict(raw: Any) -> Mapping[str, Any]:
     usage = getattr(raw, "usage", None)
     if usage is None:
@@ -84,6 +105,42 @@ def _google_text(raw: Any) -> str:
     return "".join(chunks).strip()
 
 
+def _openai_metadata(raw: Any) -> Mapping[str, Any]:
+    return _compact_metadata(
+        response_id=getattr(raw, "id", None),
+        status=getattr(raw, "status", None),
+        incomplete_details=getattr(raw, "incomplete_details", None),
+    )
+
+
+def _anthropic_metadata(raw: Any) -> Mapping[str, Any]:
+    return _compact_metadata(
+        response_id=getattr(raw, "id", None),
+        stop_reason=getattr(raw, "stop_reason", None),
+        stop_sequence=getattr(raw, "stop_sequence", None),
+        response_type=getattr(raw, "type", None),
+    )
+
+
+def _mistral_metadata(raw: Any) -> Mapping[str, Any]:
+    choice = (getattr(raw, "choices", None) or [None])[0]
+    return _compact_metadata(
+        response_id=getattr(raw, "id", None),
+        finish_reason=getattr(choice, "finish_reason", None),
+    )
+
+
+def _google_metadata(raw: Any) -> Mapping[str, Any]:
+    candidates = getattr(raw, "candidates", None) or []
+    finish_reasons = [getattr(candidate, "finish_reason", None) for candidate in candidates]
+    finish_reasons = [reason for reason in finish_reasons if reason is not None]
+    return _compact_metadata(
+        response_id=getattr(raw, "response_id", None),
+        prompt_feedback=getattr(raw, "prompt_feedback", None),
+        finish_reasons=finish_reasons or None,
+    )
+
+
 class OpenAIControllerProvider(ControllerProvider):
     def __init__(
         self,
@@ -131,6 +188,7 @@ class OpenAIControllerProvider(ControllerProvider):
             model=self.model_name,
             raw=raw,
             usage=_usage_dict(raw),
+            metadata=_openai_metadata(raw),
         )
 
 
@@ -171,6 +229,7 @@ class AnthropicControllerProvider(ControllerProvider):
             model=self.model_name,
             raw=raw,
             usage=_usage_dict(raw),
+            metadata=_anthropic_metadata(raw),
         )
 
 
@@ -213,6 +272,7 @@ class MistralControllerProvider(ControllerProvider):
             model=self.model_name,
             raw=raw,
             usage=_usage_dict(raw),
+            metadata=_mistral_metadata(raw),
         )
 
 
@@ -257,4 +317,5 @@ class GoogleGenAIControllerProvider(ControllerProvider):
             model=self.model_name,
             raw=raw,
             usage=_usage_dict(raw),
+            metadata=_google_metadata(raw),
         )

@@ -17,6 +17,7 @@ from SpiralInterventionLab.bridge.controller_clients import (
     ProviderControllerClient,
     ProviderPromptHintController,
     _normalize_controller_payload,
+    load_prompt_asset,
 )
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.controllers.providers import OpenAIControllerProvider
@@ -145,10 +146,17 @@ class TestBackendsAndBridge(unittest.TestCase):
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=2)
 
         command = client.invoke({"step": 1})
+        trace = client.latest_trace()
 
         self.assertEqual(command.decision, "noop")
         self.assertEqual(len(provider.requests), 2)
         self.assertIn("Previous reply was invalid", provider.requests[-1].effective_system_prompt())
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["step"], 1)
+        self.assertEqual(len(trace["attempts"]), 2)
+        self.assertFalse(trace["attempts"][0]["parse_ok"])
+        self.assertTrue(trace["attempts"][1]["parse_ok"])
+        self.assertEqual(trace["decision"]["decision"], "noop")
 
     def test_provider_controller_client_backfills_missing_version(self):
         provider = _FakeProvider("{\"decision\":\"noop\"}")
@@ -158,6 +166,31 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(command.version, "0.1")
         self.assertEqual(command.decision, "noop")
+
+    def test_provider_controller_client_observation_includes_task_feedback(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        client.invoke(
+            {
+                "step": 1,
+                "task_view": {"task_id": "toy_task", "mode": "redacted", "prompt_hash": "sha256:test"},
+                "worker_view": {"generated_tail": "12", "status": "acting"},
+                "task_feedback": {"done": False, "partial_score": 0.5, "progress_label": "progressing"},
+                "surface_catalog": [],
+                "trace_bank": [],
+                "active_edits": [],
+                "recent_effects": [],
+                "recent_effect_summary": {"window_size": 0},
+                "telemetry": {},
+                "budget": {},
+            }
+        )
+        trace = client.latest_trace()
+
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["task_feedback"]["partial_score"], 0.5)
+        self.assertEqual(trace["observation"]["task_feedback"]["progress_label"], "progressing")
 
     def test_provider_controller_client_normalizes_common_edit_shorthand(self):
         provider = _FakeProvider(
@@ -237,13 +270,62 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(normalized["ref"]["scope"], "trace")
         self.assertEqual(normalized["ref"]["trace_id"], "paired_baseline")
 
+    def test_normalize_controller_payload_accepts_scale_alpha_alias(self):
+        normalized = _normalize_controller_payload(
+            {
+                "fn": "scale",
+                "alpha": -0.25,
+                "arg": {
+                    "ref": {
+                        "scope": "runtime",
+                        "worker": "os_0",
+                        "tensor": "hidden",
+                        "layer": 1,
+                        "token": {"mode": "last"},
+                    }
+                },
+            }
+        )
+
+        self.assertEqual(normalized["fn"], "scale")
+        self.assertEqual(normalized["by"], -0.25)
+        self.assertNotIn("alpha", normalized)
+
+    def test_normalize_controller_payload_rewrites_prev_token_alias(self):
+        normalized = _normalize_controller_payload(
+            {
+                "ref": {
+                    "scope": "runtime",
+                    "worker": "os_0",
+                    "tensor": "hidden",
+                    "layer": 1,
+                    "token": {"mode": "prev"},
+                }
+            }
+        )
+
+        self.assertEqual(normalized["ref"]["token"]["mode"], "index")
+        self.assertEqual(normalized["ref"]["token"]["value"], -2)
+
     def test_provider_prompt_hint_controller_trims_plain_text(self):
         provider = _FakeProvider("  try the digit near the end  \n")
         controller = ProviderPromptHintController(provider, system_prompt="sys")
 
         hint = controller.invoke({"step": 2})
+        trace = controller.latest_trace()
 
         self.assertEqual(hint, "try the digit near the end")
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["step"], 2)
+        self.assertEqual(trace["decision"]["advice"], "try the digit near the end")
+
+    def test_controller_prompt_asset_mentions_effect_summary_and_partial_score(self):
+        prompt = load_prompt_asset("controller_v01.txt")
+
+        self.assertIn("recent_effect_summary", prompt)
+        self.assertIn("hypothesis_stats", prompt)
+        self.assertIn("latest_effects", prompt)
+        self.assertIn("partial_score", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
         client = _FakeOpenAIClient()

@@ -6,16 +6,18 @@ from unittest.mock import patch
 
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.examples import (
+    create_task_env,
     build_default_activation_surface_catalog,
     build_allowed_token_ids_for_constraint,
     build_hooked_transformer_worker_runtime,
     load_worker_model,
+    run_digit_transform_c1_only_experiment,
     run_digit_transform_experiment,
     run_digit_transform_sweep,
 )
 from SpiralInterventionLab.examples.digit_transform_e2e import _infer_tlens_model_ref
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
-from SpiralInterventionLab.tasks import SpiralDigitTransformEnv
+from SpiralInterventionLab.tasks import SpiralDigitCopyEnv, SpiralDigitTransformEnv
 
 HAS_TRANSFORMER_LENS = bool(find_spec("transformer_lens"))
 if HAS_TRANSFORMER_LENS:
@@ -137,6 +139,10 @@ class TestExamples(unittest.TestCase):
 
         self.assertEqual(inferred, "meta-llama/Llama-3.2-3B")
 
+    def test_create_task_env_supports_copy_and_transform(self):
+        self.assertIsInstance(create_task_env("digit_transform"), SpiralDigitTransformEnv)
+        self.assertIsInstance(create_task_env("digit_copy"), SpiralDigitCopyEnv)
+
     def test_run_digit_transform_experiment_smoke(self):
         model, codec = self._make_model_and_codec()
         env = SpiralDigitTransformEnv(min_digits=4, max_digits=4)
@@ -167,6 +173,38 @@ class TestExamples(unittest.TestCase):
             self.assertTrue(Path(tmpdir, "b0.jsonl").exists())
             self.assertTrue(Path(tmpdir, "b1.jsonl").exists())
             self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "experiment_summary.json").exists())
+
+    def test_run_digit_transform_c1_only_experiment_smoke(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralDigitCopyEnv(min_digits=4, max_digits=4)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch(
+                "SpiralInterventionLab.examples.digit_transform_e2e.create_controller_provider",
+                return_value=_NoopProvider(),
+            ):
+                result = run_digit_transform_c1_only_experiment(
+                    provider_name="openai",
+                    controller_model_name="fake-controller",
+                    worker_model_name="tiny-random",
+                    seed=7,
+                    worker_model=model,
+                    task_env=env,
+                    codec=codec,
+                    log_dir=tmpdir,
+                )
+
+            payload = result.to_dict()
+            self.assertEqual(payload["suite_mode"], "c1_only")
+            self.assertEqual(payload["task_id"], env.task_id)
+            self.assertIsNone(payload["b0"])
+            self.assertIsNone(payload["b1"])
+            self.assertIn("c1", payload)
+            self.assertFalse(Path(tmpdir, "b0.jsonl").exists())
+            self.assertFalse(Path(tmpdir, "b1.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "experiment_summary.json").exists())
 
     def test_run_digit_transform_sweep_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -191,6 +229,9 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(payload["seeds"], [3, 4])
             self.assertTrue(Path(tmpdir, "seed_3", "b0.jsonl").exists())
             self.assertTrue(Path(tmpdir, "seed_4", "c1.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "seed_3", "experiment_summary.json").exists())
+            self.assertTrue(Path(tmpdir, "seed_4", "experiment_summary.json").exists())
+            self.assertTrue(Path(tmpdir, "sweep_summary.json").exists())
 
     @patch("SpiralInterventionLab.examples.digit_transform_e2e._load_local_hooked_transformer_from_hf")
     @patch("SpiralInterventionLab.examples.digit_transform_e2e.AutoTokenizer")

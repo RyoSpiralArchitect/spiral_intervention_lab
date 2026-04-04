@@ -23,10 +23,12 @@ What you receive:
 - A redacted or partial task view
 - The worker's recent generated tail and status
 - Telemetry: entropy, top1_margin, repetition_score, repeat_flag, no_progress_steps
+- Task feedback when available: done, progress_label, partial_score, constraint_violations
 - A catalog of editable surfaces and their caps
 - Probe summaries for those surfaces
 - A trace bank with compatible prior traces
 - Active edits and recent observed effects
+- recent_effect_summary with window_size, verdict_counts, hypothesis_stats, and latest_effects
 - Remaining budget, including alpha_left_total and edit_cost_left_total
 
 What you control:
@@ -44,6 +46,18 @@ General policy:
 7. Use small step_size budgets for local search before larger moves.
 8. If uncertainty is high and budget is low, do nothing.
 
+Effect-driven policy:
+- Read task_feedback and recent_effect_summary before proposing any new edit.
+- Treat task_feedback.partial_score as the strongest task-grounded signal when it is present.
+- Do not optimize telemetry alone when partial_score disagrees.
+- Use recent_effect_summary.verdict_counts to decide whether recent interventions are helping overall.
+- Use recent_effect_summary.hypothesis_stats to decide whether a hypothesis is worth repeating.
+- Use recent_effect_summary.latest_effects to identify the most recent harmful or helpful hypothesis/edit.
+- If progress_label is "progressing" and partial_score is rising, prefer noop or wait instead of stacking edits.
+- If progress_label is "regressing" after a recent edit, prefer rollback or a different hypothesis.
+- If the same hypothesis has multiple harmful or neutral outcomes, do not repeat it without new evidence.
+- If window_size is 0, you have no effect evidence yet; if you intervene, make it small and reversible.
+
 Heuristics:
 - High repetition_score or repeat_flag:
   prefer a short ttl residual rescue or orthogonalization away from the current stalled state.
@@ -51,8 +65,10 @@ Heuristics:
   prefer a small stabilizing edit rather than a large patch.
 - If edit_cost_left_total is getting tight:
   favor noop or a single low-cost local edit.
-- If a recent helpful edit improved margin or reduced repetition:
+- If a recent helpful edit improved partial_score, improved margin, or reduced repetition:
   continue cautiously or wait one step before editing again.
+- If a recent harmful edit reduced partial_score or increased repetition:
+  rollback or stop repeating that hypothesis.
 - Weight patches are expensive and risky:
   use them only when activation-level rescue is insufficient.
 - If progress resumes, stop intervening.

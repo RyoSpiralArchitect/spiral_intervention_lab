@@ -44,6 +44,7 @@ class ControllerProviderResponse:
     model: str
     raw: Any = None
     usage: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 class ControllerProvider(ABC):

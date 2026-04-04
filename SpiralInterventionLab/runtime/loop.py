@@ -90,7 +90,78 @@ def _coerce_jsonable(value: Any) -> Any:
         return {str(key): _coerce_jsonable(item) for key, item in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [_coerce_jsonable(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    try:
+        return {str(key): _coerce_jsonable(item) for key, item in vars(value).items()}
+    except Exception:
+        pass
     return value
+
+
+def _latest_controller_trace(controller_client: Any) -> Mapping[str, Any] | None:
+    getter = getattr(controller_client, "latest_trace", None)
+    if not callable(getter):
+        return None
+    trace = getter()
+    if not isinstance(trace, Mapping):
+        return None
+    return trace
+
+
+def _log_controller_trace(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    trace: Mapping[str, Any] | None,
+) -> None:
+    if logger is None or trace is None:
+        return
+
+    observation = trace.get("observation")
+    if isinstance(observation, Mapping):
+        logger.log({"event": "controller_observation", "step": step, **dict(observation)})
+
+    for attempt in trace.get("attempts", []) if isinstance(trace.get("attempts"), Sequence) else []:
+        if isinstance(attempt, Mapping):
+            logger.log({"event": "controller_provider_attempt", "step": step, **dict(attempt)})
+
+    decision = trace.get("decision")
+    if isinstance(decision, Mapping):
+        logger.log({"event": "controller_decision", "step": step, **dict(decision)})
+
+
+def _latest_effect_trace(worker_runtime: Any) -> Mapping[str, Any] | None:
+    getter = getattr(worker_runtime, "latest_effect_trace", None)
+    if not callable(getter):
+        return None
+    trace = getter()
+    if not isinstance(trace, Mapping):
+        return None
+    return trace
+
+
+def _log_effect_trace(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    worker_runtime: Any,
+) -> None:
+    if logger is None:
+        return
+    trace = _latest_effect_trace(worker_runtime)
+    if trace is None:
+        return
+
+    completed = trace.get("completed_effects")
+    if isinstance(completed, Sequence):
+        for effect in completed:
+            if isinstance(effect, Mapping):
+                logger.log({"event": "controller_effect", "step": step, **dict(effect)})
+
+    summary = trace.get("summary")
+    if isinstance(summary, Mapping):
+        logger.log({"event": "controller_effect_summary", "step": step, **dict(summary)})
 
 
 def run_episode(
@@ -111,11 +182,25 @@ def run_episode(
     while not worker_runtime.done():
         worker_runtime.step()
         packet = worker_runtime.build_controller_packet()
-        command = controller_client.invoke(packet)
-        compiled_edits = compile_command(command, packet, ctx, policy=policy)
+        try:
+            command = controller_client.invoke(packet)
+        except Exception as exc:
+            _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
+            if logger is not None:
+                logger.log({"event": "controller_error", "step": step_count, "phase": "invoke", "error": str(exc)})
+            raise
+
+        _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
             logger.log({"event": "controller_command", "step": step_count, "command": command})
+
+        try:
+            compiled_edits = compile_command(command, packet, ctx, policy=policy)
+        except Exception as exc:
+            if logger is not None:
+                logger.log({"event": "controller_error", "step": step_count, "phase": "compile", "error": str(exc)})
+            raise
 
         for compiled in compiled_edits:
             compiled.apply(ctx)
@@ -135,6 +220,7 @@ def run_episode(
                 )
 
         worker_runtime.observe_recent_effects()
+        _log_effect_trace(logger, step=step_count, worker_runtime=worker_runtime)
         worker_runtime.tick_ttl()
         worker_runtime.cleanup_expired()
         step_count += 1

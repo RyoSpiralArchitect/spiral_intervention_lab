@@ -641,6 +641,12 @@ class EditEffect:
     after: MiniMetrics
     delta: Mapping[str, float]
     verdict: str
+    hypothesis: str | None = None
+    expected_effect: str | None = None
+    controller_confidence: float | None = None
+    op: str | None = None
+    step_size: float | None = None
+    edit_cost: float | None = None
 
     @classmethod
     def from_dict(cls, value: Any) -> "EditEffect":
@@ -657,6 +663,12 @@ class EditEffect:
             after=MiniMetrics.from_dict(_require_key(data, "after", "edit_effect"), "edit_effect.after"),
             delta={str(k): _require_float(v, f"edit_effect.delta.{k}") for k, v in delta.items()},
             verdict=_require_str(_require_key(data, "verdict", "edit_effect"), "edit_effect.verdict"),
+            hypothesis=_optional_str(data.get("hypothesis"), "edit_effect.hypothesis"),
+            expected_effect=_optional_str(data.get("expected_effect"), "edit_effect.expected_effect"),
+            controller_confidence=_optional_float(data.get("controller_confidence"), "edit_effect.controller_confidence"),
+            op=_optional_str(data.get("op"), "edit_effect.op"),
+            step_size=_optional_float(data.get("step_size"), "edit_effect.step_size"),
+            edit_cost=_optional_float(data.get("edit_cost"), "edit_effect.edit_cost"),
         )
 
 
@@ -702,6 +714,7 @@ class ControllerObservationPacket:
     active_edits: tuple[ActiveEdit, ...]
     recent_effects: tuple[EditEffect, ...]
     budget: BudgetState
+    recent_effect_summary: Mapping[str, Any] | None = None
     task_feedback: Mapping[str, Any] | None = None
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
@@ -724,6 +737,9 @@ class ControllerObservationPacket:
             trace_bank=tuple(TraceRef.from_dict(item) for item in data.get("trace_bank", [])),
             active_edits=tuple(ActiveEdit.from_dict(item) for item in data.get("active_edits", [])),
             recent_effects=tuple(EditEffect.from_dict(item) for item in data.get("recent_effects", [])),
+            recent_effect_summary=_as_mapping(data["recent_effect_summary"], "packet.recent_effect_summary")
+            if data.get("recent_effect_summary") is not None
+            else None,
             budget=BudgetState.from_dict(_require_key(data, "budget", "packet")),
             task_feedback=_as_mapping(data["task_feedback"], "packet.task_feedback") if data.get("task_feedback") is not None else None,
             raw=data,
