@@ -34,10 +34,19 @@ _DECODER_CONTROL_MODE_SPECS = {
         "track": "auxiliary",
         "objective": "Break local attractors, then softly bias toward explicitly missing constraint tokens without forcing output.",
     },
+    "loop_aware_entity_recall": {
+        "track": "auxiliary",
+        "objective": "Break local attractors, then softly continue or start explicit missing entity tokens from task feedback.",
+    },
+    "logit_bias_entity_soft": {
+        "track": "auxiliary",
+        "objective": "Apply a bounded soft logit bias toward tokens from explicit missing entities without forcing a prefix or full answer.",
+    },
 }
 _DECODER_CONTROL_MODES = set(_DECODER_CONTROL_MODE_SPECS)
 _CONTROLLER_MEMORY_STRING_FIELDS = (
     "hypothesis",
+    "micro_rationale",
     "expected_effect",
     "observed_outcome",
     "why_failed_or_helped",
@@ -46,12 +55,20 @@ _CONTROLLER_MEMORY_STRING_FIELDS = (
 )
 _CONTROLLER_MEMORY_ALLOWED_OUTCOMES = {"unknown", "helpful", "harmful", "neutral", "mixed"}
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
+_ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
 
 
 @dataclass
 class _TokenSegment:
     kind: str
     token_ids: list[int]
+
+
+@dataclass(frozen=True)
+class _TargetTokenSequence:
+    term: str
+    token_ids: tuple[int, ...]
+    variant: str
 
 
 def _cosine_similarity(left: torch.Tensor, right: torch.Tensor) -> float | None:
@@ -126,6 +143,26 @@ def _normalize_controller_memory_entry(
     return entry or None
 
 
+def _normalize_observer_check_request(value: Any) -> dict[str, Any] | None:
+    if value is True:
+        return {"kind": "semantic_progress"}
+    if not isinstance(value, Mapping):
+        return None
+    kind = " ".join(str(value.get("kind", "semantic_progress")).split()).strip().lower().replace("-", "_")
+    if not kind:
+        kind = "semantic_progress"
+    if kind != "semantic_progress":
+        return None
+    normalized: dict[str, Any] = {"kind": kind}
+    reason = _clean_controller_memory_text(value.get("reason"), limit=120)
+    if reason is not None:
+        normalized["reason"] = reason
+    trigger = _clean_controller_memory_text(value.get("trigger"), limit=40)
+    if trigger is not None:
+        normalized["trigger"] = trigger.lower().replace(" ", "_")
+    return normalized
+
+
 class HookedTransformerWorkerRuntime:
     def __init__(
         self,
@@ -159,10 +196,13 @@ class HookedTransformerWorkerRuntime:
         stop_checker: Callable[[str], bool] | None = None,
         trace_metadata: Mapping[str, Mapping[str, Any]] | None = None,
         task_feedback_fn: Callable[[str], Mapping[str, Any] | None] | None = None,
+        observer_check_fn: Callable[..., Mapping[str, Any] | None] | None = None,
         trace_recorder: StepAlignedTraceRecorder | None = None,
         controller_reflection_mode: str = "off",
         controller_memory_window: int = 3,
         decoder_control_mode: str = "off",
+        max_observer_checks_per_run: int = 4,
+        observer_check_window: int = 4,
     ) -> None:
         self.runtime_state = runtime_state
         self.adapter = adapter
@@ -195,9 +235,12 @@ class HookedTransformerWorkerRuntime:
         self.stop_checker = stop_checker
         self.trace_metadata = {str(trace_id): dict(meta) for trace_id, meta in (trace_metadata or {}).items()}
         self.task_feedback_fn = task_feedback_fn
+        self.observer_check_fn = observer_check_fn
         self.controller_reflection_mode = _normalize_controller_reflection_mode(controller_reflection_mode)
         self.controller_memory_window = max(1, int(controller_memory_window))
         self.decoder_control_mode = _normalize_decoder_control_mode(decoder_control_mode)
+        self.max_observer_checks_per_run = max(0, int(max_observer_checks_per_run))
+        self.observer_check_window = max(1, int(observer_check_window))
 
         self.surface_catalog = tuple(
             surface if isinstance(surface, SurfaceInfo) else SurfaceInfo.from_dict(surface) for surface in surface_catalog
@@ -223,6 +266,10 @@ class HookedTransformerWorkerRuntime:
         self._latest_completed_effects: list[dict[str, Any]] = []
         self._recent_effect_summary: dict[str, Any] = summarize_effects(())
         self._controller_memory: list[dict[str, Any]] = []
+        self._observer_checks: list[dict[str, Any]] = []
+        self._latest_observer_check: dict[str, Any] | None = None
+        self._pending_observer_check_events: list[dict[str, Any]] = []
+        self._last_observer_candidate_hash: str | None = None
         self._last_decoder_control: dict[str, Any] = {
             "mode": self.decoder_control_mode,
             "track": _decoder_control_spec(self.decoder_control_mode)["track"],
@@ -247,6 +294,10 @@ class HookedTransformerWorkerRuntime:
         self._segments = [_TokenSegment(kind="prompt", token_ids=prompt_tokens)]
 
     def step(self) -> None:
+        previous_metrics = dict(self._last_metrics)
+        previous_feedback = dict(self._last_task_feedback)
+        previous_status = str(self._last_status)
+        previous_no_progress_steps = int(self._no_progress_steps)
         tokens = self._current_token_tensor()
         logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
         if not isinstance(logits, torch.Tensor) or logits.ndim != 3:
@@ -260,6 +311,12 @@ class HookedTransformerWorkerRuntime:
         self._last_metrics = self._compute_metrics(next_logits)
         self._update_status()
         self._last_task_feedback = self._compute_task_feedback()
+        self._maybe_run_observer_check(
+            previous_feedback=previous_feedback,
+            previous_metrics=previous_metrics,
+            previous_status=previous_status,
+            previous_no_progress_steps=previous_no_progress_steps,
+        )
         self._record_trace_step(emitted_token_id=next_token)
         self._last_packet = None
 
@@ -306,11 +363,25 @@ class HookedTransformerWorkerRuntime:
                 "repeat_flag": self._repeat_flag(),
                 "no_progress_steps": self._no_progress_steps,
                 "loop_cycle_length": int(self._loop_cycle_length() or 0),
+                "observer_check_count": len(self._observer_checks),
+                "observer_check_budget_left": max(0, self.max_observer_checks_per_run - len(self._observer_checks)),
+                "observer_check_last_trigger": None
+                if self._latest_observer_check is None
+                else str(self._latest_observer_check.get("trigger", "")),
                 "decoder_control_mode": self.decoder_control_mode,
                 "decoder_control_track": str(self._last_decoder_control.get("track", "baseline")),
                 "decoder_rescue_active": bool(self._last_decoder_control.get("active", False)),
                 "decoder_candidate_prune_active": bool(self._last_decoder_control.get("candidate_prune_active", False)),
                 "decoder_constraint_target_count": int(self._last_decoder_control.get("constraint_target_count", 0) or 0),
+                "decoder_entity_prior_active": bool(self._last_decoder_control.get("entity_prior_active", False)),
+                "decoder_entity_target_count": int(self._last_decoder_control.get("entity_target_count", 0) or 0),
+                "decoder_entity_prefix_depth": int(self._last_decoder_control.get("entity_prefix_depth", 0) or 0),
+                "decoder_logit_bias_active": bool(self._last_decoder_control.get("logit_bias_active", False)),
+                "decoder_logit_bias_term_count": int(self._last_decoder_control.get("logit_bias_term_count", 0) or 0),
+                "decoder_logit_bias_token_count": int(self._last_decoder_control.get("logit_bias_token_count", 0) or 0),
+                "decoder_logit_bias_focus_term_count": int(
+                    self._last_decoder_control.get("logit_bias_focus_term_count", 0) or 0
+                ),
             },
             "surface_catalog": [dict(surface) for surface in self._surface_catalog_raw],
             "probe_frames": self._build_probe_frames(),
@@ -321,6 +392,10 @@ class HookedTransformerWorkerRuntime:
             "budget": self._budget_state(active_edits),
             "task_feedback": dict(self._last_task_feedback),
         }
+        if self._latest_observer_check is not None:
+            packet["latest_observer_check"] = dict(self._latest_observer_check)
+        if self._observer_checks:
+            packet["recent_observer_checks"] = [dict(check) for check in self._observer_checks]
         if self.controller_reflection_mode != "off":
             packet["controller_memory"] = [dict(entry) for entry in self._controller_memory]
         self._last_packet = packet
@@ -334,6 +409,48 @@ class HookedTransformerWorkerRuntime:
             return None
         self._controller_memory.append(normalized)
         self._controller_memory = self._controller_memory[-self.controller_memory_window :]
+        self._last_packet = None
+        return dict(normalized)
+
+    def pop_observer_check_events(self) -> list[dict[str, Any]]:
+        events = [dict(event) for event in self._pending_observer_check_events]
+        self._pending_observer_check_events = []
+        return events
+
+    def request_observer_check(
+        self,
+        request: Mapping[str, Any] | None = None,
+        *,
+        source: str = "controller",
+    ) -> dict[str, Any] | None:
+        normalized_request = _normalize_observer_check_request(request if request is not None else {"kind": "semantic_progress"})
+        if normalized_request is None or self.observer_check_fn is None or self.max_observer_checks_per_run <= 0:
+            return None
+        if len(self._observer_checks) >= self.max_observer_checks_per_run:
+            return None
+        candidate_text = self.final_text()
+        if not candidate_text.strip():
+            return None
+        candidate_hash = hashlib.sha256(candidate_text.encode("utf-8")).hexdigest()
+        trigger = str(normalized_request.get("trigger", f"{source}_request"))
+        result = self._invoke_observer_check(candidate_text, trigger=trigger)
+        normalized = self._normalize_observer_check_result(
+            result,
+            trigger=trigger,
+            candidate_hash=candidate_hash,
+            previous_result=self._latest_observer_check,
+        )
+        if normalized is None:
+            return None
+        normalized["requested_by"] = str(source)
+        normalized["request_kind"] = str(normalized_request.get("kind", "semantic_progress"))
+        if normalized_request.get("reason") is not None:
+            normalized["request_reason"] = str(normalized_request["reason"])
+        self._latest_observer_check = normalized
+        self._observer_checks.append(normalized)
+        self._observer_checks = self._observer_checks[-self.observer_check_window :]
+        self._pending_observer_check_events.append(dict(normalized))
+        self._last_observer_candidate_hash = candidate_hash
         self._last_packet = None
         return dict(normalized)
 
@@ -451,6 +568,10 @@ class HookedTransformerWorkerRuntime:
         self._latest_completed_effects = []
         self._recent_effect_summary = summarize_effects(())
         self._controller_memory = []
+        self._observer_checks = []
+        self._latest_observer_check = None
+        self._pending_observer_check_events = []
+        self._last_observer_candidate_hash = None
         self._last_decoder_control = {
             "mode": self.decoder_control_mode,
             "track": _decoder_control_spec(self.decoder_control_mode)["track"],
@@ -522,18 +643,32 @@ class HookedTransformerWorkerRuntime:
             "loop_cycle_length": int(cycle_length or 0),
             "candidate_prune_active": False,
             "constraint_target_count": 0,
+            "entity_prior_active": False,
+            "entity_target_count": 0,
+            "entity_prefix_depth": 0,
+            "logit_bias_active": False,
+            "logit_bias_term_count": 0,
+            "logit_bias_token_count": 0,
+            "logit_bias_focus_term_count": 0,
         }
         if self.decoder_control_mode == "off":
             return next_logits, state
 
         tokens = self._output_token_ids()
         rescue_active = cycle_length is not None or self._repeat_flag() or self._no_progress_steps > 0
-        if not tokens or not rescue_active:
+        bias_ready = bool(self._feedback_terms(_ENTITY_RECALL_FEEDBACK_KEYS))
+        if not tokens:
+            return next_logits, state
+        if self.decoder_control_mode != "logit_bias_entity_soft" and not rescue_active:
+            return next_logits, state
+        if self.decoder_control_mode == "logit_bias_entity_soft" and not (rescue_active or bias_ready):
             return next_logits, state
 
-        adjusted, loop_state = self._apply_loop_aware_penalties(next_logits.clone(), cycle_length=cycle_length)
-        state.update(loop_state)
-        state["active"] = bool(loop_state.get("active", False))
+        adjusted = next_logits.clone()
+        if rescue_active:
+            adjusted, loop_state = self._apply_loop_aware_penalties(adjusted, cycle_length=cycle_length)
+            state.update(loop_state)
+            state["active"] = bool(loop_state.get("active", False))
 
         if self.decoder_control_mode == "loop_aware_prune":
             adjusted, prune_state = self._apply_candidate_prune(adjusted)
@@ -545,6 +680,18 @@ class HookedTransformerWorkerRuntime:
             adjusted, constraint_state = self._apply_soft_constraint_bias(adjusted)
             state.update(constraint_state)
             state["active"] = state["active"] or bool(constraint_state.get("constraint_bias_active", False))
+            return adjusted, state
+
+        if self.decoder_control_mode == "loop_aware_entity_recall":
+            adjusted, entity_state = self._apply_entity_recall_prior(adjusted)
+            state.update(entity_state)
+            state["active"] = state["active"] or bool(entity_state.get("entity_prior_active", False))
+            return adjusted, state
+
+        if self.decoder_control_mode == "logit_bias_entity_soft":
+            adjusted, bias_state = self._apply_soft_entity_logit_bias(adjusted)
+            state.update(bias_state)
+            state["active"] = state["active"] or bool(bias_state.get("logit_bias_active", False))
             return adjusted, state
 
         return adjusted, state
@@ -625,21 +772,125 @@ class HookedTransformerWorkerRuntime:
             "constraint_target_token_ids": applied_ids,
         }
 
+    def _apply_entity_recall_prior(self, adjusted: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        sequences, target_terms = self._entity_recall_target_sequences(vocab_size=int(adjusted.shape[-1]))
+        if not sequences:
+            return adjusted, {"entity_prior_active": False, "entity_target_count": 0, "entity_prefix_depth": 0}
+
+        output_tokens = self._output_token_ids()
+        bias_by_token: dict[int, float] = {}
+        max_prefix_depth = 0
+        matched_terms: list[str] = []
+        continued_terms: list[str] = []
+        start_bias = min(1.8, 0.8 + (0.2 * max(1, self._no_progress_steps)))
+        continuation_bias = min(2.8, start_bias + 0.9)
+
+        for sequence in sequences:
+            prefix_depth = self._target_prefix_depth(output_tokens, sequence.token_ids)
+            next_index = prefix_depth if prefix_depth < len(sequence.token_ids) else None
+            if next_index is None:
+                continue
+            next_token_id = int(sequence.token_ids[next_index])
+            if not (0 <= next_token_id < adjusted.shape[-1]) or not torch.isfinite(adjusted[next_token_id]):
+                continue
+            bias = start_bias if prefix_depth == 0 else min(3.0, continuation_bias + (0.25 * (prefix_depth - 1)))
+            bias_by_token[next_token_id] = max(bias_by_token.get(next_token_id, 0.0), float(bias))
+            max_prefix_depth = max(max_prefix_depth, prefix_depth)
+            if sequence.term not in matched_terms:
+                matched_terms.append(sequence.term)
+            if prefix_depth > 0 and sequence.term not in continued_terms:
+                continued_terms.append(sequence.term)
+
+        if not bias_by_token:
+            return adjusted, {"entity_prior_active": False, "entity_target_count": 0, "entity_prefix_depth": 0}
+
+        for token_id, bias in bias_by_token.items():
+            adjusted[token_id] = adjusted[token_id] + bias
+
+        return adjusted, {
+            "entity_prior_active": True,
+            "entity_target_count": len(sequences),
+            "entity_target_terms": list(target_terms),
+            "entity_target_token_ids": sorted(bias_by_token),
+            "entity_prefix_depth": int(max_prefix_depth),
+            "entity_continuation_active": bool(continued_terms),
+            "entity_continued_terms": continued_terms[:6],
+            "entity_matched_terms": matched_terms[:6],
+            "entity_start_bias": float(start_bias),
+            "entity_continuation_bias": float(continuation_bias),
+        }
+
+    def _apply_soft_entity_logit_bias(self, adjusted: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        sequences, target_terms = self._entity_recall_target_sequences(vocab_size=int(adjusted.shape[-1]))
+        if not sequences:
+            return adjusted, {
+                "logit_bias_active": False,
+                "logit_bias_term_count": 0,
+                "logit_bias_token_count": 0,
+                "logit_bias_focus_term_count": 0,
+            }
+
+        output_tokens = self._output_token_ids()
+        term_progress = self._feedback_term_progress_by_term()
+        focus_terms = self._focus_terms_by_progress(target_terms, term_progress, max_terms=2)
+        if not focus_terms:
+            focus_terms = list(target_terms[:2])
+        token_biases: dict[int, float] = {}
+        base_bias = min(1.45, 0.6 + (0.15 * max(1, self._no_progress_steps)) + (0.15 * float(self._repeat_flag())))
+        max_bias = 0.0
+        for sequence in sequences:
+            if sequence.term not in focus_terms:
+                continue
+            prefix_depth = self._target_prefix_depth(output_tokens, sequence.token_ids)
+            progress = max(0.0, min(1.0, float(term_progress.get(sequence.term, 0.0))))
+            if progress <= 0.01:
+                term_scale = 1.45
+            elif progress <= 0.34:
+                term_scale = 1.1
+            else:
+                term_scale = 0.75
+            for index, token_id in enumerate(sequence.token_ids):
+                if not (0 <= token_id < adjusted.shape[-1]) or not torch.isfinite(adjusted[token_id]):
+                    continue
+                if index == 0:
+                    position_scale = 1.2
+                elif index == 1:
+                    position_scale = 0.85
+                else:
+                    position_scale = 0.65
+                if prefix_depth > 0 and index == min(prefix_depth, len(sequence.token_ids) - 1):
+                    position_scale = max(position_scale, 1.05)
+                bias = min(2.25, float(base_bias * term_scale * position_scale))
+                token_biases[token_id] = max(token_biases.get(token_id, 0.0), bias)
+                max_bias = max(max_bias, bias)
+
+        if not token_biases:
+            return adjusted, {
+                "logit_bias_active": False,
+                "logit_bias_term_count": 0,
+                "logit_bias_token_count": 0,
+                "logit_bias_focus_term_count": 0,
+            }
+
+        for token_id, bias in token_biases.items():
+            adjusted[token_id] = adjusted[token_id] + bias
+
+        return adjusted, {
+            "logit_bias_active": True,
+            "logit_bias_weight": float(base_bias),
+            "logit_bias_max_weight": float(max_bias),
+            "logit_bias_term_count": len(target_terms),
+            "logit_bias_token_count": len(token_biases),
+            "logit_bias_terms": list(target_terms),
+            "logit_bias_focus_term_count": len(focus_terms),
+            "logit_bias_focus_terms": list(focus_terms),
+            "logit_bias_token_ids": sorted(token_biases),
+        }
+
     def _soft_constraint_target_token_ids(self, *, vocab_size: int) -> tuple[list[int], list[str]]:
         if bool(self._last_task_feedback.get("done", False)):
             return [], []
-        terms: list[str] = []
-        seen_terms: set[str] = set()
-        for key in _SOFT_CONSTRAINT_FEEDBACK_KEYS:
-            value = self._last_task_feedback.get(key)
-            if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
-                continue
-            for item in value:
-                term = " ".join(str(item).split()).strip()
-                if not term or term in seen_terms:
-                    continue
-                seen_terms.add(term)
-                terms.append(term)
+        terms = self._feedback_terms(_SOFT_CONSTRAINT_FEEDBACK_KEYS)
         if not terms:
             return [], []
 
@@ -666,14 +917,94 @@ class HookedTransformerWorkerRuntime:
                 token_ids.append(token_id)
         return token_ids, terms[:6]
 
+    def _entity_recall_target_sequences(self, *, vocab_size: int) -> tuple[list[_TargetTokenSequence], list[str]]:
+        if bool(self._last_task_feedback.get("done", False)):
+            return [], []
+        terms = self._feedback_terms(_ENTITY_RECALL_FEEDBACK_KEYS)
+        if not terms:
+            return [], []
+        return self._target_token_sequences(terms, vocab_size=vocab_size), terms[:6]
+
+    def _feedback_terms(self, keys: Sequence[str]) -> list[str]:
+        terms: list[str] = []
+        seen_terms: set[str] = set()
+        for key in keys:
+            value = self._last_task_feedback.get(key)
+            if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
+                continue
+            for item in value:
+                term = " ".join(str(item).split()).strip()
+                if not term or term in seen_terms:
+                    continue
+                seen_terms.add(term)
+                terms.append(term)
+        return terms
+
+    def _feedback_term_progress_by_term(self) -> dict[str, float]:
+        progress_by_term: dict[str, float] = {}
+        for key in (
+            "entity_recall_progress_by_term",
+            "required_term_span_progress_by_term",
+            "summary_term_span_progress_by_term",
+        ):
+            value = self._last_task_feedback.get(key)
+            if not isinstance(value, Mapping):
+                continue
+            for raw_term, raw_progress in value.items():
+                term = " ".join(str(raw_term).split()).strip()
+                if not term:
+                    continue
+                try:
+                    progress = max(0.0, min(1.0, float(raw_progress)))
+                except Exception:
+                    continue
+                progress_by_term[term] = progress
+        return progress_by_term
+
+    def _focus_terms_by_progress(self, terms: Sequence[str], progress_by_term: Mapping[str, float], *, max_terms: int) -> list[str]:
+        if max_terms <= 0:
+            return []
+        indexed_terms = list(enumerate(terms))
+        indexed_terms.sort(key=lambda item: (float(progress_by_term.get(item[1], 0.0) or 0.0), item[0]))
+        return [str(term) for _index, term in indexed_terms[: min(max_terms, len(indexed_terms))]]
+
+    def _target_token_sequences(self, terms: Sequence[str], *, vocab_size: int) -> list[_TargetTokenSequence]:
+        sequences: list[_TargetTokenSequence] = []
+        seen_sequences: set[tuple[int, ...]] = set()
+        for term in terms:
+            for variant in self._constraint_token_variants(term):
+                try:
+                    encoded = self.codec.encode(variant).detach().reshape(-1).to(dtype=torch.long).tolist()
+                except Exception:
+                    continue
+                if not encoded:
+                    continue
+                token_ids = tuple(int(token_id) for token_id in encoded)
+                if token_ids in seen_sequences or any(token_id < 0 or token_id >= vocab_size for token_id in token_ids):
+                    continue
+                seen_sequences.add(token_ids)
+                sequences.append(_TargetTokenSequence(term=str(term), token_ids=token_ids, variant=str(variant)))
+        return sequences
+
+    def _target_prefix_depth(self, output_tokens: Sequence[int], target_token_ids: Sequence[int]) -> int:
+        if not output_tokens or not target_token_ids:
+            return 0
+        max_depth = min(len(output_tokens), max(0, len(target_token_ids) - 1))
+        for depth in range(max_depth, 0, -1):
+            if list(output_tokens[-depth:]) == list(target_token_ids[:depth]):
+                return depth
+        return 0
+
     def _constraint_token_variants(self, term: str) -> tuple[str, ...]:
         stripped = " ".join(str(term).split()).strip()
         variants: list[str] = []
         for candidate in (
             stripped,
             stripped.lower(),
+            stripped.capitalize(),
             f" {stripped}",
             f" {stripped.lower()}",
+            f" {stripped.capitalize()}",
         ):
             if candidate not in variants:
                 variants.append(candidate)
@@ -756,6 +1087,137 @@ class HookedTransformerWorkerRuntime:
     def _task_feedback(self) -> dict[str, Any]:
         return dict(self._last_task_feedback)
 
+    def _maybe_run_observer_check(
+        self,
+        *,
+        previous_feedback: Mapping[str, Any],
+        previous_metrics: Mapping[str, Any],
+        previous_status: str,
+        previous_no_progress_steps: int,
+    ) -> None:
+        if self.observer_check_fn is None or self.max_observer_checks_per_run <= 0:
+            return
+        if len(self._observer_checks) >= self.max_observer_checks_per_run:
+            return
+        candidate_text = self.final_text()
+        candidate_hash = hashlib.sha256(candidate_text.encode("utf-8")).hexdigest()
+        if candidate_hash == self._last_observer_candidate_hash:
+            return
+        trigger = self._observer_check_trigger(
+            previous_feedback=previous_feedback,
+            previous_metrics=previous_metrics,
+            previous_status=previous_status,
+            previous_no_progress_steps=previous_no_progress_steps,
+        )
+        if trigger is None:
+            return
+        result = self._invoke_observer_check(candidate_text, trigger=trigger)
+        normalized = self._normalize_observer_check_result(
+            result,
+            trigger=trigger,
+            candidate_hash=candidate_hash,
+            previous_result=self._latest_observer_check,
+        )
+        if normalized is None:
+            return
+        self._latest_observer_check = normalized
+        self._observer_checks.append(normalized)
+        self._observer_checks = self._observer_checks[-self.observer_check_window :]
+        self._pending_observer_check_events.append(dict(normalized))
+        self._last_observer_candidate_hash = candidate_hash
+
+    def _observer_check_trigger(
+        self,
+        *,
+        previous_feedback: Mapping[str, Any],
+        previous_metrics: Mapping[str, Any],
+        previous_status: str,
+        previous_no_progress_steps: int,
+    ) -> str | None:
+        current_feedback = self._last_task_feedback
+        for key in (
+            "required_term_recall",
+            "required_term_span_progress",
+            "summary_term_span_progress",
+            "keyword_recall",
+            "partial_score",
+        ):
+            current_value = float(current_feedback.get(key, 0.0) or 0.0)
+            previous_value = float(previous_feedback.get(key, 0.0) or 0.0)
+            if current_value - previous_value > 0.01:
+                return "coverage_progress" if "term" in key or "keyword" in key else "partial_progress"
+        if previous_status == "looping" and self._last_status != "looping":
+            return "loop_relief"
+        if previous_no_progress_steps > 0 and self._no_progress_steps == 0 and self._last_status != "looping":
+            return "stall_relief"
+        previous_repetition = float(previous_metrics.get("repetition_score", 0.0) or 0.0)
+        current_repetition = float(self._last_metrics.get("repetition_score", 0.0) or 0.0)
+        if previous_repetition - current_repetition > 0.2 and self._last_status != "looping":
+            return "trajectory_shift"
+        return None
+
+    def _invoke_observer_check(self, candidate_text: str, *, trigger: str) -> Mapping[str, Any] | None:
+        if self.observer_check_fn is None:
+            return None
+        feedback = dict(self._last_task_feedback)
+        try:
+            result = self.observer_check_fn(candidate_text, task_feedback=feedback, trigger=trigger)
+        except TypeError:
+            try:
+                result = self.observer_check_fn(candidate_text, feedback, trigger)
+            except TypeError:
+                result = self.observer_check_fn(candidate_text)
+        if not isinstance(result, Mapping):
+            return None
+        return result
+
+    def _normalize_observer_check_result(
+        self,
+        value: Mapping[str, Any] | None,
+        *,
+        trigger: str,
+        candidate_hash: str,
+        previous_result: Mapping[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not isinstance(value, Mapping):
+            return None
+        score = value.get("score")
+        raw_score = value.get("raw_score")
+        coverage_weight = value.get("coverage_weight")
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            return None
+        normalized = {
+            "check_type": str(value.get("check_type", "semantic_progress")),
+            "trigger": str(value.get("trigger", trigger)),
+            "score": round(float(score), 6),
+            "candidate_hash": str(candidate_hash),
+            "recorded_step": int(self._steps),
+        }
+        if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool):
+            normalized["raw_score"] = round(float(raw_score), 6)
+        if isinstance(coverage_weight, (int, float)) and not isinstance(coverage_weight, bool):
+            normalized["coverage_weight"] = round(float(coverage_weight), 6)
+        for key in ("coverage_signal", "mode", "model_name", "reference_kind"):
+            if value.get(key) is not None:
+                normalized[key] = value.get(key)
+        previous_score = None
+        if isinstance(previous_result, Mapping):
+            last_value = previous_result.get("score")
+            if isinstance(last_value, (int, float)) and not isinstance(last_value, bool):
+                previous_score = float(last_value)
+        if previous_score is not None:
+            delta = round(float(normalized["score"]) - previous_score, 6)
+            normalized["delta_vs_last_check"] = delta
+            if delta > 0.03:
+                normalized["verdict"] = "improved"
+            elif delta < -0.03:
+                normalized["verdict"] = "regressed"
+            else:
+                normalized["verdict"] = "flat"
+        else:
+            normalized["verdict"] = "baseline"
+        return normalized
+
     def _compute_task_feedback(self) -> dict[str, Any]:
         feedback = {"done": self.done(), "progress_label": "stalled" if self._last_status == "looping" else "progressing"}
         if self.task_feedback_fn is None:
@@ -774,6 +1236,12 @@ class HookedTransformerWorkerRuntime:
             value = self._last_task_feedback.get(key)
             if value is not None:
                 metrics[key] = float(value)
+        required_term_span_progress = self._last_task_feedback.get("required_term_span_progress")
+        if required_term_span_progress is not None:
+            metrics["required_term_span_progress"] = float(required_term_span_progress)
+        semantic_progress_score = None if self._latest_observer_check is None else self._latest_observer_check.get("score")
+        if semantic_progress_score is not None:
+            metrics["semantic_progress_score"] = float(semantic_progress_score)
         budget_ok = self._last_task_feedback.get("budget_ok")
         if budget_ok is not None:
             metrics["budget_ok"] = float(bool(budget_ok))
@@ -785,12 +1253,20 @@ class HookedTransformerWorkerRuntime:
     def _progress_score(self, feedback: Mapping[str, Any]) -> float:
         if bool(feedback.get("done", False)):
             return 1.0
+        semantic_score = None if self._latest_observer_check is None else self._latest_observer_check.get("score")
+        semantic_adjustment = 0.0
+        if semantic_score is not None:
+            semantic_value = float(semantic_score)
+            if semantic_value >= 0.75:
+                semantic_adjustment = 0.15
+            elif semantic_value <= 0.35:
+                semantic_adjustment = -0.15
         label = str(feedback.get("progress_label", "") or "").strip().lower()
         if label == "progressing":
-            return 0.25
+            return 0.25 + semantic_adjustment
         if label == "regressing":
-            return -0.5
-        return 0.0
+            return -0.5 + semantic_adjustment
+        return semantic_adjustment
 
     def _task_violation_count(self, feedback: Mapping[str, Any]) -> int:
         total = 0

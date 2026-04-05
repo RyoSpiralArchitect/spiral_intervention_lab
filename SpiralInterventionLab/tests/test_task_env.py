@@ -1,6 +1,9 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from SpiralInterventionLab.tasks import (
+    MiniLMSemanticCritic,
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
     SpiralDigitTransformEnv,
@@ -8,6 +11,44 @@ from SpiralInterventionLab.tasks import (
     SpiralSentenceOrderingEnv,
     SpiralStructuredSummaryEnv,
 )
+
+
+class _StubSemanticCritic:
+    mode = "stub"
+    model_name = "stub-minilm"
+
+    def score(self, *, reference_text: str, candidate_text: str) -> float:
+        if not candidate_text:
+            return 0.0
+        if "Mira" in candidate_text or "museum" in candidate_text.lower():
+            return 0.81
+        return 0.44
+
+
+class _FakeMiniLMTokenizer:
+    def __call__(self, texts, padding=True, truncation=True, return_tensors="pt"):
+        import torch
+
+        batch = len(texts)
+        return {
+            "input_ids": torch.ones((batch, 2), dtype=torch.long),
+            "attention_mask": torch.ones((batch, 2), dtype=torch.long),
+        }
+
+
+class _FakeMiniLMModel:
+    def to(self, device):
+        return self
+
+    def eval(self):
+        return self
+
+    def __call__(self, **encoded):
+        import torch
+
+        batch, seq_len = encoded["input_ids"].shape
+        hidden = torch.ones((batch, seq_len, 4), dtype=torch.float32, device=encoded["input_ids"].device)
+        return type("Outputs", (), {"last_hidden_state": hidden})()
 
 
 class TestSpiralDigitTransformEnv(unittest.TestCase):
@@ -156,7 +197,7 @@ class TestSpiralEntailmentReasoningEnv(unittest.TestCase):
 
 class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
     def test_rewrite_feedback_and_runtime_kwargs(self):
-        env = SpiralConstrainedRewriteEnv()
+        env = SpiralConstrainedRewriteEnv(semantic_critic=_StubSemanticCritic())
         env.reset(3)
         self.assertIsNotNone(env.current_episode)
         episode = env.current_episode
@@ -170,18 +211,30 @@ class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
         self.assertIn("forbidden_terms_present", env.task_feedback(bad_candidate)["constraint_violations"])
         feedback = env.task_feedback(partial_candidate)
         self.assertEqual(feedback["required_term_recall"], 2 / len(episode.required_terms))
+        self.assertIn("required_term_span_progress", feedback)
+        self.assertIn("required_term_span_progress_by_term", feedback)
         self.assertEqual(feedback["forbidden_term_clean"], 1.0)
         self.assertTrue(feedback["budget_ok"])
         self.assertEqual(feedback["word_budget_score"], 1.0)
         self.assertEqual(feedback["required_terms_present"], list(episode.required_terms[:2]))
+        self.assertEqual(feedback["entity_recall_terms"], list(episode.required_terms[2:]))
+        self.assertEqual(set(feedback["entity_recall_progress_by_term"]), set(episode.required_terms[2:]))
+        self.assertNotIn("semantic_progress_score", feedback)
         kwargs = env.worker_runtime_kwargs()
         self.assertGreater(kwargs["max_generated_tokens"], episode.max_words)
-        self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)
+        self.assertIn("observer_check_fn", kwargs)
+        observer = kwargs["observer_check_fn"](partial_candidate, task_feedback=feedback, trigger="coverage_progress")
+        self.assertIsNotNone(observer)
+        self.assertIn("score", observer)
+        self.assertIn("coverage_weight", observer)
+        full_feedback = kwargs["task_feedback_fn"](candidate)
+        self.assertEqual(full_feedback["partial_score"], 1.0)
+        self.assertEqual(full_feedback["required_term_span_progress"], 1.0)
 
 
 class TestSpiralStructuredSummaryEnv(unittest.TestCase):
     def test_summary_feedback_and_runtime_kwargs(self):
-        env = SpiralStructuredSummaryEnv()
+        env = SpiralStructuredSummaryEnv(semantic_critic=_StubSemanticCritic())
         env.reset(9)
         self.assertIsNotNone(env.current_episode)
         episode = env.current_episode
@@ -193,10 +246,67 @@ class TestSpiralStructuredSummaryEnv(unittest.TestCase):
         self.assertEqual(env.score(candidate), 1.0)
         self.assertTrue(env.done(candidate))
         self.assertLess(env.score(partial), 1.0)
-        self.assertIn("missing_keywords_line", env.task_feedback(partial)["constraint_violations"])
+        partial_feedback = env.task_feedback(partial)
+        self.assertIn("missing_keywords_line", partial_feedback["constraint_violations"])
+        self.assertIn("summary_term_span_progress", partial_feedback)
+        self.assertIn("keyword_recall", partial_feedback)
+        full_feedback = env.task_feedback(candidate)
+        self.assertNotIn("semantic_progress_score", full_feedback)
         kwargs = env.worker_runtime_kwargs()
         self.assertGreater(kwargs["max_generated_tokens"], episode.max_summary_words)
+        self.assertIn("observer_check_fn", kwargs)
+        observer = kwargs["observer_check_fn"](candidate, task_feedback=full_feedback, trigger="coverage_progress")
+        self.assertIsNotNone(observer)
+        self.assertIn("score", observer)
         self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)
+
+
+class TestMiniLMSemanticCritic(unittest.TestCase):
+    def test_load_components_overrides_offline_env_flags(self):
+        seen = {}
+
+        def fake_tokenizer_loader(model_name, *args, **kwargs):
+            seen["tokenizer_env"] = {
+                "HF_HUB_OFFLINE": os.environ.get("HF_HUB_OFFLINE"),
+                "TRANSFORMERS_OFFLINE": os.environ.get("TRANSFORMERS_OFFLINE"),
+                "HF_DATASETS_OFFLINE": os.environ.get("HF_DATASETS_OFFLINE"),
+            }
+            seen["tokenizer_kwargs"] = dict(kwargs)
+            return _FakeMiniLMTokenizer()
+
+        def fake_model_loader(model_name, *args, **kwargs):
+            seen["model_env"] = {
+                "HF_HUB_OFFLINE": os.environ.get("HF_HUB_OFFLINE"),
+                "TRANSFORMERS_OFFLINE": os.environ.get("TRANSFORMERS_OFFLINE"),
+                "HF_DATASETS_OFFLINE": os.environ.get("HF_DATASETS_OFFLINE"),
+            }
+            seen["model_kwargs"] = dict(kwargs)
+            return _FakeMiniLMModel()
+
+        critic = MiniLMSemanticCritic()
+        with patch.dict(
+            os.environ,
+            {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1"},
+            clear=False,
+        ):
+            with patch("transformers.AutoTokenizer.from_pretrained", side_effect=fake_tokenizer_loader):
+                with patch("transformers.AutoModel.from_pretrained", side_effect=fake_model_loader):
+                    score = critic.score(reference_text="Mira sends budget", candidate_text="Mira sends budget")
+            restored_env = {
+                "HF_HUB_OFFLINE": os.environ.get("HF_HUB_OFFLINE"),
+                "TRANSFORMERS_OFFLINE": os.environ.get("TRANSFORMERS_OFFLINE"),
+                "HF_DATASETS_OFFLINE": os.environ.get("HF_DATASETS_OFFLINE"),
+            }
+
+        self.assertGreater(score, 0.9)
+        self.assertEqual(seen["tokenizer_env"]["HF_HUB_OFFLINE"], "0")
+        self.assertEqual(seen["tokenizer_env"]["TRANSFORMERS_OFFLINE"], "0")
+        self.assertEqual(seen["model_env"]["HF_DATASETS_OFFLINE"], "0")
+        self.assertIs(seen["tokenizer_kwargs"]["local_files_only"], False)
+        self.assertIs(seen["model_kwargs"]["local_files_only"], False)
+        self.assertEqual(restored_env["HF_HUB_OFFLINE"], "1")
+        self.assertEqual(restored_env["TRANSFORMERS_OFFLINE"], "1")
+        self.assertEqual(restored_env["HF_DATASETS_OFFLINE"], "1")
 
 
 if __name__ == "__main__":

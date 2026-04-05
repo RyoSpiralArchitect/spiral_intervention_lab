@@ -238,6 +238,7 @@ def _resid_command_with_memory():
     command["meta"] = dict(command["meta"]) | {
         "controller_memory": {
             "hypothesis": "small_rescue",
+            "micro_rationale": "test a small reversible rescue first",
             "expected_effect": "break_loop",
             "observed_outcome": "unknown",
             "why_failed_or_helped": "first attempt; no effect observed yet",
@@ -247,6 +248,21 @@ def _resid_command_with_memory():
         }
     }
     return command
+
+
+def _noop_command_with_observer_request():
+    return {
+        "version": "0.1",
+        "decision": "noop",
+        "meta": {
+            "hypothesis": "loop_relief_but_coverage_zero",
+            "micro_rationale": "Loop eased, but coverage is still zero.",
+            "observer_check_request": {
+                "kind": "semantic_progress",
+                "reason": "fresh semantic read after loop relief",
+            },
+        },
+    }
 
 
 def _rank1_command():
@@ -769,12 +785,16 @@ class _ToyWorkerRuntime:
         self.steps = 0
         self._latest_effect_trace = {"completed_effects": [], "summary": {"window_size": 0, "verdict_counts": {}, "hypothesis_stats": [], "latest_effects": []}}
         self._controller_memory = []
+        self._observer_checks = []
+        self._pending_observer_check_events = []
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
         self.output = "base"
         self.steps = 0
         self._controller_memory = []
+        self._observer_checks = []
+        self._pending_observer_check_events = []
 
     def step(self) -> None:
         self.steps += 1
@@ -790,6 +810,9 @@ class _ToyWorkerRuntime:
         rollbackable_ids = list(self.runtime_state.hooks) + list(self.runtime_state.overlays)
         packet = _make_packet(rollbackable_ids=rollbackable_ids)
         packet["controller_memory"] = [dict(entry) for entry in self._controller_memory]
+        if self._observer_checks:
+            packet["latest_observer_check"] = dict(self._observer_checks[-1])
+            packet["recent_observer_checks"] = [dict(entry) for entry in self._observer_checks[-4:]]
         return packet
 
     def observe_recent_effects(self) -> None:
@@ -833,6 +856,26 @@ class _ToyWorkerRuntime:
         self._controller_memory = self._controller_memory[-3:]
         return stored
 
+    def request_observer_check(self, request, *, source="controller"):
+        stored = {
+            "check_type": "semantic_progress",
+            "trigger": f"{source}_request",
+            "verdict": "baseline" if not self._observer_checks else "flat",
+            "score": 0.4,
+            "requested_by": source,
+            "request_kind": request.get("kind", "semantic_progress"),
+            "request_reason": request.get("reason"),
+            "recorded_step": self.steps,
+        }
+        self._observer_checks.append(stored)
+        self._pending_observer_check_events.append(stored)
+        return dict(stored)
+
+    def pop_observer_check_events(self):
+        events = [dict(entry) for entry in self._pending_observer_check_events]
+        self._pending_observer_check_events = []
+        return events
+
 
 class _BudgetExhaustedToyWorkerRuntime(_ToyWorkerRuntime):
     def build_controller_packet(self):
@@ -873,6 +916,14 @@ class _MemoryToyController(_ToyController):
         return response
 
 
+class _ObserverRequestToyController(_ToyController):
+    def invoke(self, packet):
+        response = super().invoke(packet)
+        if self.calls == 1:
+            return _noop_command_with_observer_request()
+        return response
+
+
 class TestLoopAndEffects(unittest.TestCase):
     def test_build_edit_effect_marks_helpful(self):
         effect = build_edit_effect(
@@ -909,6 +960,8 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertIn("progress_delta", summary["latest_effects"][0])
         self.assertIn("mean_required_term_recall_delta", summary["hypothesis_stats"][0])
         self.assertIn("required_term_recall_delta", summary["latest_effects"][0])
+        self.assertIn("mean_required_term_span_progress_delta", summary["hypothesis_stats"][0])
+        self.assertIn("required_term_span_progress_delta", summary["latest_effects"][0])
 
     def test_build_edit_effect_marks_looping_without_progress_as_harmful(self):
         effect = build_edit_effect(
@@ -1104,10 +1157,32 @@ class TestLoopAndEffects(unittest.TestCase):
         )
 
         self.assertEqual(worker._controller_memory[0]["hypothesis"], "small_rescue")
+        self.assertEqual(worker._controller_memory[0]["micro_rationale"], "test a small reversible rescue first")
         self.assertEqual(worker._controller_memory[0]["decision"], "apply")
         self.assertTrue(any(event["event"] == "controller_memory" for event in logger.events))
         observations = [event for event in logger.events if event["event"] == "controller_observation"]
         self.assertEqual(observations[-1]["controller_memory"][0]["hypothesis"], "small_rescue")
+
+    def test_run_episode_executes_controller_requested_observer_check(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        worker = _ToyWorkerRuntime(runtime_state)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            worker,
+            _ObserverRequestToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertTrue(any(event["event"] == "controller_observer_check_request" for event in logger.events))
+        self.assertTrue(any(event["event"] == "observer_check" for event in logger.events))
+        self.assertEqual(worker._controller_memory[0]["micro_rationale"], "Loop eased, but coverage is still zero.")
+        self.assertEqual(worker._observer_checks[-1]["trigger"], "controller_request")
 
 
 class TestRank1Bridge(unittest.TestCase):
@@ -1293,7 +1368,13 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
     def _surface_catalog(self):
         return [_make_packet()["surface_catalog"][0]]
 
-    def _make_worker_runtime(self, *, decoder_control_mode: str = "off"):
+    def _make_worker_runtime(
+        self,
+        *,
+        decoder_control_mode: str = "off",
+        task_feedback_fn=None,
+        observer_check_fn=None,
+    ):
         codec = CharacterCodec("pabc!? ")
         runtime_state = DeterministicRuntimeState(codec)
         adapter = FakeAdapter()
@@ -1310,6 +1391,8 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             max_total_alpha=0.5,
             max_active_patch_slots=1,
             stop_checker=lambda output: len(output) >= 3,
+            task_feedback_fn=task_feedback_fn,
+            observer_check_fn=observer_check_fn,
             decoder_control_mode=decoder_control_mode,
         )
 
@@ -1448,6 +1531,141 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(state["constraint_target_terms"], ["b"])
         self.assertGreaterEqual(state["constraint_target_count"], 1)
         self.assertEqual(state["track"], "auxiliary")
+
+    def test_worker_runtime_loop_aware_entity_recall_continues_missing_term_sequence(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="loop_aware_entity_recall")
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(worker_runtime.runtime_state.hint_token)
+        worker_runtime._no_progress_steps = 2
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "entity_recall_terms": ["bc"],
+            "missing_required_terms": ["bc"],
+        }
+
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[worker_runtime.runtime_state.base_token] = 0.8
+        logits[worker_runtime.runtime_state.hint_token] = 1.7
+        logits[worker_runtime.runtime_state.edit_token] = 1.2
+
+        adjusted, state = worker_runtime._apply_decoder_control(logits)
+
+        self.assertEqual(int(torch.argmax(adjusted).item()), worker_runtime.runtime_state.edit_token)
+        self.assertTrue(state["entity_prior_active"])
+        self.assertEqual(state["entity_prefix_depth"], 1)
+        self.assertIn("bc", state["entity_continued_terms"])
+        self.assertEqual(state["track"], "auxiliary")
+
+    def test_worker_runtime_logit_bias_entity_soft_biases_missing_entity_tokens(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(worker_runtime.runtime_state.base_token)
+        worker_runtime._no_progress_steps = 2
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.2,
+            "entity_recall_terms": ["b", "c"],
+            "missing_required_terms": ["b", "c"],
+            "entity_recall_progress_by_term": {"b": 0.7, "c": 0.0},
+            "required_term_span_progress_by_term": {"b": 0.7, "c": 0.0},
+        }
+
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[worker_runtime.runtime_state.base_token] = 1.0
+        logits[worker_runtime.runtime_state.hint_token] = 0.45
+        logits[worker_runtime.runtime_state.edit_token] = 0.45
+
+        adjusted, state = worker_runtime._apply_decoder_control(logits)
+
+        self.assertTrue(state["logit_bias_active"])
+        self.assertEqual(state["logit_bias_term_count"], 2)
+        self.assertEqual(state["logit_bias_focus_term_count"], 2)
+        self.assertGreaterEqual(state["logit_bias_token_count"], 2)
+        self.assertGreater(float(adjusted[worker_runtime.runtime_state.hint_token].item()), 0.45)
+        self.assertGreater(float(adjusted[worker_runtime.runtime_state.edit_token].item()), 0.45)
+        self.assertGreater(
+            float(adjusted[worker_runtime.runtime_state.edit_token].item()),
+            float(adjusted[worker_runtime.runtime_state.hint_token].item()),
+        )
+        self.assertEqual(state["track"], "auxiliary")
+
+    def test_worker_runtime_runs_bounded_observer_check_on_coverage_progress(self):
+        seen = []
+
+        def task_feedback_fn(output):
+            partial = 1.0 if output.endswith("a") else 0.0
+            return {
+                "done": False,
+                "partial_score": partial,
+                "progress_label": "progressing" if partial > 0.0 else "stalled",
+                "required_term_recall": partial,
+                "required_term_span_progress": partial,
+            }
+
+        def observer_check_fn(output, *, task_feedback=None, trigger="runtime"):
+            seen.append((output, dict(task_feedback or {}), trigger))
+            return {
+                "check_type": "semantic_progress",
+                "trigger": trigger,
+                "raw_score": 0.8,
+                "coverage_weight": 1.0,
+                "score": 0.8,
+            }
+
+        worker_runtime = self._make_worker_runtime(
+            task_feedback_fn=task_feedback_fn,
+            observer_check_fn=observer_check_fn,
+        )
+        worker_runtime.reset("p")
+        worker_runtime.step()
+
+        packet = worker_runtime.build_controller_packet()
+
+        self.assertEqual(len(seen), 1)
+        self.assertIn("latest_observer_check", packet)
+        self.assertEqual(packet["latest_observer_check"]["trigger"], "coverage_progress")
+        self.assertEqual(packet["telemetry"]["observer_check_count"], 1)
+        self.assertEqual(packet["telemetry"]["observer_check_budget_left"], 3)
+        self.assertEqual(packet["latest_observer_check"]["verdict"], "baseline")
+        self.assertEqual(worker_runtime._effect_metrics()["semantic_progress_score"], 0.8)
+
+    def test_worker_runtime_reports_flat_observer_check_delta_on_repeat_trigger(self):
+        def observer_check_fn(output, *, task_feedback=None, trigger="runtime"):
+            score = 0.62 if output.endswith("b") else 0.60
+            return {
+                "check_type": "semantic_progress",
+                "trigger": trigger,
+                "raw_score": score,
+                "coverage_weight": 1.0,
+                "score": score,
+            }
+
+        def task_feedback_fn(output):
+            partial = 0.22 if output.endswith("b") else 0.20 if output.endswith("a") else 0.0
+            return {
+                "done": False,
+                "partial_score": partial,
+                "progress_label": "progressing" if partial > 0.0 else "stalled",
+                "required_term_recall": partial,
+            }
+
+        worker_runtime = self._make_worker_runtime(
+            task_feedback_fn=task_feedback_fn,
+            observer_check_fn=observer_check_fn,
+        )
+        worker_runtime.reset("p")
+        worker_runtime.step()
+        worker_runtime._append_output_token(worker_runtime.runtime_state.hint_token)
+        worker_runtime.step()
+
+        packet = worker_runtime.build_controller_packet()
+
+        self.assertEqual(packet["recent_observer_checks"][-1]["verdict"], "flat")
+        self.assertAlmostEqual(packet["recent_observer_checks"][-1]["delta_vs_last_check"], 0.02)
 
     def test_probe_frames_use_step_aligned_baseline_trace(self):
         baseline_worker = self._make_worker_runtime()

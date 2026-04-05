@@ -76,6 +76,7 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
     summary: dict[str, Any] = {}
     for key in (
         "hypothesis",
+        "micro_rationale",
         "expected_effect",
         "observed_outcome",
         "why_failed_or_helped",
@@ -103,6 +104,49 @@ def _controller_memory_summaries(items: Any) -> list[dict[str, Any]]:
     return summaries
 
 
+def _compact_observer_check(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in (
+        "check_type",
+        "trigger",
+        "verdict",
+        "score",
+        "raw_score",
+        "coverage_signal",
+        "coverage_weight",
+        "delta_vs_last_check",
+        "recorded_step",
+    ):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    return summary or None
+
+
+def _observer_check_summaries(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        summary = _compact_observer_check(item)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
+def _compact_observer_check_request(value: Any) -> dict[str, Any] | None:
+    if value is True:
+        return {"kind": "semantic_progress"}
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in ("kind", "reason", "trigger"):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    return summary or None
+
+
 def _recent_effect_summaries(items: Any) -> list[dict[str, Any]]:
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
         return []
@@ -119,7 +163,14 @@ def _recent_effect_summaries(items: Any) -> list[dict[str, Any]]:
         if isinstance(delta, Mapping):
             summary["delta"] = {
                 key: delta.get(key)
-                for key in ("entropy", "top1_margin", "repetition_score", "partial_score")
+                for key in (
+                    "entropy",
+                    "top1_margin",
+                    "repetition_score",
+                    "partial_score",
+                    "semantic_progress_score",
+                    "required_term_span_progress",
+                )
                 if key in delta
             }
         summaries.append(summary)
@@ -158,6 +209,8 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
             "recent_effect_summary": dict(payload.get("recent_effect_summary", {}))
             if isinstance(payload.get("recent_effect_summary"), Mapping)
             else {},
+            "latest_observer_check": _compact_observer_check(payload.get("latest_observer_check")),
+            "recent_observer_checks": _observer_check_summaries(payload.get("recent_observer_checks")),
             "controller_memory": _controller_memory_summaries(payload.get("controller_memory")),
         }
     )
@@ -194,12 +247,17 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
 
     meta = getattr(command, "meta", None)
     controller_memory = None
+    micro_rationale = None
+    observer_check_request = None
     if isinstance(meta, Mapping):
         if meta.get("hypothesis"):
             hypotheses.append(str(meta["hypothesis"]))
         if meta.get("confidence") is not None:
             confidences.append(float(meta["confidence"]))
         controller_memory = meta.get("controller_memory")
+        if meta.get("micro_rationale") is not None:
+            micro_rationale = str(meta["micro_rationale"])
+        observer_check_request = meta.get("observer_check_request")
     elif meta is not None:
         if getattr(meta, "hypothesis", None):
             hypotheses.append(str(meta.hypothesis))
@@ -238,6 +296,11 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
         "total_alpha": total_alpha,
         "total_edit_cost": total_edit_cost,
     }
+    if micro_rationale:
+        summary["micro_rationale"] = micro_rationale
+    compact_observer_request = _compact_observer_check_request(observer_check_request)
+    if compact_observer_request is not None:
+        summary["observer_check_request"] = compact_observer_request
     compact_memory = _compact_controller_memory(controller_memory)
     if compact_memory is not None:
         summary["controller_memory"] = compact_memory
@@ -286,6 +349,16 @@ def _normalize_controller_payload(value: Any) -> Any:
                 meta["controller_memory"] = normalized.pop("reflection_log")
             if "reflection_log" in meta and "controller_memory" not in meta:
                 meta["controller_memory"] = meta.pop("reflection_log")
+            if "request_observer_check" in normalized and "observer_check_request" not in meta:
+                meta["observer_check_request"] = normalized.pop("request_observer_check")
+            if "observer_check_request" in normalized and "observer_check_request" not in meta:
+                meta["observer_check_request"] = normalized.pop("observer_check_request")
+            if "request_observer_check" in meta and "observer_check_request" not in meta:
+                meta["observer_check_request"] = meta.pop("request_observer_check")
+            if "rationale" in normalized and "micro_rationale" not in meta:
+                meta["micro_rationale"] = normalized.pop("rationale")
+            if "micro_rationale" in normalized and "micro_rationale" not in meta:
+                meta["micro_rationale"] = normalized.pop("micro_rationale")
             if meta:
                 normalized["meta"] = meta
 

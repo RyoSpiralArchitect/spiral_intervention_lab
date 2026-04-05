@@ -192,6 +192,46 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["task_feedback"]["partial_score"], 0.5)
         self.assertEqual(trace["observation"]["task_feedback"]["progress_label"], "progressing")
 
+    def test_provider_controller_client_observation_includes_latest_observer_check(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        client.invoke(
+            {
+                "step": 1,
+                "task_view": {"task_id": "toy_task", "mode": "redacted", "prompt_hash": "sha256:test"},
+                "worker_view": {"generated_tail": "12", "status": "acting"},
+                "task_feedback": {"done": False, "partial_score": 0.5, "progress_label": "progressing"},
+                "latest_observer_check": {
+                    "check_type": "semantic_progress",
+                    "trigger": "coverage_progress",
+                    "verdict": "baseline",
+                    "score": 0.77,
+                    "coverage_weight": 1.0,
+                },
+                "recent_observer_checks": [
+                    {
+                        "check_type": "semantic_progress",
+                        "trigger": "coverage_progress",
+                        "verdict": "baseline",
+                        "score": 0.77,
+                    }
+                ],
+                "surface_catalog": [],
+                "trace_bank": [],
+                "active_edits": [],
+                "recent_effects": [],
+                "recent_effect_summary": {"window_size": 0},
+                "telemetry": {"observer_check_count": 1},
+                "budget": {},
+            }
+        )
+        trace = client.latest_trace()
+
+        self.assertIsNotNone(trace)
+        self.assertEqual(trace["observation"]["latest_observer_check"]["trigger"], "coverage_progress")
+        self.assertEqual(trace["observation"]["recent_observer_checks"][0]["score"], 0.77)
+
     def test_provider_controller_client_observation_includes_controller_memory(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
@@ -210,6 +250,7 @@ class TestBackendsAndBridge(unittest.TestCase):
                 "controller_memory": [
                     {
                         "hypothesis": "small_resid_loop_rescue",
+                        "micro_rationale": "avoid another blind nudge",
                         "observed_outcome": "harmful",
                         "next_change": "prefer noop",
                         "confidence": 0.74,
@@ -223,6 +264,7 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertIsNotNone(trace)
         self.assertEqual(trace["observation"]["controller_memory"][0]["hypothesis"], "small_resid_loop_rescue")
+        self.assertEqual(trace["observation"]["controller_memory"][0]["micro_rationale"], "avoid another blind nudge")
         self.assertEqual(trace["observation"]["controller_memory"][0]["observed_outcome"], "harmful")
 
     def test_provider_controller_client_normalizes_common_edit_shorthand(self):
@@ -249,6 +291,20 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(command.meta["controller_memory"]["hypothesis"], "rescue")
         self.assertEqual(trace["decision"]["controller_memory"]["observed_outcome"], "harmful")
+
+    def test_provider_controller_client_normalizes_observer_request_and_micro_rationale_into_meta(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"request_observer_check\":{\"kind\":\"semantic_progress\",\"reason\":\"fresh semantic read after loop relief\"},\"micro_rationale\":\"Loop eased, but coverage is still zero.\"}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["observer_check_request"]["kind"], "semantic_progress")
+        self.assertEqual(command.meta["micro_rationale"], "Loop eased, but coverage is still zero.")
+        self.assertEqual(trace["decision"]["observer_check_request"]["kind"], "semantic_progress")
+        self.assertEqual(trace["decision"]["micro_rationale"], "Loop eased, but coverage is still zero.")
 
     def test_normalize_controller_payload_keeps_target_surface_id_flat(self):
         normalized = _normalize_controller_payload(
@@ -371,11 +427,19 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("hypothesis_stats", prompt)
         self.assertIn("latest_effects", prompt)
         self.assertIn("partial_score", prompt)
+        self.assertIn("semantic_progress_score", prompt)
+        self.assertIn("latest_observer_check", prompt)
+        self.assertIn("recent_observer_checks", prompt)
+        self.assertIn("observer_check_budget_left", prompt)
+        self.assertIn("meta.observer_check_request", prompt)
+        self.assertIn("meta.micro_rationale", prompt)
         self.assertIn("required_term_recall", prompt)
+        self.assertIn("required_term_span_progress", prompt)
         self.assertIn("forbidden_term_clean", prompt)
         self.assertIn("budget_ok", prompt)
         self.assertIn("mean_progress_delta", prompt)
         self.assertIn("mean_required_term_recall_delta", prompt)
+        self.assertIn("mean_required_term_span_progress_delta", prompt)
         self.assertIn("after_is_looping", prompt)
         self.assertIn("after_task_violation_count", prompt)
         self.assertIn("edits_left_this_run", prompt)
@@ -389,10 +453,20 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("decoder_rescue_active", prompt)
         self.assertIn("decoder_control_track", prompt)
         self.assertIn("decoder_constraint_target_count", prompt)
+        self.assertIn("decoder_entity_prior_active", prompt)
+        self.assertIn("decoder_entity_target_count", prompt)
+        self.assertIn("decoder_entity_prefix_depth", prompt)
+        self.assertIn("decoder_logit_bias_active", prompt)
+        self.assertIn("decoder_logit_bias_term_count", prompt)
+        self.assertIn("decoder_logit_bias_token_count", prompt)
+        self.assertIn("decoder_logit_bias_focus_term_count", prompt)
         self.assertIn("loop_rescue_edits_left_this_run", prompt)
         self.assertIn("loop_rescue_alpha_left_total", prompt)
         self.assertIn("do not treat this as a hard noop gate", prompt)
         self.assertIn("budget_only_loop_rescue", prompt)
+        self.assertIn("micro_rationale", prompt)
+        self.assertIn("measure whether the local shift improved semantic grounding", prompt)
+        self.assertNotIn("include meta.hypothesis and meta.confidence when useful", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
         client = _FakeOpenAIClient()

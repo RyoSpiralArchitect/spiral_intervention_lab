@@ -286,9 +286,44 @@ def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, 
     if not isinstance(meta, Mapping):
         return None, None if decision is None else str(decision)
     entry = meta.get("controller_memory")
-    if not isinstance(entry, Mapping):
+    if isinstance(entry, Mapping):
+        normalized = dict(entry)
+    else:
+        normalized = {}
+    if meta.get("hypothesis") is not None and "hypothesis" not in normalized:
+        normalized["hypothesis"] = meta.get("hypothesis")
+    if meta.get("micro_rationale") is not None and "micro_rationale" not in normalized:
+        normalized["micro_rationale"] = meta.get("micro_rationale")
+    if not normalized:
         return None, None if decision is None else str(decision)
-    return entry, None if decision is None else str(decision)
+    return normalized, None if decision is None else str(decision)
+
+
+def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
+    meta = _command_meta(command)
+    if not isinstance(meta, Mapping):
+        return None
+    request = meta.get("observer_check_request")
+    if request is True:
+        return {"kind": "semantic_progress"}
+    if isinstance(request, Mapping):
+        return dict(request)
+    return None
+
+
+def _log_pending_observer_check_events(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    worker_runtime: Any,
+) -> None:
+    if logger is None:
+        return
+    reader = getattr(worker_runtime, "pop_observer_check_events", None)
+    if not callable(reader):
+        return
+    for event in reader():
+        logger.log({"event": "observer_check", "step": step, **dict(event)})
 
 
 def _record_controller_memory(
@@ -329,6 +364,7 @@ def run_episode(
     step_count = 0
     while not worker_runtime.done():
         worker_runtime.step()
+        _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
         packet = worker_runtime.build_controller_packet()
         try:
             command = controller_client.invoke(packet)
@@ -349,6 +385,24 @@ def run_episode(
                 logger.log({"event": "controller_guardrail", "step": step_count, **budget_guard_event})
             logger.log({"event": "controller_command", "step": step_count, "command": command})
         _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
+        observer_check_request = _extract_observer_check_request(command)
+        if observer_check_request is not None:
+            requester = getattr(worker_runtime, "request_observer_check", None)
+            result = None
+            if callable(requester):
+                try:
+                    result = requester(observer_check_request, source="controller")
+                except TypeError:
+                    result = requester(observer_check_request)
+            if logger is not None:
+                request_event = {"event": "controller_observer_check_request", "step": step_count, **dict(observer_check_request)}
+                request_event["executed"] = bool(result)
+                if isinstance(result, Mapping):
+                    request_event["result_trigger"] = result.get("trigger")
+                    request_event["result_verdict"] = result.get("verdict")
+                    request_event["result_score"] = result.get("score")
+                logger.log(request_event)
+            _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

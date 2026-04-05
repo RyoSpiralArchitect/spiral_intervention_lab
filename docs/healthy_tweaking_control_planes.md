@@ -21,6 +21,9 @@ Auxiliary controls are healthy supports. They can make the worker easier to stee
 | Task-agnostic decoder rescue | `loop_aware` | Break short repetition loops and local attractors without task-specific token forcing. |
 | Search widening | `loop_aware_prune` | Demote the current overconfident top token once the worker is stalled, so a nearby alternative can surface. |
 | Soft explicit-constraint bias | `loop_aware_constraint` | Gently bias toward tokens tied to explicit missing constraints, but never force a full answer string. |
+| Soft entity recall prior | `loop_aware_entity_recall` | Continue or start explicit missing entity token sequences from task feedback, while keeping the effect bounded and auditable. |
+| Soft entity logit bias | `logit_bias_entity_soft` | Nudge logits toward a small coverage-ranked set of explicit missing entities, stronger for untouched terms and weaker once a term starts to emerge. |
+| Semantic progress critic | `MiniLM` sentence critic | Add a coverage-weighted semantic-progress signal so meaning-level drift only counts once explicit task coverage begins to move. |
 
 Auxiliary controls should only:
 - operate with bounded, inspectable strength
