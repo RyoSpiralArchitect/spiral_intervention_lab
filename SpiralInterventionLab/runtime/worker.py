@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
@@ -54,6 +55,14 @@ _CONTROLLER_MEMORY_STRING_FIELDS = (
     "stop_condition",
 )
 _CONTROLLER_MEMORY_ALLOWED_OUTCOMES = {"unknown", "helpful", "harmful", "neutral", "mixed"}
+_CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
+    "wait",
+    "noop",
+    "apply",
+    "rollback",
+    "request_observer_check",
+    "stop",
+}
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
 
@@ -114,6 +123,14 @@ def _clean_controller_memory_text(value: Any, *, limit: int = 160) -> str | None
     return text[:limit]
 
 
+def _normalize_controller_memory_label(value: Any, *, limit: int = 48) -> str | None:
+    text = _clean_controller_memory_text(value, limit=limit)
+    if text is None:
+        return None
+    normalized = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    return normalized[:limit] or None
+
+
 def _normalize_controller_memory_entry(
     value: Mapping[str, Any] | None,
     *,
@@ -133,6 +150,12 @@ def _normalize_controller_memory_entry(
                 entry[key] = normalized_outcome
             else:
                 entry[key] = text
+    next_trigger = _normalize_controller_memory_label(value.get("next_trigger"), limit=60)
+    if next_trigger is not None:
+        entry["next_trigger"] = next_trigger
+    next_action = _normalize_controller_memory_label(value.get("next_action"), limit=32)
+    if next_action in _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS:
+        entry["next_action"] = next_action
     confidence = value.get("confidence")
     if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
         entry["confidence"] = max(0.0, min(1.0, float(confidence)))
@@ -270,6 +293,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_observer_check: dict[str, Any] | None = None
         self._pending_observer_check_events: list[dict[str, Any]] = []
         self._last_observer_candidate_hash: str | None = None
+        self._feature_prototype_cache: dict[str, torch.Tensor] = {}
         self._last_decoder_control: dict[str, Any] = {
             "mode": self.decoder_control_mode,
             "track": _decoder_control_spec(self.decoder_control_mode)["track"],
@@ -416,6 +440,132 @@ class HookedTransformerWorkerRuntime:
         events = [dict(event) for event in self._pending_observer_check_events]
         self._pending_observer_check_events = []
         return events
+
+    def latent_feature_scan(
+        self,
+        *,
+        feature_groups: Mapping[str, Any],
+        max_features_per_group: int = 4,
+        max_surface_hits: int = 2,
+    ) -> dict[str, Any] | None:
+        if not isinstance(feature_groups, Mapping):
+            return None
+        surface_vectors = self._feature_scan_surface_vectors()
+        if not surface_vectors:
+            return None
+
+        groups: list[dict[str, Any]] = []
+        top_feature_hits: list[dict[str, Any]] = []
+        term_progress = self._feedback_term_progress_by_term()
+
+        for raw_group_name, raw_spec in feature_groups.items():
+            group_name = " ".join(str(raw_group_name).split()).strip().lower().replace(" ", "_")
+            if not group_name:
+                continue
+
+            polarity = "promote"
+            feature_kind = "term"
+            raw_terms: Any = raw_spec
+            if isinstance(raw_spec, Mapping):
+                raw_terms = raw_spec.get("terms", ())
+                polarity = " ".join(str(raw_spec.get("polarity", "promote")).split()).strip().lower().replace(" ", "_")
+                feature_kind = " ".join(str(raw_spec.get("feature_kind", "term")).split()).strip().lower().replace(" ", "_")
+            if not isinstance(raw_terms, SequenceABC) or isinstance(raw_terms, (str, bytes, bytearray)):
+                continue
+
+            feature_rows: list[dict[str, Any]] = []
+            seen_terms: set[str] = set()
+            for raw_term in raw_terms:
+                term = " ".join(str(raw_term).split()).strip()
+                if not term or term in seen_terms:
+                    continue
+                seen_terms.add(term)
+                prototype = self._feature_prototype_vector(term)
+                if prototype is None:
+                    continue
+
+                surface_hits: list[dict[str, Any]] = []
+                for surface_id, surface_vector in surface_vectors.items():
+                    alignment = _cosine_similarity(surface_vector, prototype)
+                    if alignment is None:
+                        continue
+                    surface_hits.append(
+                        {
+                            "surface_id": str(surface_id),
+                            "alignment": round(max(0.0, float(alignment)), 6),
+                        }
+                    )
+                if not surface_hits:
+                    continue
+                surface_hits.sort(key=lambda item: (-float(item["alignment"]), str(item["surface_id"])))
+                best_hit = surface_hits[0]
+                feature_rows.append(
+                    {
+                        "feature": term,
+                        "feature_kind": feature_kind,
+                        "polarity": polarity,
+                        "alignment": best_hit["alignment"],
+                        "surface_id": best_hit["surface_id"],
+                        "surface_hits": surface_hits[: max(1, int(max_surface_hits))],
+                        "coverage_progress": round(float(term_progress.get(term, 0.0) or 0.0), 6),
+                    }
+                )
+
+            if not feature_rows:
+                continue
+            feature_rows.sort(
+                key=lambda item: (
+                    -float(item["alignment"]),
+                    -float(item.get("coverage_progress", 0.0) or 0.0),
+                    str(item["feature"]).lower(),
+                )
+            )
+            top_rows = feature_rows[: max(1, int(max_features_per_group))]
+            mean_alignment = sum(float(item["alignment"]) for item in feature_rows) / len(feature_rows)
+            groups.append(
+                {
+                    "group": group_name,
+                    "polarity": polarity,
+                    "feature_kind": feature_kind,
+                    "feature_count": len(feature_rows),
+                    "mean_alignment": round(mean_alignment, 6),
+                    "top_features": top_rows,
+                }
+            )
+            for item in top_rows:
+                top_feature_hits.append(
+                    {
+                        "group": group_name,
+                        "feature": item["feature"],
+                        "feature_kind": item["feature_kind"],
+                        "polarity": item["polarity"],
+                        "alignment": item["alignment"],
+                        "surface_id": item["surface_id"],
+                        "coverage_progress": item["coverage_progress"],
+                    }
+                )
+
+        if not groups:
+            return None
+
+        top_feature_hits.sort(
+            key=lambda item: (
+                -float(item["alignment"]),
+                -float(item.get("coverage_progress", 0.0) or 0.0),
+                str(item["feature"]).lower(),
+            )
+        )
+        mean_alignment = sum(float(group["mean_alignment"]) for group in groups) / len(groups)
+        max_alignment = max(float(item["alignment"]) for item in top_feature_hits)
+        return {
+            "prototype_mode": "token_embedding_mean",
+            "surface_count": len(surface_vectors),
+            "group_count": len(groups),
+            "mean_alignment": round(mean_alignment, 6),
+            "max_alignment": round(max_alignment, 6),
+            "groups": groups,
+            "top_feature_hits": top_feature_hits[:6],
+        }
 
     def request_observer_check(
         self,
@@ -1161,12 +1311,24 @@ class HookedTransformerWorkerRuntime:
             return None
         feedback = dict(self._last_task_feedback)
         try:
-            result = self.observer_check_fn(candidate_text, task_feedback=feedback, trigger=trigger)
+            result = self.observer_check_fn(
+                candidate_text,
+                task_feedback=feedback,
+                trigger=trigger,
+                worker_runtime=self,
+            )
         except TypeError:
             try:
-                result = self.observer_check_fn(candidate_text, feedback, trigger)
+                result = self.observer_check_fn(
+                    candidate_text,
+                    task_feedback=feedback,
+                    trigger=trigger,
+                )
             except TypeError:
-                result = self.observer_check_fn(candidate_text)
+                try:
+                    result = self.observer_check_fn(candidate_text, feedback, trigger)
+                except TypeError:
+                    result = self.observer_check_fn(candidate_text)
         if not isinstance(result, Mapping):
             return None
         return result
@@ -1200,6 +1362,9 @@ class HookedTransformerWorkerRuntime:
         for key in ("coverage_signal", "mode", "model_name", "reference_kind"):
             if value.get(key) is not None:
                 normalized[key] = value.get(key)
+        latent_feature_scan = value.get("latent_feature_scan")
+        if isinstance(latent_feature_scan, Mapping):
+            normalized["latent_feature_scan"] = dict(latent_feature_scan)
         previous_score = None
         if isinstance(previous_result, Mapping):
             last_value = previous_result.get("score")
@@ -1278,6 +1443,76 @@ class HookedTransformerWorkerRuntime:
             if isinstance(detail, SequenceABC) and not isinstance(detail, (str, bytes, bytearray)):
                 total += sum(1 for item in detail if item)
         return total
+
+    def _feature_scan_surface_vectors(self) -> dict[str, torch.Tensor]:
+        if getattr(self.runtime_state, "last_cache", None) is None:
+            return {}
+        if hasattr(self.runtime_state, "set_trace_alignment"):
+            self.runtime_state.set_trace_alignment(self._steps)
+        ctx = StepContext(packet={"step": self._steps}, runtime_state=self.runtime_state, traces={}, stats={}, adapter=self.adapter, active_edits={})
+        vectors: dict[str, torch.Tensor] = {}
+        for surface in self.surface_catalog:
+            bound = self.adapter.bind_surface(surface)
+            if bound.kind != "activation":
+                continue
+            vector = self._surface_probe_vector(surface, bound, ctx)
+            if vector is None:
+                continue
+            vectors[str(surface.surface_id)] = vector.detach().reshape(-1).cpu().float()
+        return vectors
+
+    def _feature_embedding_matrix(self) -> torch.Tensor | None:
+        model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
+        if model is None:
+            return None
+        for candidate in (
+            getattr(model, "W_E", None),
+            getattr(getattr(model, "embed", None), "W_E", None),
+            getattr(getattr(model, "embed", None), "weight", None),
+        ):
+            if isinstance(candidate, torch.nn.Parameter):
+                return candidate.detach().float()
+            if isinstance(candidate, torch.Tensor):
+                return candidate.detach().float()
+        return None
+
+    def _feature_prototype_vector(self, term: str) -> torch.Tensor | None:
+        normalized_term = " ".join(str(term).split()).strip()
+        if not normalized_term:
+            return None
+        cached = self._feature_prototype_cache.get(normalized_term)
+        if cached is not None:
+            return cached
+        embedding_matrix = self._feature_embedding_matrix()
+        if embedding_matrix is None:
+            return None
+
+        variant_vectors: list[torch.Tensor] = []
+        for variant in self._constraint_token_variants(normalized_term):
+            try:
+                encoded = self.codec.encode(variant).detach().reshape(-1).to(dtype=torch.long).tolist()
+            except Exception:
+                continue
+            if not encoded:
+                continue
+            if any(token_id < 0 or token_id >= embedding_matrix.shape[0] for token_id in encoded):
+                continue
+            token_index = torch.tensor(encoded, dtype=torch.long, device=embedding_matrix.device)
+            vector = embedding_matrix.index_select(0, token_index).mean(dim=0).reshape(-1).float()
+            norm = float(vector.norm().item())
+            if norm <= 0.0:
+                continue
+            variant_vectors.append(vector / norm)
+        if not variant_vectors:
+            return None
+
+        prototype = torch.stack(variant_vectors, dim=0).mean(dim=0)
+        norm = float(prototype.norm().item())
+        if norm <= 0.0:
+            return None
+        prototype = (prototype / norm).detach().cpu().float()
+        self._feature_prototype_cache[normalized_term] = prototype
+        return prototype
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})

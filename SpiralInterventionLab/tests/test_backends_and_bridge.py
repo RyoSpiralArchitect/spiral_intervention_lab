@@ -208,6 +208,22 @@ class TestBackendsAndBridge(unittest.TestCase):
                     "verdict": "baseline",
                     "score": 0.77,
                     "coverage_weight": 1.0,
+                    "latent_feature_scan": {
+                        "prototype_mode": "token_embedding_mean",
+                        "surface_count": 2,
+                        "group_count": 1,
+                        "groups": [
+                            {
+                                "group": "required_terms",
+                                "polarity": "promote",
+                                "feature_count": 2,
+                                "mean_alignment": 0.18,
+                                "top_features": [
+                                    {"feature": "Mira", "surface_id": "s_resid_pre_l4_last", "alignment": 0.24}
+                                ],
+                            }
+                        ],
+                    },
                 },
                 "recent_observer_checks": [
                     {
@@ -231,6 +247,10 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIsNotNone(trace)
         self.assertEqual(trace["observation"]["latest_observer_check"]["trigger"], "coverage_progress")
         self.assertEqual(trace["observation"]["recent_observer_checks"][0]["score"], 0.77)
+        self.assertEqual(
+            trace["observation"]["latest_observer_check"]["latent_feature_scan"]["groups"][0]["group"],
+            "required_terms",
+        )
 
     def test_provider_controller_client_observation_includes_controller_memory(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
@@ -253,6 +273,8 @@ class TestBackendsAndBridge(unittest.TestCase):
                         "micro_rationale": "avoid another blind nudge",
                         "observed_outcome": "harmful",
                         "next_change": "prefer noop",
+                        "next_trigger": "loop_relief_without_coverage",
+                        "next_action": "request_observer_check",
                         "confidence": 0.74,
                     }
                 ],
@@ -266,6 +288,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["controller_memory"][0]["hypothesis"], "small_resid_loop_rescue")
         self.assertEqual(trace["observation"]["controller_memory"][0]["micro_rationale"], "avoid another blind nudge")
         self.assertEqual(trace["observation"]["controller_memory"][0]["observed_outcome"], "harmful")
+        self.assertEqual(trace["observation"]["controller_memory"][0]["next_trigger"], "loop_relief_without_coverage")
+        self.assertEqual(trace["observation"]["controller_memory"][0]["next_action"], "request_observer_check")
 
     def test_provider_controller_client_normalizes_common_edit_shorthand(self):
         provider = _FakeProvider(
@@ -305,6 +329,20 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.meta["micro_rationale"], "Loop eased, but coverage is still zero.")
         self.assertEqual(trace["decision"]["observer_check_request"]["kind"], "semantic_progress")
         self.assertEqual(trace["decision"]["micro_rationale"], "Loop eased, but coverage is still zero.")
+
+    def test_provider_controller_client_normalizes_next_trigger_and_action_into_meta(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"micro_rationale\":\"wait for a clearer shift\",\"next_trigger\":\"loop relief without coverage\",\"next_action\":\"request observer check\"}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["next_trigger"], "loop relief without coverage")
+        self.assertEqual(command.meta["next_action"], "request observer check")
+        self.assertEqual(trace["decision"]["next_trigger"], "loop relief without coverage")
+        self.assertEqual(trace["decision"]["next_action"], "request observer check")
 
     def test_normalize_controller_payload_keeps_target_surface_id_flat(self):
         normalized = _normalize_controller_payload(
@@ -430,6 +468,12 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("semantic_progress_score", prompt)
         self.assertIn("latest_observer_check", prompt)
         self.assertIn("recent_observer_checks", prompt)
+        self.assertIn("latent_feature_scan", prompt)
+        self.assertIn("top_feature_hits", prompt)
+        self.assertIn("forbidden_phrases", prompt)
+        self.assertIn("choose between provided surfaces", prompt)
+        self.assertIn("s_resid_pre_l4_last", prompt)
+        self.assertIn("latent_scan_prefers_l4_for_required_terms", prompt)
         self.assertIn("observer_check_budget_left", prompt)
         self.assertIn("meta.observer_check_request", prompt)
         self.assertIn("meta.micro_rationale", prompt)

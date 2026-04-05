@@ -142,6 +142,7 @@ def _semantic_observer_payload(
     coverage_signal: float,
     trigger: str,
     reference_kind: str,
+    latent_feature_scan: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     semantic_progress = _coverage_weighted_semantic_progress(
         critic,
@@ -152,7 +153,7 @@ def _semantic_observer_payload(
     if semantic_progress is None:
         return None
     raw_score, coverage_weight, weighted_score = semantic_progress
-    return {
+    payload = {
         "check_type": "semantic_progress",
         "trigger": str(trigger),
         "reference_kind": str(reference_kind),
@@ -163,6 +164,9 @@ def _semantic_observer_payload(
         "coverage_weight": coverage_weight,
         "score": weighted_score,
     }
+    if isinstance(latent_feature_scan, dict) and latent_feature_scan:
+        payload["latent_feature_scan"] = latent_feature_scan
+    return payload
 
 
 @dataclass(frozen=True)
@@ -543,12 +547,30 @@ class SpiralConstrainedRewriteEnv:
         *,
         task_feedback: dict[str, Any] | None = None,
         trigger: str = "runtime",
+        worker_runtime: Any | None = None,
     ) -> dict[str, Any] | None:
         candidate = _compact_whitespace(output)
         if not candidate:
             return None
         episode = self._episode()
         feedback = dict(task_feedback or self.task_feedback(output))
+        latent_feature_scan = None
+        scanner = getattr(worker_runtime, "latent_feature_scan", None)
+        if callable(scanner):
+            latent_feature_scan = scanner(
+                feature_groups={
+                    "required_terms": {
+                        "terms": tuple(feedback.get("entity_recall_terms") or episode.required_terms),
+                        "polarity": "promote",
+                        "feature_kind": "required_term",
+                    },
+                    "forbidden_phrases": {
+                        "terms": episode.forbidden_terms,
+                        "polarity": "suppress",
+                        "feature_kind": "forbidden_phrase",
+                    },
+                }
+            )
         return _semantic_observer_payload(
             self.semantic_critic,
             reference_text=episode.source_text,
@@ -559,6 +581,7 @@ class SpiralConstrainedRewriteEnv:
             ),
             trigger=trigger,
             reference_kind="source_text",
+            latent_feature_scan=latent_feature_scan,
         )
 
     def stop_checker(self, output: str) -> bool:
@@ -767,12 +790,31 @@ class SpiralStructuredSummaryEnv:
         *,
         task_feedback: dict[str, Any] | None = None,
         trigger: str = "runtime",
+        worker_runtime: Any | None = None,
     ) -> dict[str, Any] | None:
         parsed = self._parse_output(output)
         summary_text = parsed["summary"]
         if not summary_text:
             return None
         feedback = dict(task_feedback or self.task_feedback(output))
+        latent_feature_scan = None
+        scanner = getattr(worker_runtime, "latent_feature_scan", None)
+        if callable(scanner):
+            episode = self._episode()
+            latent_feature_scan = scanner(
+                feature_groups={
+                    "summary_terms": {
+                        "terms": tuple(feedback.get("missing_summary_terms") or episode.required_summary_terms),
+                        "polarity": "promote",
+                        "feature_kind": "summary_term",
+                    },
+                    "keywords": {
+                        "terms": tuple(feedback.get("missing_keywords") or episode.required_keywords),
+                        "polarity": "promote",
+                        "feature_kind": "keyword",
+                    },
+                }
+            )
         return _semantic_observer_payload(
             self.semantic_critic,
             reference_text=self._episode().note_text,
@@ -783,6 +825,7 @@ class SpiralStructuredSummaryEnv:
             ),
             trigger=trigger,
             reference_kind="note_text",
+            latent_feature_scan=latent_feature_scan,
         )
 
     def stop_checker(self, output: str) -> bool:

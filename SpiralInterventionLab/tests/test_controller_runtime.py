@@ -243,6 +243,8 @@ def _resid_command_with_memory():
             "observed_outcome": "unknown",
             "why_failed_or_helped": "first attempt; no effect observed yet",
             "next_change": "wait for effect before stacking",
+            "next_trigger": "loop_relief_without_coverage",
+            "next_action": "request_observer_check",
             "stop_condition": "if no progress improves, stop",
             "confidence": 0.55,
         }
@@ -257,6 +259,8 @@ def _noop_command_with_observer_request():
         "meta": {
             "hypothesis": "loop_relief_but_coverage_zero",
             "micro_rationale": "Loop eased, but coverage is still zero.",
+            "next_trigger": "observer_flat_after_loop_relief",
+            "next_action": "apply",
             "observer_check_request": {
                 "kind": "semantic_progress",
                 "reason": "fresh semantic read after loop relief",
@@ -1158,6 +1162,8 @@ class TestLoopAndEffects(unittest.TestCase):
 
         self.assertEqual(worker._controller_memory[0]["hypothesis"], "small_rescue")
         self.assertEqual(worker._controller_memory[0]["micro_rationale"], "test a small reversible rescue first")
+        self.assertEqual(worker._controller_memory[0]["next_trigger"], "loop_relief_without_coverage")
+        self.assertEqual(worker._controller_memory[0]["next_action"], "request_observer_check")
         self.assertEqual(worker._controller_memory[0]["decision"], "apply")
         self.assertTrue(any(event["event"] == "controller_memory" for event in logger.events))
         observations = [event for event in logger.events if event["event"] == "controller_observation"]
@@ -1182,6 +1188,8 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertTrue(any(event["event"] == "controller_observer_check_request" for event in logger.events))
         self.assertTrue(any(event["event"] == "observer_check" for event in logger.events))
         self.assertEqual(worker._controller_memory[0]["micro_rationale"], "Loop eased, but coverage is still zero.")
+        self.assertEqual(worker._controller_memory[0]["next_trigger"], "observer_flat_after_loop_relief")
+        self.assertEqual(worker._controller_memory[0]["next_action"], "apply")
         self.assertEqual(worker._observer_checks[-1]["trigger"], "controller_request")
 
 

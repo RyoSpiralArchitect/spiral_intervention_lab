@@ -294,6 +294,10 @@ def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, 
         normalized["hypothesis"] = meta.get("hypothesis")
     if meta.get("micro_rationale") is not None and "micro_rationale" not in normalized:
         normalized["micro_rationale"] = meta.get("micro_rationale")
+    if meta.get("next_trigger") is not None and "next_trigger" not in normalized:
+        normalized["next_trigger"] = meta.get("next_trigger")
+    if meta.get("next_action") is not None and "next_action" not in normalized:
+        normalized["next_action"] = meta.get("next_action")
     if not normalized:
         return None, None if decision is None else str(decision)
     return normalized, None if decision is None else str(decision)

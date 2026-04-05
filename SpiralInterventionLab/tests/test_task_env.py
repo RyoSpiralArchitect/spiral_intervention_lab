@@ -25,6 +25,44 @@ class _StubSemanticCritic:
         return 0.44
 
 
+class _StubFeatureScanWorker:
+    def latent_feature_scan(self, *, feature_groups, max_features_per_group=4, max_surface_hits=2):
+        return {
+            "prototype_mode": "token_embedding_mean",
+            "surface_count": 2,
+            "group_count": 1,
+            "mean_alignment": 0.18,
+            "max_alignment": 0.24,
+            "groups": [
+                {
+                    "group": "required_terms",
+                    "polarity": "promote",
+                    "feature_kind": "required_term",
+                    "feature_count": 2,
+                    "mean_alignment": 0.18,
+                    "top_features": [
+                        {
+                            "feature": "Mira",
+                            "alignment": 0.24,
+                            "surface_id": "s_resid_pre_l4_last",
+                            "coverage_progress": 0.0,
+                        }
+                    ],
+                }
+            ],
+            "top_feature_hits": [
+                {
+                    "group": "required_terms",
+                    "feature": "Mira",
+                    "polarity": "promote",
+                    "surface_id": "s_resid_pre_l4_last",
+                    "alignment": 0.24,
+                    "coverage_progress": 0.0,
+                }
+            ],
+        }
+
+
 class _FakeMiniLMTokenizer:
     def __call__(self, texts, padding=True, truncation=True, return_tensors="pt"):
         import torch
@@ -223,10 +261,17 @@ class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
         kwargs = env.worker_runtime_kwargs()
         self.assertGreater(kwargs["max_generated_tokens"], episode.max_words)
         self.assertIn("observer_check_fn", kwargs)
-        observer = kwargs["observer_check_fn"](partial_candidate, task_feedback=feedback, trigger="coverage_progress")
+        observer = kwargs["observer_check_fn"](
+            partial_candidate,
+            task_feedback=feedback,
+            trigger="coverage_progress",
+            worker_runtime=_StubFeatureScanWorker(),
+        )
         self.assertIsNotNone(observer)
         self.assertIn("score", observer)
         self.assertIn("coverage_weight", observer)
+        self.assertIn("latent_feature_scan", observer)
+        self.assertEqual(observer["latent_feature_scan"]["groups"][0]["group"], "required_terms")
         full_feedback = kwargs["task_feedback_fn"](candidate)
         self.assertEqual(full_feedback["partial_score"], 1.0)
         self.assertEqual(full_feedback["required_term_span_progress"], 1.0)
@@ -255,9 +300,15 @@ class TestSpiralStructuredSummaryEnv(unittest.TestCase):
         kwargs = env.worker_runtime_kwargs()
         self.assertGreater(kwargs["max_generated_tokens"], episode.max_summary_words)
         self.assertIn("observer_check_fn", kwargs)
-        observer = kwargs["observer_check_fn"](candidate, task_feedback=full_feedback, trigger="coverage_progress")
+        observer = kwargs["observer_check_fn"](
+            candidate,
+            task_feedback=full_feedback,
+            trigger="coverage_progress",
+            worker_runtime=_StubFeatureScanWorker(),
+        )
         self.assertIsNotNone(observer)
         self.assertIn("score", observer)
+        self.assertIn("latent_feature_scan", observer)
         self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)
 
 
