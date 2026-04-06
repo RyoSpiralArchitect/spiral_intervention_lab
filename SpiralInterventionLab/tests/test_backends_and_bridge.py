@@ -252,6 +252,50 @@ class TestBackendsAndBridge(unittest.TestCase):
             "required_terms",
         )
 
+    def test_provider_controller_client_observation_includes_tool_catalog_and_results(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        client.invoke(
+            {
+                "step": 1,
+                "task_view": {"task_id": "toy_task", "mode": "redacted", "prompt_hash": "sha256:test"},
+                "worker_view": {"generated_tail": "12", "status": "acting"},
+                "surface_catalog": [],
+                "trace_bank": [],
+                "active_edits": [],
+                "recent_effects": [],
+                "recent_effect_summary": {"window_size": 0},
+                "telemetry": {"tool_call_count": 2},
+                "budget": {},
+                "tool_catalog": [
+                    {"tool": "tokenize_terms", "available": True, "cost_hint": "cheap", "budget_left": 4},
+                    {"tool": "dry_run_decode", "available": True, "cost_hint": "expensive", "budget_left": 4},
+                ],
+                "latest_tool_results": [
+                    {
+                        "tool": "tokenize_terms",
+                        "status": "ok",
+                        "term_count": 2,
+                        "terms": [{"term": "Mira"}],
+                    },
+                    {
+                        "tool": "dry_run_decode",
+                        "status": "ok",
+                        "entropy_delta": -0.1,
+                        "required_term_recall_delta": 0.25,
+                        "topk_token_diff": [{"piece": "M", "prob_delta": 0.2}],
+                    },
+                ],
+            }
+        )
+        trace = client.latest_trace()
+
+        self.assertEqual(trace["observation"]["tool_catalog"][0]["tool"], "tokenize_terms")
+        self.assertEqual(trace["observation"]["latest_tool_results"][0]["tool"], "tokenize_terms")
+        self.assertEqual(trace["observation"]["latest_tool_results"][1]["tool"], "dry_run_decode")
+        self.assertEqual(trace["observation"]["latest_tool_results"][1]["topk_token_diff"][0]["piece"], "M")
+
     def test_provider_controller_client_observation_includes_controller_memory(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
@@ -329,6 +373,20 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.meta["micro_rationale"], "Loop eased, but coverage is still zero.")
         self.assertEqual(trace["decision"]["observer_check_request"]["kind"], "semantic_progress")
         self.assertEqual(trace["decision"]["micro_rationale"], "Loop eased, but coverage is still zero.")
+
+    def test_provider_controller_client_normalizes_tool_requests_into_meta(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"request_tools\":[{\"tool\":\"tokenize_terms\",\"terms\":[\"Mira\",\"Omar\"]},{\"tool\":\"dry_run_decode\",\"candidate_edit\":{\"surface_id\":\"s_resid_pre_l4_last\",\"kind\":\"resid_add\",\"alpha\":0.04,\"ttl_steps\":1},\"max_new_tokens\":4}]}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["tool_requests"][0]["tool"], "tokenize_terms")
+        self.assertEqual(command.meta["tool_requests"][1]["tool"], "dry_run_decode")
+        self.assertEqual(trace["decision"]["tool_requests"][0]["term_count"], 2)
+        self.assertEqual(trace["decision"]["tool_requests"][1]["surface_id"], "s_resid_pre_l4_last")
 
     def test_provider_controller_client_normalizes_next_trigger_and_action_into_meta(self):
         provider = _FakeProvider(
@@ -468,6 +526,9 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("semantic_progress_score", prompt)
         self.assertIn("latest_observer_check", prompt)
         self.assertIn("recent_observer_checks", prompt)
+        self.assertIn("tool_catalog", prompt)
+        self.assertIn("latest_tool_results", prompt)
+        self.assertIn("recent_tool_results", prompt)
         self.assertIn("latent_feature_scan", prompt)
         self.assertIn("top_feature_hits", prompt)
         self.assertIn("forbidden_phrases", prompt)
@@ -475,7 +536,9 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("s_resid_pre_l4_last", prompt)
         self.assertIn("latent_scan_prefers_l4_for_required_terms", prompt)
         self.assertIn("observer_check_budget_left", prompt)
+        self.assertIn("tool_call_budget_left", prompt)
         self.assertIn("meta.observer_check_request", prompt)
+        self.assertIn("meta.tool_requests", prompt)
         self.assertIn("meta.micro_rationale", prompt)
         self.assertIn("required_term_recall", prompt)
         self.assertIn("required_term_span_progress", prompt)
@@ -510,6 +573,9 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("budget_only_loop_rescue", prompt)
         self.assertIn("micro_rationale", prompt)
         self.assertIn("measure whether the local shift improved semantic grounding", prompt)
+        self.assertIn("tokenize_terms", prompt)
+        self.assertIn("constraint_scorer", prompt)
+        self.assertIn("dry_run_decode", prompt)
         self.assertNotIn("include meta.hypothesis and meta.confidence when useful", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):

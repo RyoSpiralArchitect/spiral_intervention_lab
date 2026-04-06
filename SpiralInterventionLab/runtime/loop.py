@@ -315,6 +315,22 @@ def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
     return None
 
 
+def _extract_tool_requests(command: Any) -> list[dict[str, Any]]:
+    meta = _command_meta(command)
+    if not isinstance(meta, Mapping):
+        return []
+    requests = meta.get("tool_requests")
+    if isinstance(requests, Mapping):
+        return [dict(requests)]
+    if not isinstance(requests, SequenceABC) or isinstance(requests, (str, bytes, bytearray)):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in requests:
+        if isinstance(item, Mapping):
+            normalized.append(dict(item))
+    return normalized
+
+
 def _log_pending_observer_check_events(
     logger: StructuredLogger | None,
     *,
@@ -328,6 +344,21 @@ def _log_pending_observer_check_events(
         return
     for event in reader():
         logger.log({"event": "observer_check", "step": step, **dict(event)})
+
+
+def _log_pending_tool_events(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    worker_runtime: Any,
+) -> None:
+    if logger is None:
+        return
+    reader = getattr(worker_runtime, "pop_tool_events", None)
+    if not callable(reader):
+        return
+    for event in reader():
+        logger.log({"event": "controller_tool_result", "step": step, **dict(event)})
 
 
 def _record_controller_memory(
@@ -407,6 +438,22 @@ def run_episode(
                     request_event["result_score"] = result.get("score")
                 logger.log(request_event)
             _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
+
+        tool_requests = _extract_tool_requests(command)
+        if tool_requests:
+            requester = getattr(worker_runtime, "request_controller_tools", None)
+            results = []
+            if callable(requester):
+                try:
+                    results = requester(tool_requests, source="controller") or []
+                except TypeError:
+                    results = requester(tool_requests) or []
+            if logger is not None:
+                for request in tool_requests:
+                    request_event = {"event": "controller_tool_request", "step": step_count, **dict(request)}
+                    request_event["executed"] = bool(results)
+                    logger.log(request_event)
+            _log_pending_tool_events(logger, step=step_count, worker_runtime=worker_runtime)
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

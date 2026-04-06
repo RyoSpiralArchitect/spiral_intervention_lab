@@ -269,6 +269,31 @@ def _noop_command_with_observer_request():
     }
 
 
+def _noop_command_with_tool_requests():
+    return {
+        "version": "0.1",
+        "decision": "noop",
+        "meta": {
+            "hypothesis": "need_local_tools_before_next_apply",
+            "micro_rationale": "Gather local evidence before the next edit.",
+            "tool_requests": [
+                {"tool": "tokenize_terms", "terms": ["Mira", "budget"]},
+                {
+                    "tool": "dry_run_decode",
+                    "candidate_edit": {
+                        "surface_id": "s_resid_l11_last",
+                        "kind": "resid_add",
+                        "alpha": 0.04,
+                        "ttl_steps": 1,
+                        "step_size": 0.04,
+                    },
+                    "max_new_tokens": 3,
+                },
+            ],
+        },
+    }
+
+
 def _rank1_command():
     return {
         "version": "0.1",
@@ -791,6 +816,8 @@ class _ToyWorkerRuntime:
         self._controller_memory = []
         self._observer_checks = []
         self._pending_observer_check_events = []
+        self._tool_results = []
+        self._pending_tool_events = []
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
@@ -799,6 +826,8 @@ class _ToyWorkerRuntime:
         self._controller_memory = []
         self._observer_checks = []
         self._pending_observer_check_events = []
+        self._tool_results = []
+        self._pending_tool_events = []
 
     def step(self) -> None:
         self.steps += 1
@@ -817,6 +846,13 @@ class _ToyWorkerRuntime:
         if self._observer_checks:
             packet["latest_observer_check"] = dict(self._observer_checks[-1])
             packet["recent_observer_checks"] = [dict(entry) for entry in self._observer_checks[-4:]]
+        packet["tool_catalog"] = [
+            {"tool": "tokenize_terms", "available": True, "cost_hint": "cheap", "budget_left": 4},
+            {"tool": "dry_run_decode", "available": True, "cost_hint": "expensive", "budget_left": 4},
+        ]
+        if self._tool_results:
+            packet["latest_tool_results"] = [dict(entry) for entry in self._tool_results[-2:]]
+            packet["recent_tool_results"] = [dict(entry) for entry in self._tool_results[-4:]]
         return packet
 
     def observe_recent_effects(self) -> None:
@@ -880,6 +916,41 @@ class _ToyWorkerRuntime:
         self._pending_observer_check_events = []
         return events
 
+    def request_controller_tools(self, requests, *, source="controller"):
+        results = []
+        for request in requests:
+            tool_name = request.get("tool")
+            if tool_name == "tokenize_terms":
+                result = {
+                    "tool": "tokenize_terms",
+                    "status": "ok",
+                    "requested_by": source,
+                    "recorded_step": self.steps,
+                    "term_count": len(request.get("terms", [])),
+                }
+            elif tool_name == "dry_run_decode":
+                result = {
+                    "tool": "dry_run_decode",
+                    "status": "ok",
+                    "requested_by": source,
+                    "recorded_step": self.steps,
+                    "entropy_delta": -0.1,
+                    "repeat_flag_delta": -1,
+                    "required_term_recall_delta": 0.25,
+                }
+            else:
+                continue
+            self._tool_results.append(result)
+            self._pending_tool_events.append(result)
+            results.append(dict(result))
+        self._tool_results = self._tool_results[-4:]
+        return results
+
+    def pop_tool_events(self):
+        events = [dict(entry) for entry in self._pending_tool_events]
+        self._pending_tool_events = []
+        return events
+
 
 class _BudgetExhaustedToyWorkerRuntime(_ToyWorkerRuntime):
     def build_controller_packet(self):
@@ -925,6 +996,14 @@ class _ObserverRequestToyController(_ToyController):
         response = super().invoke(packet)
         if self.calls == 1:
             return _noop_command_with_observer_request()
+        return response
+
+
+class _ToolRequestToyController(_ToyController):
+    def invoke(self, packet):
+        response = super().invoke(packet)
+        if self.calls == 1:
+            return _noop_command_with_tool_requests()
         return response
 
 
@@ -1192,6 +1271,30 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertEqual(worker._controller_memory[0]["next_action"], "apply")
         self.assertEqual(worker._observer_checks[-1]["trigger"], "controller_request")
 
+    def test_run_episode_executes_controller_requested_tools(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        worker = _ToyWorkerRuntime(runtime_state)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            worker,
+            _ToolRequestToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertTrue(any(event["event"] == "controller_tool_request" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_tool_result" for event in logger.events))
+        self.assertEqual(worker._tool_results[0]["tool"], "tokenize_terms")
+        self.assertEqual(worker._tool_results[1]["tool"], "dry_run_decode")
+        packet_after = worker.build_controller_packet()
+        self.assertEqual(packet_after["tool_catalog"][0]["tool"], "tokenize_terms")
+        self.assertEqual(packet_after["latest_tool_results"][0]["tool"], "tokenize_terms")
+
 
 class TestRank1Bridge(unittest.TestCase):
     def test_parameter_aware_lift_maps_hidden_to_mlp_row_space(self):
@@ -1418,6 +1521,117 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["budget"]["edit_cost_left_total"], 0.5)
         self.assertEqual(packet["surface_catalog"][0]["surface_id"], "s_resid_l11_last")
         self.assertEqual(packet["recent_effect_summary"]["window_size"], 0)
+
+    def test_worker_runtime_tokenize_terms_tool_returns_token_units(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+
+        results = worker_runtime.request_controller_tools(
+            [{"tool": "tokenize_terms", "terms": ["ab", "c"]}],
+            source="controller",
+        )
+
+        self.assertEqual(results[0]["tool"], "tokenize_terms")
+        self.assertEqual(results[0]["term_count"], 2)
+        self.assertEqual(results[0]["terms"][0]["term"], "ab")
+        self.assertEqual(results[0]["terms"][0]["token_ids"], [1, 2])
+        self.assertEqual(results[0]["terms"][0]["biasable_units"][0]["piece"], "a")
+
+    def test_worker_runtime_constraint_scorer_tool_uses_task_feedback_and_observer(self):
+        def task_feedback_fn(output):
+            has_c = "c" in output
+            return {
+                "done": has_c,
+                "partial_score": 1.0 if has_c else 0.0,
+                "progress_label": "progressing" if has_c else "stalled",
+                "required_term_recall": 1.0 if has_c else 0.0,
+                "required_term_span_progress_by_term": {"c": 1.0 if has_c else 0.0},
+                "constraint_violations": [] if has_c else ["missing_required_terms"],
+                "forbidden_term_clean": 1.0,
+                "word_budget_score": 1.0,
+                "missing_required_terms": [] if has_c else ["c"],
+            }
+
+        def observer_check_fn(output, *, task_feedback=None, trigger="runtime", worker_runtime=None):
+            return {
+                "check_type": "semantic_progress",
+                "trigger": trigger,
+                "score": 0.9 if "c" in output else 0.2,
+                "raw_score": 0.9 if "c" in output else 0.2,
+                "coverage_weight": 1.0,
+            }
+
+        worker_runtime = self._make_worker_runtime(
+            task_feedback_fn=task_feedback_fn,
+            observer_check_fn=observer_check_fn,
+        )
+        worker_runtime.reset("p")
+
+        results = worker_runtime.request_controller_tools(
+            [{"tool": "constraint_scorer", "candidate": "c"}],
+            source="controller",
+        )
+
+        self.assertEqual(results[0]["tool"], "constraint_scorer")
+        self.assertAlmostEqual(results[0]["required_term_recall"], 1.0)
+        self.assertAlmostEqual(results[0]["semantic_progress_score"], 0.9)
+        self.assertIn("semantic_checked", results[0]["explanation_tags"])
+
+    def test_worker_runtime_dry_run_decode_tool_compares_small_candidate_edit(self):
+        def task_feedback_fn(output):
+            has_c = "c" in output
+            span = 1.0 if has_c else 0.0
+            return {
+                "done": has_c,
+                "partial_score": 1.0 if has_c else 0.0,
+                "progress_label": "progressing" if has_c else "stalled",
+                "required_term_recall": 1.0 if has_c else 0.0,
+                "required_term_span_progress_by_term": {"c": span},
+                "required_term_span_progress": span,
+                "constraint_violations": [] if has_c else ["missing_required_terms"],
+                "forbidden_term_clean": 1.0,
+                "word_budget_score": 1.0,
+                "missing_required_terms": [] if has_c else ["c"],
+            }
+
+        def observer_check_fn(output, *, task_feedback=None, trigger="runtime", worker_runtime=None):
+            return {
+                "check_type": "semantic_progress",
+                "trigger": trigger,
+                "score": 0.8 if "c" in output else 0.1,
+                "raw_score": 0.8 if "c" in output else 0.1,
+                "coverage_weight": 1.0,
+            }
+
+        worker_runtime = self._make_worker_runtime(
+            task_feedback_fn=task_feedback_fn,
+            observer_check_fn=observer_check_fn,
+        )
+        worker_runtime.reset("p")
+
+        before = worker_runtime.final_text()
+        results = worker_runtime.request_controller_tools(
+            [
+                {
+                    "tool": "dry_run_decode",
+                    "candidate_edit": {
+                        "surface_id": "s_resid_l11_last",
+                        "kind": "resid_add",
+                        "alpha": 0.04,
+                        "ttl_steps": 1,
+                        "step_size": 0.04,
+                    },
+                    "max_new_tokens": 2,
+                }
+            ],
+            source="controller",
+        )
+
+        self.assertEqual(results[0]["tool"], "dry_run_decode")
+        self.assertEqual(results[0]["status"], "ok")
+        self.assertGreater(results[0]["required_term_recall_delta"], 0.0)
+        self.assertGreater(results[0]["semantic_progress_delta"], 0.0)
+        self.assertEqual(worker_runtime.final_text(), before)
 
     def test_worker_runtime_current_tokens_use_model_device_when_available(self):
         worker_runtime = self._make_worker_runtime()

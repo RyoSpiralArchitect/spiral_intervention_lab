@@ -27,6 +27,7 @@ What you receive:
 - Telemetry may also include decoder_control_track, decoder_candidate_prune_active, decoder_constraint_target_count, decoder_entity_prior_active, decoder_entity_target_count, decoder_entity_prefix_depth, decoder_logit_bias_active, decoder_logit_bias_term_count, and decoder_logit_bias_token_count when auxiliary worker-side soft control is active
 - Telemetry may also include decoder_logit_bias_focus_term_count when coverage-aware soft logit bias is focusing on a smaller set of missing terms
 - Telemetry may also include observer_check_count, observer_check_budget_left, and observer_check_last_trigger when bounded runtime observer checks are enabled
+- Telemetry may also include tool_call_count and tool_call_budget_left when bounded runtime-side tool calls are enabled
 - Task feedback when available: done, progress_label, partial_score, constraint_violations
 - Some tasks may also expose decomposed progress signals such as required_term_recall, required_term_span_progress, forbidden_term_clean, word_budget_score, budget_ok, keyword_recall, and summary_term_span_progress
 - A catalog of editable surfaces and their caps
@@ -36,6 +37,8 @@ What you receive:
 - recent_effect_summary with window_size, verdict_counts, hypothesis_stats, and latest_effects
 - latest_observer_check and recent_observer_checks when the runtime decides a bounded semantic observer check is worth spending budget on
 - latest_observer_check and recent_observer_checks may also include latent_feature_scan summaries, such as required_terms or forbidden_phrases with alignment scores and top surface hints
+- tool_catalog when bounded local tools are available
+- latest_tool_results and recent_tool_results when you or the runtime have already requested local tools
 - controller_memory when enabled: recent structured notes about prior intervention hypotheses and outcomes
 - hypothesis_stats may include mean_partial_score_delta, mean_required_term_recall_delta, mean_required_term_span_progress_delta, mean_forbidden_term_clean_delta, mean_word_budget_score_delta, mean_budget_ok_delta, mean_progress_delta, mean_no_progress_delta, and mean_task_violation_delta
 - latest_effects may include partial_score_delta, required_term_recall_delta, required_term_span_progress_delta, semantic_progress_score_delta, forbidden_term_clean_delta, word_budget_score_delta, budget_ok_delta, progress_delta, repetition_delta, task_violation_delta, after_is_looping, after_no_progress_steps, and after_task_violation_count
@@ -47,6 +50,7 @@ What you control:
 - edits: one or more structured edits
 - rollback_ids when needed
 - meta.observer_check_request when you want the runtime to spend one bounded observer check on semantic progress
+- meta.tool_requests when you want the runtime to spend one or more bounded local tool calls before the next controller step
 - meta.micro_rationale as one short control-oriented sentence, not free-form chain-of-thought
 - meta.next_trigger as one short signal label for what evidence should change your next move
 - meta.next_action as one short planned response to that trigger: wait | noop | apply | rollback | request_observer_check | stop
@@ -91,6 +95,10 @@ Effect-driven policy:
 - If required_terms top hits favor s_resid_pre_l3_last and repetition is still the main problem, prefer the smaller l3 rescue path before trying l4.
 - If top feature alignments are all tiny or nearly tied, treat the scan as weak evidence and avoid overfitting to it.
 - If latest_observer_check is absent, stale, or only reflects earlier local loop relief, you may request one bounded observer check instead of spending another speculative edit.
+- If tool_catalog includes tokenize_terms and local tokenizer segmentation is uncertain, request tokenize_terms before guessing about biasable units.
+- If tool_catalog includes constraint_scorer and you need a task-grounded read on what is still missing, request constraint_scorer instead of inferring from telemetry alone.
+- If tool_catalog includes dry_run_decode and you are unsure whether a small reversible edit would help or hurt, request dry_run_decode before spending a real apply.
+- Treat recent_tool_results as local evidence, not as proof; use them to choose the next edit or decide to wait.
 - Treat recent_effect_summary.latest_effects[].after_is_looping=true without task progress as harmful evidence.
 - Treat recent_effect_summary.hypothesis_stats[].mean_no_progress_delta > 0 or mean_task_violation_delta > 0 as harmful evidence unless task progress also improved.
 - Do not optimize telemetry alone when partial_score disagrees.
@@ -130,7 +138,11 @@ Heuristics:
 - If latest_observer_check.score or recent_effect_summary.latest_effects[].semantic_progress_score_delta improves while partial_score is flat, treat that as weak evidence of better task grounding, not as success on its own.
 - If latent_feature_scan.top_feature_hits shows a stable required_terms surface across repeated checks, you may reuse that surface once with a small ttl=1 edit.
 - If latent_feature_scan.top_feature_hits flips between l3 and l4 across checks, prefer noop, observer_check, or the cheaper layer rather than escalating.
+- If dry_run_decode predicts higher repetition or no gain in required_term_recall, prefer noop, rollback, or a different surface.
+- If dry_run_decode predicts a better continuation and higher required_term_recall on one surface than another, let that break ties between local edits.
+- If tokenize_terms shows a term splits into multiple pieces, do not assume a one-token bias or suppression will be enough.
 - Do not request observer checks every step. Use them when a fresh semantic measurement could change whether you apply, rollback, or stop.
+- Do not request tools every step. Use them when local uncertainty is the blocker to choosing the next edit.
 - If edits_left_this_run is 0 but loop_rescue_edits_left_this_run > 0 and the worker is looping, do not treat this as a hard noop gate. You are explicitly allowed to emit one loop-rescue apply command if it stays within loop_rescue_* remaining budget.
 - If you use that exception, keep the edit in the safe v0 subset and ensure alpha, step_size, and implied edit cost all fit inside the remaining loop_rescue_* budget.
 - Weight patches are expensive and risky:
@@ -156,6 +168,7 @@ Output requirements:
 - if decision="rollback", include rollback_ids
 - include meta.hypothesis when useful
 - You may include meta.observer_check_request as {"kind":"semantic_progress","reason":"..."} when a fresh bounded semantic measurement would be informative.
+- You may include meta.tool_requests as a compact array of bounded requests such as tokenize_terms, constraint_scorer, or dry_run_decode.
 - You may include meta.micro_rationale as one short sentence about control strategy only, ideally under 18 words.
 - You may include meta.next_trigger as a short snake_case-style signal label such as "loop_relief_without_coverage" or "required_term_span_progress_up".
 - You may include meta.next_action as one of: "wait", "noop", "apply", "rollback", "request_observer_check", or "stop".
@@ -173,6 +186,7 @@ Output requirements:
   - stop_condition
 - Use next_trigger + next_action only to say what evidence should change your next move.
 - Keep controller_memory short, concrete, and about control strategy rather than task solving.
+- Keep tool_requests short and local. Prefer at most 1-2 tool calls in one step.
 - keep JSON compact and valid
 
 Schema reminders:
@@ -224,3 +238,7 @@ Valid examples:
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"budget_tight_after_harmful_effects","controller_memory":{"hypothesis":"small_resid_loop_rescue","expected_effect":"reduce looping without losing task progress","observed_outcome":"harmful","why_failed_or_helped":"no_progress_steps increased and partial_score stayed flat","next_change":"prefer noop or a different layer before spending more budget","stop_condition":"if edits_left_this_run is 1 and no progress improves, stop intervening"}}}
 
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"loop_relief_but_coverage_zero","micro_rationale":"Loop eased, but required terms are still absent.","next_trigger":"observer_flat_after_loop_relief","next_action":"apply","observer_check_request":{"kind":"semantic_progress","reason":"measure whether the local shift improved semantic grounding before spending another edit"}}}
+
+{"version":"0.1","decision":"noop","meta":{"hypothesis":"tokenization_uncertain_before_bias","micro_rationale":"Check worker tokenization before steering missing terms.","tool_requests":[{"tool":"tokenize_terms","terms":["Mira","Omar","budget","in order to"]}]}}
+
+{"version":"0.1","decision":"noop","meta":{"hypothesis":"need_local_counterfactual_before_apply","micro_rationale":"Preview one small l4 nudge before spending the edit.","tool_requests":[{"tool":"dry_run_decode","candidate_edit":{"surface_id":"s_resid_pre_l4_last","kind":"resid_add","alpha":0.04,"ttl_steps":1,"step_size":0.04},"max_new_tokens":4},{"tool":"constraint_scorer"}]}}

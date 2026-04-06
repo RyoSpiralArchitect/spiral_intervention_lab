@@ -10,7 +10,7 @@ import torch
 
 from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
-from .compiler import StepContext
+from .compiler import StepContext, compile_command
 from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
 from .effects import build_edit_effect, summarize_effects
 from .schema import SurfaceInfo
@@ -63,6 +63,7 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "request_observer_check",
     "stop",
 }
+_CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
 
@@ -186,6 +187,89 @@ def _normalize_observer_check_request(value: Any) -> dict[str, Any] | None:
     return normalized
 
 
+def _normalize_controller_tool_name(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = " ".join(str(value).split()).strip().lower().replace("-", "_")
+    return text or None
+
+
+def _normalize_controller_tool_request(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    tool_name = _normalize_controller_tool_name(value.get("tool") or value.get("name") or value.get("kind"))
+    if tool_name not in _CONTROLLER_TOOL_NAMES:
+        return None
+    normalized: dict[str, Any] = {"tool": tool_name}
+    reason = _clean_controller_memory_text(value.get("reason"), limit=120)
+    if reason is not None:
+        normalized["reason"] = reason
+    if tool_name == "tokenize_terms":
+        raw_terms = value.get("terms") or value.get("features") or ()
+        if not isinstance(raw_terms, SequenceABC) or isinstance(raw_terms, (str, bytes, bytearray)):
+            return None
+        terms: list[str] = []
+        for raw_term in raw_terms:
+            term = _clean_controller_memory_text(raw_term, limit=80)
+            if term is None or term in terms:
+                continue
+            terms.append(term)
+        if not terms:
+            return None
+        normalized["terms"] = terms[:8]
+        return normalized
+    if tool_name == "constraint_scorer":
+        candidate = _clean_controller_memory_text(value.get("candidate"), limit=240)
+        if candidate is not None:
+            normalized["candidate"] = candidate
+        source_text = _clean_controller_memory_text(value.get("source"), limit=240)
+        if source_text is not None:
+            normalized["source"] = source_text
+        constraints = value.get("constraints")
+        if isinstance(constraints, Mapping):
+            normalized["constraints"] = dict(constraints)
+        return normalized
+    candidate_edit = value.get("candidate_edit") or value.get("edit")
+    if not isinstance(candidate_edit, Mapping):
+        return None
+    normalized["candidate_edit"] = dict(candidate_edit)
+    max_new_tokens = value.get("max_new_tokens", 4)
+    if isinstance(max_new_tokens, bool) or not isinstance(max_new_tokens, int):
+        max_new_tokens = 4
+    normalized["max_new_tokens"] = max(1, min(6, int(max_new_tokens)))
+    top_k = value.get("top_k", 5)
+    if isinstance(top_k, bool) or not isinstance(top_k, int):
+        top_k = 5
+    normalized["top_k"] = max(1, min(8, int(top_k)))
+    return normalized
+
+
+def _tool_contains_term(text: str, term: str) -> bool:
+    haystack = " ".join(str(text).split()).strip()
+    needle = " ".join(str(term).split()).strip()
+    if not haystack or not needle:
+        return False
+    escaped = re.escape(needle)
+    if any(char.isalnum() for char in needle):
+        return re.search(rf"(?i)(?<!\w){escaped}(?!\w)", haystack) is not None
+    return needle.lower() in haystack.lower()
+
+
+def _tool_term_span_progress(text: str, term: str) -> float:
+    haystack = " ".join(str(text).lower().split()).strip()
+    needle = " ".join(str(term).lower().split()).strip()
+    if not haystack or not needle:
+        return 0.0
+    if needle in haystack:
+        return 1.0
+    best = 0
+    for width in range(len(needle), 0, -1):
+        if needle[:width] in haystack:
+            best = width
+            break
+    return round(best / max(1, len(needle)), 6)
+
+
 class HookedTransformerWorkerRuntime:
     def __init__(
         self,
@@ -226,6 +310,8 @@ class HookedTransformerWorkerRuntime:
         decoder_control_mode: str = "off",
         max_observer_checks_per_run: int = 4,
         observer_check_window: int = 4,
+        max_tool_calls_per_run: int = 6,
+        tool_result_window: int = 6,
     ) -> None:
         self.runtime_state = runtime_state
         self.adapter = adapter
@@ -264,6 +350,8 @@ class HookedTransformerWorkerRuntime:
         self.decoder_control_mode = _normalize_decoder_control_mode(decoder_control_mode)
         self.max_observer_checks_per_run = max(0, int(max_observer_checks_per_run))
         self.observer_check_window = max(1, int(observer_check_window))
+        self.max_tool_calls_per_run = max(0, int(max_tool_calls_per_run))
+        self.tool_result_window = max(1, int(tool_result_window))
 
         self.surface_catalog = tuple(
             surface if isinstance(surface, SurfaceInfo) else SurfaceInfo.from_dict(surface) for surface in surface_catalog
@@ -292,6 +380,9 @@ class HookedTransformerWorkerRuntime:
         self._observer_checks: list[dict[str, Any]] = []
         self._latest_observer_check: dict[str, Any] | None = None
         self._pending_observer_check_events: list[dict[str, Any]] = []
+        self._tool_results: list[dict[str, Any]] = []
+        self._latest_tool_results: list[dict[str, Any]] = []
+        self._pending_tool_events: list[dict[str, Any]] = []
         self._last_observer_candidate_hash: str | None = None
         self._feature_prototype_cache: dict[str, torch.Tensor] = {}
         self._last_decoder_control: dict[str, Any] = {
@@ -392,6 +483,8 @@ class HookedTransformerWorkerRuntime:
                 "observer_check_last_trigger": None
                 if self._latest_observer_check is None
                 else str(self._latest_observer_check.get("trigger", "")),
+                "tool_call_count": len(self._tool_results),
+                "tool_call_budget_left": max(0, self.max_tool_calls_per_run - len(self._tool_results)),
                 "decoder_control_mode": self.decoder_control_mode,
                 "decoder_control_track": str(self._last_decoder_control.get("track", "baseline")),
                 "decoder_rescue_active": bool(self._last_decoder_control.get("active", False)),
@@ -415,11 +508,16 @@ class HookedTransformerWorkerRuntime:
             "recent_effect_summary": dict(self._recent_effect_summary),
             "budget": self._budget_state(active_edits),
             "task_feedback": dict(self._last_task_feedback),
+            "tool_catalog": self._build_tool_catalog(),
         }
         if self._latest_observer_check is not None:
             packet["latest_observer_check"] = dict(self._latest_observer_check)
         if self._observer_checks:
             packet["recent_observer_checks"] = [dict(check) for check in self._observer_checks]
+        if self._latest_tool_results:
+            packet["latest_tool_results"] = [dict(result) for result in self._latest_tool_results]
+        if self._tool_results:
+            packet["recent_tool_results"] = [dict(result) for result in self._tool_results]
         if self.controller_reflection_mode != "off":
             packet["controller_memory"] = [dict(entry) for entry in self._controller_memory]
         self._last_packet = packet
@@ -439,6 +537,11 @@ class HookedTransformerWorkerRuntime:
     def pop_observer_check_events(self) -> list[dict[str, Any]]:
         events = [dict(event) for event in self._pending_observer_check_events]
         self._pending_observer_check_events = []
+        return events
+
+    def pop_tool_events(self) -> list[dict[str, Any]]:
+        events = [dict(event) for event in self._pending_tool_events]
+        self._pending_tool_events = []
         return events
 
     def latent_feature_scan(
@@ -604,6 +707,44 @@ class HookedTransformerWorkerRuntime:
         self._last_packet = None
         return dict(normalized)
 
+    def request_controller_tools(
+        self,
+        requests: Sequence[Mapping[str, Any]] | Mapping[str, Any] | None,
+        *,
+        source: str = "controller",
+    ) -> list[dict[str, Any]]:
+        if self.max_tool_calls_per_run <= 0:
+            return []
+        raw_items: Sequence[Any]
+        if isinstance(requests, Mapping):
+            raw_items = [requests]
+        elif isinstance(requests, SequenceABC) and not isinstance(requests, (str, bytes, bytearray)):
+            raw_items = requests
+        else:
+            return []
+        budget_left = max(0, self.max_tool_calls_per_run - len(self._tool_results))
+        if budget_left <= 0:
+            return []
+
+        results: list[dict[str, Any]] = []
+        for raw_request in raw_items[:budget_left]:
+            request = _normalize_controller_tool_request(raw_request)
+            if request is None:
+                continue
+            result = self._execute_controller_tool_request(request, source=source)
+            if result is None:
+                continue
+            results.append(result)
+
+        if not results:
+            return []
+        self._latest_tool_results = [dict(result) for result in results]
+        self._tool_results.extend(self._latest_tool_results)
+        self._tool_results = self._tool_results[-self.tool_result_window :]
+        self._pending_tool_events.extend(dict(result) for result in self._latest_tool_results)
+        self._last_packet = None
+        return [dict(result) for result in self._latest_tool_results]
+
     def observe_recent_effects(self) -> None:
         current_metrics = self._effect_metrics()
         completed = [
@@ -721,6 +862,9 @@ class HookedTransformerWorkerRuntime:
         self._observer_checks = []
         self._latest_observer_check = None
         self._pending_observer_check_events = []
+        self._tool_results = []
+        self._latest_tool_results = []
+        self._pending_tool_events = []
         self._last_observer_candidate_hash = None
         self._last_decoder_control = {
             "mode": self.decoder_control_mode,
@@ -1234,6 +1378,484 @@ class HookedTransformerWorkerRuntime:
             "status": self._last_status,
         }
 
+    def _build_tool_catalog(self) -> list[dict[str, Any]]:
+        catalog = [
+            {
+                "tool": "tokenize_terms",
+                "available": True,
+                "cost_hint": "cheap",
+                "objective": "Inspect how local terms map onto worker tokenizer pieces and token ids.",
+            },
+            {
+                "tool": "constraint_scorer",
+                "available": bool(self.task_feedback_fn is not None),
+                "cost_hint": "medium",
+                "objective": "Score a candidate against task constraints and expose missing local coverage.",
+            },
+            {
+                "tool": "dry_run_decode",
+                "available": bool(self.surface_catalog),
+                "cost_hint": "expensive",
+                "objective": "Preview a small reversible edit for a few tokens before spending a real apply.",
+            },
+        ]
+        for item in catalog:
+            item["budget_left"] = max(0, self.max_tool_calls_per_run - len(self._tool_results))
+        return catalog
+
+    def _execute_controller_tool_request(self, request: Mapping[str, Any], *, source: str) -> dict[str, Any] | None:
+        tool_name = str(request.get("tool", "") or "")
+        base = {
+            "tool": tool_name,
+            "requested_by": str(source),
+            "recorded_step": int(self._steps),
+        }
+        reason = request.get("reason")
+        if reason is not None:
+            base["request_reason"] = str(reason)
+        if tool_name == "tokenize_terms":
+            payload = self._tokenize_terms_tool_result(request)
+        elif tool_name == "constraint_scorer":
+            payload = self._constraint_scorer_tool_result(request)
+        elif tool_name == "dry_run_decode":
+            payload = self._dry_run_decode_tool_result(request)
+        else:
+            return None
+        if payload is None:
+            return None
+        return base | payload
+
+    def _tokenize_terms_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
+        raw_terms = request.get("terms")
+        if not isinstance(raw_terms, SequenceABC) or isinstance(raw_terms, (str, bytes, bytearray)):
+            return None
+        rows: list[dict[str, Any]] = []
+        for raw_term in raw_terms:
+            term = _clean_controller_memory_text(raw_term, limit=80)
+            if term is None:
+                continue
+            segmentations: list[dict[str, Any]] = []
+            seen_tokenizations: set[tuple[int, ...]] = set()
+            for variant in self._constraint_token_variants(term):
+                try:
+                    token_ids = tuple(int(token_id) for token_id in self.codec.encode(variant).detach().reshape(-1).tolist())
+                except Exception:
+                    continue
+                if not token_ids or token_ids in seen_tokenizations:
+                    continue
+                seen_tokenizations.add(token_ids)
+                pieces = [self.codec.decode([token_id]) for token_id in token_ids]
+                cursor = 0
+                boundaries = []
+                for piece in pieces:
+                    start = cursor
+                    cursor += len(piece)
+                    boundaries.append({"piece": piece, "start": start, "end": cursor})
+                segmentations.append(
+                    {
+                        "variant": variant,
+                        "token_ids": list(token_ids),
+                        "pieces": pieces,
+                        "piece_boundaries": boundaries,
+                        "biasable_units": [
+                            {"token_id": int(token_id), "piece": piece, "position": idx}
+                            for idx, (token_id, piece) in enumerate(zip(token_ids, pieces, strict=False))
+                        ],
+                    }
+                )
+            if not segmentations:
+                continue
+            primary = segmentations[0]
+            rows.append(
+                {
+                    "term": term,
+                    "token_ids": list(primary["token_ids"]),
+                    "pieces": list(primary["pieces"]),
+                    "piece_boundaries": list(primary["piece_boundaries"]),
+                    "alternative_segmentations": [
+                        {
+                            "variant": item["variant"],
+                            "token_ids": list(item["token_ids"]),
+                            "pieces": list(item["pieces"]),
+                        }
+                        for item in segmentations[1:4]
+                    ],
+                    "biasable_units": list(primary["biasable_units"]),
+                }
+            )
+        if not rows:
+            return None
+        return {"status": "ok", "term_count": len(rows), "terms": rows}
+
+    def _constraint_scorer_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
+        candidate_text = _clean_controller_memory_text(request.get("candidate"), limit=320) or self.final_text()
+        if not candidate_text.strip():
+            return None
+        scoring = self._score_candidate_text(
+            candidate_text,
+            trigger="tool_constraint_scorer",
+            constraints=request.get("constraints"),
+        )
+        result = {
+            "status": "ok",
+            "candidate_preview": candidate_text[:160],
+            "required_term_recall": scoring.get("required_term_recall"),
+            "forbidden_clean": scoring.get("forbidden_clean"),
+            "brevity_score": scoring.get("brevity_score"),
+            "per_term_coverage": scoring.get("per_term_coverage"),
+            "explanation_tags": scoring.get("explanation_tags", []),
+        }
+        if scoring.get("semantic_progress_score") is not None:
+            result["semantic_progress_score"] = scoring.get("semantic_progress_score")
+        if scoring.get("progress_label") is not None:
+            result["progress_label"] = scoring.get("progress_label")
+        if scoring.get("constraint_violations") is not None:
+            result["constraint_violations"] = scoring.get("constraint_violations")
+        return result
+
+    def _generic_constraint_feedback(self, candidate_text: str, constraints: Mapping[str, Any] | None) -> dict[str, Any]:
+        if not isinstance(constraints, Mapping):
+            return {}
+        required_terms = constraints.get("required_terms") or ()
+        forbidden_terms = constraints.get("forbidden_terms") or ()
+        max_words = constraints.get("max_words")
+        if not isinstance(required_terms, SequenceABC) or isinstance(required_terms, (str, bytes, bytearray)):
+            required_terms = ()
+        if not isinstance(forbidden_terms, SequenceABC) or isinstance(forbidden_terms, (str, bytes, bytearray)):
+            forbidden_terms = ()
+        required_terms = tuple(" ".join(str(term).split()).strip() for term in required_terms if str(term).strip())
+        forbidden_terms = tuple(" ".join(str(term).split()).strip() for term in forbidden_terms if str(term).strip())
+        present_required = [term for term in required_terms if _tool_contains_term(candidate_text, term)]
+        missing_required = [term for term in required_terms if term not in present_required]
+        forbidden_present = [term for term in forbidden_terms if _tool_contains_term(candidate_text, term)]
+        span_progress = {term: _tool_term_span_progress(candidate_text, term) for term in required_terms}
+        word_count = len([part for part in candidate_text.split() if part])
+        brevity_score = None
+        budget_ok = None
+        if isinstance(max_words, int) and max_words > 0:
+            budget_ok = word_count <= max_words
+            brevity_score = 1.0 if budget_ok else round(max_words / max(1, word_count), 6)
+        required_term_recall = round(len(present_required) / max(1, len(required_terms)), 6) if required_terms else 1.0
+        forbidden_clean = round(
+            sum(1 for term in forbidden_terms if term not in forbidden_present) / max(1, len(forbidden_terms)),
+            6,
+        ) if forbidden_terms else 1.0
+        done = bool(required_term_recall >= 1.0 and forbidden_clean >= 1.0 and (budget_ok is not False))
+        violations: list[str] = []
+        if missing_required:
+            violations.append("missing_required_terms")
+        if forbidden_present:
+            violations.append("forbidden_terms_present")
+        if budget_ok is False:
+            violations.append("over_word_budget")
+        return {
+            "done": done,
+            "partial_score": round(
+                (0.55 * required_term_recall)
+                + (0.25 * forbidden_clean)
+                + (0.20 * (1.0 if brevity_score is None else float(brevity_score))),
+                6,
+            ),
+            "progress_label": "progressing" if present_required else "stalled",
+            "required_term_recall": required_term_recall,
+            "required_term_span_progress": round(
+                sum(float(value) for value in span_progress.values()) / max(1, len(span_progress)),
+                6,
+            ) if span_progress else 0.0,
+            "required_term_span_progress_by_term": span_progress,
+            "missing_required_terms": missing_required,
+            "forbidden_term_clean": forbidden_clean,
+            "forbidden_terms_present": forbidden_present,
+            "word_budget_score": brevity_score,
+            "budget_ok": budget_ok,
+            "constraint_violations": violations,
+        }
+
+    def _score_candidate_text(
+        self,
+        candidate_text: str,
+        *,
+        trigger: str,
+        constraints: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        feedback: dict[str, Any] = {}
+        if self.task_feedback_fn is not None:
+            try:
+                feedback = dict(self.task_feedback_fn(candidate_text) or {})
+            except Exception:
+                feedback = {}
+        if not feedback:
+            feedback = self._generic_constraint_feedback(candidate_text, constraints)
+
+        observer_result = self._invoke_observer_check(candidate_text, trigger=trigger, task_feedback=feedback)
+        semantic_progress_score = None
+        if isinstance(observer_result, Mapping):
+            score = observer_result.get("score")
+            if isinstance(score, (int, float)) and not isinstance(score, bool):
+                semantic_progress_score = round(float(score), 6)
+
+        required_term_recall = feedback.get("required_term_recall")
+        forbidden_clean = feedback.get("forbidden_term_clean")
+        brevity_score = feedback.get("word_budget_score")
+        if brevity_score is None and feedback.get("budget_ok") is not None:
+            brevity_score = 1.0 if bool(feedback.get("budget_ok")) else 0.0
+        span_by_term = feedback.get("required_term_span_progress_by_term")
+        per_term_coverage: dict[str, Any] = {}
+        if isinstance(span_by_term, Mapping):
+            missing_terms = set()
+            raw_missing = feedback.get("missing_required_terms")
+            if isinstance(raw_missing, SequenceABC) and not isinstance(raw_missing, (str, bytes, bytearray)):
+                missing_terms = {str(term) for term in raw_missing}
+            for raw_term, raw_progress in span_by_term.items():
+                term = str(raw_term)
+                progress = round(float(raw_progress or 0.0), 6)
+                per_term_coverage[term] = {
+                    "present": term not in missing_terms,
+                    "span_progress": progress,
+                }
+
+        explanation_tags: list[str] = []
+        progress_label = feedback.get("progress_label")
+        if progress_label:
+            explanation_tags.append(str(progress_label))
+        for violation in feedback.get("constraint_violations", []) if isinstance(feedback.get("constraint_violations"), SequenceABC) else []:
+            if violation:
+                explanation_tags.append(str(violation))
+        if required_term_recall is not None and float(required_term_recall or 0.0) <= 0.0:
+            explanation_tags.append("required_recall_zero")
+        if forbidden_clean is not None and float(forbidden_clean or 0.0) >= 1.0:
+            explanation_tags.append("forbidden_clean")
+        if brevity_score is not None and float(brevity_score or 0.0) >= 1.0:
+            explanation_tags.append("brevity_ok")
+        if semantic_progress_score is not None:
+            explanation_tags.append("semantic_checked")
+
+        return {
+            "semantic_progress_score": semantic_progress_score,
+            "required_term_recall": None if required_term_recall is None else round(float(required_term_recall), 6),
+            "forbidden_clean": None if forbidden_clean is None else round(float(forbidden_clean), 6),
+            "brevity_score": None if brevity_score is None else round(float(brevity_score), 6),
+            "per_term_coverage": per_term_coverage,
+            "explanation_tags": explanation_tags[:6],
+            "progress_label": progress_label,
+            "constraint_violations": list(feedback.get("constraint_violations", []) or ()),
+        }
+
+    def _dry_run_decode_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
+        candidate_edit = request.get("candidate_edit")
+        if not isinstance(candidate_edit, Mapping):
+            return None
+        max_new_tokens = int(request.get("max_new_tokens", 4) or 4)
+        top_k = int(request.get("top_k", 5) or 5)
+        baseline = self._simulate_decode(max_new_tokens=max_new_tokens, top_k=top_k)
+        if baseline is None:
+            return None
+        command = self._build_dry_run_command(candidate_edit)
+        if command is None:
+            return {
+                "status": "error",
+                "error": "unsupported_candidate_edit",
+                "candidate_edit": dict(candidate_edit),
+            }
+        edited = self._simulate_decode(max_new_tokens=max_new_tokens, top_k=top_k, command=command)
+        if edited is None:
+            return {
+                "status": "error",
+                "error": "dry_run_failed",
+                "candidate_edit": dict(candidate_edit),
+            }
+        baseline_score = baseline.get("scoring", {})
+        edited_score = edited.get("scoring", {})
+        return {
+            "status": "ok",
+            "candidate_edit": dict(candidate_edit),
+            "max_new_tokens": max_new_tokens,
+            "sampled_continuations": [
+                {"variant": "baseline", "text": baseline["continuation"]},
+                {"variant": "candidate", "text": edited["continuation"]},
+            ],
+            "topk_token_diff": self._topk_token_diff(baseline["first_logits"], edited["first_logits"], top_k=top_k),
+            "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
+            "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"])),
+            "required_term_recall_delta": round(
+                float(edited_score.get("required_term_recall") or 0.0) - float(baseline_score.get("required_term_recall") or 0.0),
+                6,
+            ),
+            "semantic_progress_delta": round(
+                float(edited_score.get("semantic_progress_score") or 0.0)
+                - float(baseline_score.get("semantic_progress_score") or 0.0),
+                6,
+            ),
+        }
+
+    def _build_dry_run_command(self, candidate_edit: Mapping[str, Any]) -> dict[str, Any] | None:
+        if "source" in candidate_edit and "op" in candidate_edit and "budget" in candidate_edit:
+            edit = dict(candidate_edit)
+            edit.setdefault("id", f"dry_run_{self._steps}")
+            if "target" not in edit and candidate_edit.get("surface_id") is not None:
+                edit["target"] = {"surface_id": candidate_edit.get("surface_id")}
+            return {"version": "0.1", "decision": "apply", "edits": [edit]}
+
+        surface_id = candidate_edit.get("surface_id")
+        if surface_id is None and isinstance(candidate_edit.get("target"), Mapping):
+            surface_id = candidate_edit["target"].get("surface_id")
+        if not isinstance(surface_id, str) or not surface_id:
+            return None
+        op_kind = _normalize_controller_tool_name(candidate_edit.get("kind") or candidate_edit.get("op", {}).get("kind"))
+        if op_kind != "resid_add":
+            return None
+        surface = next((surface for surface in self.surface_catalog if str(surface.surface_id) == surface_id), None)
+        if surface is None or getattr(surface.target, "kind", None) != "activation":
+            return None
+        layer = getattr(surface.target, "layer", None)
+        if not isinstance(layer, int):
+            return None
+        alpha = candidate_edit.get("alpha", 0.04)
+        ttl_steps = candidate_edit.get("ttl_steps", 1)
+        step_size = candidate_edit.get("step_size", alpha)
+        try:
+            alpha = float(alpha)
+            step_size = float(step_size)
+            ttl_steps = int(ttl_steps)
+        except Exception:
+            return None
+        if alpha <= 0.0 or step_size <= 0.0 or ttl_steps <= 0:
+            return None
+        norm_clip = getattr(getattr(surface, "caps", None), "norm_clip", None) or 1.0
+        edit = {
+            "id": f"dry_run_{self._steps}_{surface_id}",
+            "target": {"surface_id": surface_id},
+            "source": {
+                "dtype": "vector",
+                "expr": {
+                    "fn": "clip_norm",
+                    "max_norm": float(norm_clip),
+                    "arg": {
+                        "fn": "scale",
+                        "by": step_size,
+                        "arg": {
+                            "fn": "normalize",
+                            "arg": {
+                                "ref": {
+                                    "scope": "runtime",
+                                    "worker": self.worker_id,
+                                    "tensor": "hidden",
+                                    "layer": layer,
+                                    "token": {"mode": "last"},
+                                }
+                            },
+                        },
+                    },
+                },
+            },
+            "op": {"kind": "resid_add", "alpha": alpha},
+            "budget": {
+                "ttl_steps": ttl_steps,
+                "norm_clip": float(norm_clip),
+                "step_size": step_size,
+                "revertible": True,
+            },
+        }
+        return {"version": "0.1", "decision": "apply", "edits": [edit]}
+
+    def _simulate_decode(
+        self,
+        *,
+        max_new_tokens: int,
+        top_k: int,
+        command: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        if max_new_tokens <= 0:
+            return None
+        saved_segments = [_TokenSegment(kind=segment.kind, token_ids=list(segment.token_ids)) for segment in self._segments]
+        saved_last_packet = self._last_packet
+        saved_last_tokens = None if getattr(self.runtime_state, "last_tokens", None) is None else self.runtime_state.last_tokens.detach().clone()
+        saved_last_logits = None if getattr(self.runtime_state, "last_logits", None) is None else self.runtime_state.last_logits.detach().clone()
+        saved_last_cache = None
+        if getattr(self.runtime_state, "last_cache", None) is not None:
+            saved_last_cache = {str(name): tensor.detach().clone() for name, tensor in self.runtime_state.last_cache.items()}
+
+        temporary_edits = []
+        try:
+            if command is not None:
+                if getattr(self.runtime_state, "last_cache", None) is None:
+                    primer_tokens = self._current_token_tensor()
+                    self.runtime_state.run_with_cache(primer_tokens, return_type="logits")
+                packet = self.build_controller_packet()
+                ctx = StepContext(packet=packet, runtime_state=self.runtime_state, traces={}, stats={}, adapter=self.adapter, active_edits={})
+                compiled = compile_command(command, packet, ctx)
+                for item in compiled:
+                    item.apply(ctx)
+                    temporary_edits.append((item, ctx))
+
+            baseline_output_len = len(self._output_token_ids())
+            first_logits: torch.Tensor | None = None
+            first_entropy = 0.0
+            for _ in range(max_new_tokens):
+                tokens = self._current_token_tensor()
+                logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
+                next_logits = self._apply_token_constraints(logits[0, -1].detach())
+                next_logits, _decoder_state = self._apply_decoder_control(next_logits)
+                if first_logits is None:
+                    first_logits = next_logits.detach().cpu().float()
+                    first_entropy = float(self._compute_metrics(next_logits)["entropy"])
+                next_token = int(torch.argmax(next_logits).item())
+                self._append_output_token(next_token)
+                continuation_ids = self._output_token_ids()[baseline_output_len:]
+                if continuation_ids and continuation_ids[-1] in self.stop_token_ids:
+                    break
+                if self.stop_checker is not None and self.stop_checker(self.final_text()):
+                    break
+            continuation_ids = self._output_token_ids()[baseline_output_len:]
+            if first_logits is None:
+                return None
+            scoring = self._score_candidate_text(self.final_text(), trigger="tool_dry_run_candidate")
+            return {
+                "continuation": self.codec.decode(continuation_ids),
+                "first_logits": first_logits,
+                "entropy": first_entropy,
+                "repeat_flag": self._repeat_flag(),
+                "scoring": scoring,
+            }
+        except Exception:
+            return None
+        finally:
+            for compiled, ctx in reversed(temporary_edits):
+                try:
+                    compiled.rollback(ctx)
+                except Exception:
+                    pass
+            self._segments = [_TokenSegment(kind=segment.kind, token_ids=list(segment.token_ids)) for segment in saved_segments]
+            self._last_packet = saved_last_packet
+            self.runtime_state.last_tokens = saved_last_tokens
+            self.runtime_state.last_logits = saved_last_logits
+            self.runtime_state.last_cache = saved_last_cache
+
+    def _topk_token_diff(self, baseline_logits: torch.Tensor, edited_logits: torch.Tensor, *, top_k: int) -> list[dict[str, Any]]:
+        baseline = baseline_logits.detach().float()
+        edited = edited_logits.detach().float()
+        baseline_probs = torch.softmax(baseline, dim=-1)
+        edited_probs = torch.softmax(edited, dim=-1)
+        baseline_ids = torch.topk(baseline, k=min(top_k, baseline.shape[-1]), dim=-1).indices.tolist()
+        edited_ids = torch.topk(edited, k=min(top_k, edited.shape[-1]), dim=-1).indices.tolist()
+        token_ids = list(dict.fromkeys([int(token_id) for token_id in baseline_ids + edited_ids]))
+        rows: list[dict[str, Any]] = []
+        for token_id in token_ids:
+            rows.append(
+                {
+                    "token_id": int(token_id),
+                    "piece": self.codec.decode([int(token_id)]),
+                    "baseline_logit": round(float(baseline[token_id].item()), 6),
+                    "edited_logit": round(float(edited[token_id].item()), 6),
+                    "logit_delta": round(float(edited[token_id].item() - baseline[token_id].item()), 6),
+                    "baseline_prob": round(float(baseline_probs[token_id].item()), 6),
+                    "edited_prob": round(float(edited_probs[token_id].item()), 6),
+                    "prob_delta": round(float(edited_probs[token_id].item() - baseline_probs[token_id].item()), 6),
+                }
+            )
+        rows.sort(key=lambda item: (-abs(float(item["prob_delta"])), str(item["piece"])))
+        return rows[:top_k]
+
     def _task_feedback(self) -> dict[str, Any]:
         return dict(self._last_task_feedback)
 
@@ -1306,10 +1928,16 @@ class HookedTransformerWorkerRuntime:
             return "trajectory_shift"
         return None
 
-    def _invoke_observer_check(self, candidate_text: str, *, trigger: str) -> Mapping[str, Any] | None:
+    def _invoke_observer_check(
+        self,
+        candidate_text: str,
+        *,
+        trigger: str,
+        task_feedback: Mapping[str, Any] | None = None,
+    ) -> Mapping[str, Any] | None:
         if self.observer_check_fn is None:
             return None
-        feedback = dict(self._last_task_feedback)
+        feedback = dict(self._last_task_feedback if task_feedback is None else task_feedback)
         try:
             result = self.observer_check_fn(
                 candidate_text,
