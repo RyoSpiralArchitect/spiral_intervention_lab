@@ -76,10 +76,13 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
     summary: dict[str, Any] = {}
     for key in (
         "hypothesis",
+        "micro_rationale",
         "expected_effect",
         "observed_outcome",
         "why_failed_or_helped",
         "next_change",
+        "next_trigger",
+        "next_action",
         "stop_condition",
         "decision",
         "recorded_step",
@@ -103,6 +106,235 @@ def _controller_memory_summaries(items: Any) -> list[dict[str, Any]]:
     return summaries
 
 
+def _compact_latent_feature_scan(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in ("prototype_mode", "surface_count", "group_count", "mean_alignment", "max_alignment"):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+
+    groups_value = value.get("groups")
+    if isinstance(groups_value, Sequence) and not isinstance(groups_value, (str, bytes, bytearray)):
+        groups: list[dict[str, Any]] = []
+        for item in groups_value[:3]:
+            if not isinstance(item, Mapping):
+                continue
+            group_summary: dict[str, Any] = {}
+            for key in ("group", "polarity", "feature_kind", "feature_count", "mean_alignment"):
+                if key in item and item.get(key) not in (None, ""):
+                    group_summary[key] = item.get(key)
+            top_features_value = item.get("top_features")
+            if isinstance(top_features_value, Sequence) and not isinstance(top_features_value, (str, bytes, bytearray)):
+                top_features: list[dict[str, Any]] = []
+                for feature in top_features_value[:2]:
+                    if not isinstance(feature, Mapping):
+                        continue
+                    feature_summary = {
+                        key: feature.get(key)
+                        for key in ("feature", "polarity", "surface_id", "alignment", "coverage_progress")
+                        if key in feature and feature.get(key) not in (None, "")
+                    }
+                    if feature_summary:
+                        top_features.append(feature_summary)
+                if top_features:
+                    group_summary["top_features"] = top_features
+            if group_summary:
+                groups.append(group_summary)
+        if groups:
+            summary["groups"] = groups
+
+    top_hits_value = value.get("top_feature_hits")
+    if isinstance(top_hits_value, Sequence) and not isinstance(top_hits_value, (str, bytes, bytearray)):
+        top_hits: list[dict[str, Any]] = []
+        for item in top_hits_value[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            hit_summary = {
+                key: item.get(key)
+                for key in ("group", "feature", "polarity", "surface_id", "alignment", "coverage_progress")
+                if key in item and item.get(key) not in (None, "")
+            }
+            if hit_summary:
+                top_hits.append(hit_summary)
+        if top_hits:
+            summary["top_feature_hits"] = top_hits
+
+    return summary or None
+
+
+def _compact_observer_check(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in (
+        "check_type",
+        "trigger",
+        "verdict",
+        "score",
+        "raw_score",
+        "coverage_signal",
+        "coverage_weight",
+        "delta_vs_last_check",
+        "recorded_step",
+    ):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    latent_feature_scan = _compact_latent_feature_scan(value.get("latent_feature_scan"))
+    if latent_feature_scan is not None:
+        summary["latent_feature_scan"] = latent_feature_scan
+    return summary or None
+
+
+def _observer_check_summaries(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        summary = _compact_observer_check(item)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
+def _compact_observer_check_request(value: Any) -> dict[str, Any] | None:
+    if value is True:
+        return {"kind": "semantic_progress"}
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in ("kind", "reason", "trigger"):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    return summary or None
+
+
+def _compact_tool_request(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    tool_name = value.get("tool") or value.get("name") or value.get("kind")
+    if not tool_name:
+        return None
+    summary: dict[str, Any] = {"tool": str(tool_name)}
+    if isinstance(value.get("terms"), Sequence) and not isinstance(value.get("terms"), (str, bytes, bytearray)):
+        terms = [str(item) for item in value.get("terms", [])[:4]]
+        if terms:
+            summary["terms"] = terms
+            summary["term_count"] = len(value.get("terms", []))
+    if value.get("candidate") not in (None, ""):
+        summary["candidate_preview"] = _truncate_text(value.get("candidate"), 80)
+    if isinstance(value.get("candidate_edit"), Mapping):
+        candidate_edit = value["candidate_edit"]
+        if candidate_edit.get("surface_id") is not None:
+            summary["surface_id"] = candidate_edit.get("surface_id")
+        elif isinstance(candidate_edit.get("target"), Mapping) and candidate_edit["target"].get("surface_id") is not None:
+            summary["surface_id"] = candidate_edit["target"].get("surface_id")
+        op_kind = candidate_edit.get("kind")
+        if op_kind is None and isinstance(candidate_edit.get("op"), Mapping):
+            op_kind = candidate_edit["op"].get("kind")
+        if op_kind is not None:
+            summary["kind"] = op_kind
+        if candidate_edit.get("alpha") is not None:
+            summary["alpha"] = candidate_edit.get("alpha")
+        elif isinstance(candidate_edit.get("op"), Mapping) and candidate_edit["op"].get("alpha") is not None:
+            summary["alpha"] = candidate_edit["op"].get("alpha")
+    if value.get("max_new_tokens") is not None:
+        summary["max_new_tokens"] = value.get("max_new_tokens")
+    if value.get("reason") not in (None, ""):
+        summary["reason"] = value.get("reason")
+    return summary
+
+
+def _tool_request_summaries(items: Any) -> list[dict[str, Any]]:
+    if isinstance(items, Mapping):
+        items = [items]
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        summary = _compact_tool_request(item)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
+def _compact_tool_catalog(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        summary = {
+            key: item.get(key)
+            for key in ("tool", "available", "cost_hint", "budget_left")
+            if key in item and item.get(key) not in (None, "")
+        }
+        if summary:
+            summaries.append(summary)
+    return summaries
+
+
+def _compact_tool_result(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    tool_name = value.get("tool")
+    if not tool_name:
+        return None
+    summary: dict[str, Any] = {"tool": str(tool_name)}
+    for key in (
+        "status",
+        "recorded_step",
+        "requested_by",
+        "term_count",
+        "required_term_recall",
+        "forbidden_clean",
+        "brevity_score",
+        "semantic_progress_score",
+        "entropy_delta",
+        "repeat_flag_delta",
+        "required_term_recall_delta",
+        "semantic_progress_delta",
+    ):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    if value.get("candidate_preview") not in (None, ""):
+        summary["candidate_preview"] = _truncate_text(value.get("candidate_preview"), 80)
+    if isinstance(value.get("sampled_continuations"), Sequence) and not isinstance(
+        value.get("sampled_continuations"), (str, bytes, bytearray)
+    ):
+        summary["sampled_continuations"] = [
+            {
+                "variant": item.get("variant"),
+                "text": _truncate_text(item.get("text"), 60),
+            }
+            for item in value.get("sampled_continuations", [])[:2]
+            if isinstance(item, Mapping)
+        ]
+    if isinstance(value.get("topk_token_diff"), Sequence) and not isinstance(value.get("topk_token_diff"), (str, bytes, bytearray)):
+        summary["topk_token_diff"] = [
+            {
+                key: item.get(key)
+                for key in ("piece", "prob_delta", "logit_delta")
+                if key in item and item.get(key) not in (None, "")
+            }
+            for item in value.get("topk_token_diff", [])[:4]
+            if isinstance(item, Mapping)
+        ]
+    return summary
+
+
+def _tool_result_summaries(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        summary = _compact_tool_result(item)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
 def _recent_effect_summaries(items: Any) -> list[dict[str, Any]]:
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
         return []
@@ -119,7 +351,14 @@ def _recent_effect_summaries(items: Any) -> list[dict[str, Any]]:
         if isinstance(delta, Mapping):
             summary["delta"] = {
                 key: delta.get(key)
-                for key in ("entropy", "top1_margin", "repetition_score", "partial_score")
+                for key in (
+                    "entropy",
+                    "top1_margin",
+                    "repetition_score",
+                    "partial_score",
+                    "semantic_progress_score",
+                    "required_term_span_progress",
+                )
                 if key in delta
             }
         summaries.append(summary)
@@ -158,6 +397,11 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
             "recent_effect_summary": dict(payload.get("recent_effect_summary", {}))
             if isinstance(payload.get("recent_effect_summary"), Mapping)
             else {},
+            "latest_observer_check": _compact_observer_check(payload.get("latest_observer_check")),
+            "recent_observer_checks": _observer_check_summaries(payload.get("recent_observer_checks")),
+            "tool_catalog": _compact_tool_catalog(payload.get("tool_catalog")),
+            "latest_tool_results": _tool_result_summaries(payload.get("latest_tool_results")),
+            "recent_tool_results": _tool_result_summaries(payload.get("recent_tool_results")),
             "controller_memory": _controller_memory_summaries(payload.get("controller_memory")),
         }
     )
@@ -194,12 +438,25 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
 
     meta = getattr(command, "meta", None)
     controller_memory = None
+    micro_rationale = None
+    next_trigger = None
+    next_action = None
+    observer_check_request = None
+    tool_requests = None
     if isinstance(meta, Mapping):
         if meta.get("hypothesis"):
             hypotheses.append(str(meta["hypothesis"]))
         if meta.get("confidence") is not None:
             confidences.append(float(meta["confidence"]))
         controller_memory = meta.get("controller_memory")
+        if meta.get("micro_rationale") is not None:
+            micro_rationale = str(meta["micro_rationale"])
+        if meta.get("next_trigger") is not None:
+            next_trigger = str(meta["next_trigger"])
+        if meta.get("next_action") is not None:
+            next_action = str(meta["next_action"])
+        observer_check_request = meta.get("observer_check_request")
+        tool_requests = meta.get("tool_requests")
     elif meta is not None:
         if getattr(meta, "hypothesis", None):
             hypotheses.append(str(meta.hypothesis))
@@ -238,9 +495,25 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
         "total_alpha": total_alpha,
         "total_edit_cost": total_edit_cost,
     }
+    if micro_rationale:
+        summary["micro_rationale"] = micro_rationale
+    compact_observer_request = _compact_observer_check_request(observer_check_request)
+    if compact_observer_request is not None:
+        summary["observer_check_request"] = compact_observer_request
+    compact_tool_requests = _tool_request_summaries(tool_requests)
+    if compact_tool_requests:
+        summary["tool_requests"] = compact_tool_requests
     compact_memory = _compact_controller_memory(controller_memory)
     if compact_memory is not None:
         summary["controller_memory"] = compact_memory
+        if next_trigger is None and compact_memory.get("next_trigger") is not None:
+            next_trigger = str(compact_memory["next_trigger"])
+        if next_action is None and compact_memory.get("next_action") is not None:
+            next_action = str(compact_memory["next_action"])
+    if next_trigger:
+        summary["next_trigger"] = next_trigger
+    if next_action:
+        summary["next_action"] = next_action
     return summary
 
 
@@ -286,6 +559,28 @@ def _normalize_controller_payload(value: Any) -> Any:
                 meta["controller_memory"] = normalized.pop("reflection_log")
             if "reflection_log" in meta and "controller_memory" not in meta:
                 meta["controller_memory"] = meta.pop("reflection_log")
+            if "request_observer_check" in normalized and "observer_check_request" not in meta:
+                meta["observer_check_request"] = normalized.pop("request_observer_check")
+            if "observer_check_request" in normalized and "observer_check_request" not in meta:
+                meta["observer_check_request"] = normalized.pop("observer_check_request")
+            if "request_observer_check" in meta and "observer_check_request" not in meta:
+                meta["observer_check_request"] = meta.pop("request_observer_check")
+            if "request_tools" in normalized and "tool_requests" not in meta:
+                meta["tool_requests"] = normalized.pop("request_tools")
+            if "tool_requests" in normalized and "tool_requests" not in meta:
+                meta["tool_requests"] = normalized.pop("tool_requests")
+            if "request_tools" in meta and "tool_requests" not in meta:
+                meta["tool_requests"] = meta.pop("request_tools")
+            if isinstance(meta.get("tool_requests"), Mapping):
+                meta["tool_requests"] = [dict(meta["tool_requests"])]
+            if "rationale" in normalized and "micro_rationale" not in meta:
+                meta["micro_rationale"] = normalized.pop("rationale")
+            if "micro_rationale" in normalized and "micro_rationale" not in meta:
+                meta["micro_rationale"] = normalized.pop("micro_rationale")
+            if "next_trigger" in normalized and "next_trigger" not in meta:
+                meta["next_trigger"] = normalized.pop("next_trigger")
+            if "next_action" in normalized and "next_action" not in meta:
+                meta["next_action"] = normalized.pop("next_action")
             if meta:
                 normalized["meta"] = meta
 

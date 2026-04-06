@@ -6,7 +6,7 @@ from typing import Any, Callable, Mapping
 import torch
 
 from .adapter import ModelAdapter
-from .edit_budget import budget_metadata
+from .edit_budget import MAIN_EDIT_BUDGET_POOL, budget_metadata, classify_edit_budget_pool
 from .policy import HarnessPolicy, validate_command_against_packet
 from .schema import (
     CachePairSource,
@@ -214,13 +214,20 @@ def _runtime_budget(edit: Any, surface: Any) -> dict[str, Any]:
     }
 
 
-def _registration_metadata(edit: Any, surface: Any, command_meta: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _registration_metadata(
+    edit: Any,
+    surface: Any,
+    packet: ControllerObservationPacket,
+    command_meta: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     runtime_budget = _runtime_budget(edit, surface)
+    budget_pool = classify_edit_budget_pool(edit=edit, packet=packet, surface=surface, command_meta=command_meta)
     metadata = {
         "surface_id": surface.surface_id,
         "op": edit.op.kind,
         "alpha": float(edit.op.alpha),
         "budget_key": edit.id,
+        "budget_pool": budget_pool or MAIN_EDIT_BUDGET_POOL,
         "hypothesis": None if command_meta is None else command_meta.get("hypothesis"),
         "controller_confidence": None if command_meta is None else command_meta.get("confidence"),
         "expected_effect": edit.meta.get("expected_effect"),
@@ -247,7 +254,7 @@ def _compile_resid_add(
 ) -> CompiledEdit:
     alpha = float(edit.op.alpha)
     budget = _runtime_budget(edit, surface)
-    metadata = _registration_metadata(edit, surface, command_meta)
+    metadata = _registration_metadata(edit, surface, ctx.packet, command_meta)
     hook_name, hook_fn = ctx.adapter.make_activation_hook(
         surface=surface,
         op_kind="resid_add",
@@ -289,7 +296,7 @@ def _compile_kv_mix(
 ) -> CompiledEdit:
     alpha = float(edit.op.alpha)
     budget = _runtime_budget(edit, surface)
-    metadata = _registration_metadata(edit, surface, command_meta)
+    metadata = _registration_metadata(edit, surface, ctx.packet, command_meta)
 
     if edit.op.which == "kv":
         if not isinstance(edit.source, CachePairSource) or edit.source.k is None or edit.source.v is None:
@@ -375,7 +382,7 @@ def _compile_rank1_patch(
 ) -> CompiledEdit:
     alpha = float(edit.op.alpha)
     budget = _runtime_budget(edit, surface)
-    metadata = _registration_metadata(edit, surface, command_meta)
+    metadata = _registration_metadata(edit, surface, ctx.packet, command_meta)
 
     def apply(step_ctx: StepContext) -> None:
         step_ctx.adapter.set_step_context(step_ctx)

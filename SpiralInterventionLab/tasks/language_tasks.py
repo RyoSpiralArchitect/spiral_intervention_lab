@@ -4,6 +4,8 @@ import random
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+from .semantic_critic import SemanticCritic
+
 
 def _strip_output(output: str) -> str:
     return str(output).strip()
@@ -50,6 +52,121 @@ def _fraction(matched: int, total: int) -> float:
     if total <= 0:
         return 0.0
     return matched / total
+
+
+def _normalized_term_tokens(text: str) -> list[str]:
+    tokens: list[str] = []
+    for item in _compact_whitespace(text).split(" "):
+        token = "".join(char.lower() for char in item if char.isalnum())
+        if token:
+            tokens.append(token)
+    return tokens
+
+
+def _single_term_span_progress(candidate_tokens: Sequence[str], term_token: str) -> float:
+    normalized_term = "".join(char.lower() for char in str(term_token) if char.isalnum())
+    if not normalized_term or not candidate_tokens:
+        return 0.0
+    best = 0.0
+    min_partial_chars = 2 if len(normalized_term) >= 4 else 1
+    for candidate_token in candidate_tokens:
+        if not candidate_token:
+            continue
+        if normalized_term in candidate_token:
+            return 1.0
+        prefix_length = _matching_prefix_length(candidate_token, normalized_term)
+        if prefix_length < min_partial_chars:
+            continue
+        best = max(best, prefix_length / len(normalized_term))
+    return min(1.0, best)
+
+
+def _term_span_progress_by_term(candidate_text: str, terms: Sequence[str]) -> dict[str, float]:
+    candidate_tokens = _normalized_term_tokens(candidate_text)
+    progress: dict[str, float] = {}
+    for term in terms:
+        term_tokens = _normalized_term_tokens(term)
+        if not term_tokens:
+            progress[str(term)] = 0.0
+            continue
+        part_scores = [_single_term_span_progress(candidate_tokens, token) for token in term_tokens]
+        progress[str(term)] = round(sum(part_scores) / len(part_scores), 6)
+    return progress
+
+
+def _mean_term_span_progress(progress_by_term: dict[str, float]) -> float:
+    if not progress_by_term:
+        return 0.0
+    return round(sum(float(value) for value in progress_by_term.values()) / len(progress_by_term), 6)
+
+
+def _semantic_progress_score(
+    critic: SemanticCritic | None,
+    *,
+    reference_text: str,
+    candidate_text: str,
+) -> float | None:
+    if critic is None:
+        return None
+    candidate = _compact_whitespace(candidate_text)
+    if not candidate:
+        return 0.0
+    return float(critic.score(reference_text=reference_text, candidate_text=candidate))
+
+
+def _coverage_weighted_semantic_progress(
+    critic: SemanticCritic | None,
+    *,
+    reference_text: str,
+    candidate_text: str,
+    coverage_signal: float,
+) -> tuple[float, float, float] | None:
+    raw_score = _semantic_progress_score(
+        critic,
+        reference_text=reference_text,
+        candidate_text=candidate_text,
+    )
+    if raw_score is None:
+        return None
+    bounded_coverage = max(0.0, min(1.0, float(coverage_signal)))
+    coverage_weight = round(0.1 + (0.9 * bounded_coverage), 6)
+    weighted_score = round(float(raw_score) * coverage_weight, 6)
+    return round(float(raw_score), 6), coverage_weight, weighted_score
+
+
+def _semantic_observer_payload(
+    critic: SemanticCritic | None,
+    *,
+    reference_text: str,
+    candidate_text: str,
+    coverage_signal: float,
+    trigger: str,
+    reference_kind: str,
+    latent_feature_scan: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    semantic_progress = _coverage_weighted_semantic_progress(
+        critic,
+        reference_text=reference_text,
+        candidate_text=candidate_text,
+        coverage_signal=coverage_signal,
+    )
+    if semantic_progress is None:
+        return None
+    raw_score, coverage_weight, weighted_score = semantic_progress
+    payload = {
+        "check_type": "semantic_progress",
+        "trigger": str(trigger),
+        "reference_kind": str(reference_kind),
+        "mode": str(getattr(critic, "mode", "unknown") or "unknown"),
+        "model_name": str(getattr(critic, "model_name", "unknown") or "unknown"),
+        "raw_score": raw_score,
+        "coverage_signal": round(float(max(0.0, min(1.0, coverage_signal))), 6),
+        "coverage_weight": coverage_weight,
+        "score": weighted_score,
+    }
+    if isinstance(latent_feature_scan, dict) and latent_feature_scan:
+        payload["latent_feature_scan"] = latent_feature_scan
+    return payload
 
 
 @dataclass(frozen=True)
@@ -333,8 +450,9 @@ class SpiralConstrainedRewriteEnv:
         },
     )
 
-    def __init__(self) -> None:
+    def __init__(self, *, semantic_critic: SemanticCritic | None = None) -> None:
         self.current_episode: ConstrainedRewriteEpisode | None = None
+        self.semantic_critic = semantic_critic
 
     def reset(self, seed: int) -> str:
         rng = random.Random(seed)
@@ -364,22 +482,7 @@ class SpiralConstrainedRewriteEnv:
         if not candidate:
             return 0.0
         episode = self._episode()
-        required_score = _fraction(
-            sum(1 for term in episode.required_terms if _contains_term(candidate, term)),
-            len(episode.required_terms),
-        )
-        forbidden_score = _fraction(
-            sum(1 for term in episode.forbidden_terms if not _contains_term(candidate, term)),
-            len(episode.forbidden_terms),
-        )
-        word_count = _word_count(candidate)
-        if word_count == 0:
-            budget_score = 0.0
-        elif word_count <= episode.max_words:
-            budget_score = 1.0
-        else:
-            overflow = word_count - episode.max_words
-            budget_score = max(0.0, 1.0 - (overflow / max(1, episode.max_words)))
+        required_score, forbidden_score, budget_score = self._component_scores(candidate)
         return round((0.55 * required_score) + (0.25 * forbidden_score) + (0.20 * budget_score), 6)
 
     def done(self, output: str) -> bool:
@@ -397,8 +500,13 @@ class SpiralConstrainedRewriteEnv:
         candidate = _compact_whitespace(output)
         episode = self._episode()
         violations: list[str] = []
-        missing_required = [term for term in episode.required_terms if candidate and not _contains_term(candidate, term)]
+        missing_required = [term for term in episode.required_terms if not _contains_term(candidate, term)]
         forbidden_present = [term for term in episode.forbidden_terms if candidate and _contains_term(candidate, term)]
+        required_score, forbidden_score, budget_score = self._component_scores(candidate)
+        required_span_progress_by_term = _term_span_progress_by_term(candidate, episode.required_terms)
+        required_span_progress = _mean_term_span_progress(required_span_progress_by_term)
+        required_present = [term for term in episode.required_terms if candidate and _contains_term(candidate, term)]
+        budget_ok = bool(candidate) and _word_count(candidate) <= episode.max_words
         if not candidate:
             violations.append("empty_output")
         if missing_required:
@@ -408,14 +516,73 @@ class SpiralConstrainedRewriteEnv:
         if candidate and _word_count(candidate) > episode.max_words:
             violations.append("over_word_budget")
         partial_score = self.score(output)
-        return {
+        missing_required_sorted = sorted(
+            missing_required,
+            key=lambda term: (required_span_progress_by_term.get(term, 0.0), episode.required_terms.index(term)),
+        )
+        feedback = {
             "done": self.done(output),
             "partial_score": partial_score,
             "progress_label": _progress_label(done=self.done(output), candidate=candidate, partial_score=partial_score),
+            "required_term_recall": required_score,
+            "required_term_span_progress": required_span_progress,
+            "required_term_span_progress_by_term": required_span_progress_by_term,
+            "required_terms_present": required_present,
+            "forbidden_term_clean": forbidden_score,
+            "budget_ok": budget_ok,
+            "word_budget_score": budget_score,
             "constraint_violations": violations,
             "missing_required_terms": missing_required,
+            "entity_recall_terms": missing_required_sorted,
+            "entity_recall_progress_by_term": {
+                term: required_span_progress_by_term.get(term, 0.0) for term in missing_required_sorted
+            },
             "forbidden_terms_present": forbidden_present,
         }
+        return feedback
+
+    def semantic_observer_check(
+        self,
+        output: str,
+        *,
+        task_feedback: dict[str, Any] | None = None,
+        trigger: str = "runtime",
+        worker_runtime: Any | None = None,
+    ) -> dict[str, Any] | None:
+        candidate = _compact_whitespace(output)
+        if not candidate:
+            return None
+        episode = self._episode()
+        feedback = dict(task_feedback or self.task_feedback(output))
+        latent_feature_scan = None
+        scanner = getattr(worker_runtime, "latent_feature_scan", None)
+        if callable(scanner):
+            latent_feature_scan = scanner(
+                feature_groups={
+                    "required_terms": {
+                        "terms": tuple(feedback.get("entity_recall_terms") or episode.required_terms),
+                        "polarity": "promote",
+                        "feature_kind": "required_term",
+                    },
+                    "forbidden_phrases": {
+                        "terms": episode.forbidden_terms,
+                        "polarity": "suppress",
+                        "feature_kind": "forbidden_phrase",
+                    },
+                }
+            )
+        return _semantic_observer_payload(
+            self.semantic_critic,
+            reference_text=episode.source_text,
+            candidate_text=candidate,
+            coverage_signal=max(
+                float(feedback.get("required_term_recall", 0.0) or 0.0),
+                float(feedback.get("required_term_span_progress", 0.0) or 0.0),
+            ),
+            trigger=trigger,
+            reference_kind="source_text",
+            latent_feature_scan=latent_feature_scan,
+        )
 
     def stop_checker(self, output: str) -> bool:
         candidate = _strip_output(output)
@@ -428,7 +595,7 @@ class SpiralConstrainedRewriteEnv:
 
     def worker_runtime_kwargs(self) -> dict[str, Any]:
         episode = self._episode()
-        return {
+        kwargs = {
             "task_id": self.task_id,
             "goal_hint": self.goal_hint,
             "constraints": self.constraints,
@@ -436,11 +603,34 @@ class SpiralConstrainedRewriteEnv:
             "stop_checker": self.stop_checker,
             "task_feedback_fn": self.task_feedback,
         }
+        if self.semantic_critic is not None:
+            kwargs["observer_check_fn"] = self.semantic_observer_check
+        return kwargs
 
     def _episode(self) -> ConstrainedRewriteEpisode:
         if self.current_episode is None:
             raise RuntimeError("reset(seed=...) must be called before scoring or feedback")
         return self.current_episode
+
+    def _component_scores(self, candidate: str) -> tuple[float, float, float]:
+        episode = self._episode()
+        required_score = _fraction(
+            sum(1 for term in episode.required_terms if _contains_term(candidate, term)),
+            len(episode.required_terms),
+        )
+        forbidden_score = _fraction(
+            sum(1 for term in episode.forbidden_terms if not _contains_term(candidate, term)),
+            len(episode.forbidden_terms),
+        )
+        word_count = _word_count(candidate)
+        if word_count == 0:
+            budget_score = 0.0
+        elif word_count <= episode.max_words:
+            budget_score = 1.0
+        else:
+            overflow = word_count - episode.max_words
+            budget_score = max(0.0, 1.0 - (overflow / max(1, episode.max_words)))
+        return required_score, forbidden_score, budget_score
 
 
 @dataclass(frozen=True)
@@ -491,8 +681,9 @@ class SpiralStructuredSummaryEnv:
         },
     )
 
-    def __init__(self) -> None:
+    def __init__(self, *, semantic_critic: SemanticCritic | None = None) -> None:
         self.current_episode: StructuredSummaryEpisode | None = None
+        self.semantic_critic = semantic_critic
 
     def reset(self, seed: int) -> str:
         rng = random.Random(seed)
@@ -561,6 +752,12 @@ class SpiralStructuredSummaryEnv:
         violations: list[str] = []
         missing_summary_terms = [term for term in self._episode().required_summary_terms if summary_text and not _contains_term(summary_text, term)]
         missing_keywords = [term for term in self._episode().required_keywords if term.lower() not in keyword_items]
+        summary_term_span_progress_by_term = _term_span_progress_by_term(summary_text, self._episode().required_summary_terms)
+        summary_term_span_progress = _mean_term_span_progress(summary_term_span_progress_by_term)
+        keyword_recall = _fraction(
+            sum(1 for term in self._episode().required_keywords if term.lower() in keyword_items),
+            len(self._episode().required_keywords),
+        )
         if not summary_text:
             violations.append("missing_summary_line")
         if not keyword_items:
@@ -574,14 +771,62 @@ class SpiralStructuredSummaryEnv:
         if missing_keywords:
             violations.append("missing_keywords")
         partial_score = self.score(output)
-        return {
+        feedback = {
             "done": self.done(output),
             "partial_score": partial_score,
             "progress_label": _progress_label(done=self.done(output), candidate=_strip_output(output), partial_score=partial_score),
             "constraint_violations": violations,
             "missing_summary_terms": missing_summary_terms,
             "missing_keywords": missing_keywords,
+            "summary_term_span_progress": summary_term_span_progress,
+            "summary_term_span_progress_by_term": summary_term_span_progress_by_term,
+            "keyword_recall": keyword_recall,
         }
+        return feedback
+
+    def semantic_observer_check(
+        self,
+        output: str,
+        *,
+        task_feedback: dict[str, Any] | None = None,
+        trigger: str = "runtime",
+        worker_runtime: Any | None = None,
+    ) -> dict[str, Any] | None:
+        parsed = self._parse_output(output)
+        summary_text = parsed["summary"]
+        if not summary_text:
+            return None
+        feedback = dict(task_feedback or self.task_feedback(output))
+        latent_feature_scan = None
+        scanner = getattr(worker_runtime, "latent_feature_scan", None)
+        if callable(scanner):
+            episode = self._episode()
+            latent_feature_scan = scanner(
+                feature_groups={
+                    "summary_terms": {
+                        "terms": tuple(feedback.get("missing_summary_terms") or episode.required_summary_terms),
+                        "polarity": "promote",
+                        "feature_kind": "summary_term",
+                    },
+                    "keywords": {
+                        "terms": tuple(feedback.get("missing_keywords") or episode.required_keywords),
+                        "polarity": "promote",
+                        "feature_kind": "keyword",
+                    },
+                }
+            )
+        return _semantic_observer_payload(
+            self.semantic_critic,
+            reference_text=self._episode().note_text,
+            candidate_text=summary_text,
+            coverage_signal=max(
+                float(feedback.get("keyword_recall", 0.0) or 0.0),
+                float(feedback.get("summary_term_span_progress", 0.0) or 0.0),
+            ),
+            trigger=trigger,
+            reference_kind="note_text",
+            latent_feature_scan=latent_feature_scan,
+        )
 
     def stop_checker(self, output: str) -> bool:
         parsed = self._parse_output(output)
@@ -591,7 +836,7 @@ class SpiralStructuredSummaryEnv:
 
     def worker_runtime_kwargs(self) -> dict[str, Any]:
         episode = self._episode()
-        return {
+        kwargs = {
             "task_id": self.task_id,
             "goal_hint": self.goal_hint,
             "constraints": self.constraints,
@@ -599,6 +844,9 @@ class SpiralStructuredSummaryEnv:
             "stop_checker": self.stop_checker,
             "task_feedback_fn": self.task_feedback,
         }
+        if self.semantic_critic is not None:
+            kwargs["observer_check_fn"] = self.semantic_observer_check
+        return kwargs
 
     def _parse_output(self, output: str) -> dict[str, Any]:
         raw = _strip_output(output)

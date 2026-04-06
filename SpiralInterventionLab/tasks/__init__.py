@@ -10,6 +10,7 @@ from .language_tasks import (
     SpiralStructuredSummaryEnv,
     StructuredSummaryEpisode,
 )
+from .semantic_critic import MiniLMSemanticCritic, SemanticCritic
 
 __all__ = [
     "ConstrainedRewriteEpisode",
@@ -17,6 +18,7 @@ __all__ = [
     "DigitTransformEpisode",
     "EntailmentReasoningEpisode",
     "SentenceOrderingEpisode",
+    "SemanticCritic",
     "SpiralDigitCopyEnv",
     "SpiralDigitTransformEnv",
     "SpiralConstrainedRewriteEnv",
@@ -24,4 +26,5 @@ __all__ = [
     "SpiralSentenceOrderingEnv",
     "SpiralStructuredSummaryEnv",
     "StructuredSummaryEpisode",
+    "MiniLMSemanticCritic",
 ]

@@ -24,6 +24,7 @@ from ..runtime import (
     run_minimal_baseline_suite,
 )
 from ..tasks import (
+    MiniLMSemanticCritic,
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
     SpiralDigitTransformEnv,
@@ -47,7 +48,15 @@ except Exception:  # pragma: no cover - optional dependency at import time
 _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
 _WORKER_MPS_MODES = ("auto", "conservative")
 _CONTROLLER_REFLECTION_MODES = ("off", "structured")
-_WORKER_DECODER_CONTROL_MODES = ("off", "loop_aware")
+_SEMANTIC_CRITIC_MODES = ("off", "minilm")
+_WORKER_DECODER_CONTROL_MODES = (
+    "off",
+    "loop_aware",
+    "loop_aware_prune",
+    "loop_aware_constraint",
+    "loop_aware_entity_recall",
+    "logit_bias_entity_soft",
+)
 
 ExperimentTaskEnv = (
     SpiralDigitTransformEnv
@@ -176,6 +185,9 @@ def build_hooked_transformer_worker_runtime(
     controller_reflection_mode: str = "off",
     controller_memory_window: int = 3,
     worker_decoder_control_mode: str = "off",
+    worker_loop_rescue_edits_per_run: int = 0,
+    worker_loop_rescue_total_alpha: float = 0.0,
+    worker_loop_rescue_total_edit_cost: float | None = None,
 ) -> HookedTransformerWorkerRuntime:
     runtime_state = HookedTransformerRuntimeState(model, seed=seed)
     adapter = HookedTransformerAdapter(model)
@@ -217,6 +229,9 @@ def build_hooked_transformer_worker_runtime(
         controller_reflection_mode=controller_reflection_mode,
         controller_memory_window=controller_memory_window,
         decoder_control_mode=worker_decoder_control_mode,
+        max_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+        max_loop_rescue_alpha=worker_loop_rescue_total_alpha,
+        max_loop_rescue_edit_cost=worker_loop_rescue_total_edit_cost,
         allowed_token_ids=allowed_token_ids,
         trace_metadata={
             "paired_baseline": {
@@ -442,7 +457,21 @@ def _write_summary_artifact(log_dir: str | Path | None, filename: str, payload: 
     (base / filename).write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def create_task_env(task_name: str) -> ExperimentTaskEnv:
+def create_semantic_critic(
+    mode: str,
+    *,
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+    device: str = "cpu",
+) -> Any | None:
+    normalized = str(mode).strip().lower().replace("-", "_")
+    if normalized == "off":
+        return None
+    if normalized == "minilm":
+        return MiniLMSemanticCritic(model_name=model_name, device=device)
+    raise ValueError(f"unknown semantic critic mode '{mode}'")
+
+
+def create_task_env(task_name: str, *, semantic_critic: Any | None = None) -> ExperimentTaskEnv:
     normalized = str(task_name).strip().lower().replace("-", "_")
     if normalized in {"digit_transform", "transform"}:
         return SpiralDigitTransformEnv()
@@ -453,9 +482,9 @@ def create_task_env(task_name: str) -> ExperimentTaskEnv:
     if normalized in {"entailment_reasoning", "entailment", "nli"}:
         return SpiralEntailmentReasoningEnv()
     if normalized in {"constrained_rewrite", "rewrite"}:
-        return SpiralConstrainedRewriteEnv()
+        return SpiralConstrainedRewriteEnv(semantic_critic=semantic_critic)
     if normalized in {"structured_summary", "summary"}:
-        return SpiralStructuredSummaryEnv()
+        return SpiralStructuredSummaryEnv(semantic_critic=semantic_critic)
     raise ValueError(f"unknown task '{task_name}'")
 
 
@@ -467,7 +496,12 @@ class DigitTransformExperimentResult:
     controller_provider: str
     controller_model_name: str
     controller_reflection_mode: str
+    semantic_critic_mode: str
+    semantic_critic_model_name: str | None
     worker_decoder_control_mode: str
+    worker_loop_rescue_edits_per_run: int
+    worker_loop_rescue_total_alpha: float
+    worker_loop_rescue_total_edit_cost: float
     surface_ids: tuple[str, ...]
     suite: BaselineSuiteResult
 
@@ -480,7 +514,12 @@ class DigitTransformExperimentResult:
             "controller_provider": self.controller_provider,
             "controller_model_name": self.controller_model_name,
             "controller_reflection_mode": self.controller_reflection_mode,
+            "semantic_critic_mode": self.semantic_critic_mode,
+            "semantic_critic_model_name": self.semantic_critic_model_name,
             "worker_decoder_control_mode": self.worker_decoder_control_mode,
+            "worker_loop_rescue_edits_per_run": self.worker_loop_rescue_edits_per_run,
+            "worker_loop_rescue_total_alpha": self.worker_loop_rescue_total_alpha,
+            "worker_loop_rescue_total_edit_cost": self.worker_loop_rescue_total_edit_cost,
             "surface_ids": list(self.surface_ids),
             "paired_trace_id": self.suite.paired_trace_id,
             "b0": asdict(self.suite.b0),
@@ -497,7 +536,12 @@ class DigitTransformC1OnlyExperimentResult:
     controller_provider: str
     controller_model_name: str
     controller_reflection_mode: str
+    semantic_critic_mode: str
+    semantic_critic_model_name: str | None
     worker_decoder_control_mode: str
+    worker_loop_rescue_edits_per_run: int
+    worker_loop_rescue_total_alpha: float
+    worker_loop_rescue_total_edit_cost: float
     surface_ids: tuple[str, ...]
     c1: EpisodeResult
 
@@ -510,7 +554,12 @@ class DigitTransformC1OnlyExperimentResult:
             "controller_provider": self.controller_provider,
             "controller_model_name": self.controller_model_name,
             "controller_reflection_mode": self.controller_reflection_mode,
+            "semantic_critic_mode": self.semantic_critic_mode,
+            "semantic_critic_model_name": self.semantic_critic_model_name,
             "worker_decoder_control_mode": self.worker_decoder_control_mode,
+            "worker_loop_rescue_edits_per_run": self.worker_loop_rescue_edits_per_run,
+            "worker_loop_rescue_total_alpha": self.worker_loop_rescue_total_alpha,
+            "worker_loop_rescue_total_edit_cost": self.worker_loop_rescue_total_edit_cost,
             "surface_ids": list(self.surface_ids),
             "paired_trace_id": None,
             "b0": None,
@@ -593,7 +642,12 @@ def run_digit_transform_experiment(
     worker_mps_mode: str = "auto",
     controller_reflection_mode: str = "off",
     controller_memory_window: int = 3,
+    semantic_critic_mode: str = "off",
+    semantic_critic_model_name: str | None = None,
     worker_decoder_control_mode: str = "off",
+    worker_loop_rescue_edits_per_run: int = 0,
+    worker_loop_rescue_total_alpha: float = 0.0,
+    worker_loop_rescue_total_edit_cost: float | None = None,
 ) -> DigitTransformExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -630,6 +684,9 @@ def run_digit_transform_experiment(
             controller_reflection_mode=controller_reflection_mode,
             controller_memory_window=controller_memory_window,
             worker_decoder_control_mode=worker_decoder_control_mode,
+            worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+            worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
+            worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
         )
 
     suite = run_minimal_baseline_suite(
@@ -649,7 +706,16 @@ def run_digit_transform_experiment(
         controller_provider=normalize_provider_name(provider_name),
         controller_model_name=controller_model_name,
         controller_reflection_mode=controller_reflection_mode,
+        semantic_critic_mode=str(semantic_critic_mode),
+        semantic_critic_model_name=semantic_critic_model_name,
         worker_decoder_control_mode=worker_decoder_control_mode,
+        worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+        worker_loop_rescue_total_alpha=float(worker_loop_rescue_total_alpha),
+        worker_loop_rescue_total_edit_cost=float(
+            worker_loop_rescue_total_edit_cost
+            if worker_loop_rescue_total_edit_cost is not None
+            else worker_loop_rescue_total_alpha
+        ),
         surface_ids=surface_ids,
         suite=suite,
     )
@@ -681,7 +747,12 @@ def run_digit_transform_c1_only_experiment(
     worker_mps_mode: str = "auto",
     controller_reflection_mode: str = "off",
     controller_memory_window: int = 3,
+    semantic_critic_mode: str = "off",
+    semantic_critic_model_name: str | None = None,
     worker_decoder_control_mode: str = "off",
+    worker_loop_rescue_edits_per_run: int = 0,
+    worker_loop_rescue_total_alpha: float = 0.0,
+    worker_loop_rescue_total_edit_cost: float | None = None,
 ) -> DigitTransformC1OnlyExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -711,6 +782,9 @@ def run_digit_transform_c1_only_experiment(
         controller_reflection_mode=controller_reflection_mode,
         controller_memory_window=controller_memory_window,
         worker_decoder_control_mode=worker_decoder_control_mode,
+        worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+        worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
+        worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
     )
     logger_factory = _logger_factory(log_dir)
     c1 = run_c1(
@@ -727,7 +801,16 @@ def run_digit_transform_c1_only_experiment(
         controller_provider=normalize_provider_name(provider_name),
         controller_model_name=controller_model_name,
         controller_reflection_mode=controller_reflection_mode,
+        semantic_critic_mode=str(semantic_critic_mode),
+        semantic_critic_model_name=semantic_critic_model_name,
         worker_decoder_control_mode=worker_decoder_control_mode,
+        worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+        worker_loop_rescue_total_alpha=float(worker_loop_rescue_total_alpha),
+        worker_loop_rescue_total_edit_cost=float(
+            worker_loop_rescue_total_edit_cost
+            if worker_loop_rescue_total_edit_cost is not None
+            else worker_loop_rescue_total_alpha
+        ),
         surface_ids=surface_ids,
         c1=c1,
     )
@@ -761,7 +844,12 @@ def run_digit_transform_sweep(
     worker_mps_mode: str = "auto",
     controller_reflection_mode: str = "off",
     controller_memory_window: int = 3,
+    semantic_critic_mode: str = "off",
+    semantic_critic_model_name: str | None = None,
     worker_decoder_control_mode: str = "off",
+    worker_loop_rescue_edits_per_run: int = 0,
+    worker_loop_rescue_total_alpha: float = 0.0,
+    worker_loop_rescue_total_edit_cost: float | None = None,
 ) -> DigitTransformSweepResult:
     resolved_seeds = tuple(int(seed) for seed in seeds)
     if not resolved_seeds:
@@ -810,7 +898,12 @@ def run_digit_transform_sweep(
                 worker_mps_mode=worker_mps_mode,
                 controller_reflection_mode=controller_reflection_mode,
                 controller_memory_window=controller_memory_window,
+                semantic_critic_mode=semantic_critic_mode,
+                semantic_critic_model_name=semantic_critic_model_name,
                 worker_decoder_control_mode=worker_decoder_control_mode,
+                worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+                worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
+                worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
             )
             )
     result = DigitTransformSweepResult(seeds=resolved_seeds, runs=tuple(runs))
@@ -869,10 +962,50 @@ def _build_parser() -> argparse.ArgumentParser:
         help="How many recent controller_memory entries to retain in the observation packet when reflection mode is enabled",
     )
     parser.add_argument(
+        "--semantic-critic-mode",
+        default="off",
+        choices=list(_SEMANTIC_CRITIC_MODES),
+        help="Optional bounded runtime semantic observer. 'minilm' enables MiniLM observer checks triggered by runtime progress signals instead of a per-step heartbeat metric.",
+    )
+    parser.add_argument(
+        "--semantic-critic-model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        help="Sentence-transformer model name for --semantic-critic-mode=minilm",
+    )
+    parser.add_argument(
+        "--semantic-critic-device",
+        default="cpu",
+        help="Device for the semantic critic model, e.g. cpu or mps",
+    )
+    parser.add_argument(
         "--worker-decoder-control-mode",
         default="off",
         choices=list(_WORKER_DECODER_CONTROL_MODES),
-        help="Optional worker-side decoder rescue mode; loop_aware applies task-agnostic anti-loop logit shaping without adding task-specific token bias",
+        help=(
+            "Optional worker-side soft-control mode: loop_aware is task-agnostic anti-loop shaping; "
+            "loop_aware_prune also demotes the current overconfident top token when stalled; "
+            "loop_aware_constraint adds a small soft bias toward explicitly missing constraint tokens; "
+            "loop_aware_entity_recall softly continues or starts explicit missing entity token sequences; "
+            "logit_bias_entity_soft softly biases logits toward tokens from explicit missing entities without forcing output."
+        ),
+    )
+    parser.add_argument(
+        "--worker-loop-rescue-edits-per-run",
+        type=int,
+        default=0,
+        help="Separate run budget for small loop-rescue controller edits; 0 disables the rescue pool",
+    )
+    parser.add_argument(
+        "--worker-loop-rescue-total-alpha",
+        type=float,
+        default=0.0,
+        help="Separate total alpha budget for loop-rescue edits",
+    )
+    parser.add_argument(
+        "--worker-loop-rescue-total-edit-cost",
+        type=float,
+        default=None,
+        help="Separate total edit-cost budget for loop-rescue edits; defaults to --worker-loop-rescue-total-alpha",
     )
     return parser
 
@@ -884,12 +1017,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--num-seeds must be >= 1")
     if args.controller_memory_window <= 0:
         parser.error("--controller-memory-window must be >= 1")
+    if args.worker_loop_rescue_edits_per_run < 0:
+        parser.error("--worker-loop-rescue-edits-per-run must be >= 0")
+    if args.worker_loop_rescue_total_alpha < 0.0:
+        parser.error("--worker-loop-rescue-total-alpha must be >= 0")
+    if args.worker_loop_rescue_total_edit_cost is not None and args.worker_loop_rescue_total_edit_cost < 0.0:
+        parser.error("--worker-loop-rescue-total-edit-cost must be >= 0")
     if args.c1_only and args.num_seeds != 1:
         parser.error("--c1-only currently supports only --num-seeds 1")
     if args.controller_api_key is None:
         env_var = provider_api_env_var(args.provider)
         if os.getenv(env_var) is None:
             parser.error(f"{env_var} is not set and --controller-api-key was not provided")
+
+    semantic_critic = create_semantic_critic(
+        args.semantic_critic_mode,
+        model_name=args.semantic_critic_model,
+        device=args.semantic_critic_device,
+    )
 
     if args.c1_only:
         result = run_digit_transform_c1_only_experiment(
@@ -898,7 +1043,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_model_name=args.worker_model,
             seed=args.seed,
             controller_api_key=args.controller_api_key,
-            task_env=create_task_env(args.task),
+            task_env=create_task_env(args.task, semantic_critic=semantic_critic),
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,
@@ -911,7 +1056,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_mps_mode=args.worker_mps_mode,
             controller_reflection_mode=args.controller_reflection_mode,
             controller_memory_window=args.controller_memory_window,
+            semantic_critic_mode=args.semantic_critic_mode,
+            semantic_critic_model_name=None if semantic_critic is None else args.semantic_critic_model,
             worker_decoder_control_mode=args.worker_decoder_control_mode,
+            worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
+            worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
+            worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
         )
         payload = result.to_dict()
     elif args.num_seeds == 1:
@@ -921,7 +1071,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_model_name=args.worker_model,
             seed=args.seed,
             controller_api_key=args.controller_api_key,
-            task_env=create_task_env(args.task),
+            task_env=create_task_env(args.task, semantic_critic=semantic_critic),
             include_prompt_baseline=not args.no_b1,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
@@ -935,7 +1085,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_mps_mode=args.worker_mps_mode,
             controller_reflection_mode=args.controller_reflection_mode,
             controller_memory_window=args.controller_memory_window,
+            semantic_critic_mode=args.semantic_critic_mode,
+            semantic_critic_model_name=None if semantic_critic is None else args.semantic_critic_model,
             worker_decoder_control_mode=args.worker_decoder_control_mode,
+            worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
+            worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
+            worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
         )
         payload = result.to_dict()
     else:
@@ -945,7 +1100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_model_name=args.worker_model,
             seeds=tuple(range(args.seed, args.seed + args.num_seeds)),
             controller_api_key=args.controller_api_key,
-            task_env_factory=lambda: create_task_env(args.task),
+            task_env_factory=lambda: create_task_env(args.task, semantic_critic=semantic_critic),
             include_prompt_baseline=not args.no_b1,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
@@ -959,7 +1114,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_mps_mode=args.worker_mps_mode,
             controller_reflection_mode=args.controller_reflection_mode,
             controller_memory_window=args.controller_memory_window,
+            semantic_critic_mode=args.semantic_critic_mode,
+            semantic_critic_model_name=None if semantic_critic is None else args.semantic_critic_model,
             worker_decoder_control_mode=args.worker_decoder_control_mode,
+            worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
+            worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
+            worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
         )
         payload = sweep.to_dict()
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))

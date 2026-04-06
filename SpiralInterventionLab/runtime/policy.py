@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
-from .edit_budget import estimate_edit_cost
+from .edit_budget import (
+    LOOP_RESCUE_EDIT_BUDGET_POOL,
+    MAIN_EDIT_BUDGET_POOL,
+    classify_edit_budget_pool,
+    estimate_edit_cost,
+)
 from .schema import (
     CachePairSource,
     ControllerCommand,
@@ -39,6 +44,9 @@ class GlobalBudget:
     max_edits_per_run: int = 4
     max_total_alpha: float = 0.5
     max_total_edit_cost: float = 0.5
+    max_loop_rescue_edits_per_run: int = 4
+    max_loop_rescue_total_alpha: float = 0.24
+    max_loop_rescue_total_edit_cost: float = 0.24
     max_rank_per_edit: int = 1
 
 
@@ -168,17 +176,11 @@ def validate_command_against_packet(
             raise PolicyViolation(f"rollback ids are not currently revertible: {unknown}")
         return
 
-    if len(cmd.edits) > pkt.budget.edits_left_this_step:
-        raise PolicyViolation("command exceeds packet.edits_left_this_step")
-    if len(cmd.edits) > pol.global_budget.max_edits_per_step:
-        raise PolicyViolation("command exceeds policy.max_edits_per_step")
-    if len(cmd.edits) > pkt.budget.edits_left_this_run:
-        raise PolicyViolation("command exceeds packet.edits_left_this_run")
-    if len(cmd.edits) > pol.global_budget.max_edits_per_run:
-        raise PolicyViolation("command exceeds policy.max_edits_per_run")
+    usage = command_budget_usage(cmd, pkt, policy=pol)
+    budget_reason = budget_violation_reason(cmd, pkt, policy=pol, usage=usage)
+    if budget_reason is not None:
+        raise PolicyViolation(budget_reason)
 
-    total_alpha = 0.0
-    total_edit_cost = 0.0
     rank_patch_count = 0
 
     for edit in cmd.edits:
@@ -196,8 +198,6 @@ def validate_command_against_packet(
         alpha = float(edit.op.alpha)
         if alpha > surface.caps.max_alpha:
             raise PolicyViolation(f"edit '{edit.id}' exceeds surface alpha cap")
-        total_alpha += alpha
-
         if edit.budget.norm_clip is not None and surface.caps.norm_clip is not None:
             if edit.budget.norm_clip > surface.caps.norm_clip:
                 raise PolicyViolation(f"edit '{edit.id}' exceeds surface norm clip cap")
@@ -223,22 +223,88 @@ def validate_command_against_packet(
 
         _validate_expr_budget(edit.source, pol)
         _validate_trace_access(edit.source, pkt)
+    if rank_patch_count > pkt.budget.active_patch_slots_left:
+        raise PolicyViolation("command exceeds packet active_patch_slots_left")
+
+
+def command_budget_usage(
+    command: ControllerCommand | Mapping[str, Any],
+    packet: ControllerObservationPacket | Mapping[str, Any],
+    *,
+    policy: HarnessPolicy | None = None,
+) -> dict[str, dict[str, float]]:
+    cmd, pkt = _packet_and_command(command, packet)
+    del policy
+    usage = {
+        MAIN_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
+        LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
+    }
+    for edit in cmd.edits:
+        surface = _resolve_surface(pkt, edit.target)
+        pool = classify_edit_budget_pool(edit=edit, packet=pkt, surface=surface, command_meta=cmd.meta)
+        if pool not in usage:
+            pool = MAIN_EDIT_BUDGET_POOL
+        usage[pool]["edit_count"] += 1.0
+        usage[pool]["alpha"] += float(edit.op.alpha)
         effective_step_size = edit.budget.step_size if edit.budget.step_size is not None else surface.caps.step_size
-        total_edit_cost += estimate_edit_cost(
+        usage[pool]["edit_cost"] += estimate_edit_cost(
             op_kind=edit.op.kind,
             alpha=edit.op.alpha,
             ttl_steps=edit.budget.ttl_steps,
             step_size=effective_step_size,
             rank_cap=edit.budget.rank_cap,
         )
+    return usage
 
-    if total_alpha > pkt.budget.alpha_left_total:
-        raise PolicyViolation("command exceeds packet alpha budget")
-    if total_alpha > pol.global_budget.max_total_alpha:
-        raise PolicyViolation("command exceeds policy total alpha budget")
-    if pkt.budget.edit_cost_left_total is not None and total_edit_cost > pkt.budget.edit_cost_left_total:
-        raise PolicyViolation("command exceeds packet edit cost budget")
-    if total_edit_cost > pol.global_budget.max_total_edit_cost:
-        raise PolicyViolation("command exceeds policy total edit cost budget")
-    if rank_patch_count > pkt.budget.active_patch_slots_left:
-        raise PolicyViolation("command exceeds packet active_patch_slots_left")
+
+def budget_violation_reason(
+    command: ControllerCommand | Mapping[str, Any],
+    packet: ControllerObservationPacket | Mapping[str, Any],
+    *,
+    policy: HarnessPolicy | None = None,
+    usage: dict[str, dict[str, float]] | None = None,
+) -> str | None:
+    cmd, pkt = _packet_and_command(command, packet)
+    pol = policy or HarnessPolicy.default_v0()
+
+    if cmd.decision != "apply":
+        return None
+
+    usage = usage or command_budget_usage(cmd, pkt, policy=pol)
+
+    if len(cmd.edits) > pkt.budget.edits_left_this_step:
+        return "command exceeds packet.edits_left_this_step"
+    if len(cmd.edits) > pol.global_budget.max_edits_per_step:
+        return "command exceeds policy.max_edits_per_step"
+    if usage[MAIN_EDIT_BUDGET_POOL]["edit_count"] > pkt.budget.edits_left_this_run:
+        return "command exceeds packet.edits_left_this_run"
+    if usage[MAIN_EDIT_BUDGET_POOL]["edit_count"] > pol.global_budget.max_edits_per_run:
+        return "command exceeds policy.max_edits_per_run"
+    if usage[LOOP_RESCUE_EDIT_BUDGET_POOL]["edit_count"] > pkt.budget.loop_rescue_edits_left_this_run:
+        return "command exceeds packet.loop_rescue_edits_left_this_run"
+    if usage[LOOP_RESCUE_EDIT_BUDGET_POOL]["edit_count"] > pol.global_budget.max_loop_rescue_edits_per_run:
+        return "command exceeds policy.max_loop_rescue_edits_per_run"
+
+    main_alpha = float(usage[MAIN_EDIT_BUDGET_POOL]["alpha"])
+    main_edit_cost = float(usage[MAIN_EDIT_BUDGET_POOL]["edit_cost"])
+    if main_alpha > pkt.budget.alpha_left_total:
+        return "command exceeds packet alpha budget"
+    if main_alpha > pol.global_budget.max_total_alpha:
+        return "command exceeds policy total alpha budget"
+    if pkt.budget.edit_cost_left_total is not None and main_edit_cost > pkt.budget.edit_cost_left_total:
+        return "command exceeds packet edit cost budget"
+    if main_edit_cost > pol.global_budget.max_total_edit_cost:
+        return "command exceeds policy total edit cost budget"
+
+    rescue_alpha = float(usage[LOOP_RESCUE_EDIT_BUDGET_POOL]["alpha"])
+    rescue_edit_cost = float(usage[LOOP_RESCUE_EDIT_BUDGET_POOL]["edit_cost"])
+    if rescue_alpha > pkt.budget.loop_rescue_alpha_left_total:
+        return "command exceeds packet loop_rescue alpha budget"
+    if rescue_alpha > pol.global_budget.max_loop_rescue_total_alpha:
+        return "command exceeds policy loop_rescue total alpha budget"
+    if rescue_edit_cost > pkt.budget.loop_rescue_edit_cost_left_total:
+        return "command exceeds packet loop_rescue edit cost budget"
+    if rescue_edit_cost > pol.global_budget.max_loop_rescue_total_edit_cost:
+        return "command exceeds policy loop_rescue total edit cost budget"
+
+    return None

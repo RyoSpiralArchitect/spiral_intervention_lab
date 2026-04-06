@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 from .compiler import StepContext, compile_command
+from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
+from .policy import budget_violation_reason, command_budget_usage
 
 
 class TaskEnv(Protocol):
@@ -165,13 +167,48 @@ def _log_effect_trace(
         logger.log({"event": "controller_effect_summary", "step": step, **dict(summary)})
 
 
+def _command_field(command: Any, name: str) -> Any:
+    if isinstance(command, Mapping):
+        return command.get(name)
+    return getattr(command, name, None)
+
+
+def _command_decision(command: Any) -> str:
+    return str(_command_field(command, "decision") or "").strip().lower()
+
+
+def _command_meta(command: Any) -> dict[str, Any] | None:
+    meta = _command_field(command, "meta")
+    if not isinstance(meta, Mapping):
+        return None
+    return dict(meta)
+
+
+def _command_edit_count(command: Any) -> int:
+    edits = _command_field(command, "edits")
+    if isinstance(edits, SequenceABC) and not isinstance(edits, (str, bytes, bytearray)):
+        return len(edits)
+    return 0
+
+
+def _guarded_noop_command(command: Any) -> dict[str, Any]:
+    guarded_command = {
+        "version": str(_command_field(command, "version") or "0.1"),
+        "decision": "noop",
+        "edits": [],
+        "rollback_ids": [],
+    }
+    meta = _command_meta(command)
+    if meta is not None:
+        guarded_command["meta"] = meta
+    return guarded_command
+
+
 def _guard_exhausted_apply_command(
     command: Any,
     packet: Mapping[str, Any],
 ) -> tuple[Any, dict[str, Any] | None]:
-    if not isinstance(command, Mapping):
-        return command, None
-    decision = str(command.get("decision", "") or "").strip().lower()
+    decision = _command_decision(command)
     if decision != "apply":
         return command, None
     budget = packet.get("budget")
@@ -184,21 +221,58 @@ def _guard_exhausted_apply_command(
         return command, None
     if edits_left_this_run > 0:
         return command, None
-    guarded_command = {
-        "version": str(command.get("version", "0.1") or "0.1"),
-        "decision": "noop",
-        "edits": [],
-        "rollback_ids": [],
-    }
-    if isinstance(command.get("meta"), Mapping):
-        guarded_command["meta"] = dict(command["meta"])
+    try:
+        usage = command_budget_usage(command, packet)
+    except Exception:
+        usage = {
+            MAIN_EDIT_BUDGET_POOL: {"edit_count": 1.0},
+            LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0},
+        }
+    loop_rescue_edits_left_this_run = budget.get("loop_rescue_edits_left_this_run")
+    try:
+        loop_rescue_edits_left_this_run = int(loop_rescue_edits_left_this_run)
+    except Exception:
+        loop_rescue_edits_left_this_run = 0
+    if (
+        int(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) == 0
+        and int(usage.get(LOOP_RESCUE_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) > 0
+        and loop_rescue_edits_left_this_run > 0
+    ):
+        return command, None
+    guarded_command = _guarded_noop_command(command)
     return guarded_command, {
         "reason": "edits_left_this_run_exhausted",
         "original_decision": decision,
         "edits_left_this_run": edits_left_this_run,
-        "requested_edit_count": len(command.get("edits", ()))
-        if isinstance(command.get("edits"), SequenceABC)
-        else 0,
+        "requested_edit_count": _command_edit_count(command),
+    }
+
+
+def _guard_budget_violating_apply_command(
+    command: Any,
+    packet: Mapping[str, Any],
+    *,
+    policy: Any | None = None,
+) -> tuple[Any, dict[str, Any] | None]:
+    decision = _command_decision(command)
+    if decision != "apply":
+        return command, None
+    try:
+        usage = command_budget_usage(command, packet, policy=policy)
+        reason = budget_violation_reason(command, packet, policy=policy, usage=usage)
+    except Exception:
+        return command, None
+    if reason is None:
+        return command, None
+    guarded_command = _guarded_noop_command(command)
+    return guarded_command, {
+        "reason": reason,
+        "original_decision": decision,
+        "requested_edit_count": _command_edit_count(command),
+        "requested_main_alpha": float(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0),
+        "requested_loop_rescue_alpha": float(
+            usage.get(LOOP_RESCUE_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0
+        ),
     }
 
 
@@ -212,9 +286,79 @@ def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, 
     if not isinstance(meta, Mapping):
         return None, None if decision is None else str(decision)
     entry = meta.get("controller_memory")
-    if not isinstance(entry, Mapping):
+    if isinstance(entry, Mapping):
+        normalized = dict(entry)
+    else:
+        normalized = {}
+    if meta.get("hypothesis") is not None and "hypothesis" not in normalized:
+        normalized["hypothesis"] = meta.get("hypothesis")
+    if meta.get("micro_rationale") is not None and "micro_rationale" not in normalized:
+        normalized["micro_rationale"] = meta.get("micro_rationale")
+    if meta.get("next_trigger") is not None and "next_trigger" not in normalized:
+        normalized["next_trigger"] = meta.get("next_trigger")
+    if meta.get("next_action") is not None and "next_action" not in normalized:
+        normalized["next_action"] = meta.get("next_action")
+    if not normalized:
         return None, None if decision is None else str(decision)
-    return entry, None if decision is None else str(decision)
+    return normalized, None if decision is None else str(decision)
+
+
+def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
+    meta = _command_meta(command)
+    if not isinstance(meta, Mapping):
+        return None
+    request = meta.get("observer_check_request")
+    if request is True:
+        return {"kind": "semantic_progress"}
+    if isinstance(request, Mapping):
+        return dict(request)
+    return None
+
+
+def _extract_tool_requests(command: Any) -> list[dict[str, Any]]:
+    meta = _command_meta(command)
+    if not isinstance(meta, Mapping):
+        return []
+    requests = meta.get("tool_requests")
+    if isinstance(requests, Mapping):
+        return [dict(requests)]
+    if not isinstance(requests, SequenceABC) or isinstance(requests, (str, bytes, bytearray)):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in requests:
+        if isinstance(item, Mapping):
+            normalized.append(dict(item))
+    return normalized
+
+
+def _log_pending_observer_check_events(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    worker_runtime: Any,
+) -> None:
+    if logger is None:
+        return
+    reader = getattr(worker_runtime, "pop_observer_check_events", None)
+    if not callable(reader):
+        return
+    for event in reader():
+        logger.log({"event": "observer_check", "step": step, **dict(event)})
+
+
+def _log_pending_tool_events(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    worker_runtime: Any,
+) -> None:
+    if logger is None:
+        return
+    reader = getattr(worker_runtime, "pop_tool_events", None)
+    if not callable(reader):
+        return
+    for event in reader():
+        logger.log({"event": "controller_tool_result", "step": step, **dict(event)})
 
 
 def _record_controller_memory(
@@ -255,6 +399,7 @@ def run_episode(
     step_count = 0
     while not worker_runtime.done():
         worker_runtime.step()
+        _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
         packet = worker_runtime.build_controller_packet()
         try:
             command = controller_client.invoke(packet)
@@ -265,13 +410,50 @@ def run_episode(
             raise
 
         command, guard_event = _guard_exhausted_apply_command(command, packet)
+        command, budget_guard_event = _guard_budget_violating_apply_command(command, packet, policy=policy)
         _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
             if guard_event is not None:
                 logger.log({"event": "controller_guardrail", "step": step_count, **guard_event})
+            if budget_guard_event is not None:
+                logger.log({"event": "controller_guardrail", "step": step_count, **budget_guard_event})
             logger.log({"event": "controller_command", "step": step_count, "command": command})
         _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
+        observer_check_request = _extract_observer_check_request(command)
+        if observer_check_request is not None:
+            requester = getattr(worker_runtime, "request_observer_check", None)
+            result = None
+            if callable(requester):
+                try:
+                    result = requester(observer_check_request, source="controller")
+                except TypeError:
+                    result = requester(observer_check_request)
+            if logger is not None:
+                request_event = {"event": "controller_observer_check_request", "step": step_count, **dict(observer_check_request)}
+                request_event["executed"] = bool(result)
+                if isinstance(result, Mapping):
+                    request_event["result_trigger"] = result.get("trigger")
+                    request_event["result_verdict"] = result.get("verdict")
+                    request_event["result_score"] = result.get("score")
+                logger.log(request_event)
+            _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
+
+        tool_requests = _extract_tool_requests(command)
+        if tool_requests:
+            requester = getattr(worker_runtime, "request_controller_tools", None)
+            results = []
+            if callable(requester):
+                try:
+                    results = requester(tool_requests, source="controller") or []
+                except TypeError:
+                    results = requester(tool_requests) or []
+            if logger is not None:
+                for request in tool_requests:
+                    request_event = {"event": "controller_tool_request", "step": step_count, **dict(request)}
+                    request_event["executed"] = bool(results)
+                    logger.log(request_event)
+            _log_pending_tool_events(logger, step=step_count, worker_runtime=worker_runtime)
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

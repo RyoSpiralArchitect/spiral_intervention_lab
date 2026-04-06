@@ -620,6 +620,8 @@ class MiniMetrics:
     top1_margin: float
     repetition_score: float
     partial_score: float | None = None
+    semantic_progress_score: float | None = None
+    required_term_span_progress: float | None = None
 
     @classmethod
     def from_dict(cls, value: Any, name: str) -> "MiniMetrics":
@@ -629,6 +631,11 @@ class MiniMetrics:
             top1_margin=_require_float(_require_key(data, "top1_margin", name), f"{name}.top1_margin"),
             repetition_score=_require_float(_require_key(data, "repetition_score", name), f"{name}.repetition_score"),
             partial_score=_optional_float(data.get("partial_score"), f"{name}.partial_score"),
+            semantic_progress_score=_optional_float(data.get("semantic_progress_score"), f"{name}.semantic_progress_score"),
+            required_term_span_progress=_optional_float(
+                data.get("required_term_span_progress"),
+                f"{name}.required_term_span_progress",
+            ),
         )
 
 
@@ -680,6 +687,9 @@ class BudgetState:
     active_patch_slots_left: int
     rollbackable_ids: tuple[str, ...] = ()
     edit_cost_left_total: float | None = None
+    loop_rescue_edits_left_this_run: int = 0
+    loop_rescue_alpha_left_total: float = 0.0
+    loop_rescue_edit_cost_left_total: float = 0.0
 
     @classmethod
     def from_dict(cls, value: Any) -> "BudgetState":
@@ -689,6 +699,21 @@ class BudgetState:
             edits_left_this_run=_require_int(_require_key(data, "edits_left_this_run", "budget"), "budget.edits_left_this_run"),
             alpha_left_total=_require_float(_require_key(data, "alpha_left_total", "budget"), "budget.alpha_left_total"),
             edit_cost_left_total=_optional_float(data.get("edit_cost_left_total"), "budget.edit_cost_left_total"),
+            loop_rescue_edits_left_this_run=_optional_int(
+                data.get("loop_rescue_edits_left_this_run"),
+                "budget.loop_rescue_edits_left_this_run",
+            )
+            or 0,
+            loop_rescue_alpha_left_total=_optional_float(
+                data.get("loop_rescue_alpha_left_total"),
+                "budget.loop_rescue_alpha_left_total",
+            )
+            or 0.0,
+            loop_rescue_edit_cost_left_total=_optional_float(
+                data.get("loop_rescue_edit_cost_left_total"),
+                "budget.loop_rescue_edit_cost_left_total",
+            )
+            or 0.0,
             active_patch_slots_left=_require_int(
                 _require_key(data, "active_patch_slots_left", "budget"),
                 "budget.active_patch_slots_left",
@@ -715,6 +740,8 @@ class ControllerObservationPacket:
     recent_effects: tuple[EditEffect, ...]
     budget: BudgetState
     recent_effect_summary: Mapping[str, Any] | None = None
+    latest_observer_check: Mapping[str, Any] | None = None
+    recent_observer_checks: tuple[Mapping[str, Any], ...] = ()
     controller_memory: tuple[Mapping[str, Any], ...] = ()
     task_feedback: Mapping[str, Any] | None = None
     raw: Mapping[str, Any] = field(default_factory=dict, repr=False)
@@ -741,6 +768,12 @@ class ControllerObservationPacket:
             recent_effect_summary=_as_mapping(data["recent_effect_summary"], "packet.recent_effect_summary")
             if data.get("recent_effect_summary") is not None
             else None,
+            latest_observer_check=_as_mapping(data["latest_observer_check"], "packet.latest_observer_check")
+            if data.get("latest_observer_check") is not None
+            else None,
+            recent_observer_checks=tuple(
+                _as_mapping(item, "packet.recent_observer_checks[]") for item in data.get("recent_observer_checks", [])
+            ),
             controller_memory=tuple(_as_mapping(item, "packet.controller_memory[]") for item in data.get("controller_memory", [])),
             budget=BudgetState.from_dict(_require_key(data, "budget", "packet")),
             task_feedback=_as_mapping(data["task_feedback"], "packet.task_feedback") if data.get("task_feedback") is not None else None,
