@@ -267,6 +267,24 @@ class TestBackendsAndBridge(unittest.TestCase):
                 "recent_effects": [],
                 "recent_effect_summary": {"window_size": 0},
                 "telemetry": {"tool_call_count": 2},
+                "control_phase_hint": "entity_insertion",
+                "strategy_hints": {
+                    "loop_severity": "low",
+                    "prefer_space_prefixed_logit_bias": True,
+                    "prefer_auxiliary_entity_bias": True,
+                    "direct_entity_edit_gate": "auxiliary_first",
+                    "easy_entity_terms": ["budget"],
+                    "hard_entity_terms": ["Mira"],
+                    "shot_mode_ready": False,
+                    "shot_probe_needed": False,
+                    "shot_candidate_edits": [
+                        {"surface_id": "s_resid_pre_l3_prev", "kind": "resid_add", "alpha": 0.04, "ttl_steps": 1, "step_size": 0.04, "role": "shot_prev_anchor"}
+                    ],
+                    "preferred_shot_surface_id": "s_resid_pre_l3_prev",
+                    "loop_break_attempt_count": 1,
+                    "stabilizing_only_count": 0,
+                    "l4_term_nudge_cooldown": True,
+                },
                 "budget": {},
                 "tool_catalog": [
                     {"tool": "tokenize_terms", "available": True, "cost_hint": "cheap", "budget_left": 4},
@@ -277,7 +295,12 @@ class TestBackendsAndBridge(unittest.TestCase):
                         "tool": "tokenize_terms",
                         "status": "ok",
                         "term_count": 2,
-                        "terms": [{"term": "Mira"}],
+                        "terms": [
+                            {"term": "Mira", "piece_count": 2, "control_profile": "sequence_bias_plus_patience"},
+                            {"term": "budget", "piece_count": 1, "control_profile": "single_token_bias_ok"},
+                        ],
+                        "soft_logit_bias_ok_terms": ["budget"],
+                        "needs_sequence_support_terms": ["Mira"],
                     },
                     {
                         "tool": "dry_run_decode",
@@ -292,7 +315,19 @@ class TestBackendsAndBridge(unittest.TestCase):
         trace = client.latest_trace()
 
         self.assertEqual(trace["observation"]["tool_catalog"][0]["tool"], "tokenize_terms")
+        self.assertEqual(trace["observation"]["control_phase_hint"], "entity_insertion")
+        self.assertEqual(trace["observation"]["strategy_hints"]["loop_severity"], "low")
+        self.assertTrue(trace["observation"]["strategy_hints"]["prefer_auxiliary_entity_bias"])
+        self.assertEqual(trace["observation"]["strategy_hints"]["direct_entity_edit_gate"], "auxiliary_first")
+        self.assertFalse(trace["observation"]["strategy_hints"]["shot_mode_ready"])
+        self.assertFalse(trace["observation"]["strategy_hints"]["shot_probe_needed"])
+        self.assertEqual(trace["observation"]["strategy_hints"]["preferred_shot_surface_id"], "s_resid_pre_l3_prev")
+        self.assertEqual(trace["observation"]["strategy_hints"]["shot_candidate_edits"][0]["surface_id"], "s_resid_pre_l3_prev")
+        self.assertTrue(trace["observation"]["strategy_hints"]["l4_term_nudge_cooldown"])
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["tool"], "tokenize_terms")
+        self.assertEqual(trace["observation"]["latest_tool_results"][0]["soft_logit_bias_ok_terms"], ["budget"])
+        self.assertEqual(trace["observation"]["latest_tool_results"][0]["needs_sequence_support_terms"], ["Mira"])
+        self.assertEqual(trace["observation"]["latest_tool_results"][0]["term_profiles"][0]["control_profile"], "sequence_bias_plus_patience")
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["tool"], "dry_run_decode")
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["topk_token_diff"][0]["piece"], "M")
 
@@ -576,6 +611,20 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("tokenize_terms", prompt)
         self.assertIn("constraint_scorer", prompt)
         self.assertIn("dry_run_decode", prompt)
+        self.assertIn("soft_logit_bias_ok_terms", prompt)
+        self.assertIn("needs_sequence_support_terms", prompt)
+        self.assertIn("control_phase_hint", prompt)
+        self.assertIn("loop_severity", prompt)
+        self.assertIn("shot_mode", prompt)
+        self.assertIn("shot_probe_needed", prompt)
+        self.assertIn("shot_candidate_edits", prompt)
+        self.assertIn("preferred_shot_surface_id", prompt)
+        self.assertIn("l4_term_nudge_cooldown", prompt)
+        self.assertIn("prefer_auxiliary_entity_bias", prompt)
+        self.assertIn("direct_entity_edit_gate", prompt)
+        self.assertIn("stabilizing_only", prompt)
+        self.assertIn("loop_break, entity_insertion, shot_mode", prompt)
+        self.assertIn("s_resid_pre_l3_prev", prompt)
         self.assertNotIn("include meta.hypothesis and meta.confidence when useful", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):

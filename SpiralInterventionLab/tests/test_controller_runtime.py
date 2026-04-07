@@ -1081,6 +1081,43 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertEqual(summary["verdict_counts"]["harmful"], 1)
         self.assertTrue(summary["latest_effects"][0]["after_is_looping"])
 
+    def test_build_edit_effect_marks_loop_relief_without_coverage_as_stabilizing_only(self):
+        effect = build_edit_effect(
+            edit_id="e_stabilize",
+            surface_id="s1",
+            observed_window_steps=1,
+            before={
+                "entropy": 5.0,
+                "top1_margin": 0.02,
+                "repetition_score": 1.0,
+                "partial_score": 0.45,
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "repeat_flag": 1.0,
+                "no_progress_steps": 2.0,
+                "progress_score": 0.0,
+            },
+            after={
+                "entropy": 3.2,
+                "top1_margin": 0.1,
+                "repetition_score": 0.2,
+                "partial_score": 0.45,
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "repeat_flag": 0.0,
+                "no_progress_steps": 0.0,
+                "progress_score": 0.0,
+            },
+            hypothesis="loop_break_only",
+        )
+
+        self.assertEqual(effect["verdict"], "neutral")
+        self.assertEqual(effect["signal_profile"], "stabilizing_only")
+        summary = summarize_effects([effect])
+        self.assertEqual(summary["verdict_counts"]["neutral"], 1)
+        self.assertEqual(summary["hypothesis_stats"][0]["stabilizing_only_count"], 1)
+        self.assertEqual(summary["latest_effects"][0]["signal_profile"], "stabilizing_only")
+
     def test_run_episode_smoke(self):
         adapter = FakeAdapter()
         runtime_state = FakeRuntimeState()
@@ -1477,7 +1514,64 @@ class _ResidEditController:
 
 class TestWorkerRuntimeAndBaselines(unittest.TestCase):
     def _surface_catalog(self):
-        return [_make_packet()["surface_catalog"][0]]
+        base_surface = _make_packet()["surface_catalog"][0]
+        return [
+            base_surface,
+            {
+                "surface_id": "s_resid_pre_l3_last",
+                "target": {
+                    "kind": "activation",
+                    "worker": "os_0",
+                    "site": "resid_pre",
+                    "layer": 3,
+                    "token": {"mode": "last"},
+                },
+                "allow_ops": ["resid_add"],
+                "caps": {
+                    "max_alpha": 0.12,
+                    "max_ttl_steps": 1,
+                    "norm_clip": 1.5,
+                    "step_size": 0.08,
+                    "revertible_only": True,
+                },
+            },
+            {
+                "surface_id": "s_resid_pre_l4_last",
+                "target": {
+                    "kind": "activation",
+                    "worker": "os_0",
+                    "site": "resid_pre",
+                    "layer": 4,
+                    "token": {"mode": "last"},
+                },
+                "allow_ops": ["resid_add"],
+                "caps": {
+                    "max_alpha": 0.12,
+                    "max_ttl_steps": 1,
+                    "norm_clip": 1.5,
+                    "step_size": 0.08,
+                    "revertible_only": True,
+                },
+            },
+            {
+                "surface_id": "s_resid_pre_l3_prev",
+                "target": {
+                    "kind": "activation",
+                    "worker": "os_0",
+                    "site": "resid_pre",
+                    "layer": 3,
+                    "token": {"mode": "index", "value": -2},
+                },
+                "allow_ops": ["resid_add"],
+                "caps": {
+                    "max_alpha": 0.12,
+                    "max_ttl_steps": 1,
+                    "norm_clip": 1.5,
+                    "step_size": 0.08,
+                    "revertible_only": True,
+                },
+            },
+        ]
 
     def _make_worker_runtime(
         self,
@@ -1535,7 +1629,12 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(results[0]["term_count"], 2)
         self.assertEqual(results[0]["terms"][0]["term"], "ab")
         self.assertEqual(results[0]["terms"][0]["token_ids"], [1, 2])
+        self.assertEqual(results[0]["terms"][0]["piece_count"], 2)
+        self.assertEqual(results[0]["terms"][0]["control_profile"], "sequence_bias_plus_patience")
         self.assertEqual(results[0]["terms"][0]["biasable_units"][0]["piece"], "a")
+        self.assertEqual(results[0]["terms"][1]["control_profile"], "single_token_bias_ok")
+        self.assertEqual(results[0]["soft_logit_bias_ok_terms"], ["c"])
+        self.assertEqual(results[0]["needs_sequence_support_terms"], ["ab"])
 
     def test_worker_runtime_constraint_scorer_tool_uses_task_feedback_and_observer(self):
         def task_feedback_fn(output):
@@ -1576,6 +1675,140 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertAlmostEqual(results[0]["required_term_recall"], 1.0)
         self.assertAlmostEqual(results[0]["semantic_progress_score"], 0.9)
         self.assertIn("semantic_checked", results[0]["explanation_tags"])
+
+    def test_worker_runtime_logit_bias_prefers_space_prefixed_variant(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(worker_runtime.runtime_state.base_token)
+        worker_runtime._no_progress_steps = 1
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["ab"],
+            "entity_recall_terms": ["ab"],
+            "required_term_span_progress_by_term": {"ab": 0.0},
+        }
+
+        space_token = int(worker_runtime.codec.encode(" ")[0].item())
+        a_token = int(worker_runtime.codec.encode("a")[0].item())
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[space_token] = 1.0
+        logits[a_token] = 1.0
+
+        adjusted, state = worker_runtime._apply_soft_entity_logit_bias(logits)
+
+        self.assertGreater(float(adjusted[space_token].item()), float(adjusted[a_token].item()))
+        self.assertIn("ab", state["logit_bias_prefer_space_terms"])
+
+    def test_worker_runtime_packet_exposes_entity_phase_and_l4_term_cooldown(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "progressing",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["ab", "c"],
+            "entity_recall_terms": ["ab", "c"],
+        }
+        worker_runtime._tool_results = [
+            {
+                "tool": "tokenize_terms",
+                "soft_logit_bias_ok_terms": ["c"],
+                "needs_sequence_support_terms": ["ab"],
+                "span_progress_watch_terms": ["ab"],
+            }
+        ]
+        worker_runtime._recent_effects = [
+            {
+                "edit_id": "e_required_term_nudge_l4",
+                "surface_id": "s_resid_pre_l4_last",
+                "op": "resid_add",
+                "hypothesis": "required_term_nudge_l4",
+                "verdict": "harmful",
+                "delta": {
+                    "required_term_recall": 0.0,
+                    "required_term_span_progress": 0.0,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+            }
+        ]
+
+        packet = worker_runtime.build_controller_packet()
+
+        self.assertEqual(packet["control_phase_hint"], "shot_mode")
+        self.assertEqual(packet["strategy_hints"]["loop_severity"], "none")
+        self.assertEqual(packet["strategy_hints"]["easy_entity_terms"], ["c"])
+        self.assertEqual(packet["strategy_hints"]["hard_entity_terms"], ["ab"])
+        self.assertTrue(packet["strategy_hints"]["prefer_space_prefixed_logit_bias"])
+        self.assertTrue(packet["strategy_hints"]["prefer_auxiliary_entity_bias"])
+        self.assertTrue(packet["strategy_hints"]["shot_mode_ready"])
+        self.assertEqual(packet["strategy_hints"]["direct_entity_edit_gate"], "shot_mode_first")
+        self.assertEqual(packet["strategy_hints"]["prefer_shot_tools"], ["constraint_scorer", "dry_run_decode"])
+        self.assertTrue(packet["strategy_hints"]["shot_probe_needed"])
+        self.assertEqual(packet["strategy_hints"]["preferred_shot_surface_id"], "s_resid_pre_l3_prev")
+        self.assertEqual(packet["strategy_hints"]["shot_candidate_edits"][0]["surface_id"], "s_resid_pre_l3_prev")
+        self.assertNotIn(
+            "s_resid_pre_l4_last",
+            [candidate["surface_id"] for candidate in packet["strategy_hints"]["shot_candidate_edits"]],
+        )
+        self.assertTrue(packet["strategy_hints"]["l4_term_nudge_cooldown"])
+        self.assertEqual(packet["strategy_hints"]["avoid_recall_surfaces"], ["s_resid_pre_l4_last"])
+
+    def test_worker_runtime_packet_switches_to_shot_mode_after_stabilizing_only_loop_relief(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["budget", "send", "Mira"],
+            "entity_recall_terms": ["budget", "send", "Mira"],
+        }
+        worker_runtime._tool_results = [
+            {
+                "tool": "tokenize_terms",
+                "soft_logit_bias_ok_terms": ["budget", "send"],
+                "needs_sequence_support_terms": ["Mira"],
+                "span_progress_watch_terms": ["Mira"],
+            }
+        ]
+        worker_runtime._recent_effects = [
+            {
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "hypothesis": "loop_break_small_rescue",
+                "verdict": "neutral",
+                "signal_profile": "stabilizing_only",
+                "delta": {
+                    "required_term_recall": 0.0,
+                    "required_term_span_progress": 0.0,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                    "repeat_flag": -1.0,
+                    "no_progress_steps": -1.0,
+                },
+            }
+        ]
+
+        packet = worker_runtime.build_controller_packet()
+
+        self.assertEqual(packet["control_phase_hint"], "shot_mode")
+        self.assertTrue(packet["strategy_hints"]["shot_mode_ready"])
+        self.assertEqual(packet["strategy_hints"]["direct_entity_edit_gate"], "shot_mode_first")
+        self.assertEqual(packet["strategy_hints"]["loop_break_attempt_count"], 1)
+        self.assertEqual(packet["strategy_hints"]["stabilizing_only_count"], 1)
+        self.assertEqual(packet["strategy_hints"]["prefer_shot_tools"], ["constraint_scorer", "dry_run_decode"])
+        self.assertTrue(packet["strategy_hints"]["shot_probe_needed"])
+        self.assertEqual(packet["strategy_hints"]["preferred_shot_surface_id"], "s_resid_pre_l3_prev")
+        self.assertEqual(packet["strategy_hints"]["shot_candidate_edits"][0]["surface_id"], "s_resid_pre_l3_prev")
+        self.assertIn(
+            "s_resid_pre_l4_last",
+            [candidate["surface_id"] for candidate in packet["strategy_hints"]["shot_candidate_edits"]],
+        )
 
     def test_worker_runtime_dry_run_decode_tool_compares_small_candidate_edit(self):
         def task_feedback_fn(output):
@@ -1814,6 +2047,36 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             float(adjusted[worker_runtime.runtime_state.hint_token].item()),
         )
         self.assertEqual(state["track"], "auxiliary")
+
+    def test_worker_runtime_logit_bias_entity_soft_prefers_easy_terms_first(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "entity_recall_terms": ["ab", "c"],
+            "missing_required_terms": ["ab", "c"],
+            "entity_recall_progress_by_term": {"ab": 0.0, "c": 0.0},
+            "required_term_span_progress_by_term": {"ab": 0.0, "c": 0.0},
+        }
+        worker_runtime._tool_results = [
+            {
+                "tool": "tokenize_terms",
+                "soft_logit_bias_ok_terms": ["c"],
+                "needs_sequence_support_terms": ["ab"],
+            }
+        ]
+
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        adjusted, state = worker_runtime._apply_soft_entity_logit_bias(logits)
+
+        self.assertTrue(state["logit_bias_active"])
+        self.assertEqual(state["logit_bias_focus_mode"], "easy_terms_first")
+        self.assertEqual(state["logit_bias_focus_terms"][0], "c")
+        self.assertEqual(state["logit_bias_easy_terms"], ["c"])
+        self.assertEqual(state["logit_bias_hard_terms"], ["ab"])
+        self.assertGreaterEqual(float(adjusted.max().item()), -5.0)
 
     def test_worker_runtime_runs_bounded_observer_check_on_coverage_progress(self):
         seen = []

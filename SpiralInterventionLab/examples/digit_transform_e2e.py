@@ -113,6 +113,31 @@ def build_default_activation_surface_catalog(
                     },
                 }
             )
+    if selected_layers:
+        shot_layer = min(selected_layers)
+        for site in sites:
+            if site != "resid_pre":
+                continue
+            catalog.append(
+                {
+                    "surface_id": f"s_{site}_l{shot_layer}_prev",
+                    "target": {
+                        "kind": "activation",
+                        "worker": worker_id,
+                        "site": site,
+                        "layer": shot_layer,
+                        "token": {"mode": "index", "value": -2},
+                    },
+                    "allow_ops": ["resid_add"],
+                    "caps": {
+                        "max_alpha": float(min(max_alpha, 0.12)),
+                        "max_ttl_steps": 1,
+                        "norm_clip": float(norm_clip),
+                        "step_size": float(min(step_size, 0.08)),
+                        "revertible_only": True,
+                    },
+                }
+            )
     return catalog
 
 

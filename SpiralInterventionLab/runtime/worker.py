@@ -460,6 +460,8 @@ class HookedTransformerWorkerRuntime:
         if hasattr(self.runtime_state, "set_trace_alignment"):
             self.runtime_state.set_trace_alignment(self._steps)
         active_edits = self._collect_active_edits()
+        control_phase_hint = self._control_phase_hint()
+        strategy_hints = self._strategy_hints(control_phase_hint=control_phase_hint)
         packet = {
             "version": "0.1",
             "run_id": self.run_id,
@@ -509,6 +511,8 @@ class HookedTransformerWorkerRuntime:
             "budget": self._budget_state(active_edits),
             "task_feedback": dict(self._last_task_feedback),
             "tool_catalog": self._build_tool_catalog(),
+            "control_phase_hint": control_phase_hint,
+            "strategy_hints": strategy_hints,
         }
         if self._latest_observer_check is not None:
             packet["latest_observer_check"] = dict(self._latest_observer_check)
@@ -1126,12 +1130,18 @@ class HookedTransformerWorkerRuntime:
 
         output_tokens = self._output_token_ids()
         term_progress = self._feedback_term_progress_by_term()
-        focus_terms = self._focus_terms_by_progress(target_terms, term_progress, max_terms=2)
+        focus_terms, easy_terms, hard_terms, focus_mode = self._entity_bias_focus_terms(
+            target_terms,
+            term_progress,
+            max_terms=2,
+        )
         if not focus_terms:
             focus_terms = list(target_terms[:2])
+        easy_term_set = set(easy_terms)
         token_biases: dict[int, float] = {}
         base_bias = min(1.45, 0.6 + (0.15 * max(1, self._no_progress_steps)) + (0.15 * float(self._repeat_flag())))
         max_bias = 0.0
+        space_prefixed_terms: list[str] = []
         for sequence in sequences:
             if sequence.term not in focus_terms:
                 continue
@@ -1143,6 +1153,22 @@ class HookedTransformerWorkerRuntime:
                 term_scale = 1.1
             else:
                 term_scale = 0.75
+            if sequence.term in easy_term_set:
+                term_scale *= 1.12
+            elif easy_term_set:
+                term_scale *= 0.88
+            has_space_prefixed_variant = any(
+                candidate.term == sequence.term and str(candidate.variant).startswith(" ")
+                for candidate in sequences
+            )
+            if has_space_prefixed_variant and str(sequence.variant).startswith(" "):
+                variant_scale = 1.3
+                if sequence.term not in space_prefixed_terms:
+                    space_prefixed_terms.append(sequence.term)
+            elif has_space_prefixed_variant:
+                variant_scale = 0.72
+            else:
+                variant_scale = 1.0
             for index, token_id in enumerate(sequence.token_ids):
                 if not (0 <= token_id < adjusted.shape[-1]) or not torch.isfinite(adjusted[token_id]):
                     continue
@@ -1154,7 +1180,7 @@ class HookedTransformerWorkerRuntime:
                     position_scale = 0.65
                 if prefix_depth > 0 and index == min(prefix_depth, len(sequence.token_ids) - 1):
                     position_scale = max(position_scale, 1.05)
-                bias = min(2.25, float(base_bias * term_scale * position_scale))
+                bias = min(2.25, float(base_bias * term_scale * variant_scale * position_scale))
                 token_biases[token_id] = max(token_biases.get(token_id, 0.0), bias)
                 max_bias = max(max_bias, bias)
 
@@ -1178,6 +1204,10 @@ class HookedTransformerWorkerRuntime:
             "logit_bias_terms": list(target_terms),
             "logit_bias_focus_term_count": len(focus_terms),
             "logit_bias_focus_terms": list(focus_terms),
+            "logit_bias_focus_mode": focus_mode,
+            "logit_bias_easy_terms": list(easy_terms),
+            "logit_bias_hard_terms": list(hard_terms),
+            "logit_bias_prefer_space_terms": space_prefixed_terms[:6],
             "logit_bias_token_ids": sorted(token_biases),
         }
 
@@ -1261,6 +1291,295 @@ class HookedTransformerWorkerRuntime:
         indexed_terms = list(enumerate(terms))
         indexed_terms.sort(key=lambda item: (float(progress_by_term.get(item[1], 0.0) or 0.0), item[0]))
         return [str(term) for _index, term in indexed_terms[: min(max_terms, len(indexed_terms))]]
+
+    def _entity_bias_focus_terms(
+        self,
+        terms: Sequence[str],
+        progress_by_term: Mapping[str, float],
+        *,
+        max_terms: int,
+    ) -> tuple[list[str], list[str], list[str], str]:
+        if max_terms <= 0:
+            return [], [], [], "off"
+        allowed_terms = {str(term) for term in terms}
+        latest_tokenize = self._latest_tokenize_terms_result()
+        easy_terms = self._intersect_terms(latest_tokenize.get("soft_logit_bias_ok_terms"), allowed_terms)
+        hard_terms = self._intersect_terms(latest_tokenize.get("needs_sequence_support_terms"), allowed_terms)
+        if easy_terms:
+            focus_terms = self._focus_terms_by_progress(easy_terms, progress_by_term, max_terms=max_terms)
+            if len(focus_terms) < max_terms:
+                ranked_terms = self._focus_terms_by_progress(terms, progress_by_term, max_terms=len(terms))
+                for term in ranked_terms:
+                    if term in focus_terms:
+                        continue
+                    focus_terms.append(term)
+                    if len(focus_terms) >= max_terms:
+                        break
+            return focus_terms[:max_terms], easy_terms, hard_terms, "easy_terms_first"
+        focus_terms = self._focus_terms_by_progress(terms, progress_by_term, max_terms=max_terms)
+        return focus_terms[:max_terms], easy_terms, hard_terms, "progress_only"
+
+    def _loop_severity_hint(self) -> str:
+        cycle_length = self._loop_cycle_length()
+        output_len = len(self._output_token_ids())
+        if self._last_status == "looping":
+            return "high"
+        if self._repeat_flag() and (self._no_progress_steps >= 2 or (cycle_length is not None and output_len >= 4)):
+            return "high"
+        if self._repeat_flag() or cycle_length is not None or self._no_progress_steps > 0:
+            return "low"
+        return "none"
+
+    def _effect_has_coverage_progress(self, effect: Mapping[str, Any]) -> bool:
+        delta = effect.get("delta", {})
+        if not isinstance(delta, Mapping):
+            return False
+        return (
+            float(delta.get("required_term_recall", 0.0) or 0.0) > 1e-6
+            or float(delta.get("required_term_span_progress", 0.0) or 0.0) > 0.01
+            or float(delta.get("partial_score", 0.0) or 0.0) > 1e-6
+            or float(delta.get("semantic_progress_score", 0.0) or 0.0) > 0.03
+        )
+
+    def _effect_looks_like_recall_edit(self, effect: Mapping[str, Any]) -> bool:
+        text = " ".join(
+            str(effect.get(key, "") or "")
+            for key in ("hypothesis", "edit_id", "expected_effect")
+        ).lower()
+        if not text:
+            return False
+        term_markers = ("required", "term", "entity", "coverage", "recall", "insertion", "shot")
+        loop_markers = ("loop", "rescue", "repeat")
+        return any(marker in text for marker in term_markers) and not any(marker in text for marker in loop_markers)
+
+    def _effect_looks_like_loop_break(self, effect: Mapping[str, Any]) -> bool:
+        text = " ".join(
+            str(effect.get(key, "") or "")
+            for key in ("hypothesis", "edit_id", "expected_effect")
+        ).lower()
+        if not text:
+            return False
+        return any(marker in text for marker in ("loop", "rescue", "repeat", "stall"))
+
+    def _recent_loop_break_attempt_count(self, *, window: int = 8) -> int:
+        count = 0
+        for effect in list(self._recent_effects)[-window:]:
+            if isinstance(effect, Mapping) and self._effect_looks_like_loop_break(effect):
+                count += 1
+        return count
+
+    def _recent_stabilizing_only_count(self, *, window: int = 8) -> int:
+        count = 0
+        for effect in list(self._recent_effects)[-window:]:
+            if not isinstance(effect, Mapping):
+                continue
+            if not self._effect_looks_like_loop_break(effect):
+                continue
+            if str(effect.get("signal_profile", "flat")) == "stabilizing_only":
+                count += 1
+        return count
+
+    def _recent_recall_failure_count(self, *, window: int = 8) -> int:
+        count = 0
+        for effect in list(self._recent_effects)[-window:]:
+            if not isinstance(effect, Mapping):
+                continue
+            if not self._effect_looks_like_recall_edit(effect):
+                continue
+            if self._effect_has_coverage_progress(effect):
+                continue
+            verdict = str(effect.get("verdict", "unknown"))
+            signal_profile = str(effect.get("signal_profile", "flat"))
+            if verdict == "harmful" or signal_profile in {"stabilizing_only", "flat"}:
+                count += 1
+        return count
+
+    def _recent_tool_result_count(self, tool_names: Sequence[str], *, window: int = 6) -> int:
+        allowed = {str(name) for name in tool_names}
+        count = 0
+        for item in list(self._tool_results)[-window:]:
+            if not isinstance(item, Mapping):
+                continue
+            if str(item.get("tool", "")) in allowed:
+                count += 1
+        return count
+
+    def _shot_mode_ready(self) -> bool:
+        missing_terms = self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
+        if not missing_terms:
+            return False
+        if self._loop_severity_hint() == "high":
+            return False
+        recent_coverage_progress = any(
+            isinstance(effect, Mapping) and self._effect_has_coverage_progress(effect)
+            for effect in list(self._recent_effects)[-6:]
+        )
+        if recent_coverage_progress:
+            return False
+        stabilizing_only_count = self._recent_stabilizing_only_count()
+        recall_failure_count = self._recent_recall_failure_count()
+        loop_break_attempt_count = self._recent_loop_break_attempt_count()
+        return stabilizing_only_count >= 1 or recall_failure_count >= 1 or loop_break_attempt_count >= 2
+
+    def _shot_candidate_edits(self, *, avoid_surfaces: Sequence[str] = ()) -> list[dict[str, Any]]:
+        avoid = {str(surface_id) for surface_id in avoid_surfaces}
+        candidates: list[tuple[int, int, dict[str, Any]]] = []
+        for surface in self.surface_catalog:
+            target = getattr(surface, "target", None)
+            if getattr(target, "kind", None) != "activation" or getattr(target, "site", None) != "resid_pre":
+                continue
+            surface_id = str(surface.surface_id)
+            if surface_id in avoid:
+                continue
+            token = getattr(target, "token", None)
+            mode = getattr(token, "mode", None)
+            token_priority = 99
+            role = "shot_generic"
+            alpha = 0.04
+            if mode == "index" and getattr(token, "value", None) == -2:
+                token_priority = 0
+                role = "shot_prev_anchor"
+                alpha = 0.04
+            elif mode == "last":
+                token_priority = 1
+                role = "shot_last_anchor"
+                alpha = 0.05 if getattr(target, "layer", 0) >= 4 else 0.04
+            else:
+                continue
+            layer = int(getattr(target, "layer", 0) or 0)
+            candidates.append(
+                (
+                    token_priority,
+                    layer,
+                    {
+                        "surface_id": surface_id,
+                        "kind": "resid_add",
+                        "alpha": float(alpha),
+                        "ttl_steps": 1,
+                        "step_size": float(alpha),
+                        "role": role,
+                    },
+                )
+            )
+        candidates.sort(key=lambda item: (item[0], item[1], str(item[2]["surface_id"])))
+        return [candidate for _priority, _layer, candidate in candidates[:3]]
+
+    def _shot_probe_needed(self, *, shot_mode_ready: bool) -> bool:
+        if not shot_mode_ready:
+            return False
+        if max(0, self.max_tool_calls_per_run - len(self._tool_results)) <= 0:
+            return False
+        return self._recent_tool_result_count(("constraint_scorer", "dry_run_decode"), window=4) == 0
+
+    def _control_phase_hint(self) -> str:
+        if self._loop_severity_hint() == "high":
+            return "loop_break"
+        missing_terms = self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
+        if missing_terms:
+            if self._shot_mode_ready():
+                return "shot_mode"
+            return "entity_insertion"
+        if self._loop_severity_hint() == "low":
+            return "loop_break"
+        return "monitor"
+
+    def _strategy_hints(self, *, control_phase_hint: str) -> dict[str, Any]:
+        latest_tokenize = self._latest_tokenize_terms_result()
+        missing_terms = set(
+            self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
+        )
+        easy_terms = self._intersect_terms(latest_tokenize.get("soft_logit_bias_ok_terms"), missing_terms)
+        hard_terms = self._intersect_terms(latest_tokenize.get("needs_sequence_support_terms"), missing_terms)
+        watch_terms = self._intersect_terms(latest_tokenize.get("span_progress_watch_terms"), missing_terms)
+        prefer_auxiliary_entity_bias = bool(easy_terms) and self.decoder_control_mode == "logit_bias_entity_soft"
+        shot_mode_ready = self._shot_mode_ready()
+        loop_break_attempt_count = self._recent_loop_break_attempt_count()
+        stabilizing_only_count = self._recent_stabilizing_only_count()
+        avoid_surfaces = ["s_resid_pre_l4_last"] if self._l4_term_nudge_cooldown_active() else []
+        shot_candidate_edits = self._shot_candidate_edits(avoid_surfaces=avoid_surfaces)
+        shot_probe_needed = self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
+        hints = {
+            "control_phase_hint": control_phase_hint,
+            "loop_severity": self._loop_severity_hint(),
+            "prefer_space_prefixed_logit_bias": bool(hard_terms or easy_terms),
+            "prefer_auxiliary_entity_bias": prefer_auxiliary_entity_bias,
+            "direct_entity_edit_gate": (
+                "shot_mode_first"
+                if control_phase_hint == "shot_mode"
+                else ("auxiliary_first" if prefer_auxiliary_entity_bias else "direct_edit_ok")
+            ),
+            "easy_entity_terms": easy_terms,
+            "hard_entity_terms": hard_terms,
+            "watch_span_progress_terms": watch_terms,
+            "shot_mode_ready": shot_mode_ready,
+            "loop_break_attempt_count": loop_break_attempt_count,
+            "stabilizing_only_count": stabilizing_only_count,
+            "shot_probe_needed": shot_probe_needed,
+            "shot_candidate_edits": shot_candidate_edits,
+            "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
+        }
+        if hints["l4_term_nudge_cooldown"]:
+            hints["avoid_recall_surfaces"] = list(avoid_surfaces)
+        if control_phase_hint == "loop_break":
+            hints["phase_policy"] = "Prefer loop relief, patience, or observer/tool checks before entity insertion edits."
+        elif control_phase_hint == "shot_mode":
+            hints["phase_policy"] = (
+                "De-loop already helped but coverage is still zero; prefer constraint_scorer, dry_run_decode, or a dedicated shot edit before another loop-break."
+            )
+            hints["prefer_shot_tools"] = ["constraint_scorer", "dry_run_decode"]
+            if shot_candidate_edits:
+                hints["preferred_shot_surface_id"] = str(shot_candidate_edits[0]["surface_id"])
+        elif control_phase_hint == "entity_insertion":
+            if prefer_auxiliary_entity_bias:
+                hints["phase_policy"] = (
+                    "Favor auxiliary easy-term bias, dry-run checks, or observer checks before a new direct latent recall edit."
+                )
+            else:
+                hints["phase_policy"] = "Favor entity insertion and dry-run checks; avoid new loop-rescue edits unless looping returns."
+        else:
+            hints["phase_policy"] = "Prefer noop or monitoring unless fresh evidence justifies a small edit."
+        return hints
+
+    def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
+        for item in reversed(self._tool_results):
+            if isinstance(item, Mapping) and str(item.get("tool", "")) == "tokenize_terms":
+                return item
+        return {}
+
+    def _intersect_terms(self, raw_terms: Any, allowed_terms: set[str]) -> list[str]:
+        if not isinstance(raw_terms, SequenceABC) or isinstance(raw_terms, (str, bytes, bytearray)):
+            return []
+        terms: list[str] = []
+        for raw_term in raw_terms:
+            term = " ".join(str(raw_term).split()).strip()
+            if not term or term not in allowed_terms or term in terms:
+                continue
+            terms.append(term)
+        return terms[:6]
+
+    def _l4_term_nudge_cooldown_active(self) -> bool:
+        for effect in reversed(self._recent_effects):
+            if not self._effect_looks_like_l4_term_nudge(effect):
+                continue
+            verdict = str(effect.get("verdict", "unknown"))
+            delta = effect.get("delta", {})
+            if not isinstance(delta, Mapping):
+                return verdict in {"harmful", "neutral"}
+            flat = (
+                float(delta.get("required_term_recall", 0.0) or 0.0) <= 0.0
+                and float(delta.get("required_term_span_progress", 0.0) or 0.0) <= 0.0
+                and float(delta.get("partial_score", 0.0) or 0.0) <= 0.0
+                and float(delta.get("semantic_progress_score", 0.0) or 0.0) <= 0.0
+            )
+            return verdict == "harmful" or flat or verdict == "neutral"
+        return False
+
+    def _effect_looks_like_l4_term_nudge(self, effect: Mapping[str, Any]) -> bool:
+        if str(effect.get("surface_id", "")) != "s_resid_pre_l4_last":
+            return False
+        if str(effect.get("op", "")) != "resid_add":
+            return False
+        return self._effect_looks_like_recall_edit(effect)
 
     def _target_token_sequences(self, terms: Sequence[str], *, vocab_size: int) -> list[_TargetTokenSequence]:
         sequences: list[_TargetTokenSequence] = []
@@ -1430,6 +1749,11 @@ class HookedTransformerWorkerRuntime:
         if not isinstance(raw_terms, SequenceABC) or isinstance(raw_terms, (str, bytes, bytearray)):
             return None
         rows: list[dict[str, Any]] = []
+        single_token_terms: list[str] = []
+        multi_piece_terms: list[str] = []
+        soft_logit_bias_ok_terms: list[str] = []
+        needs_sequence_support_terms: list[str] = []
+        span_progress_watch_terms: list[str] = []
         for raw_term in raw_terms:
             term = _clean_controller_memory_text(raw_term, limit=80)
             if term is None:
@@ -1466,11 +1790,29 @@ class HookedTransformerWorkerRuntime:
             if not segmentations:
                 continue
             primary = segmentations[0]
+            piece_count = len(primary["token_ids"])
+            if piece_count <= 1:
+                control_profile = "single_token_bias_ok"
+                soft_logit_bias_ok_terms.append(term)
+                single_token_terms.append(term)
+            elif piece_count == 2:
+                control_profile = "sequence_bias_plus_patience"
+                needs_sequence_support_terms.append(term)
+                span_progress_watch_terms.append(term)
+                multi_piece_terms.append(term)
+            else:
+                control_profile = "edit_plus_sequence_support"
+                needs_sequence_support_terms.append(term)
+                span_progress_watch_terms.append(term)
+                multi_piece_terms.append(term)
             rows.append(
                 {
                     "term": term,
                     "token_ids": list(primary["token_ids"]),
                     "pieces": list(primary["pieces"]),
+                    "piece_count": piece_count,
+                    "is_single_token": piece_count == 1,
+                    "control_profile": control_profile,
                     "piece_boundaries": list(primary["piece_boundaries"]),
                     "alternative_segmentations": [
                         {
@@ -1485,7 +1827,16 @@ class HookedTransformerWorkerRuntime:
             )
         if not rows:
             return None
-        return {"status": "ok", "term_count": len(rows), "terms": rows}
+        return {
+            "status": "ok",
+            "term_count": len(rows),
+            "terms": rows,
+            "single_token_terms": single_token_terms[:8],
+            "multi_piece_terms": multi_piece_terms[:8],
+            "soft_logit_bias_ok_terms": soft_logit_bias_ok_terms[:8],
+            "needs_sequence_support_terms": needs_sequence_support_terms[:8],
+            "span_progress_watch_terms": span_progress_watch_terms[:8],
+        }
 
     def _constraint_scorer_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
         candidate_text = _clean_controller_memory_text(request.get("candidate"), limit=320) or self.final_text()
