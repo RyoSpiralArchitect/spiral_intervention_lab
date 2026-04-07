@@ -62,6 +62,48 @@ class _StubFeatureScanWorker:
             ],
         }
 
+    def kv_feature_scan(self, *, feature_groups, max_features_per_group=4, max_surface_hits=2):
+        return {
+            "projection_mode": "attn_weight_head_projection",
+            "surface_count": 4,
+            "group_count": 1,
+            "mean_alignment": 0.15,
+            "max_alignment": 0.22,
+            "groups": [
+                {
+                    "group": "required_terms",
+                    "polarity": "promote",
+                    "feature_kind": "required_term",
+                    "feature_count": 2,
+                    "mean_alignment": 0.15,
+                    "top_features": [
+                        {
+                            "feature": "Mira",
+                            "alignment": 0.22,
+                            "site": "v_cache",
+                            "layer": 4,
+                            "head": 1,
+                            "token_mode": "last",
+                            "coverage_progress": 0.0,
+                        }
+                    ],
+                }
+            ],
+            "top_feature_hits": [
+                {
+                    "group": "required_terms",
+                    "feature": "Mira",
+                    "polarity": "promote",
+                    "site": "v_cache",
+                    "layer": 4,
+                    "head": 1,
+                    "token_mode": "last",
+                    "alignment": 0.22,
+                    "coverage_progress": 0.0,
+                }
+            ],
+        }
+
 
 class _FakeMiniLMTokenizer:
     def __call__(self, texts, padding=True, truncation=True, return_tensors="pt"):
@@ -271,7 +313,9 @@ class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
         self.assertIn("score", observer)
         self.assertIn("coverage_weight", observer)
         self.assertIn("latent_feature_scan", observer)
+        self.assertIn("kv_feature_scan", observer)
         self.assertEqual(observer["latent_feature_scan"]["groups"][0]["group"], "required_terms")
+        self.assertEqual(observer["kv_feature_scan"]["groups"][0]["top_features"][0]["site"], "v_cache")
         full_feedback = kwargs["task_feedback_fn"](candidate)
         self.assertEqual(full_feedback["partial_score"], 1.0)
         self.assertEqual(full_feedback["required_term_span_progress"], 1.0)
@@ -309,6 +353,8 @@ class TestSpiralStructuredSummaryEnv(unittest.TestCase):
         self.assertIsNotNone(observer)
         self.assertIn("score", observer)
         self.assertIn("latent_feature_scan", observer)
+        self.assertIn("kv_feature_scan", observer)
+        self.assertEqual(observer["kv_feature_scan"]["groups"][0]["top_features"][0]["site"], "v_cache")
         self.assertEqual(kwargs["task_feedback_fn"](candidate)["partial_score"], 1.0)
 
 

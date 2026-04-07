@@ -25,7 +25,8 @@ class BaselineSuiteResult:
 def activation_only_policy(base: HarnessPolicy | None = None) -> HarnessPolicy:
     root = base or HarnessPolicy.default_v0()
     deny_targets = tuple(root.deny_targets) + (DenyTargetRule(kind="weight"),)
-    return replace(root, allow_ops=("resid_add",), deny_targets=deny_targets)
+    # Activation-only includes cache-space edits; it excludes persistent weight surgery.
+    return replace(root, allow_ops=("resid_add", "kv_mix"), deny_targets=deny_targets)
 
 
 def run_b0(

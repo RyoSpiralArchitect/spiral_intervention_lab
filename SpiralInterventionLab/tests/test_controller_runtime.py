@@ -5,7 +5,7 @@ from unittest.mock import patch
 import torch
 
 from SpiralInterventionLab.runtime.adapter import BoundSurface, HookedTransformerAdapter, ModelAdapter
-from SpiralInterventionLab.runtime.baselines import run_b0, run_b1, run_c1, run_minimal_baseline_suite
+from SpiralInterventionLab.runtime.baselines import activation_only_policy, run_b0, run_b1, run_c1, run_minimal_baseline_suite
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.compiler import StepContext, compile_command
 from SpiralInterventionLab.runtime.edit_budget import prepare_direction
@@ -1676,6 +1676,371 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertAlmostEqual(results[0]["semantic_progress_score"], 0.9)
         self.assertIn("semantic_checked", results[0]["explanation_tags"])
 
+    def test_worker_runtime_kv_feature_scan_reports_cache_head_candidates(self):
+        worker_runtime = self._make_worker_runtime()
+
+        class _FakeAttn:
+            def __init__(self):
+                self.W_K = torch.tensor(
+                    [
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                    ],
+                    dtype=torch.float32,
+                )
+                self.W_V = torch.tensor(
+                    [
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[1.0, 0.0], [0.0, 1.0], [0.0, 0.0]],
+                    ],
+                    dtype=torch.float32,
+                )
+
+        fake_model = type(
+            "FakeModel",
+            (),
+            {"blocks": [type("FakeBlock", (), {"attn": _FakeAttn()})() for _ in range(12)]},
+        )()
+        worker_runtime.model = fake_model
+        worker_runtime.runtime_state.model = fake_model
+        worker_runtime.runtime_state.last_cache = {
+            "blocks.3.attn.hook_k": torch.tensor(
+                [[[[0.1, 0.0], [0.0, 0.1]], [[0.2, 0.0], [0.1, 0.2]]]],
+                dtype=torch.float32,
+            ),
+            "blocks.3.attn.hook_v": torch.tensor(
+                [[[[0.1, 0.0], [0.3, 0.2]], [[0.1, 0.0], [1.0, 0.0]]]],
+                dtype=torch.float32,
+            ),
+        }
+        worker_runtime._feature_prototype_cache["term_x"] = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
+
+        scan = worker_runtime.kv_feature_scan(
+            feature_groups={
+                "required_terms": {
+                    "terms": ("term_x",),
+                    "polarity": "promote",
+                    "feature_kind": "required_term",
+                }
+            }
+        )
+
+        self.assertIsNotNone(scan)
+        assert scan is not None
+        self.assertEqual(scan["projection_mode"], "attn_weight_head_projection")
+        self.assertEqual(scan["groups"][0]["group"], "required_terms")
+        self.assertEqual(scan["top_feature_hits"][0]["site"], "v_cache")
+        self.assertEqual(scan["top_feature_hits"][0]["layer"], 3)
+        self.assertEqual(scan["top_feature_hits"][0]["head"], 1)
+        self.assertEqual(scan["top_feature_hits"][0]["token_mode"], "last")
+
+    def test_worker_runtime_kv_feature_scan_handles_gqa_expanded_weights(self):
+        worker_runtime = self._make_worker_runtime()
+
+        class _FakeAttn:
+            def __init__(self):
+                self.W_K = torch.tensor(
+                    [
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                    ],
+                    dtype=torch.float32,
+                )
+                self.W_V = torch.tensor(
+                    [
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                    ],
+                    dtype=torch.float32,
+                )
+
+        fake_model = type(
+            "FakeGQAModel",
+            (),
+            {
+                "blocks": [type("FakeBlock", (), {"attn": _FakeAttn()})() for _ in range(12)],
+                "cfg": type("FakeCfg", (), {"n_heads": 6, "n_key_value_heads": 2, "d_head": 2, "d_model": 3})(),
+            },
+        )()
+        worker_runtime.model = fake_model
+        worker_runtime.runtime_state.model = fake_model
+        worker_runtime.runtime_state.last_cache = {
+            "blocks.3.attn.hook_k": torch.tensor(
+                [[[[1.0, 0.0], [0.0, 0.1]], [[0.2, 0.0], [0.0, 0.2]]]],
+                dtype=torch.float32,
+            ),
+            "blocks.3.attn.hook_v": torch.tensor(
+                [[[[0.5, 0.0], [0.1, 0.1]], [[0.0, 0.2], [0.0, 0.6]]]],
+                dtype=torch.float32,
+            ),
+        }
+        worker_runtime._feature_prototype_cache["term_x"] = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
+
+        scan = worker_runtime.kv_feature_scan(
+            feature_groups={
+                "required_terms": {
+                    "terms": ("term_x",),
+                    "polarity": "promote",
+                    "feature_kind": "required_term",
+                }
+            }
+        )
+
+        self.assertIsNotNone(scan)
+        assert scan is not None
+        self.assertEqual(scan["top_feature_hits"][0]["site"], "k_cache")
+        self.assertEqual(scan["top_feature_hits"][0]["layer"], 3)
+        self.assertEqual(scan["top_feature_hits"][0]["head"], 0)
+
+    def test_worker_runtime_kv_feature_scan_prioritizes_required_promote_hits(self):
+        worker_runtime = self._make_worker_runtime()
+
+        class _FakeAttn:
+            def __init__(self):
+                self.W_K = torch.tensor(
+                    [
+                        [[1.0, 1.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 0.0], [0.0, 1.0], [0.0, 0.0]],
+                    ],
+                    dtype=torch.float32,
+                )
+                self.W_V = torch.tensor(
+                    [
+                        [[1.0, 0.0], [0.0, 0.0], [0.0, 0.0]],
+                        [[0.0, 0.0], [1.0, 1.0], [0.0, 0.0]],
+                    ],
+                    dtype=torch.float32,
+                )
+
+        fake_model = type(
+            "FakeModel",
+            (),
+            {"blocks": [type("FakeBlock", (), {"attn": _FakeAttn()})() for _ in range(12)]},
+        )()
+        worker_runtime.model = fake_model
+        worker_runtime.runtime_state.model = fake_model
+        worker_runtime.runtime_state.last_cache = {
+            "blocks.3.attn.hook_k": torch.tensor(
+                [[[[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.2]]]],
+                dtype=torch.float32,
+            ),
+            "blocks.3.attn.hook_v": torch.tensor(
+                [[[[1.0, 0.0], [0.0, 1.0]], [[0.1, 0.0], [0.0, 0.2]]]],
+                dtype=torch.float32,
+            ),
+        }
+        worker_runtime._feature_prototype_cache["term_req"] = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
+        worker_runtime._feature_prototype_cache["term_forbid"] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32)
+
+        scan = worker_runtime.kv_feature_scan(
+            feature_groups={
+                "required_terms": {
+                    "terms": ("term_req",),
+                    "polarity": "promote",
+                    "feature_kind": "required_term",
+                },
+                "forbidden_phrases": {
+                    "terms": ("term_forbid",),
+                    "polarity": "suppress",
+                    "feature_kind": "forbidden_phrase",
+                },
+            }
+        )
+
+        self.assertIsNotNone(scan)
+        assert scan is not None
+        self.assertEqual(scan["top_feature_hits"][0]["group"], "required_terms")
+        self.assertEqual(scan["top_feature_hits"][0]["polarity"], "promote")
+        self.assertEqual(scan["top_feature_hits"][0]["site"], "v_cache")
+        self.assertEqual(scan["top_feature_hits"][1]["group"], "forbidden_phrases")
+        self.assertEqual(scan["top_feature_hits"][1]["site"], "k_cache")
+
+    def test_worker_runtime_packet_promotes_kv_scan_hits_into_cache_surfaces_and_hints(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["term_x"],
+            "entity_recall_terms": ["term_x"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.41,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "alignment": 0.31,
+                    }
+                ],
+                "groups": [
+                    {
+                        "group": "required_terms",
+                        "polarity": "promote",
+                        "top_features": [
+                            {
+                                "feature": "term_x",
+                                "site": "v_cache",
+                                "layer": 3,
+                                "head": 1,
+                                "token_mode": "last",
+                                "alignment": 0.31,
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "hypothesis": "small_loop_rescue",
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "observed_window_steps": 1,
+                "before": {
+                    "entropy": 1.2,
+                    "top1_margin": 0.1,
+                    "repetition_score": 0.8,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+                "after": {
+                    "entropy": 1.1,
+                    "top1_margin": 0.2,
+                    "repetition_score": 0.5,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+                "delta": {
+                    "repetition_score": -0.3,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+                "verdict": "neutral",
+                "signal_profile": "stabilizing_only",
+            }
+        ]
+
+        packet = worker_runtime.build_controller_packet()
+        parsed = parse_observation_packet(packet)
+
+        promoted = next(surface for surface in packet["surface_catalog"] if surface["target"]["kind"] == "cache")
+        self.assertEqual(promoted["target"]["site"], "v_cache")
+        self.assertEqual(promoted["target"]["layer"], 3)
+        self.assertEqual(promoted["target"]["head"], 1)
+        self.assertEqual(promoted["allow_ops"], ["kv_mix"])
+        self.assertEqual(promoted["caps"]["max_ttl_steps"], 1)
+        self.assertEqual(
+            packet["latest_observer_check"]["kv_feature_scan"]["top_feature_hits"][0]["surface_id"],
+            promoted["surface_id"],
+        )
+        self.assertEqual(parsed.surface_map()[promoted["surface_id"]].target.kind, "cache")
+        self.assertEqual(packet["strategy_hints"]["preferred_kv_surface_id"], promoted["surface_id"])
+        self.assertTrue(packet["strategy_hints"]["kv_probe_needed"])
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["surface_id"], promoted["surface_id"])
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["op"]["kind"], "kv_mix")
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["op"]["which"], "v")
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["tensor"], "v_cache")
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["head"], 1)
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["token"]["value"], -2)
+
+    def test_worker_runtime_build_dry_run_command_accepts_kv_candidate_edit(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["term_x"],
+            "entity_recall_terms": ["term_x"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.41,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "alignment": 0.31,
+                    }
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "hypothesis": "small_loop_rescue",
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "observed_window_steps": 1,
+                "before": {
+                    "entropy": 1.2,
+                    "top1_margin": 0.1,
+                    "repetition_score": 0.8,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+                "after": {
+                    "entropy": 1.1,
+                    "top1_margin": 0.2,
+                    "repetition_score": 0.5,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+                "delta": {
+                    "repetition_score": -0.3,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                },
+                "verdict": "neutral",
+                "signal_profile": "stabilizing_only",
+            }
+        ]
+        packet = worker_runtime.build_controller_packet()
+        candidate_edit = packet["strategy_hints"]["kv_candidate_edits"][0]
+
+        command = worker_runtime._build_dry_run_command(candidate_edit)
+
+        self.assertIsNotNone(command)
+        assert command is not None
+        parsed = parse_controller_command(command)
+        self.assertEqual(parsed.edits[0].op.kind, "kv_mix")
+        self.assertEqual(parsed.edits[0].target.surface_id, candidate_edit["surface_id"])
+        validate_command_against_packet(command, packet)
+
     def test_worker_runtime_logit_bias_prefers_space_prefixed_variant(self):
         worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
         worker_runtime.reset("p")
@@ -2201,6 +2566,13 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
 
         self.assertEqual(result.output, "aca")
         self.assertEqual(result.score, 1.0)
+
+    def test_activation_only_policy_keeps_cache_edits_but_denies_weight_patches(self):
+        policy = activation_only_policy()
+
+        self.assertEqual(policy.allow_ops, ("resid_add", "kv_mix"))
+        self.assertIn("kv_mix", policy.allow_ops)
+        self.assertNotIn("rank1_patch", policy.allow_ops)
 
     def test_minimal_baseline_suite_runs_b0_b1_c1_and_seeds_paired_trace(self):
         controller = _ResidEditController()

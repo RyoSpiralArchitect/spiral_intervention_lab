@@ -224,6 +224,22 @@ class TestBackendsAndBridge(unittest.TestCase):
                             }
                         ],
                     },
+                    "kv_feature_scan": {
+                        "projection_mode": "attn_weight_head_projection",
+                        "surface_count": 4,
+                        "group_count": 1,
+                        "groups": [
+                            {
+                                "group": "required_terms",
+                                "polarity": "promote",
+                                "feature_count": 2,
+                                "mean_alignment": 0.15,
+                                "top_features": [
+                                    {"feature": "Mira", "site": "v_cache", "layer": 4, "head": 1, "alignment": 0.22}
+                                ],
+                            }
+                        ],
+                    },
                 },
                 "recent_observer_checks": [
                     {
@@ -251,6 +267,10 @@ class TestBackendsAndBridge(unittest.TestCase):
             trace["observation"]["latest_observer_check"]["latent_feature_scan"]["groups"][0]["group"],
             "required_terms",
         )
+        self.assertEqual(
+            trace["observation"]["latest_observer_check"]["kv_feature_scan"]["groups"][0]["top_features"][0]["site"],
+            "v_cache",
+        )
 
     def test_provider_controller_client_observation_includes_tool_catalog_and_results(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
@@ -277,10 +297,37 @@ class TestBackendsAndBridge(unittest.TestCase):
                     "hard_entity_terms": ["Mira"],
                     "shot_mode_ready": False,
                     "shot_probe_needed": False,
+                    "kv_probe_needed": True,
                     "shot_candidate_edits": [
                         {"surface_id": "s_resid_pre_l3_prev", "kind": "resid_add", "alpha": 0.04, "ttl_steps": 1, "step_size": 0.04, "role": "shot_prev_anchor"}
                     ],
+                    "kv_candidate_edits": [
+                        {
+                            "surface_id": "s_v_cache_l4_h1_last_promoted",
+                            "kind": "kv_mix",
+                            "site": "v_cache",
+                            "layer": 4,
+                            "head": 1,
+                            "source": {
+                                "dtype": "cache_pair",
+                                "v": {
+                                    "ref": {
+                                        "scope": "runtime",
+                                        "worker": "os_0",
+                                        "tensor": "v_cache",
+                                        "layer": 4,
+                                        "head": 1,
+                                        "token": {"mode": "index", "value": -2},
+                                    }
+                                },
+                            },
+                            "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+                            "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.04, "revertible": True},
+                            "role": "kv_shot_v_prev_anchor",
+                        }
+                    ],
                     "preferred_shot_surface_id": "s_resid_pre_l3_prev",
+                    "preferred_kv_surface_id": "s_v_cache_l4_h1_last_promoted",
                     "loop_break_attempt_count": 1,
                     "stabilizing_only_count": 0,
                     "l4_term_nudge_cooldown": True,
@@ -321,8 +368,12 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["strategy_hints"]["direct_entity_edit_gate"], "auxiliary_first")
         self.assertFalse(trace["observation"]["strategy_hints"]["shot_mode_ready"])
         self.assertFalse(trace["observation"]["strategy_hints"]["shot_probe_needed"])
+        self.assertTrue(trace["observation"]["strategy_hints"]["kv_probe_needed"])
         self.assertEqual(trace["observation"]["strategy_hints"]["preferred_shot_surface_id"], "s_resid_pre_l3_prev")
+        self.assertEqual(trace["observation"]["strategy_hints"]["preferred_kv_surface_id"], "s_v_cache_l4_h1_last_promoted")
         self.assertEqual(trace["observation"]["strategy_hints"]["shot_candidate_edits"][0]["surface_id"], "s_resid_pre_l3_prev")
+        self.assertEqual(trace["observation"]["strategy_hints"]["kv_candidate_edits"][0]["surface_id"], "s_v_cache_l4_h1_last_promoted")
+        self.assertEqual(trace["observation"]["strategy_hints"]["kv_candidate_edits"][0]["op"]["kind"], "kv_mix")
         self.assertTrue(trace["observation"]["strategy_hints"]["l4_term_nudge_cooldown"])
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["tool"], "tokenize_terms")
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["soft_logit_bias_ok_terms"], ["budget"])
@@ -565,10 +616,13 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("latest_tool_results", prompt)
         self.assertIn("recent_tool_results", prompt)
         self.assertIn("latent_feature_scan", prompt)
+        self.assertIn("kv_feature_scan", prompt)
         self.assertIn("top_feature_hits", prompt)
+        self.assertIn("k_cache/v_cache", prompt)
         self.assertIn("forbidden_phrases", prompt)
         self.assertIn("choose between provided surfaces", prompt)
         self.assertIn("s_resid_pre_l4_last", prompt)
+        self.assertIn("research telemetry only", prompt)
         self.assertIn("latent_scan_prefers_l4_for_required_terms", prompt)
         self.assertIn("observer_check_budget_left", prompt)
         self.assertIn("tool_call_budget_left", prompt)
@@ -617,14 +671,19 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("loop_severity", prompt)
         self.assertIn("shot_mode", prompt)
         self.assertIn("shot_probe_needed", prompt)
+        self.assertIn("kv_probe_needed", prompt)
         self.assertIn("shot_candidate_edits", prompt)
+        self.assertIn("kv_candidate_edits", prompt)
         self.assertIn("preferred_shot_surface_id", prompt)
+        self.assertIn("preferred_kv_surface_id", prompt)
         self.assertIn("l4_term_nudge_cooldown", prompt)
         self.assertIn("prefer_auxiliary_entity_bias", prompt)
         self.assertIn("direct_entity_edit_gate", prompt)
         self.assertIn("stabilizing_only", prompt)
         self.assertIn("loop_break, entity_insertion, shot_mode", prompt)
         self.assertIn("s_resid_pre_l3_prev", prompt)
+        self.assertIn("dry_run_decode on one kv_candidate_edits probe", prompt)
+        self.assertIn("runtime promoted a bounded cache surface", prompt)
         self.assertNotIn("include meta.hypothesis and meta.confidence when useful", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):

@@ -163,6 +163,63 @@ def _compact_latent_feature_scan(value: Any) -> dict[str, Any] | None:
     return summary or None
 
 
+def _compact_kv_feature_scan(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in ("projection_mode", "surface_count", "group_count", "mean_alignment", "max_alignment"):
+        if key in value and value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+
+    groups_value = value.get("groups")
+    if isinstance(groups_value, Sequence) and not isinstance(groups_value, (str, bytes, bytearray)):
+        groups: list[dict[str, Any]] = []
+        for item in groups_value[:3]:
+            if not isinstance(item, Mapping):
+                continue
+            group_summary: dict[str, Any] = {}
+            for key in ("group", "polarity", "feature_kind", "feature_count", "mean_alignment"):
+                if key in item and item.get(key) not in (None, ""):
+                    group_summary[key] = item.get(key)
+            top_features_value = item.get("top_features")
+            if isinstance(top_features_value, Sequence) and not isinstance(top_features_value, (str, bytes, bytearray)):
+                top_features: list[dict[str, Any]] = []
+                for feature in top_features_value[:2]:
+                    if not isinstance(feature, Mapping):
+                        continue
+                    feature_summary = {
+                        key: feature.get(key)
+                        for key in ("feature", "polarity", "site", "layer", "head", "token_mode", "surface_id", "alignment", "coverage_progress")
+                        if key in feature and feature.get(key) not in (None, "")
+                    }
+                    if feature_summary:
+                        top_features.append(feature_summary)
+                if top_features:
+                    group_summary["top_features"] = top_features
+            if group_summary:
+                groups.append(group_summary)
+        if groups:
+            summary["groups"] = groups
+
+    top_hits_value = value.get("top_feature_hits")
+    if isinstance(top_hits_value, Sequence) and not isinstance(top_hits_value, (str, bytes, bytearray)):
+        top_hits: list[dict[str, Any]] = []
+        for item in top_hits_value[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            hit_summary = {
+                key: item.get(key)
+                for key in ("group", "feature", "polarity", "site", "layer", "head", "token_mode", "surface_id", "alignment", "coverage_progress")
+                if key in item and item.get(key) not in (None, "")
+            }
+            if hit_summary:
+                top_hits.append(hit_summary)
+        if top_hits:
+            summary["top_feature_hits"] = top_hits
+
+    return summary or None
+
+
 def _compact_observer_check(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
@@ -183,6 +240,9 @@ def _compact_observer_check(value: Any) -> dict[str, Any] | None:
     latent_feature_scan = _compact_latent_feature_scan(value.get("latent_feature_scan"))
     if latent_feature_scan is not None:
         summary["latent_feature_scan"] = latent_feature_scan
+    kv_feature_scan = _compact_kv_feature_scan(value.get("kv_feature_scan"))
+    if kv_feature_scan is not None:
+        summary["kv_feature_scan"] = kv_feature_scan
     return summary or None
 
 
