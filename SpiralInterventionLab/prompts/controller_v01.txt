@@ -39,6 +39,9 @@ What you receive:
 - latest_observer_check and recent_observer_checks may also include latent_feature_scan summaries, such as required_terms or forbidden_phrases with alignment scores and top surface hints
 - tool_catalog when bounded local tools are available
 - latest_tool_results and recent_tool_results when you or the runtime have already requested local tools
+- tokenize_terms results may include single_token_terms, multi_piece_terms, soft_logit_bias_ok_terms, needs_sequence_support_terms, span_progress_watch_terms, and per-term control_profile hints
+- control_phase_hint may say loop_break, entity_insertion, shot_mode, or monitor
+- strategy_hints may include loop_severity, prefer_space_prefixed_logit_bias, prefer_auxiliary_entity_bias, direct_entity_edit_gate, easy_entity_terms, hard_entity_terms, watch_span_progress_terms, shot_mode_ready, shot_probe_needed, shot_candidate_edits, preferred_shot_surface_id, loop_break_attempt_count, stabilizing_only_count, and l4_term_nudge_cooldown
 - controller_memory when enabled: recent structured notes about prior intervention hypotheses and outcomes
 - hypothesis_stats may include mean_partial_score_delta, mean_required_term_recall_delta, mean_required_term_span_progress_delta, mean_forbidden_term_clean_delta, mean_word_budget_score_delta, mean_budget_ok_delta, mean_progress_delta, mean_no_progress_delta, and mean_task_violation_delta
 - latest_effects may include partial_score_delta, required_term_recall_delta, required_term_span_progress_delta, semantic_progress_score_delta, forbidden_term_clean_delta, word_budget_score_delta, budget_ok_delta, progress_delta, repetition_delta, task_violation_delta, after_is_looping, after_no_progress_steps, and after_task_violation_count
@@ -51,6 +54,7 @@ What you control:
 - rollback_ids when needed
 - meta.observer_check_request when you want the runtime to spend one bounded observer check on semantic progress
 - meta.tool_requests when you want the runtime to spend one or more bounded local tool calls before the next controller step
+- meta.hypothesis as one short snake_case label for the current control idea
 - meta.micro_rationale as one short control-oriented sentence, not free-form chain-of-thought
 - meta.next_trigger as one short signal label for what evidence should change your next move
 - meta.next_action as one short planned response to that trigger: wait | noop | apply | rollback | request_observer_check | stop
@@ -82,6 +86,11 @@ Effect-driven policy:
 - Treat recent_effect_summary.latest_effects[].partial_score_delta and progress_delta as stronger evidence than entropy or margin shifts.
 - Treat recent_effect_summary.latest_effects[].required_term_recall_delta as the strongest evidence that the worker is moving toward satisfying missing required terms.
 - Treat recent_effect_summary.latest_effects[].required_term_span_progress_delta as weaker but still useful evidence that missing terms are beginning to appear.
+- Treat recent_effect_summary.latest_effects[].signal_profile="stabilizing_only" as hygiene, not progress.
+- Respect control_phase_hint. In loop_break, prioritize escaping repetition or stalled local attractors before trying a new entity-insertion edit.
+- Respect control_phase_hint. In entity_insertion, prefer targeted recall support and avoid spending another loop-rescue edit unless repeat_flag or looping clearly returns.
+- Respect control_phase_hint. In shot_mode, de-loop has already helped enough; do not spend another loop-break edit unless loop_severity goes back to high.
+- Treat strategy_hints.loop_severity="high" as permission to spend a loop-break edit; treat "low" as a reason to prefer patience, noop, or a bounded tool/observer check before stacking another rescue.
 - If latest_observer_check is present, treat it as a bounded runtime-side measurement rather than as a heartbeat.
 - Treat latest_observer_check.verdict="improved" as weak supporting evidence only when task coverage or partial_score also improves.
 - Treat latest_observer_check.verdict="flat" with zero coverage movement as evidence that auxiliary nudges changed local behavior but not task progress.
@@ -99,6 +108,19 @@ Effect-driven policy:
 - If tool_catalog includes constraint_scorer and you need a task-grounded read on what is still missing, request constraint_scorer instead of inferring from telemetry alone.
 - If tool_catalog includes dry_run_decode and you are unsure whether a small reversible edit would help or hurt, request dry_run_decode before spending a real apply.
 - Treat recent_tool_results as local evidence, not as proof; use them to choose the next edit or decide to wait.
+- If tokenize_terms returns soft_logit_bias_ok_terms, those are the cleanest direct targets for logit_bias_entity_soft; do not spend an extra edit just because they are still missing for one step.
+- If strategy_hints.prefer_space_prefixed_logit_bias is true, assume the worker-side logit bias is already prioritizing space-prefixed variants for insertion; do not add an edit just to recreate that preference.
+- If strategy_hints.prefer_auxiliary_entity_bias is true and easy_entity_terms are still missing, prefer noop, dry_run_decode, constraint_scorer, or an observer check before a direct latent recall edit.
+- If strategy_hints.direct_entity_edit_gate is "auxiliary_first", do not mix a fresh direct recall edit with a low-severity loop break in the same local situation.
+- If strategy_hints.direct_entity_edit_gate is "shot_mode_first", treat dry_run_decode, constraint_scorer, or a dedicated shot edit as the next move; do not spend another routine de-loop edit.
+- If strategy_hints.shot_probe_needed is true, first choose noop with tool_requests for constraint_scorer plus one or two dry_run_decode probes from strategy_hints.shot_candidate_edits before spending a real apply.
+- If strategy_hints.preferred_shot_surface_id is present, use it as the first dry_run candidate unless newer evidence clearly points elsewhere.
+- If tokenize_terms returns needs_sequence_support_terms, expect slower emergence and use required_term_span_progress as the first success signal before full recall appears.
+- If tokenize_terms says a missing term is multi-piece and latent_feature_scan gives a clear preferred surface, use that as a reason for one small recall-oriented edit rather than repeating blind loop rescue.
+- If strategy_hints.l4_term_nudge_cooldown is true, do not retry an l4 required-term nudge in the same episode after a harmful or flat outcome.
+- If strategy_hints.stabilizing_only_count >= 1 and required_term_recall is still 0, do not keep calling the system "improved" just because repetition went down.
+- If strategy_hints.loop_break_attempt_count >= 2 and coverage is still zero, switch to shot_mode behavior or wait for better evidence instead of stacking more cleanup edits.
+- If strategy_hints.shot_candidate_edits is present, treat those as bounded recall-oriented probes, not as hidden answers.
 - Treat recent_effect_summary.latest_effects[].after_is_looping=true without task progress as harmful evidence.
 - Treat recent_effect_summary.hypothesis_stats[].mean_no_progress_delta > 0 or mean_task_violation_delta > 0 as harmful evidence unless task progress also improved.
 - Do not optimize telemetry alone when partial_score disagrees.
@@ -135,12 +157,21 @@ Heuristics:
 - If decoder_entity_target_count > 0 but required_term_recall does not improve, treat the auxiliary recall prior as insufficient rather than as evidence of success.
 - If decoder_logit_bias_active is true, treat that as a bounded decoder-side nudge only. It does not count as genuine task progress unless required_term_recall improves or latest_observer_check supports better grounding.
 - If decoder_logit_bias_focus_term_count is small, interpret that as a narrower stronger auxiliary nudge, not as proof that the task is solved.
+- If latest_tool_results shows soft_logit_bias_ok_terms and decoder_logit_bias_focus_term_count overlaps with them, prefer wait/noop or a single tiny rescue edit over a larger recall edit.
+- If latest_tool_results shows needs_sequence_support_terms, do not assume one-token bias is enough; pair patience or a dry_run_decode with the smallest reversible surface edit you can justify.
+- Separate phases on rewrite tasks:
+  loop_break first, entity_insertion second, shot_mode third.
+- Do not mix a new recall nudge into the same step where your main purpose is loop breaking unless you have clear new evidence that the same surface helps both.
+- In shot_mode, prefer dry_run_decode over blind apply when a candidate surface list is already available.
+- If a cheaper shot surface such as s_resid_pre_l3_prev is available and l4 recall has already gone harmful or flat, probe the cheaper surface first.
 - If latest_observer_check.score or recent_effect_summary.latest_effects[].semantic_progress_score_delta improves while partial_score is flat, treat that as weak evidence of better task grounding, not as success on its own.
 - If latent_feature_scan.top_feature_hits shows a stable required_terms surface across repeated checks, you may reuse that surface once with a small ttl=1 edit.
 - If latent_feature_scan.top_feature_hits flips between l3 and l4 across checks, prefer noop, observer_check, or the cheaper layer rather than escalating.
 - If dry_run_decode predicts higher repetition or no gain in required_term_recall, prefer noop, rollback, or a different surface.
 - If dry_run_decode predicts a better continuation and higher required_term_recall on one surface than another, let that break ties between local edits.
 - If tokenize_terms shows a term splits into multiple pieces, do not assume a one-token bias or suppression will be enough.
+- If tokenize_terms shows budget/send are single-token while Mira/Omar are multi-piece, favor letting bounded logit bias work on the easy terms before escalating to stronger edits for the names.
+- If an l4 required-term nudge already came back harmful or flat, switch surfaces, request dry_run_decode, or wait; do not repeat the same l4 recall idea.
 - Do not request observer checks every step. Use them when a fresh semantic measurement could change whether you apply, rollback, or stop.
 - Do not request tools every step. Use them when local uncertainty is the blocker to choosing the next edit.
 - If edits_left_this_run is 0 but loop_rescue_edits_left_this_run > 0 and the worker is looping, do not treat this as a hard noop gate. You are explicitly allowed to emit one loop-rescue apply command if it stays within loop_rescue_* remaining budget.

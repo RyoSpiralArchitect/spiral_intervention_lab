@@ -117,11 +117,13 @@ class TestExamples(unittest.TestCase):
 
         catalog = build_default_activation_surface_catalog(model, worker_id="os_0")
 
-        self.assertEqual(len(catalog), 1)
+        self.assertEqual(len(catalog), 2)
         self.assertEqual(catalog[0]["target"]["kind"], "activation")
         self.assertEqual(catalog[0]["target"]["site"], "resid_pre")
         self.assertEqual(catalog[0]["target"]["layer"], 1)
         self.assertIn("step_size", catalog[0]["caps"])
+        self.assertEqual(catalog[1]["surface_id"], "s_resid_pre_l1_prev")
+        self.assertEqual(catalog[1]["target"]["token"], {"mode": "index", "value": -2})
 
     def test_build_hooked_transformer_worker_runtime_smoke(self):
         model, codec = self._make_model_and_codec()

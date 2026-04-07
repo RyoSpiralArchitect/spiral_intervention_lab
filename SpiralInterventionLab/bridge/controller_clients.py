@@ -300,6 +300,32 @@ def _compact_tool_result(value: Any) -> dict[str, Any] | None:
             summary[key] = value.get(key)
     if value.get("candidate_preview") not in (None, ""):
         summary["candidate_preview"] = _truncate_text(value.get("candidate_preview"), 80)
+    for key in (
+        "single_token_terms",
+        "multi_piece_terms",
+        "soft_logit_bias_ok_terms",
+        "needs_sequence_support_terms",
+        "span_progress_watch_terms",
+    ):
+        raw_items = value.get(key)
+        if isinstance(raw_items, Sequence) and not isinstance(raw_items, (str, bytes, bytearray)):
+            compact_items = [str(item) for item in raw_items[:4] if str(item)]
+            if compact_items:
+                summary[key] = compact_items
+    if isinstance(value.get("terms"), Sequence) and not isinstance(value.get("terms"), (str, bytes, bytearray)):
+        term_profiles = []
+        for item in value.get("terms", [])[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            profile = {
+                key: item.get(key)
+                for key in ("term", "piece_count", "is_single_token", "control_profile")
+                if key in item and item.get(key) not in (None, "")
+            }
+            if profile:
+                term_profiles.append(profile)
+        if term_profiles:
+            summary["term_profiles"] = term_profiles
     if isinstance(value.get("sampled_continuations"), Sequence) and not isinstance(
         value.get("sampled_continuations"), (str, bytes, bytearray)
     ):
@@ -393,6 +419,8 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
             "surface_ids": _list_of_ids(payload.get("surface_catalog"), "surface_id"),
             "trace_ids": _list_of_ids(payload.get("trace_bank"), "trace_id"),
             "active_edit_ids": _list_of_ids(payload.get("active_edits"), "edit_id"),
+            "control_phase_hint": payload.get("control_phase_hint"),
+            "strategy_hints": dict(payload.get("strategy_hints", {})) if isinstance(payload.get("strategy_hints"), Mapping) else {},
             "recent_effects": _recent_effect_summaries(payload.get("recent_effects")),
             "recent_effect_summary": dict(payload.get("recent_effect_summary", {}))
             if isinstance(payload.get("recent_effect_summary"), Mapping)
