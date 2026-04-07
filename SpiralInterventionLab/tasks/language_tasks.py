@@ -143,6 +143,7 @@ def _semantic_observer_payload(
     trigger: str,
     reference_kind: str,
     latent_feature_scan: dict[str, Any] | None = None,
+    kv_feature_scan: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     semantic_progress = _coverage_weighted_semantic_progress(
         critic,
@@ -166,6 +167,8 @@ def _semantic_observer_payload(
     }
     if isinstance(latent_feature_scan, dict) and latent_feature_scan:
         payload["latent_feature_scan"] = latent_feature_scan
+    if isinstance(kv_feature_scan, dict) and kv_feature_scan:
+        payload["kv_feature_scan"] = kv_feature_scan
     return payload
 
 
@@ -555,9 +558,26 @@ class SpiralConstrainedRewriteEnv:
         episode = self._episode()
         feedback = dict(task_feedback or self.task_feedback(output))
         latent_feature_scan = None
+        kv_feature_scan = None
         scanner = getattr(worker_runtime, "latent_feature_scan", None)
         if callable(scanner):
             latent_feature_scan = scanner(
+                feature_groups={
+                    "required_terms": {
+                        "terms": tuple(feedback.get("entity_recall_terms") or episode.required_terms),
+                        "polarity": "promote",
+                        "feature_kind": "required_term",
+                    },
+                    "forbidden_phrases": {
+                        "terms": episode.forbidden_terms,
+                        "polarity": "suppress",
+                        "feature_kind": "forbidden_phrase",
+                    },
+                }
+            )
+        kv_scanner = getattr(worker_runtime, "kv_feature_scan", None)
+        if callable(kv_scanner):
+            kv_feature_scan = kv_scanner(
                 feature_groups={
                     "required_terms": {
                         "terms": tuple(feedback.get("entity_recall_terms") or episode.required_terms),
@@ -582,6 +602,7 @@ class SpiralConstrainedRewriteEnv:
             trigger=trigger,
             reference_kind="source_text",
             latent_feature_scan=latent_feature_scan,
+            kv_feature_scan=kv_feature_scan,
         )
 
     def stop_checker(self, output: str) -> bool:
@@ -798,10 +819,28 @@ class SpiralStructuredSummaryEnv:
             return None
         feedback = dict(task_feedback or self.task_feedback(output))
         latent_feature_scan = None
+        kv_feature_scan = None
         scanner = getattr(worker_runtime, "latent_feature_scan", None)
         if callable(scanner):
             episode = self._episode()
             latent_feature_scan = scanner(
+                feature_groups={
+                    "summary_terms": {
+                        "terms": tuple(feedback.get("missing_summary_terms") or episode.required_summary_terms),
+                        "polarity": "promote",
+                        "feature_kind": "summary_term",
+                    },
+                    "keywords": {
+                        "terms": tuple(feedback.get("missing_keywords") or episode.required_keywords),
+                        "polarity": "promote",
+                        "feature_kind": "keyword",
+                    },
+                }
+            )
+        kv_scanner = getattr(worker_runtime, "kv_feature_scan", None)
+        if callable(kv_scanner):
+            episode = self._episode()
+            kv_feature_scan = kv_scanner(
                 feature_groups={
                     "summary_terms": {
                         "terms": tuple(feedback.get("missing_summary_terms") or episode.required_summary_terms),
@@ -826,6 +865,7 @@ class SpiralStructuredSummaryEnv:
             trigger=trigger,
             reference_kind="note_text",
             latent_feature_scan=latent_feature_scan,
+            kv_feature_scan=kv_feature_scan,
         )
 
     def stop_checker(self, output: str) -> bool:

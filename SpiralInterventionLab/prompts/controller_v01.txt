@@ -37,11 +37,12 @@ What you receive:
 - recent_effect_summary with window_size, verdict_counts, hypothesis_stats, and latest_effects
 - latest_observer_check and recent_observer_checks when the runtime decides a bounded semantic observer check is worth spending budget on
 - latest_observer_check and recent_observer_checks may also include latent_feature_scan summaries, such as required_terms or forbidden_phrases with alignment scores and top surface hints
+- latest_observer_check and recent_observer_checks may also include kv_feature_scan summaries with k_cache/v_cache layer-head candidates when cache-space lensing is available
 - tool_catalog when bounded local tools are available
 - latest_tool_results and recent_tool_results when you or the runtime have already requested local tools
 - tokenize_terms results may include single_token_terms, multi_piece_terms, soft_logit_bias_ok_terms, needs_sequence_support_terms, span_progress_watch_terms, and per-term control_profile hints
 - control_phase_hint may say loop_break, entity_insertion, shot_mode, or monitor
-- strategy_hints may include loop_severity, prefer_space_prefixed_logit_bias, prefer_auxiliary_entity_bias, direct_entity_edit_gate, easy_entity_terms, hard_entity_terms, watch_span_progress_terms, shot_mode_ready, shot_probe_needed, shot_candidate_edits, preferred_shot_surface_id, loop_break_attempt_count, stabilizing_only_count, and l4_term_nudge_cooldown
+- strategy_hints may include loop_severity, prefer_space_prefixed_logit_bias, prefer_auxiliary_entity_bias, direct_entity_edit_gate, easy_entity_terms, hard_entity_terms, watch_span_progress_terms, shot_mode_ready, shot_probe_needed, kv_probe_needed, shot_candidate_edits, kv_candidate_edits, preferred_shot_surface_id, preferred_kv_surface_id, loop_break_attempt_count, stabilizing_only_count, and l4_term_nudge_cooldown
 - controller_memory when enabled: recent structured notes about prior intervention hypotheses and outcomes
 - hypothesis_stats may include mean_partial_score_delta, mean_required_term_recall_delta, mean_required_term_span_progress_delta, mean_forbidden_term_clean_delta, mean_word_budget_score_delta, mean_budget_ok_delta, mean_progress_delta, mean_no_progress_delta, and mean_task_violation_delta
 - latest_effects may include partial_score_delta, required_term_recall_delta, required_term_span_progress_delta, semantic_progress_score_delta, forbidden_term_clean_delta, word_budget_score_delta, budget_ok_delta, progress_delta, repetition_delta, task_violation_delta, after_is_looping, after_no_progress_steps, and after_task_violation_count
@@ -95,9 +96,15 @@ Effect-driven policy:
 - Treat latest_observer_check.verdict="improved" as weak supporting evidence only when task coverage or partial_score also improves.
 - Treat latest_observer_check.verdict="flat" with zero coverage movement as evidence that auxiliary nudges changed local behavior but not task progress.
 - If latest_observer_check.latent_feature_scan is present, treat it as a probe-like hint about which surfaces currently align with required-term or forbidden-phrase features.
+- If latest_observer_check.kv_feature_scan is present, treat it as a cache-space hint about which k_cache/v_cache heads currently align with missing-term or forbidden-phrase prototypes.
+- Stronger kv_feature_scan alignment is a candidate-selection hint, not proof that a kv edit will help.
+- If kv_feature_scan lacks a matching surface_id in the packet, treat it as research telemetry only; do not invent raw head edits that the runtime did not already expose.
+- If kv_feature_scan top hits now include surface_id in the packet, that means the runtime promoted a bounded cache surface for you; stay inside that surface's caps.
+- If latent_feature_scan and kv_feature_scan agree on the same layer family, treat that as stronger evidence than either scan alone.
 - Stronger required_terms alignment on one surface is a steering hint, not proof that the worker has recalled the term.
 - Stronger forbidden_phrases alignment is a risk signal, not a success signal.
 - Use latent_feature_scan.top_feature_hits to choose between provided surfaces when you must pick one local edit.
+- Use kv_feature_scan.top_feature_hits to prioritize future cache-target candidates when the runtime later exposes matching cache surfaces.
 - If required_terms alignment is clearly stronger on one surface than the others, prefer that surface for the next small reversible apply.
 - If forbidden_phrases alignment is strongest on one surface and required_terms alignment is stronger elsewhere, avoid spending your promote edit on the forbidden-heavy surface.
 - If required_terms top hits favor s_resid_pre_l4_last while loop rescue used s_resid_pre_l3_last, treat that as a reason to switch from l3 rescue toward a cautious l4 nudge.
@@ -115,6 +122,9 @@ Effect-driven policy:
 - If strategy_hints.direct_entity_edit_gate is "shot_mode_first", treat dry_run_decode, constraint_scorer, or a dedicated shot edit as the next move; do not spend another routine de-loop edit.
 - If strategy_hints.shot_probe_needed is true, first choose noop with tool_requests for constraint_scorer plus one or two dry_run_decode probes from strategy_hints.shot_candidate_edits before spending a real apply.
 - If strategy_hints.preferred_shot_surface_id is present, use it as the first dry_run candidate unless newer evidence clearly points elsewhere.
+- If strategy_hints.kv_probe_needed is true, prefer dry_run_decode on one kv_candidate_edits probe before a real kv_mix apply.
+- If strategy_hints.kv_candidate_edits is present, treat them as bounded cache-space shot probes, not as permission to invent raw head edits.
+- If strategy_hints.preferred_kv_surface_id is present, use it as the first kv dry_run candidate unless newer evidence clearly points elsewhere.
 - If tokenize_terms returns needs_sequence_support_terms, expect slower emergence and use required_term_span_progress as the first success signal before full recall appears.
 - If tokenize_terms says a missing term is multi-piece and latent_feature_scan gives a clear preferred surface, use that as a reason for one small recall-oriented edit rather than repeating blind loop rescue.
 - If strategy_hints.l4_term_nudge_cooldown is true, do not retry an l4 required-term nudge in the same episode after a harmful or flat outcome.
@@ -163,6 +173,7 @@ Heuristics:
   loop_break first, entity_insertion second, shot_mode third.
 - Do not mix a new recall nudge into the same step where your main purpose is loop breaking unless you have clear new evidence that the same surface helps both.
 - In shot_mode, prefer dry_run_decode over blind apply when a candidate surface list is already available.
+- In shot_mode, if kv_candidate_edits are available and residual shot probes already looked weak, probe one kv candidate before repeating another recall nudge.
 - If a cheaper shot surface such as s_resid_pre_l3_prev is available and l4 recall has already gone harmful or flat, probe the cheaper surface first.
 - If latest_observer_check.score or recent_effect_summary.latest_effects[].semantic_progress_score_delta improves while partial_score is flat, treat that as weak evidence of better task grounding, not as success on its own.
 - If latent_feature_scan.top_feature_hits shows a stable required_terms surface across repeated checks, you may reuse that surface once with a small ttl=1 edit.

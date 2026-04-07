@@ -385,6 +385,7 @@ class HookedTransformerWorkerRuntime:
         self._pending_tool_events: list[dict[str, Any]] = []
         self._last_observer_candidate_hash: str | None = None
         self._feature_prototype_cache: dict[str, torch.Tensor] = {}
+        self._kv_projection_cache: dict[tuple[int, str, int, int, int], torch.Tensor | None] = {}
         self._last_decoder_control: dict[str, Any] = {
             "mode": self.decoder_control_mode,
             "track": _decoder_control_spec(self.decoder_control_mode)["track"],
@@ -460,8 +461,16 @@ class HookedTransformerWorkerRuntime:
         if hasattr(self.runtime_state, "set_trace_alignment"):
             self.runtime_state.set_trace_alignment(self._steps)
         active_edits = self._collect_active_edits()
+        promoted_cache_surfaces = self._promoted_cache_surfaces()
         control_phase_hint = self._control_phase_hint()
-        strategy_hints = self._strategy_hints(control_phase_hint=control_phase_hint)
+        strategy_hints = self._strategy_hints(
+            control_phase_hint=control_phase_hint,
+            promoted_cache_surfaces=promoted_cache_surfaces,
+        )
+        latest_observer_check = self._observer_check_with_cache_surface_ids(
+            self._latest_observer_check,
+            promoted_cache_surfaces=promoted_cache_surfaces,
+        )
         packet = {
             "version": "0.1",
             "run_id": self.run_id,
@@ -502,7 +511,7 @@ class HookedTransformerWorkerRuntime:
                     self._last_decoder_control.get("logit_bias_focus_term_count", 0) or 0
                 ),
             },
-            "surface_catalog": [dict(surface) for surface in self._surface_catalog_raw],
+            "surface_catalog": self._packet_surface_catalog(promoted_cache_surfaces=promoted_cache_surfaces),
             "probe_frames": self._build_probe_frames(),
             "trace_bank": self._build_trace_bank(),
             "active_edits": active_edits,
@@ -514,10 +523,13 @@ class HookedTransformerWorkerRuntime:
             "control_phase_hint": control_phase_hint,
             "strategy_hints": strategy_hints,
         }
-        if self._latest_observer_check is not None:
-            packet["latest_observer_check"] = dict(self._latest_observer_check)
+        if latest_observer_check is not None:
+            packet["latest_observer_check"] = latest_observer_check
         if self._observer_checks:
-            packet["recent_observer_checks"] = [dict(check) for check in self._observer_checks]
+            packet["recent_observer_checks"] = [
+                self._observer_check_with_cache_surface_ids(check, promoted_cache_surfaces=promoted_cache_surfaces)
+                for check in self._observer_checks
+            ]
         if self._latest_tool_results:
             packet["latest_tool_results"] = [dict(result) for result in self._latest_tool_results]
         if self._tool_results:
@@ -667,6 +679,183 @@ class HookedTransformerWorkerRuntime:
         return {
             "prototype_mode": "token_embedding_mean",
             "surface_count": len(surface_vectors),
+            "group_count": len(groups),
+            "mean_alignment": round(mean_alignment, 6),
+            "max_alignment": round(max_alignment, 6),
+            "groups": groups,
+            "top_feature_hits": top_feature_hits[:6],
+        }
+
+    def kv_feature_scan(
+        self,
+        *,
+        feature_groups: Mapping[str, Any],
+        max_features_per_group: int = 4,
+        max_surface_hits: int = 2,
+    ) -> dict[str, Any] | None:
+        if not isinstance(feature_groups, Mapping):
+            return None
+        cache_vectors = self._kv_scan_surface_vectors()
+        if not cache_vectors:
+            return None
+
+        def _group_priority(item: Mapping[str, Any]) -> int:
+            group = str(item.get("group", "") or "")
+            if group == "required_terms":
+                return 0
+            if group == "missing_keywords":
+                return 1
+            if group == "missing_summary_terms":
+                return 2
+            return 3
+
+        def _polarity_priority(item: Mapping[str, Any]) -> int:
+            return 0 if str(item.get("polarity", "promote") or "promote") == "promote" else 1
+
+        def _site_priority(item: Mapping[str, Any]) -> int:
+            return 0 if str(item.get("site", "")) == "v_cache" else 1
+
+        groups: list[dict[str, Any]] = []
+        top_feature_hits: list[dict[str, Any]] = []
+        term_progress = self._feedback_term_progress_by_term()
+
+        for raw_group_name, raw_spec in feature_groups.items():
+            group_name = " ".join(str(raw_group_name).split()).strip().lower().replace(" ", "_")
+            if not group_name:
+                continue
+
+            polarity = "promote"
+            feature_kind = "term"
+            raw_terms: Any = raw_spec
+            if isinstance(raw_spec, Mapping):
+                raw_terms = raw_spec.get("terms", ())
+                polarity = " ".join(str(raw_spec.get("polarity", "promote")).split()).strip().lower().replace(" ", "_")
+                feature_kind = " ".join(str(raw_spec.get("feature_kind", "term")).split()).strip().lower().replace(" ", "_")
+            if not isinstance(raw_terms, SequenceABC) or isinstance(raw_terms, (str, bytes, bytearray)):
+                continue
+
+            feature_rows: list[dict[str, Any]] = []
+            seen_terms: set[str] = set()
+            for raw_term in raw_terms:
+                term = " ".join(str(raw_term).split()).strip()
+                if not term or term in seen_terms:
+                    continue
+                seen_terms.add(term)
+                prototype = self._feature_prototype_vector(term)
+                if prototype is None:
+                    continue
+
+                surface_hits: list[dict[str, Any]] = []
+                for cache_spec in cache_vectors:
+                    projected = self._project_feature_into_kv_head(
+                        prototype,
+                        layer=cache_spec["layer"],
+                        site=cache_spec["site"],
+                        head=cache_spec["head"],
+                        token_index=cache_spec["token_index"],
+                        width=cache_spec["width"],
+                        head_count=cache_spec["head_count"],
+                    )
+                    if projected is None:
+                        continue
+                    alignment = _cosine_similarity(cache_spec["vector"], projected)
+                    if alignment is None:
+                        continue
+                    hit = {
+                        "site": cache_spec["site"],
+                        "layer": cache_spec["layer"],
+                        "head": cache_spec["head"],
+                        "token_mode": cache_spec["token_mode"],
+                        "alignment": round(max(0.0, float(alignment)), 6),
+                    }
+                    if cache_spec.get("surface_id"):
+                        hit["surface_id"] = cache_spec["surface_id"]
+                    surface_hits.append(hit)
+                if not surface_hits:
+                    continue
+                surface_hits.sort(
+                    key=lambda item: (
+                        -float(item["alignment"]),
+                        str(item["site"]),
+                        int(item["layer"]),
+                        int(item["head"]),
+                    )
+                )
+                best_hit = surface_hits[0]
+                feature_rows.append(
+                    {
+                        "feature": term,
+                        "feature_kind": feature_kind,
+                        "polarity": polarity,
+                        "alignment": best_hit["alignment"],
+                        "site": best_hit["site"],
+                        "layer": best_hit["layer"],
+                        "head": best_hit["head"],
+                        "token_mode": best_hit["token_mode"],
+                        "surface_id": best_hit.get("surface_id"),
+                        "surface_hits": surface_hits[: max(1, int(max_surface_hits))],
+                        "coverage_progress": round(float(term_progress.get(term, 0.0) or 0.0), 6),
+                    }
+                )
+
+            if not feature_rows:
+                continue
+            feature_rows.sort(
+                key=lambda item: (
+                    -float(item["alignment"]),
+                    -float(item.get("coverage_progress", 0.0) or 0.0),
+                    str(item["feature"]).lower(),
+                )
+            )
+            top_rows = feature_rows[: max(1, int(max_features_per_group))]
+            mean_alignment = sum(float(item["alignment"]) for item in feature_rows) / len(feature_rows)
+            groups.append(
+                {
+                    "group": group_name,
+                    "polarity": polarity,
+                    "feature_kind": feature_kind,
+                    "feature_count": len(feature_rows),
+                    "mean_alignment": round(mean_alignment, 6),
+                    "top_features": top_rows,
+                }
+            )
+            for item in top_rows:
+                top_feature_hits.append(
+                    {
+                        "group": group_name,
+                        "feature": item["feature"],
+                        "feature_kind": item["feature_kind"],
+                        "polarity": item["polarity"],
+                        "site": item["site"],
+                        "layer": item["layer"],
+                        "head": item["head"],
+                        "token_mode": item["token_mode"],
+                        "alignment": item["alignment"],
+                        "surface_id": item.get("surface_id"),
+                        "coverage_progress": item["coverage_progress"],
+                    }
+                )
+
+        if not groups:
+            return None
+
+        top_feature_hits.sort(
+            key=lambda item: (
+                _group_priority(item),
+                _polarity_priority(item),
+                _site_priority(item),
+                -float(item["alignment"]),
+                -float(item.get("coverage_progress", 0.0) or 0.0),
+                int(item["layer"]),
+                int(item["head"]),
+                str(item.get("feature", "")).lower(),
+            )
+        )
+        mean_alignment = sum(float(group["mean_alignment"]) for group in groups) / len(groups)
+        max_alignment = max(float(item["alignment"]) for item in top_feature_hits)
+        return {
+            "projection_mode": "attn_weight_head_projection",
+            "surface_count": len(cache_vectors),
             "group_count": len(groups),
             "mean_alignment": round(mean_alignment, 6),
             "max_alignment": round(max_alignment, 6),
@@ -1483,7 +1672,12 @@ class HookedTransformerWorkerRuntime:
             return "loop_break"
         return "monitor"
 
-    def _strategy_hints(self, *, control_phase_hint: str) -> dict[str, Any]:
+    def _strategy_hints(
+        self,
+        *,
+        control_phase_hint: str,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any]:
         latest_tokenize = self._latest_tokenize_terms_result()
         missing_terms = set(
             self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
@@ -1497,6 +1691,7 @@ class HookedTransformerWorkerRuntime:
         stabilizing_only_count = self._recent_stabilizing_only_count()
         avoid_surfaces = ["s_resid_pre_l4_last"] if self._l4_term_nudge_cooldown_active() else []
         shot_candidate_edits = self._shot_candidate_edits(avoid_surfaces=avoid_surfaces)
+        kv_candidate_edits = self._kv_candidate_edits(promoted_cache_surfaces=promoted_cache_surfaces)
         shot_probe_needed = self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
         hints = {
             "control_phase_hint": control_phase_hint,
@@ -1515,7 +1710,9 @@ class HookedTransformerWorkerRuntime:
             "loop_break_attempt_count": loop_break_attempt_count,
             "stabilizing_only_count": stabilizing_only_count,
             "shot_probe_needed": shot_probe_needed,
+            "kv_probe_needed": bool(shot_probe_needed and kv_candidate_edits),
             "shot_candidate_edits": shot_candidate_edits,
+            "kv_candidate_edits": kv_candidate_edits,
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
         if hints["l4_term_nudge_cooldown"]:
@@ -1529,6 +1726,11 @@ class HookedTransformerWorkerRuntime:
             hints["prefer_shot_tools"] = ["constraint_scorer", "dry_run_decode"]
             if shot_candidate_edits:
                 hints["preferred_shot_surface_id"] = str(shot_candidate_edits[0]["surface_id"])
+            if kv_candidate_edits:
+                hints["preferred_kv_surface_id"] = str(kv_candidate_edits[0]["surface_id"])
+                hints["phase_policy"] = (
+                    "De-loop already helped but coverage is still zero; prefer constraint_scorer plus dry_run_decode on shot or kv candidates before another loop-break."
+                )
         elif control_phase_hint == "entity_insertion":
             if prefer_auxiliary_entity_bias:
                 hints["phase_policy"] = (
@@ -1556,6 +1758,391 @@ class HookedTransformerWorkerRuntime:
                 continue
             terms.append(term)
         return terms[:6]
+
+    def _latest_kv_feature_scan(self) -> Mapping[str, Any]:
+        if not isinstance(self._latest_observer_check, Mapping):
+            return {}
+        value = self._latest_observer_check.get("kv_feature_scan")
+        if not isinstance(value, Mapping):
+            return {}
+        return value
+
+    def _kv_feature_hits(self, value: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+        scan = value if isinstance(value, Mapping) else self._latest_kv_feature_scan()
+        hits: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, str, str, int, int, str]] = set()
+
+        def _push(raw_hit: Mapping[str, Any], *, group: str | None = None, polarity: str | None = None) -> None:
+            site = str(raw_hit.get("site", "") or "")
+            token_mode = str(raw_hit.get("token_mode", "last") or "last")
+            layer = raw_hit.get("layer")
+            head = raw_hit.get("head")
+            if site not in {"k_cache", "v_cache"}:
+                return
+            if token_mode != "last":
+                return
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                return
+            if isinstance(head, bool) or not isinstance(head, int):
+                return
+            alignment = raw_hit.get("alignment")
+            normalized = dict(raw_hit)
+            normalized["site"] = site
+            normalized["layer"] = int(layer)
+            normalized["head"] = int(head)
+            normalized["token_mode"] = token_mode
+            if group is not None and normalized.get("group") in (None, ""):
+                normalized["group"] = str(group)
+            if polarity is not None and normalized.get("polarity") in (None, ""):
+                normalized["polarity"] = str(polarity)
+            hit_group = str(normalized.get("group", "") or "")
+            hit_polarity = str(normalized.get("polarity", "") or "")
+            feature = str(normalized.get("feature", "") or "")
+            dedupe_key = (hit_group, hit_polarity, site, int(layer), int(head), token_mode)
+            if dedupe_key in seen_keys:
+                return
+            seen_keys.add(dedupe_key)
+            if isinstance(alignment, (int, float)) and not isinstance(alignment, bool):
+                normalized["alignment"] = round(float(alignment), 6)
+            hits.append(normalized)
+
+        top_hits = scan.get("top_feature_hits")
+        if isinstance(top_hits, SequenceABC) and not isinstance(top_hits, (str, bytes, bytearray)):
+            for item in top_hits:
+                if isinstance(item, Mapping):
+                    _push(item)
+
+        groups = scan.get("groups")
+        if isinstance(groups, SequenceABC) and not isinstance(groups, (str, bytes, bytearray)):
+            for group_item in groups:
+                if not isinstance(group_item, Mapping):
+                    continue
+                group = str(group_item.get("group", "") or "")
+                polarity = str(group_item.get("polarity", "") or "")
+                top_features = group_item.get("top_features")
+                if not isinstance(top_features, SequenceABC) or isinstance(top_features, (str, bytes, bytearray)):
+                    continue
+                for item in top_features:
+                    if isinstance(item, Mapping):
+                        _push(item, group=group, polarity=polarity)
+
+        def _group_priority(item: Mapping[str, Any]) -> int:
+            group = str(item.get("group", "") or "")
+            if group == "required_terms":
+                return 0
+            if group == "missing_keywords":
+                return 1
+            if group == "missing_summary_terms":
+                return 2
+            return 3
+
+        def _site_priority(item: Mapping[str, Any]) -> int:
+            return 0 if str(item.get("site", "")) == "v_cache" else 1
+
+        hits.sort(
+            key=lambda item: (
+                _group_priority(item),
+                0 if str(item.get("polarity", "promote") or "promote") == "promote" else 1,
+                _site_priority(item),
+                -float(item.get("alignment", 0.0) or 0.0),
+                int(item.get("layer", 0) or 0),
+                int(item.get("head", 0) or 0),
+            )
+        )
+        return hits
+
+    def _promoted_cache_surface_id(self, *, site: str, layer: int, head: int, token_mode: str) -> str:
+        return f"s_{str(site)}_l{int(layer)}_h{int(head)}_{str(token_mode)}_promoted"
+
+    def _cache_surface_records(
+        self,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        for surface in self.surface_catalog:
+            target = getattr(surface, "target", None)
+            if getattr(target, "kind", None) != "cache":
+                continue
+            token = getattr(target, "token", None)
+            if token is None or getattr(target, "head", None) is None:
+                continue
+            records.append(
+                {
+                    "surface_id": str(surface.surface_id),
+                    "site": str(target.site),
+                    "layer": int(target.layer),
+                    "head": int(target.head),
+                    "token_mode": str(token.mode),
+                    "max_alpha": float(surface.caps.max_alpha),
+                    "step_size": None if surface.caps.step_size is None else float(surface.caps.step_size),
+                    "norm_clip": None if surface.caps.norm_clip is None else float(surface.caps.norm_clip),
+                }
+            )
+        for surface in promoted_cache_surfaces:
+            if not isinstance(surface, Mapping):
+                continue
+            target = surface.get("target")
+            caps = surface.get("caps")
+            if not isinstance(target, Mapping) or not isinstance(caps, Mapping):
+                continue
+            token = target.get("token")
+            if not isinstance(token, Mapping):
+                continue
+            site = str(target.get("site", "") or "")
+            layer = target.get("layer")
+            head = target.get("head")
+            if site not in {"k_cache", "v_cache"}:
+                continue
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                continue
+            if isinstance(head, bool) or not isinstance(head, int):
+                continue
+            records.append(
+                {
+                    "surface_id": str(surface.get("surface_id", "") or ""),
+                    "site": site,
+                    "layer": int(layer),
+                    "head": int(head),
+                    "token_mode": str(token.get("mode", "last") or "last"),
+                    "max_alpha": float(caps.get("max_alpha", 0.06) or 0.06),
+                    "step_size": None if caps.get("step_size") is None else float(caps.get("step_size")),
+                    "norm_clip": None if caps.get("norm_clip") is None else float(caps.get("norm_clip")),
+                }
+            )
+        return records
+
+    def _cache_surface_lookup(
+        self,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[tuple[str, int, int, str], dict[str, Any]]:
+        lookup: dict[tuple[str, int, int, str], dict[str, Any]] = {}
+        for record in self._cache_surface_records(promoted_cache_surfaces=promoted_cache_surfaces):
+            key = (
+                str(record.get("site", "") or ""),
+                int(record.get("layer", 0) or 0),
+                int(record.get("head", 0) or 0),
+                str(record.get("token_mode", "last") or "last"),
+            )
+            surface_id = str(record.get("surface_id", "") or "")
+            if not surface_id or key in lookup:
+                continue
+            lookup[key] = record
+        return lookup
+
+    def _promoted_cache_surfaces(self) -> list[dict[str, Any]]:
+        existing_lookup = self._cache_surface_lookup()
+        promoted: list[dict[str, Any]] = []
+        seen_keys = set(existing_lookup)
+        for hit in self._kv_feature_hits():
+            if str(hit.get("polarity", "promote") or "promote") != "promote":
+                continue
+            if str(hit.get("group", "") or "").startswith("forbidden"):
+                continue
+            site = str(hit.get("site", "") or "")
+            layer = hit.get("layer")
+            head = hit.get("head")
+            token_mode = str(hit.get("token_mode", "last") or "last")
+            if site not in {"k_cache", "v_cache"} or token_mode != "last":
+                continue
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                continue
+            if isinstance(head, bool) or not isinstance(head, int):
+                continue
+            key = (site, int(layer), int(head), token_mode)
+            if key in seen_keys:
+                continue
+            max_alpha = 0.06 if site == "k_cache" else 0.08
+            step_size = 0.03 if site == "k_cache" else 0.04
+            promoted.append(
+                {
+                    "surface_id": self._promoted_cache_surface_id(
+                        site=site,
+                        layer=int(layer),
+                        head=int(head),
+                        token_mode=token_mode,
+                    ),
+                    "target": {
+                        "kind": "cache",
+                        "worker": self.worker_id,
+                        "site": site,
+                        "layer": int(layer),
+                        "head": int(head),
+                        "token": {"mode": token_mode},
+                    },
+                    "allow_ops": ["kv_mix"],
+                    "caps": {
+                        "max_alpha": float(max_alpha),
+                        "max_ttl_steps": 1,
+                        "norm_clip": 1.0,
+                        "step_size": float(step_size),
+                        "revertible_only": True,
+                    },
+                }
+            )
+            seen_keys.add(key)
+            if len(promoted) >= 2:
+                break
+        return promoted
+
+    def _observer_check_with_cache_surface_ids(
+        self,
+        value: Mapping[str, Any] | None,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any] | None:
+        if not isinstance(value, Mapping):
+            return None
+        lookup = self._cache_surface_lookup(promoted_cache_surfaces=promoted_cache_surfaces)
+        normalized = dict(value)
+        kv_scan = value.get("kv_feature_scan")
+        if not isinstance(kv_scan, Mapping):
+            return normalized
+        kv_scan_copy = dict(kv_scan)
+
+        def _inject_surface_id(raw_hit: Mapping[str, Any]) -> dict[str, Any]:
+            item = dict(raw_hit)
+            site = str(item.get("site", "") or "")
+            token_mode = str(item.get("token_mode", "last") or "last")
+            layer = item.get("layer")
+            head = item.get("head")
+            if site in {"k_cache", "v_cache"} and isinstance(layer, int) and isinstance(head, int):
+                record = lookup.get((site, int(layer), int(head), token_mode))
+                if record is not None and record.get("surface_id"):
+                    item["surface_id"] = str(record["surface_id"])
+            return item
+
+        top_hits = kv_scan.get("top_feature_hits")
+        if isinstance(top_hits, SequenceABC) and not isinstance(top_hits, (str, bytes, bytearray)):
+            kv_scan_copy["top_feature_hits"] = [
+                _inject_surface_id(item) if isinstance(item, Mapping) else item for item in top_hits
+            ]
+
+        groups = kv_scan.get("groups")
+        if isinstance(groups, SequenceABC) and not isinstance(groups, (str, bytes, bytearray)):
+            groups_copy: list[Any] = []
+            for group in groups:
+                if not isinstance(group, Mapping):
+                    groups_copy.append(group)
+                    continue
+                group_copy = dict(group)
+                top_features = group.get("top_features")
+                if isinstance(top_features, SequenceABC) and not isinstance(top_features, (str, bytes, bytearray)):
+                    group_copy["top_features"] = [
+                        _inject_surface_id(item) if isinstance(item, Mapping) else item for item in top_features
+                    ]
+                groups_copy.append(group_copy)
+            kv_scan_copy["groups"] = groups_copy
+
+        normalized["kv_feature_scan"] = kv_scan_copy
+        return normalized
+
+    def _packet_surface_catalog(
+        self,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
+        catalog = [dict(surface) for surface in self._surface_catalog_raw]
+        seen_surface_ids = {str(surface.get("surface_id", "") or "") for surface in catalog}
+        for surface in promoted_cache_surfaces:
+            if not isinstance(surface, Mapping):
+                continue
+            surface_id = str(surface.get("surface_id", "") or "")
+            if not surface_id or surface_id in seen_surface_ids:
+                continue
+            catalog.append(dict(surface))
+            seen_surface_ids.add(surface_id)
+        return catalog
+
+    def _kv_candidate_edits(
+        self,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
+        missing_terms = set(
+            self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
+        )
+        if not missing_terms:
+            return []
+        surface_lookup = self._cache_surface_lookup(promoted_cache_surfaces=promoted_cache_surfaces)
+        candidates: list[tuple[int, float, int, int, dict[str, Any]]] = []
+        seen_surface_ids: set[str] = set()
+        for hit in self._kv_feature_hits():
+            if str(hit.get("polarity", "promote") or "promote") != "promote":
+                continue
+            if str(hit.get("group", "") or "").startswith("forbidden"):
+                continue
+            feature = str(hit.get("feature", "") or "")
+            if feature and feature not in missing_terms:
+                continue
+            site = str(hit.get("site", "") or "")
+            token_mode = str(hit.get("token_mode", "last") or "last")
+            layer = hit.get("layer")
+            head = hit.get("head")
+            if site not in {"k_cache", "v_cache"} or token_mode != "last":
+                continue
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                continue
+            if isinstance(head, bool) or not isinstance(head, int):
+                continue
+            record = surface_lookup.get((site, int(layer), int(head), token_mode))
+            if record is None:
+                continue
+            surface_id = str(record.get("surface_id", "") or "")
+            if not surface_id or surface_id in seen_surface_ids:
+                continue
+            seen_surface_ids.add(surface_id)
+            max_alpha = float(record.get("max_alpha", 0.06) or 0.06)
+            alpha = min(max_alpha, 0.04 if site == "v_cache" else 0.03)
+            step_cap = record.get("step_size")
+            step_size = float(alpha if step_cap is None else min(float(step_cap), alpha))
+            norm_clip = record.get("norm_clip")
+            if norm_clip is None:
+                norm_clip = 1.0
+            which = "v" if site == "v_cache" else "k"
+            source_expr = {
+                "ref": {
+                    "scope": "runtime",
+                    "worker": self.worker_id,
+                    "tensor": site,
+                    "layer": int(layer),
+                    "head": int(head),
+                    "token": {"mode": "index", "value": -2},
+                }
+            }
+            candidate = {
+                "surface_id": surface_id,
+                "kind": "kv_mix",
+                "role": f"kv_shot_{which}_prev_anchor",
+                "site": site,
+                "layer": int(layer),
+                "head": int(head),
+                "token_mode": token_mode,
+                "focus_feature": feature,
+                "alignment": round(float(hit.get("alignment", 0.0) or 0.0), 6),
+                "source": {
+                    "dtype": "cache_pair",
+                    which: source_expr,
+                },
+                "op": {"kind": "kv_mix", "alpha": float(alpha), "which": which},
+                "budget": {
+                    "ttl_steps": 1,
+                    "norm_clip": float(norm_clip),
+                    "step_size": float(step_size),
+                    "revertible": True,
+                },
+                "meta": {
+                    "hypothesis": f"kv_{which}_recall_probe",
+                    "expected_effect": "small_cache_recall_support",
+                },
+            }
+            site_priority = 0 if site == "v_cache" else 1
+            candidates.append((site_priority, -float(candidate["alignment"]), int(layer), int(head), candidate))
+            if len(candidates) >= 4:
+                continue
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], str(item[4]["surface_id"])))
+        return [candidate for _site_priority, _alignment, _layer, _head, candidate in candidates[:2]]
 
     def _l4_term_nudge_cooldown_active(self) -> bool:
         for effect in reversed(self._recent_effects):
@@ -2344,6 +2931,9 @@ class HookedTransformerWorkerRuntime:
         latent_feature_scan = value.get("latent_feature_scan")
         if isinstance(latent_feature_scan, Mapping):
             normalized["latent_feature_scan"] = dict(latent_feature_scan)
+        kv_feature_scan = value.get("kv_feature_scan")
+        if isinstance(kv_feature_scan, Mapping):
+            normalized["kv_feature_scan"] = dict(kv_feature_scan)
         previous_score = None
         if isinstance(previous_result, Mapping):
             last_value = previous_result.get("score")
@@ -2440,6 +3030,38 @@ class HookedTransformerWorkerRuntime:
             vectors[str(surface.surface_id)] = vector.detach().reshape(-1).cpu().float()
         return vectors
 
+    def _kv_scan_surface_vectors(self) -> list[dict[str, Any]]:
+        if getattr(self.runtime_state, "last_cache", None) is None:
+            return []
+        vectors: list[dict[str, Any]] = []
+        for layer in self._feature_scan_layers():
+            for site in ("k_cache", "v_cache"):
+                cache_tensor = self._cache_tensor_for_scan(layer=layer, site=site)
+                if cache_tensor is None or cache_tensor.ndim != 4 or cache_tensor.shape[1] <= 0:
+                    continue
+                batch0 = cache_tensor[0]
+                token_index = batch0.shape[0] - 1
+                head_count = int(batch0.shape[1])
+                width = int(batch0.shape[2])
+                for head in range(head_count):
+                    vector = batch0[token_index, head, :].detach().reshape(-1).cpu().float()
+                    if vector.numel() != width:
+                        continue
+                    vectors.append(
+                        {
+                            "site": site,
+                            "layer": int(layer),
+                            "head": int(head),
+                            "token_mode": "last",
+                            "token_index": int(token_index),
+                            "head_count": head_count,
+                            "width": width,
+                            "vector": vector,
+                            "surface_id": self._cache_surface_id(site=site, layer=int(layer), head=int(head), token_mode="last"),
+                        }
+                    )
+        return vectors
+
     def _feature_embedding_matrix(self) -> torch.Tensor | None:
         model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
         if model is None:
@@ -2492,6 +3114,210 @@ class HookedTransformerWorkerRuntime:
         prototype = (prototype / norm).detach().cpu().float()
         self._feature_prototype_cache[normalized_term] = prototype
         return prototype
+
+    def _feature_scan_layers(self) -> tuple[int, ...]:
+        layers = sorted(
+            {
+                int(getattr(surface.target, "layer", 0))
+                for surface in self.surface_catalog
+                if getattr(surface.target, "kind", None) in {"activation", "cache"}
+            }
+        )
+        if layers:
+            return tuple(layers)
+        cache = getattr(self.runtime_state, "last_cache", None) or {}
+        discovered: set[int] = set()
+        for hook_name in cache:
+            match = re.search(r"blocks\.(\d+)\.attn\.hook_[kv]$", str(hook_name))
+            if match:
+                discovered.add(int(match.group(1)))
+        return tuple(sorted(discovered))
+
+    def _cache_hook_name(self, *, layer: int, site: str) -> str:
+        hook_name_for_ref = getattr(self.adapter, "_hook_name_for_ref", None)
+        if callable(hook_name_for_ref):
+            try:
+                return str(hook_name_for_ref(site, layer))
+            except Exception:
+                pass
+        templates = getattr(self.adapter, "HOOK_SITE_TEMPLATES", None)
+        if isinstance(templates, Mapping) and site in templates:
+            return str(templates[site]).format(layer=layer)
+        suffix = "k" if site == "k_cache" else "v"
+        return f"blocks.{int(layer)}.attn.hook_{suffix}"
+
+    def _cache_tensor_for_scan(self, *, layer: int, site: str) -> torch.Tensor | None:
+        cache = getattr(self.runtime_state, "last_cache", None) or {}
+        hook_name = self._cache_hook_name(layer=int(layer), site=str(site))
+        tensor = cache.get(hook_name)
+        if isinstance(tensor, torch.Tensor):
+            return tensor.detach()
+        return None
+
+    def _cache_surface_id(self, *, site: str, layer: int, head: int, token_mode: str) -> str | None:
+        for surface in self.surface_catalog:
+            target = surface.target
+            if getattr(target, "kind", None) != "cache":
+                continue
+            if str(getattr(target, "site", "")) != str(site):
+                continue
+            if int(getattr(target, "layer", -1)) != int(layer):
+                continue
+            if int(getattr(target, "head", -1) if getattr(target, "head", None) is not None else -1) != int(head):
+                continue
+            token = getattr(target, "token", None)
+            if token is None or str(getattr(token, "mode", "")) != str(token_mode):
+                continue
+            return str(surface.surface_id)
+        return None
+
+    def _project_feature_into_kv_head(
+        self,
+        prototype: torch.Tensor,
+        *,
+        layer: int,
+        site: str,
+        head: int,
+        token_index: int,
+        width: int,
+        head_count: int,
+    ) -> torch.Tensor | None:
+        projection = self._kv_projection_tensor(
+            layer=layer,
+            site=site,
+            head_count=head_count,
+            d_model=int(prototype.numel()),
+            width=width,
+        )
+        if projection is None or projection.shape[0] <= head:
+            return None
+        proto = prototype.detach().cpu().float().reshape(-1)
+        projected = torch.matmul(proto, projection[int(head)].cpu().float())
+        if projected.numel() != width:
+            return None
+        if site == "k_cache":
+            projected = self._apply_k_rotary_projection(projected, layer=layer, token_index=token_index, head=head)
+            if projected is None:
+                return None
+        norm = float(projected.norm().item())
+        if norm <= 0.0:
+            return None
+        return (projected / norm).detach().cpu().float()
+
+    def _kv_projection_tensor(
+        self,
+        *,
+        layer: int,
+        site: str,
+        head_count: int,
+        d_model: int,
+        width: int,
+    ) -> torch.Tensor | None:
+        cache_key = (int(layer), str(site), int(head_count), int(d_model), int(width))
+        if cache_key in self._kv_projection_cache:
+            return self._kv_projection_cache[cache_key]
+        model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
+        block = None if model is None else getattr(getattr(model, "blocks", None), "__getitem__", None)
+        if block is None:
+            self._kv_projection_cache[cache_key] = None
+            return None
+        try:
+            attn = model.blocks[int(layer)].attn
+        except Exception:
+            self._kv_projection_cache[cache_key] = None
+            return None
+        raw = getattr(attn, "W_K" if site == "k_cache" else "W_V", None)
+        tensor = self._reshape_kv_projection_tensor(raw, head_count=head_count, d_model=d_model, width=width)
+        self._kv_projection_cache[cache_key] = tensor
+        return tensor
+
+    def _reshape_kv_projection_tensor(
+        self,
+        raw: Any,
+        *,
+        head_count: int,
+        d_model: int,
+        width: int,
+    ) -> torch.Tensor | None:
+        if isinstance(raw, torch.nn.Parameter):
+            tensor = raw.detach().float()
+        elif isinstance(raw, torch.Tensor):
+            tensor = raw.detach().float()
+        else:
+            return None
+        canonical: torch.Tensor | None = None
+        if tensor.ndim == 3:
+            if tensor.shape[1:] == (d_model, width):
+                canonical = tensor
+            elif tensor.shape[0] == d_model and tensor.shape[2] == width:
+                canonical = tensor.permute(1, 0, 2).contiguous()
+            elif tensor.shape[0] == d_model and tensor.shape[1] == width:
+                canonical = tensor.permute(2, 0, 1).contiguous()
+            elif tensor.shape[1] == width and tensor.shape[2] == d_model:
+                canonical = tensor.permute(0, 2, 1).contiguous()
+        elif tensor.ndim == 2:
+            if tensor.shape[0] == d_model and tensor.shape[1] % width == 0:
+                canonical = tensor.reshape(d_model, tensor.shape[1] // width, width).permute(1, 0, 2).contiguous()
+            elif tensor.shape[1] == d_model and tensor.shape[0] % width == 0:
+                canonical = tensor.reshape(tensor.shape[0] // width, width, d_model).permute(0, 2, 1).contiguous()
+        if canonical is None:
+            return None
+        return self._align_kv_projection_heads(canonical, head_count=head_count, d_model=d_model, width=width)
+
+    def _align_kv_projection_heads(
+        self,
+        tensor: torch.Tensor,
+        *,
+        head_count: int,
+        d_model: int,
+        width: int,
+    ) -> torch.Tensor | None:
+        if tensor.ndim != 3 or tensor.shape[1:] != (d_model, width):
+            return None
+        if tensor.shape[0] == head_count:
+            return tensor.contiguous()
+
+        raw_head_count = int(tensor.shape[0])
+        if raw_head_count > head_count and raw_head_count % head_count == 0:
+            # GQA models can expose W_K/W_V on expanded query heads while the live cache
+            # keeps only KV heads. Collapse each contiguous query-head group back to one KV head.
+            group_size = raw_head_count // head_count
+            return tensor.reshape(head_count, group_size, d_model, width).mean(dim=1).contiguous()
+
+        if raw_head_count < head_count and head_count % raw_head_count == 0:
+            repeat_factor = head_count // raw_head_count
+            return tensor.repeat_interleave(repeat_factor, dim=0).contiguous()
+
+        return None
+
+    def _apply_k_rotary_projection(
+        self,
+        projected: torch.Tensor,
+        *,
+        layer: int,
+        token_index: int,
+        head: int,
+    ) -> torch.Tensor | None:
+        model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
+        try:
+            attn = model.blocks[int(layer)].attn if model is not None else None
+        except Exception:
+            attn = None
+        if attn is None:
+            return projected
+        apply_rotary = getattr(attn, "apply_rotary", None)
+        if not callable(apply_rotary):
+            return projected
+        try:
+            rotated = apply_rotary(
+                projected.detach().float().reshape(1, 1, 1, -1),
+                past_kv_pos_offset=max(0, int(token_index)),
+            )
+        except Exception:
+            return None
+        if not isinstance(rotated, torch.Tensor):
+            return None
+        return rotated[0, 0, 0].detach().cpu().float()
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})

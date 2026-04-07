@@ -41,3 +41,8 @@ include = ["SpiralInterventionLab*"]
 
 [tool.setuptools.package-data]
 SpiralInterventionLab = ["prompts/*.txt"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore:Module already imported so cannot be rewritten; anyio:pytest.PytestAssertRewriteWarning",
+]
