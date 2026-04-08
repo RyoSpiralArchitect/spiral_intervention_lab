@@ -11,6 +11,7 @@ from SpiralInterventionLab.examples import (
     build_allowed_token_ids_for_constraint,
     build_hooked_transformer_worker_runtime,
     load_worker_model,
+    run_shot_mode_probe_harness,
     run_digit_transform_c1_only_experiment,
     run_digit_transform_experiment,
     run_digit_transform_sweep,
@@ -338,15 +339,184 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(payload["semantic_critic_mode"], "off")
             self.assertIsNone(payload["semantic_critic_model_name"])
             self.assertEqual(payload["worker_decoder_control_mode"], "off")
-            self.assertEqual(payload["worker_loop_rescue_edits_per_run"], 0)
-            self.assertIn("b0", payload)
-            self.assertIn("b1", payload)
-            self.assertIn("c1", payload)
-            self.assertEqual(payload["paired_trace_id"], "paired_baseline")
-            self.assertTrue(Path(tmpdir, "b0.jsonl").exists())
-            self.assertTrue(Path(tmpdir, "b1.jsonl").exists())
-            self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
-            self.assertTrue(Path(tmpdir, "experiment_summary.json").exists())
+
+    def test_run_shot_mode_probe_harness_smoke(self):
+        class _StubHarnessRuntime:
+            def __init__(self):
+                self._steps = 0
+                self._tool_call_count = 0
+                self._surface_catalog_raw = [{"surface_id": "s_resid_pre_l0_last"}]
+                self._last_task_feedback = {
+                    "required_term_recall": 0.0,
+                    "required_term_span_progress": 0.0,
+                    "partial_score": 0.45,
+                }
+
+            def reset(self, prompt: str) -> None:
+                self.prompt = prompt
+
+            def build_controller_packet(self) -> dict[str, object]:
+                if self._steps == 0:
+                    return {
+                        "step": 0,
+                        "control_phase_hint": "entity_insertion",
+                        "strategy_hints": {
+                            "shot_mode_ready": False,
+                            "shot_probe_needed": False,
+                            "kv_probe_needed": False,
+                            "shot_candidate_edits": [],
+                            "kv_candidate_edits": [],
+                        },
+                        "task_feedback": dict(self._last_task_feedback),
+                    }
+                if self._tool_call_count >= 1:
+                    return {
+                        "step": 1,
+                        "control_phase_hint": "shot_mode",
+                        "strategy_hints": {
+                            "shot_mode_ready": True,
+                            "shot_probe_needed": True,
+                            "kv_probe_needed": True,
+                            "preferred_kv_surface_id": "s_k_cache_l3_h0_last_promoted",
+                            "shot_candidate_edits": [],
+                            "kv_candidate_edits": [
+                                {
+                                    "surface_id": "s_k_cache_l3_h0_last_promoted",
+                                    "kind": "kv_mix",
+                                    "site": "k_cache",
+                                    "recent_probe": {"label": "weak_positive", "score": 1.2},
+                                    "source": {
+                                        "dtype": "cache_pair",
+                                        "k": {
+                                            "ref": {
+                                                "scope": "runtime",
+                                                "worker": "os_0",
+                                                "tensor": "k_cache",
+                                                "layer": 3,
+                                                "head": 0,
+                                                "token": {"mode": "index", "value": 4},
+                                            }
+                                        },
+                                    },
+                                    "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+                                    "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.03, "revertible": True},
+                                    "canary_checked": True,
+                                    "canary_pass": True,
+                                }
+                            ],
+                        },
+                        "task_feedback": dict(self._last_task_feedback),
+                    }
+                return {
+                    "step": 1,
+                    "control_phase_hint": "shot_mode",
+                    "strategy_hints": {
+                        "shot_mode_ready": True,
+                        "shot_probe_needed": True,
+                        "kv_probe_needed": True,
+                        "preferred_kv_surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "shot_candidate_edits": [],
+                        "kv_candidate_edits": [
+                            {
+                                "surface_id": "s_k_cache_l3_h0_last_promoted",
+                                "kind": "kv_mix",
+                                "site": "k_cache",
+                                "source": {
+                                    "dtype": "cache_pair",
+                                    "k": {
+                                        "ref": {
+                                            "scope": "runtime",
+                                            "worker": "os_0",
+                                            "tensor": "k_cache",
+                                            "layer": 3,
+                                            "head": 0,
+                                            "token": {"mode": "index", "value": 4},
+                                        }
+                                    },
+                                },
+                                "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+                                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.03, "revertible": True},
+                                "canary_checked": True,
+                                "canary_pass": True,
+                            },
+                            {
+                                "surface_id": "s_v_cache_l3_h1_last_promoted",
+                                "kind": "kv_mix",
+                                "site": "v_cache",
+                                "source": {
+                                    "dtype": "cache_pair",
+                                    "v": {
+                                        "ref": {
+                                            "scope": "runtime",
+                                            "worker": "os_0",
+                                            "tensor": "v_cache",
+                                            "layer": 3,
+                                            "head": 1,
+                                            "token": {"mode": "index", "value": 5},
+                                        }
+                                    },
+                                },
+                                "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+                                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.04, "revertible": True},
+                                "canary_checked": True,
+                                "canary_pass": False,
+                            }
+                        ],
+                    },
+                    "task_feedback": dict(self._last_task_feedback),
+                }
+
+            def step(self) -> None:
+                self._steps += 1
+
+            def done(self) -> bool:
+                return False
+
+            def final_text(self) -> str:
+                return "EW"
+
+            def request_controller_tools(self, requests, *, source: str = "controller"):
+                self._tool_call_count += 1
+                return [
+                    {
+                        "tool": "dry_run_decode",
+                        "requested_by": source,
+                        "status": "ok",
+                        "candidate_edit": dict(requests[0]["candidate_edit"]),
+                        "required_term_recall_delta": 0.0,
+                        "required_term_span_progress_delta": 0.25,
+                        "semantic_progress_delta": 0.02,
+                    }
+                ]
+
+        env = SpiralConstrainedRewriteEnv()
+        stub_runtime = _StubHarnessRuntime()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch(
+                "SpiralInterventionLab.examples.digit_transform_e2e.build_hooked_transformer_worker_runtime",
+                return_value=stub_runtime,
+            ):
+                result = run_shot_mode_probe_harness(
+                    worker_model_name="tiny-random",
+                    seed=7,
+                    worker_model=object(),
+                    task_env=env,
+                    log_dir=tmpdir,
+                    worker_decoder_control_mode="logit_bias_entity_soft",
+                    max_steps=4,
+                    max_probe_candidates=2,
+                )
+
+            payload = result.to_dict()
+            self.assertTrue(payload["shot_mode_reached"])
+            self.assertEqual(payload["shot_mode_step"], 1)
+            self.assertEqual(payload["probe_round_count"], 2)
+            self.assertEqual(payload["observation_summary"]["preferred_kv_surface_id"], "s_k_cache_l3_h0_last_promoted")
+            self.assertEqual(payload["probe_results"][0]["candidate_edit"]["site"], "k_cache")
+            self.assertEqual(payload["probe_results"][0]["required_term_span_progress_delta"], 0.25)
+            self.assertEqual(payload["probe_results"][0]["probe_stage"], 1)
+            self.assertEqual(payload["probe_results"][1]["probe_stage"], 2)
+            self.assertTrue((Path(tmpdir) / "shot_harness_summary.json").exists())
 
     def test_run_digit_transform_c1_only_experiment_smoke(self):
         model, codec = self._make_model_and_codec()

@@ -760,6 +760,7 @@ class HookedTransformerWorkerRuntime:
                         continue
                     source_positions = self._kv_source_positions_for_feature(
                         prototype,
+                        feature=term,
                         cache_tensor=cache_tensor,
                         layer=int(cache_spec["layer"]),
                         site=str(cache_spec["site"]),
@@ -1630,6 +1631,88 @@ class HookedTransformerWorkerRuntime:
                 count += 1
         return count
 
+    def _recent_kv_probe_outcomes(self, *, window: int = 8) -> dict[str, dict[str, Any]]:
+        outcomes: dict[str, dict[str, Any]] = {}
+        for item in reversed(list(self._tool_results)[-window:]):
+            if not isinstance(item, Mapping):
+                continue
+            if str(item.get("tool", "") or "") != "dry_run_decode":
+                continue
+            candidate_edit = item.get("candidate_edit")
+            if not isinstance(candidate_edit, Mapping):
+                continue
+            if str(candidate_edit.get("kind", "") or "") != "kv_mix":
+                continue
+            surface_id = str(candidate_edit.get("surface_id", "") or "")
+            if not surface_id or surface_id in outcomes:
+                continue
+            recall_delta = float(item.get("required_term_recall_delta", 0.0) or 0.0)
+            span_delta = float(item.get("required_term_span_progress_delta", 0.0) or 0.0)
+            semantic_delta = float(item.get("semantic_progress_delta", 0.0) or 0.0)
+            repeat_delta = int(item.get("repeat_flag_delta", 0) or 0)
+            target_mass_delta = float(item.get("target_mass_delta", 0.0) or 0.0)
+            target_top20_hit_delta = int(item.get("target_top20_hit_delta", 0) or 0)
+            focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
+            rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
+            candidate_meta = candidate_edit.get("meta") if isinstance(candidate_edit.get("meta"), Mapping) else {}
+            retry_stage = (
+                str(candidate_edit.get("retry_stage", "") or "")
+                or str(candidate_meta.get("retry_stage", "") or "")
+            )
+            topk = item.get("topk_token_diff")
+            max_logit_delta = 0.0
+            max_prob_delta = 0.0
+            if isinstance(topk, SequenceABC) and not isinstance(topk, (str, bytes, bytearray)):
+                for token_row in topk:
+                    if not isinstance(token_row, Mapping):
+                        continue
+                    max_logit_delta = max(max_logit_delta, float(token_row.get("logit_delta", 0.0) or 0.0))
+                    max_prob_delta = max(max_prob_delta, float(token_row.get("prob_delta", 0.0) or 0.0))
+            if recall_delta > 0.0 or span_delta > 0.0:
+                label = "positive"
+                score = 3.0 + recall_delta + span_delta + max(0.0, semantic_delta)
+            elif repeat_delta > 0 or semantic_delta < -0.01:
+                label = "harmful"
+                score = -2.0 + semantic_delta - float(repeat_delta)
+            elif (
+                target_top20_hit_delta > 0
+                or target_mass_delta >= 0.00001
+                or focus_rank_delta >= 4
+                or rank_focus_delta >= 4
+                or max_logit_delta >= 0.0005
+                or max_prob_delta >= 0.00005
+                or semantic_delta > 0.0
+            ):
+                label = "weak_positive"
+                score = (
+                    1.0
+                    + max_logit_delta
+                    + (100.0 * max_prob_delta)
+                    + semantic_delta
+                    + min(1.0, 1000.0 * target_mass_delta)
+                    + (0.1 * float(target_top20_hit_delta))
+                    + (0.02 * float(max(focus_rank_delta, rank_focus_delta)))
+                )
+            else:
+                label = "flat"
+                score = -1.0
+            outcomes[surface_id] = {
+                "label": label,
+                "score": round(float(score), 6),
+                "required_term_recall_delta": round(recall_delta, 6),
+                "required_term_span_progress_delta": round(span_delta, 6),
+                "semantic_progress_delta": round(semantic_delta, 6),
+                "repeat_flag_delta": int(repeat_delta),
+                "target_mass_delta": round(target_mass_delta, 6),
+                "target_top20_hit_delta": int(target_top20_hit_delta),
+                "focus_rank_delta": int(focus_rank_delta),
+                "rank_focus_delta": int(rank_focus_delta),
+                "max_logit_delta": round(max_logit_delta, 6),
+                "max_prob_delta": round(max_prob_delta, 6),
+                "was_retry": bool(retry_stage),
+            }
+        return outcomes
+
     def _shot_mode_ready(self) -> bool:
         missing_terms = self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
         if not missing_terms:
@@ -1732,12 +1815,18 @@ class HookedTransformerWorkerRuntime:
             promoted_cache_surfaces=promoted_cache_surfaces,
             canary_enabled=control_phase_hint == "shot_mode" and not self._kv_canary_eval_active,
         )
+        kv_retry_candidate_edits = self._kv_retry_candidate_edits(
+            base_candidates=kv_candidate_edits,
+            canary_enabled=control_phase_hint == "shot_mode" and not self._kv_canary_eval_active,
+        )
         shot_probe_needed = self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
         kv_canary_checked = sum(1 for item in kv_candidate_edits if bool(item.get("canary_checked")))
         kv_canary_positive_count = sum(1 for item in kv_candidate_edits if bool(item.get("canary_pass")))
         kv_canary_rejected_count = sum(
             1 for item in kv_candidate_edits if bool(item.get("canary_checked")) and not bool(item.get("canary_pass"))
         )
+        kv_retry_canary_checked = sum(1 for item in kv_retry_candidate_edits if bool(item.get("canary_checked")))
+        kv_retry_positive_count = sum(1 for item in kv_retry_candidate_edits if bool(item.get("canary_pass")))
         hints = {
             "control_phase_hint": control_phase_hint,
             "loop_severity": self._loop_severity_hint(),
@@ -1756,14 +1845,19 @@ class HookedTransformerWorkerRuntime:
             "stabilizing_only_count": stabilizing_only_count,
             "shot_probe_needed": shot_probe_needed,
             "kv_probe_needed": bool(shot_probe_needed and kv_candidate_edits and kv_canary_checked == 0),
+            "kv_retry_needed": bool(control_phase_hint == "shot_mode" and kv_retry_candidate_edits),
             "shot_candidate_edits": shot_candidate_edits,
             "kv_candidate_edits": kv_candidate_edits,
+            "kv_retry_candidate_edits": kv_retry_candidate_edits,
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
         if kv_canary_checked > 0:
             hints["kv_canary_checked"] = kv_canary_checked
             hints["kv_canary_positive_count"] = kv_canary_positive_count
             hints["kv_canary_rejected_count"] = kv_canary_rejected_count
+        if kv_retry_canary_checked > 0:
+            hints["kv_retry_canary_checked"] = kv_retry_canary_checked
+            hints["kv_retry_positive_count"] = kv_retry_positive_count
         if hints["l4_term_nudge_cooldown"]:
             hints["avoid_recall_surfaces"] = list(avoid_surfaces)
         if control_phase_hint == "loop_break":
@@ -1785,6 +1879,18 @@ class HookedTransformerWorkerRuntime:
                 else:
                     hints["phase_policy"] = (
                         "De-loop already helped but coverage is still zero; if kv canaries fail, prefer constraint_scorer, residual shots, or noop over blind kv apply."
+                    )
+            if kv_retry_candidate_edits:
+                passing_retry_candidates = [item for item in kv_retry_candidate_edits if bool(item.get("canary_pass"))]
+                hints["preferred_kv_retry_surface_id"] = str(kv_retry_candidate_edits[0]["surface_id"])
+                if passing_retry_candidates:
+                    hints["preferred_kv_surface_id"] = str(passing_retry_candidates[0]["surface_id"])
+                    hints["phase_policy"] = (
+                        "A prior kv probe was weak-but-promising on first-token rank or target mass; prefer the bounded retry candidate before inventing a fresh blind kv apply."
+                    )
+                else:
+                    hints["phase_policy"] = (
+                        "A prior kv probe showed weak first-token readout progress; prefer the bounded retry candidate or noop over switching to a totally new blind kv surface."
                     )
         elif control_phase_hint == "entity_insertion":
             if prefer_auxiliary_entity_bias:
@@ -1878,8 +1984,18 @@ class HookedTransformerWorkerRuntime:
                 if not isinstance(top_features, SequenceABC) or isinstance(top_features, (str, bytes, bytearray)):
                     continue
                 for item in top_features:
-                    if isinstance(item, Mapping):
-                        _push(item, group=group, polarity=polarity)
+                    if not isinstance(item, Mapping):
+                        continue
+                    _push(item, group=group, polarity=polarity)
+                    surface_hits = item.get("surface_hits")
+                    if not isinstance(surface_hits, SequenceABC) or isinstance(surface_hits, (str, bytes, bytearray)):
+                        continue
+                    for surface_hit in surface_hits:
+                        if not isinstance(surface_hit, Mapping):
+                            continue
+                        expanded = dict(item)
+                        expanded.update(surface_hit)
+                        _push(expanded, group=group, polarity=polarity)
 
         def _group_priority(item: Mapping[str, Any]) -> int:
             group = str(item.get("group", "") or "")
@@ -1905,6 +2021,142 @@ class HookedTransformerWorkerRuntime:
             )
         )
         return hits
+
+    def _kv_feature_site_preferences(self, *, missing_terms: set[str] | None = None) -> dict[str, str]:
+        term_sites: dict[str, dict[str, float]] = {}
+        for hit in self._kv_feature_hits():
+            if str(hit.get("polarity", "promote") or "promote") != "promote":
+                continue
+            if str(hit.get("group", "") or "").startswith("forbidden"):
+                continue
+            feature = str(hit.get("feature", "") or "")
+            if not feature:
+                continue
+            if missing_terms is not None and feature not in missing_terms:
+                continue
+            site = str(hit.get("site", "") or "")
+            if site not in {"k_cache", "v_cache"}:
+                continue
+            alignment = float(hit.get("alignment", 0.0) or 0.0)
+            site_scores = term_sites.setdefault(feature, {})
+            site_scores[site] = max(float(site_scores.get(site, float("-inf"))), alignment)
+
+        preferences: dict[str, str] = {}
+        for feature, site_scores in term_sites.items():
+            k_score = site_scores.get("k_cache")
+            v_score = site_scores.get("v_cache")
+            if k_score is None and v_score is None:
+                continue
+            if k_score is None:
+                preferences[feature] = "v_cache"
+                continue
+            if v_score is None:
+                preferences[feature] = "k_cache"
+                continue
+            if float(k_score) >= float(v_score) + 0.01:
+                preferences[feature] = "k_cache"
+            elif float(v_score) >= float(k_score) + 0.01:
+                preferences[feature] = "v_cache"
+            else:
+                preferences[feature] = "balanced"
+        return preferences
+
+    def _actionable_kv_hits(self, *, limit: int = 3) -> list[dict[str, Any]]:
+        missing_terms = set(
+            self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
+        )
+        if not missing_terms:
+            return []
+        site_preferences = self._kv_feature_site_preferences(missing_terms=missing_terms)
+        recent_probe_outcomes = self._recent_kv_probe_outcomes()
+        ranked_hits: list[dict[str, Any]] = []
+
+        def _group_priority(item: Mapping[str, Any]) -> int:
+            group = str(item.get("group", "") or "")
+            if group == "required_terms":
+                return 0
+            if group == "missing_keywords":
+                return 1
+            if group == "missing_summary_terms":
+                return 2
+            return 3
+
+        def _site_role(site: str) -> str:
+            return "retrieval_query_probe" if site == "k_cache" else "content_value_probe"
+
+        for raw_hit in self._kv_feature_hits():
+            if str(raw_hit.get("polarity", "promote") or "promote") != "promote":
+                continue
+            if str(raw_hit.get("group", "") or "").startswith("forbidden"):
+                continue
+            feature = str(raw_hit.get("feature", "") or "")
+            if feature and feature not in missing_terms:
+                continue
+            site = str(raw_hit.get("site", "") or "")
+            if site not in {"k_cache", "v_cache"}:
+                continue
+            normalized = dict(raw_hit)
+            preferred_site = site_preferences.get(feature, "balanced")
+            normalized["site_preference"] = preferred_site
+            normalized["site_role"] = _site_role(site)
+            surface_id = str(normalized.get("surface_id", "") or "")
+            if surface_id and surface_id in recent_probe_outcomes:
+                normalized["recent_probe"] = dict(recent_probe_outcomes[surface_id])
+            ranked_hits.append(normalized)
+
+        ranked_hits.sort(
+            key=lambda item: (
+                _group_priority(item),
+                0 if str(item.get("polarity", "promote") or "promote") == "promote" else 1,
+                -float(((item.get("recent_probe") or {}).get("score", 0.0) if isinstance(item.get("recent_probe"), Mapping) else 0.0)),
+                0
+                if str(item.get("site_preference", "balanced")) in {"k_cache", "v_cache"}
+                and str(item.get("site")) == str(item.get("site_preference"))
+                else 1,
+                float(item.get("coverage_progress", 0.0) or 0.0),
+                -float(item.get("alignment", 0.0) or 0.0),
+                0 if str(item.get("site", "")) == "k_cache" else 1,
+                int(item.get("layer", 0) or 0),
+                int(item.get("head", 0) or 0),
+            )
+        )
+
+        selected: list[dict[str, Any]] = []
+        used_keys: set[tuple[str, int, int, str]] = set()
+
+        def _append_if_fresh(item: Mapping[str, Any]) -> bool:
+            key = (
+                str(item.get("site", "") or ""),
+                int(item.get("layer", 0) or 0),
+                int(item.get("head", 0) or 0),
+                str(item.get("token_mode", "last") or "last"),
+            )
+            if key in used_keys:
+                return False
+            used_keys.add(key)
+            selected.append(dict(item))
+            return True
+
+        if ranked_hits:
+            _append_if_fresh(ranked_hits[0])
+        selected_sites = {str(item.get("site", "") or "") for item in selected}
+        for required_site in ("k_cache", "v_cache"):
+            if len(selected) >= max(1, int(limit)):
+                break
+            if required_site in selected_sites:
+                continue
+            for item in ranked_hits:
+                if str(item.get("site", "") or "") != required_site:
+                    continue
+                if _append_if_fresh(item):
+                    selected_sites.add(required_site)
+                    break
+
+        for item in ranked_hits:
+            if len(selected) >= max(1, int(limit)):
+                break
+            _append_if_fresh(item)
+        return selected[: max(1, int(limit))]
 
     def _promoted_cache_surface_id(self, *, site: str, layer: int, head: int, token_mode: str) -> str:
         return f"s_{str(site)}_l{int(layer)}_h{int(head)}_{str(token_mode)}_promoted"
@@ -1990,7 +2242,7 @@ class HookedTransformerWorkerRuntime:
         existing_lookup = self._cache_surface_lookup()
         promoted: list[dict[str, Any]] = []
         seen_keys = set(existing_lookup)
-        for hit in self._kv_feature_hits():
+        for hit in self._actionable_kv_hits(limit=3):
             if str(hit.get("polarity", "promote") or "promote") != "promote":
                 continue
             if str(hit.get("group", "") or "").startswith("forbidden"):
@@ -2037,7 +2289,7 @@ class HookedTransformerWorkerRuntime:
                 }
             )
             seen_keys.add(key)
-            if len(promoted) >= 2:
+            if len(promoted) >= 3:
                 break
         return promoted
 
@@ -2122,9 +2374,9 @@ class HookedTransformerWorkerRuntime:
         if not missing_terms:
             return []
         surface_lookup = self._cache_surface_lookup(promoted_cache_surfaces=promoted_cache_surfaces)
-        candidates: list[tuple[int, float, int, int, dict[str, Any]]] = []
+        candidates: list[tuple[int, int, float, int, int, dict[str, Any]]] = []
         seen_surface_ids: set[str] = set()
-        for hit in self._kv_feature_hits():
+        for hit in self._actionable_kv_hits(limit=3):
             if str(hit.get("polarity", "promote") or "promote") != "promote":
                 continue
             if str(hit.get("group", "") or "").startswith("forbidden"):
@@ -2199,6 +2451,9 @@ class HookedTransformerWorkerRuntime:
                 "source_segment_kind": (
                     None if hit.get("argmax_segment_kind") in (None, "") else str(hit.get("argmax_segment_kind"))
                 ),
+                "site_preference": str(hit.get("site_preference", "balanced") or "balanced"),
+                "site_role": str(hit.get("site_role", "") or ""),
+                "recent_probe": dict(hit.get("recent_probe", {})) if isinstance(hit.get("recent_probe"), Mapping) else {},
                 "source": {
                     "dtype": "cache_pair",
                     which: source_expr,
@@ -2215,12 +2470,95 @@ class HookedTransformerWorkerRuntime:
                     "expected_effect": "small_cache_recall_support",
                 },
             }
-            site_priority = 0 if site == "v_cache" else 1
-            candidates.append((site_priority, -float(candidate["alignment"]), int(layer), int(head), candidate))
-            if len(candidates) >= 4:
+            preferred_site = str(hit.get("site_preference", "balanced") or "balanced")
+            preferred_priority = 0 if preferred_site in {"k_cache", "v_cache"} and site == preferred_site else 1
+            site_priority = 0 if site == "k_cache" else 1
+            candidates.append(
+                (preferred_priority, site_priority, -float(candidate["alignment"]), int(layer), int(head), candidate)
+            )
+            if len(candidates) >= 6:
                 continue
-        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], str(item[4]["surface_id"])))
-        selected = [candidate for _site_priority, _alignment, _layer, _head, candidate in candidates[:2]]
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], str(item[5]["surface_id"])))
+        selected = [candidate for _preferred, _site_priority, _alignment, _layer, _head, candidate in candidates[:3]]
+        if canary_enabled:
+            return self._annotate_kv_candidates_with_canary(selected)
+        return selected
+
+    def _kv_retry_candidate_edits(
+        self,
+        *,
+        base_candidates: Sequence[Mapping[str, Any]],
+        canary_enabled: bool = False,
+    ) -> list[dict[str, Any]]:
+        retry_candidates: list[tuple[float, int, dict[str, Any]]] = []
+        seen_surface_ids: set[str] = set()
+        for raw_candidate in base_candidates:
+            if not isinstance(raw_candidate, Mapping):
+                continue
+            recent_probe = raw_candidate.get("recent_probe")
+            if not isinstance(recent_probe, Mapping):
+                continue
+            if str(recent_probe.get("label", "") or "") != "weak_positive":
+                continue
+            if bool(recent_probe.get("was_retry", False)):
+                continue
+            if int(recent_probe.get("repeat_flag_delta", 0) or 0) > 0:
+                continue
+            if float(recent_probe.get("semantic_progress_delta", 0.0) or 0.0) < -0.01:
+                continue
+            rank_delta = max(
+                int(recent_probe.get("focus_rank_delta", 0) or 0),
+                int(recent_probe.get("rank_focus_delta", 0) or 0),
+            )
+            mass_delta = float(recent_probe.get("target_mass_delta", 0.0) or 0.0)
+            top20_delta = int(recent_probe.get("target_top20_hit_delta", 0) or 0)
+            logit_delta = float(recent_probe.get("max_logit_delta", 0.0) or 0.0)
+            prob_delta = float(recent_probe.get("max_prob_delta", 0.0) or 0.0)
+            if (
+                top20_delta <= 0
+                and mass_delta < 0.00001
+                and rank_delta < 4
+                and logit_delta < 0.0003
+                and prob_delta < 0.00003
+            ):
+                continue
+            surface_id = str(raw_candidate.get("surface_id", "") or "")
+            if not surface_id or surface_id in seen_surface_ids:
+                continue
+            seen_surface_ids.add(surface_id)
+            candidate = dict(raw_candidate)
+            for key in tuple(candidate):
+                if key.startswith("canary_"):
+                    candidate.pop(key, None)
+            op = dict(candidate.get("op", {})) if isinstance(candidate.get("op"), Mapping) else {}
+            budget = dict(candidate.get("budget", {})) if isinstance(candidate.get("budget"), Mapping) else {}
+            meta = dict(candidate.get("meta", {})) if isinstance(candidate.get("meta"), Mapping) else {}
+            site = str(candidate.get("site", "") or "")
+            current_alpha = float(op.get("alpha", 0.03 if site == "k_cache" else 0.04) or (0.03 if site == "k_cache" else 0.04))
+            alpha_cap = 0.06 if site == "k_cache" else 0.08
+            alpha_step = 0.01 if site == "k_cache" else 0.015
+            retry_alpha = min(alpha_cap, max(current_alpha, current_alpha + alpha_step, current_alpha * 1.4))
+            op["alpha"] = round(float(retry_alpha), 6)
+            budget["step_size"] = round(float(retry_alpha), 6)
+            meta["retry_stage"] = "weak_positive_retry"
+            which = str(op.get("which", "v") or "v")
+            meta["hypothesis"] = f"kv_{which}_weak_retry_probe"
+            meta["expected_effect"] = "slightly_stronger_cache_recall_support"
+            candidate["op"] = op
+            candidate["budget"] = budget
+            candidate["meta"] = meta
+            candidate["retry_stage"] = "weak_positive_retry"
+            candidate["retry_reason"] = "target_rank_or_mass_up"
+            candidate["retry_source"] = dict(recent_probe)
+            retry_candidates.append(
+                (
+                    -float(recent_probe.get("score", 0.0) or 0.0),
+                    0 if site == "k_cache" else 1,
+                    candidate,
+                )
+            )
+        retry_candidates.sort(key=lambda item: (item[0], item[1], str(item[2].get("surface_id", ""))))
+        selected = [candidate for _score, _site_priority, candidate in retry_candidates[:2]]
         if canary_enabled:
             return self._annotate_kv_candidates_with_canary(selected)
         return selected
@@ -2229,6 +2567,7 @@ class HookedTransformerWorkerRuntime:
         self,
         prototype: torch.Tensor,
         *,
+        feature: str,
         cache_tensor: torch.Tensor,
         layer: int,
         site: str,
@@ -2258,6 +2597,35 @@ class HookedTransformerWorkerRuntime:
                 return 2
             return 3
 
+        def _source_anchor_quality(piece: str, *, segment_kind: str, relative_index: int) -> float:
+            normalized_piece = "".join(ch for ch in str(piece).lower().strip() if ch.isalnum())
+            normalized_feature = "".join(ch for ch in str(feature).lower().strip() if ch.isalnum())
+            quality = 0.0
+            if segment_kind == "hint":
+                quality += 0.4
+            elif segment_kind == "prompt":
+                quality += 0.3
+            if normalized_piece:
+                quality += 0.25
+                if normalized_feature:
+                    if normalized_piece in normalized_feature:
+                        quality += 1.4 + min(0.6, len(normalized_piece) / max(1, len(normalized_feature)))
+                    overlap = len(set(normalized_piece) & set(normalized_feature))
+                    if overlap > 0:
+                        quality += 0.3 + (0.5 * overlap / max(1, len(set(normalized_piece))))
+                if str(piece).startswith(" ") and normalized_feature.startswith(normalized_piece):
+                    quality += 0.3
+            else:
+                quality -= 1.2
+            if site == "k_cache":
+                if not normalized_piece:
+                    quality -= 1.5
+                if segment_kind == "output":
+                    quality -= 0.4
+                if relative_index >= -2:
+                    quality -= 0.25
+            return float(quality)
+
         for position in range(seq_len):
             projected = projection_cache.get(position)
             if position not in projection_cache:
@@ -2285,6 +2653,7 @@ class HookedTransformerWorkerRuntime:
             relative_index = record.get("relative_index")
             if isinstance(relative_index, bool) or not isinstance(relative_index, int):
                 relative_index = int(position) - seq_len
+            anchor_quality = _source_anchor_quality(piece, segment_kind=segment_kind, relative_index=int(relative_index))
             rows.append(
                 {
                     "position": int(position),
@@ -2292,12 +2661,14 @@ class HookedTransformerWorkerRuntime:
                     "segment_kind": segment_kind,
                     "piece": piece,
                     "alignment": float(alignment),
+                    "anchor_quality": float(anchor_quality),
                     "_segment_priority": _segment_priority(segment_kind),
                 }
             )
         rows.sort(
             key=lambda item: (
                 int(item["_segment_priority"]),
+                -float(item["anchor_quality"]),
                 -float(item["alignment"]),
                 abs(int(item["relative_index"])),
                 int(item["position"]),
@@ -2310,6 +2681,7 @@ class HookedTransformerWorkerRuntime:
                 "segment_kind": str(item["segment_kind"]),
                 "piece": str(item["piece"]),
                 "alignment": float(item["alignment"]),
+                "anchor_quality": round(float(item["anchor_quality"]), 6),
             }
             for item in rows[:max_positions]
         ]
@@ -2321,7 +2693,7 @@ class HookedTransformerWorkerRuntime:
         if not terms:
             return [dict(candidate) for candidate in candidates]
 
-        baseline = self._simulate_decode(max_new_tokens=1, top_k=5)
+        baseline = self._simulate_decode(max_new_tokens=2, top_k=5)
         if baseline is None:
             return [dict(candidate) for candidate in candidates]
 
@@ -2329,6 +2701,12 @@ class HookedTransformerWorkerRuntime:
         baseline_logits = baseline["first_logits"].detach().cpu().float()
         baseline_probs = torch.softmax(baseline_logits, dim=-1)
         vocab_size = int(baseline_logits.shape[-1])
+
+        def _token_rank(logits: torch.Tensor, token_id: int) -> int:
+            token_value = float(logits[token_id].item())
+            higher = torch.count_nonzero(logits > token_value).item()
+            return int(higher) + 1
+
         for raw_candidate in candidates:
             candidate = dict(raw_candidate)
             focus_terms = []
@@ -2348,7 +2726,7 @@ class HookedTransformerWorkerRuntime:
                 continue
             try:
                 self._kv_canary_eval_active = True
-                edited = self._simulate_decode(max_new_tokens=1, top_k=5, command=command)
+                edited = self._simulate_decode(max_new_tokens=2, top_k=5, command=command)
             finally:
                 self._kv_canary_eval_active = False
             if edited is None:
@@ -2363,12 +2741,16 @@ class HookedTransformerWorkerRuntime:
             edited_logits = edited["first_logits"].detach().cpu().float()
             edited_probs = torch.softmax(edited_logits, dim=-1)
             best_focus: dict[str, Any] | None = None
+            best_space_focus: dict[str, Any] | None = None
+            best_rank_focus: dict[str, Any] | None = None
             seen_token_ids: set[int] = set()
             for sequence in target_sequences:
                 token_id = int(sequence.token_ids[0])
                 if token_id in seen_token_ids:
                     continue
                 seen_token_ids.add(token_id)
+                baseline_rank = _token_rank(baseline_logits, token_id)
+                edited_rank = _token_rank(edited_logits, token_id)
                 row = {
                     "term": str(sequence.term),
                     "variant": str(sequence.variant),
@@ -2380,6 +2762,9 @@ class HookedTransformerWorkerRuntime:
                     "baseline_prob": float(baseline_probs[token_id].item()),
                     "edited_prob": float(edited_probs[token_id].item()),
                     "prob_delta": float(edited_probs[token_id].item() - baseline_probs[token_id].item()),
+                    "baseline_rank": int(baseline_rank),
+                    "edited_rank": int(edited_rank),
+                    "rank_delta": int(baseline_rank - edited_rank),
                 }
                 if best_focus is None or (
                     float(row["prob_delta"]),
@@ -2389,8 +2774,72 @@ class HookedTransformerWorkerRuntime:
                     float(best_focus["logit_delta"]),
                 ):
                     best_focus = row
+                if str(sequence.variant).startswith(" ") and (
+                    best_space_focus is None
+                    or (float(row["prob_delta"]), float(row["logit_delta"]))
+                    > (float(best_space_focus["prob_delta"]), float(best_space_focus["logit_delta"]))
+                ):
+                    best_space_focus = row
+                if best_rank_focus is None or (
+                    int(row["rank_delta"]),
+                    -int(row["edited_rank"]),
+                    float(row["prob_delta"]),
+                    float(row["logit_delta"]),
+                    1 if str(sequence.variant).startswith(" ") else 0,
+                ) > (
+                    int(best_rank_focus["rank_delta"]),
+                    -int(best_rank_focus["edited_rank"]),
+                    float(best_rank_focus["prob_delta"]),
+                    float(best_rank_focus["logit_delta"]),
+                    1 if str(best_rank_focus["variant"]).startswith(" ") else 0,
+                ):
+                    best_rank_focus = row
+            target_token_ids = sorted(seen_token_ids)
+            target_mass_baseline = sum(float(baseline_probs[token_id].item()) for token_id in target_token_ids)
+            target_mass_edited = sum(float(edited_probs[token_id].item()) for token_id in target_token_ids)
+            top_k_width = min(20, vocab_size)
+            baseline_top_ids = {
+                int(token_id)
+                for token_id in torch.topk(baseline_logits, k=top_k_width).indices.detach().cpu().tolist()
+            }
+            edited_top_ids = {
+                int(token_id)
+                for token_id in torch.topk(edited_logits, k=top_k_width).indices.detach().cpu().tolist()
+            }
+            baseline_target_topk_hits = sum(1 for token_id in target_token_ids if token_id in baseline_top_ids)
+            edited_target_topk_hits = sum(1 for token_id in target_token_ids if token_id in edited_top_ids)
+            best_prefix: dict[str, Any] | None = None
+            for sequence in target_sequences:
+                baseline_prefix = 0
+                edited_prefix = 0
+                for baseline_token, target_token in zip(baseline.get("continuation_token_ids", []), sequence.token_ids, strict=False):
+                    if int(baseline_token) != int(target_token):
+                        break
+                    baseline_prefix += 1
+                for edited_token, target_token in zip(edited.get("continuation_token_ids", []), sequence.token_ids, strict=False):
+                    if int(edited_token) != int(target_token):
+                        break
+                    edited_prefix += 1
+                prefix_row = {
+                    "term": str(sequence.term),
+                    "variant": str(sequence.variant),
+                    "baseline_prefix_depth": int(baseline_prefix),
+                    "edited_prefix_depth": int(edited_prefix),
+                    "prefix_depth_delta": int(edited_prefix - baseline_prefix),
+                }
+                if best_prefix is None or (
+                    int(prefix_row["prefix_depth_delta"]),
+                    int(prefix_row["edited_prefix_depth"]),
+                    1 if str(sequence.variant).startswith(" ") else 0,
+                ) > (
+                    int(best_prefix["prefix_depth_delta"]),
+                    int(best_prefix["edited_prefix_depth"]),
+                    1 if str(best_prefix["variant"]).startswith(" ") else 0,
+                ):
+                    best_prefix = prefix_row
 
             candidate["canary_checked"] = True
+            candidate["canary_max_new_tokens"] = 2
             candidate["canary_repeat_flag_delta"] = int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"]))
             candidate["canary_entropy_delta"] = round(float(edited["entropy"]) - float(baseline["entropy"]), 6)
             edited_scoring = edited.get("scoring", {})
@@ -2405,27 +2854,118 @@ class HookedTransformerWorkerRuntime:
                 - float(baseline_scoring.get("semantic_progress_score") or 0.0),
                 6,
             )
+            candidate["canary_required_term_span_progress_delta"] = round(
+                float(edited_scoring.get("required_term_span_progress") or 0.0)
+                - float(baseline_scoring.get("required_term_span_progress") or 0.0),
+                6,
+            )
+            candidate["canary_target_mass_baseline"] = round(target_mass_baseline, 6)
+            candidate["canary_target_mass_edited"] = round(target_mass_edited, 6)
+            candidate["canary_target_mass_delta"] = round(target_mass_edited - target_mass_baseline, 6)
+            candidate["canary_target_top20_hits_baseline"] = int(baseline_target_topk_hits)
+            candidate["canary_target_top20_hits_edited"] = int(edited_target_topk_hits)
+            candidate["canary_target_top20_hit_delta"] = int(edited_target_topk_hits - baseline_target_topk_hits)
             if best_focus is not None:
                 candidate["canary_focus_term"] = str(best_focus["term"])
                 candidate["canary_focus_piece"] = str(best_focus["piece"])
                 candidate["canary_focus_token_id"] = int(best_focus["token_id"])
                 candidate["canary_focus_logit_delta"] = round(float(best_focus["logit_delta"]), 6)
                 candidate["canary_focus_prob_delta"] = round(float(best_focus["prob_delta"]), 6)
+                candidate["canary_focus_rank_baseline"] = int(best_focus["baseline_rank"])
+                candidate["canary_focus_rank_edited"] = int(best_focus["edited_rank"])
+                candidate["canary_focus_rank_delta"] = int(best_focus["rank_delta"])
             else:
                 candidate["canary_focus_logit_delta"] = 0.0
                 candidate["canary_focus_prob_delta"] = 0.0
+                candidate["canary_focus_rank_baseline"] = 0
+                candidate["canary_focus_rank_edited"] = 0
+                candidate["canary_focus_rank_delta"] = 0
+            if best_space_focus is not None:
+                candidate["canary_space_focus_term"] = str(best_space_focus["term"])
+                candidate["canary_space_focus_piece"] = str(best_space_focus["piece"])
+                candidate["canary_space_focus_logit_delta"] = round(float(best_space_focus["logit_delta"]), 6)
+                candidate["canary_space_focus_prob_delta"] = round(float(best_space_focus["prob_delta"]), 6)
+            else:
+                candidate["canary_space_focus_logit_delta"] = 0.0
+                candidate["canary_space_focus_prob_delta"] = 0.0
+            if best_rank_focus is not None:
+                candidate["canary_rank_focus_term"] = str(best_rank_focus["term"])
+                candidate["canary_rank_focus_piece"] = str(best_rank_focus["piece"])
+                candidate["canary_rank_focus_baseline"] = int(best_rank_focus["baseline_rank"])
+                candidate["canary_rank_focus_edited"] = int(best_rank_focus["edited_rank"])
+                candidate["canary_rank_focus_delta"] = int(best_rank_focus["rank_delta"])
+            else:
+                candidate["canary_rank_focus_delta"] = 0
+            if best_prefix is not None:
+                candidate["canary_prefix_term"] = str(best_prefix["term"])
+                candidate["canary_prefix_variant"] = str(best_prefix["variant"])
+                candidate["canary_prefix_depth_baseline"] = int(best_prefix["baseline_prefix_depth"])
+                candidate["canary_prefix_depth_edited"] = int(best_prefix["edited_prefix_depth"])
+                candidate["canary_prefix_depth_delta"] = int(best_prefix["prefix_depth_delta"])
+            else:
+                candidate["canary_prefix_depth_delta"] = 0
 
             focus_logit_delta = float(candidate.get("canary_focus_logit_delta", 0.0) or 0.0)
             focus_prob_delta = float(candidate.get("canary_focus_prob_delta", 0.0) or 0.0)
+            space_focus_logit_delta = float(candidate.get("canary_space_focus_logit_delta", 0.0) or 0.0)
+            space_focus_prob_delta = float(candidate.get("canary_space_focus_prob_delta", 0.0) or 0.0)
+            prefix_delta = int(candidate.get("canary_prefix_depth_delta", 0) or 0)
             recall_delta = float(candidate.get("canary_required_term_recall_delta", 0.0) or 0.0)
             semantic_delta = float(candidate.get("canary_semantic_progress_delta", 0.0) or 0.0)
             repeat_delta = int(candidate.get("canary_repeat_flag_delta", 0) or 0)
+            span_progress_delta = float(candidate.get("canary_required_term_span_progress_delta", 0.0) or 0.0)
+            target_mass_delta = float(candidate.get("canary_target_mass_delta", 0.0) or 0.0)
+            target_topk_hit_delta = int(candidate.get("canary_target_top20_hit_delta", 0) or 0)
+            focus_rank_delta = int(candidate.get("canary_focus_rank_delta", 0) or 0)
+            rank_focus_delta = int(candidate.get("canary_rank_focus_delta", 0) or 0)
+            site = str(candidate.get("site", "") or "")
+            focus_logit_threshold = 0.0005 if site == "k_cache" else 0.001
+            focus_prob_threshold = 0.00005 if site == "k_cache" else 0.0001
+            target_mass_threshold = 0.00001 if site == "k_cache" else 0.00002
+            target_rank_threshold = 4 if site == "k_cache" else 6
             canary_pass = (
                 (recall_delta > 0.0)
-                or ((focus_logit_delta >= 0.001 or focus_prob_delta >= 0.0001) and repeat_delta <= 0 and semantic_delta >= -0.02)
+                or (prefix_delta > 0)
+                or (
+                    (
+                        target_topk_hit_delta > 0
+                        or target_mass_delta >= target_mass_threshold
+                        or focus_rank_delta >= target_rank_threshold
+                        or rank_focus_delta >= target_rank_threshold
+                    )
+                    and repeat_delta <= 0
+                    and semantic_delta >= -0.02
+                )
+                or (
+                    (
+                        focus_logit_delta >= focus_logit_threshold
+                        or focus_prob_delta >= focus_prob_threshold
+                        or space_focus_logit_delta >= focus_logit_threshold
+                        or space_focus_prob_delta >= focus_prob_threshold
+                        or span_progress_delta > 0.0
+                    )
+                    and repeat_delta <= 0
+                    and semantic_delta >= -0.02
+                )
             )
             candidate["canary_pass"] = bool(canary_pass)
-            candidate["canary_reason"] = "focus_token_improved" if canary_pass else "focus_token_flat"
+            if canary_pass:
+                if recall_delta > 0.0:
+                    candidate["canary_reason"] = "recall_improved"
+                elif prefix_delta > 0:
+                    candidate["canary_reason"] = "target_prefix_improved"
+                elif target_topk_hit_delta > 0:
+                    candidate["canary_reason"] = "target_top20_improved"
+                elif focus_rank_delta >= target_rank_threshold or rank_focus_delta >= target_rank_threshold:
+                    candidate["canary_reason"] = "target_rank_improved"
+                elif target_mass_delta >= target_mass_threshold:
+                    candidate["canary_reason"] = "target_mass_improved"
+                elif space_focus_logit_delta >= focus_logit_threshold or space_focus_prob_delta >= focus_prob_threshold:
+                    candidate["canary_reason"] = "space_prefixed_focus_improved"
+                else:
+                    candidate["canary_reason"] = "focus_token_improved"
+            else:
+                candidate["canary_reason"] = "focus_token_flat"
             annotated.append(candidate)
         return annotated
 
@@ -2494,6 +3034,105 @@ class HookedTransformerWorkerRuntime:
             if candidate not in variants:
                 variants.append(candidate)
         return tuple(variants)
+
+    def _token_rank_for_logits(self, logits: torch.Tensor, token_id: int) -> int:
+        token_value = float(logits[token_id].item())
+        higher = torch.count_nonzero(logits > token_value).item()
+        return int(higher) + 1
+
+    def _first_token_target_readout_metrics(
+        self,
+        baseline_logits: torch.Tensor,
+        edited_logits: torch.Tensor,
+        *,
+        focus_terms: Sequence[str],
+    ) -> dict[str, Any]:
+        vocab_size = int(baseline_logits.shape[-1])
+        target_sequences = self._target_token_sequences(focus_terms, vocab_size=vocab_size)
+        if not target_sequences:
+            return {}
+        baseline_probs = torch.softmax(baseline_logits.detach().cpu().float(), dim=-1)
+        edited_probs = torch.softmax(edited_logits.detach().cpu().float(), dim=-1)
+        baseline_logits = baseline_logits.detach().cpu().float()
+        edited_logits = edited_logits.detach().cpu().float()
+        best_focus: dict[str, Any] | None = None
+        best_rank_focus: dict[str, Any] | None = None
+        seen_token_ids: set[int] = set()
+        for sequence in target_sequences:
+            token_id = int(sequence.token_ids[0])
+            if token_id in seen_token_ids:
+                continue
+            seen_token_ids.add(token_id)
+            baseline_rank = self._token_rank_for_logits(baseline_logits, token_id)
+            edited_rank = self._token_rank_for_logits(edited_logits, token_id)
+            row = {
+                "term": str(sequence.term),
+                "variant": str(sequence.variant),
+                "token_id": token_id,
+                "piece": self.codec.decode([token_id]),
+                "baseline_logit": float(baseline_logits[token_id].item()),
+                "edited_logit": float(edited_logits[token_id].item()),
+                "logit_delta": float(edited_logits[token_id].item() - baseline_logits[token_id].item()),
+                "baseline_prob": float(baseline_probs[token_id].item()),
+                "edited_prob": float(edited_probs[token_id].item()),
+                "prob_delta": float(edited_probs[token_id].item() - baseline_probs[token_id].item()),
+                "baseline_rank": int(baseline_rank),
+                "edited_rank": int(edited_rank),
+                "rank_delta": int(baseline_rank - edited_rank),
+            }
+            if best_focus is None or (
+                float(row["prob_delta"]),
+                float(row["logit_delta"]),
+            ) > (
+                float(best_focus["prob_delta"]),
+                float(best_focus["logit_delta"]),
+            ):
+                best_focus = row
+            if best_rank_focus is None or (
+                int(row["rank_delta"]),
+                -int(row["edited_rank"]),
+                float(row["prob_delta"]),
+                float(row["logit_delta"]),
+                1 if str(sequence.variant).startswith(" ") else 0,
+            ) > (
+                int(best_rank_focus["rank_delta"]),
+                -int(best_rank_focus["edited_rank"]),
+                float(best_rank_focus["prob_delta"]),
+                float(best_rank_focus["logit_delta"]),
+                1 if str(best_rank_focus["variant"]).startswith(" ") else 0,
+            ):
+                best_rank_focus = row
+        target_token_ids = sorted(seen_token_ids)
+        target_mass_baseline = sum(float(baseline_probs[token_id].item()) for token_id in target_token_ids)
+        target_mass_edited = sum(float(edited_probs[token_id].item()) for token_id in target_token_ids)
+        top_k_width = min(20, vocab_size)
+        baseline_top_ids = {
+            int(token_id)
+            for token_id in torch.topk(baseline_logits, k=top_k_width).indices.detach().cpu().tolist()
+        }
+        edited_top_ids = {
+            int(token_id)
+            for token_id in torch.topk(edited_logits, k=top_k_width).indices.detach().cpu().tolist()
+        }
+        metrics: dict[str, Any] = {
+            "target_mass_baseline": round(target_mass_baseline, 6),
+            "target_mass_edited": round(target_mass_edited, 6),
+            "target_mass_delta": round(target_mass_edited - target_mass_baseline, 6),
+            "target_top20_hits_baseline": sum(1 for token_id in target_token_ids if token_id in baseline_top_ids),
+            "target_top20_hits_edited": sum(1 for token_id in target_token_ids if token_id in edited_top_ids),
+        }
+        metrics["target_top20_hit_delta"] = int(metrics["target_top20_hits_edited"] - metrics["target_top20_hits_baseline"])
+        if best_focus is not None:
+            metrics["focus_term"] = str(best_focus["term"])
+            metrics["focus_piece"] = str(best_focus["piece"])
+            metrics["focus_logit_delta"] = round(float(best_focus["logit_delta"]), 6)
+            metrics["focus_prob_delta"] = round(float(best_focus["prob_delta"]), 6)
+            metrics["focus_rank_delta"] = int(best_focus["rank_delta"])
+        if best_rank_focus is not None:
+            metrics["rank_focus_term"] = str(best_rank_focus["term"])
+            metrics["rank_focus_piece"] = str(best_rank_focus["piece"])
+            metrics["rank_focus_delta"] = int(best_rank_focus["rank_delta"])
+        return metrics
 
     def _output_token_ids(self) -> list[int]:
         output_tokens: list[int] = []
@@ -2908,7 +3547,7 @@ class HookedTransformerWorkerRuntime:
             }
         baseline_score = baseline.get("scoring", {})
         edited_score = edited.get("scoring", {})
-        return {
+        result = {
             "status": "ok",
             "candidate_edit": dict(candidate_edit),
             "max_new_tokens": max_new_tokens,
@@ -2923,12 +3562,32 @@ class HookedTransformerWorkerRuntime:
                 float(edited_score.get("required_term_recall") or 0.0) - float(baseline_score.get("required_term_recall") or 0.0),
                 6,
             ),
+            "required_term_span_progress_delta": round(
+                float(edited_score.get("required_term_span_progress") or 0.0)
+                - float(baseline_score.get("required_term_span_progress") or 0.0),
+                6,
+            ),
             "semantic_progress_delta": round(
                 float(edited_score.get("semantic_progress_score") or 0.0)
                 - float(baseline_score.get("semantic_progress_score") or 0.0),
                 6,
             ),
         }
+        focus_terms: list[str] = []
+        feature = str(candidate_edit.get("focus_feature", "") or "")
+        if feature:
+            focus_terms.append(feature)
+        for term in self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")):
+            if term not in focus_terms:
+                focus_terms.append(term)
+        readout_metrics = self._first_token_target_readout_metrics(
+            baseline["first_logits"],
+            edited["first_logits"],
+            focus_terms=focus_terms,
+        )
+        if readout_metrics:
+            result.update(readout_metrics)
+        return result
 
     def _build_dry_run_command(self, candidate_edit: Mapping[str, Any]) -> dict[str, Any] | None:
         if "source" in candidate_edit and "op" in candidate_edit and "budget" in candidate_edit:
@@ -3055,6 +3714,7 @@ class HookedTransformerWorkerRuntime:
             scoring = self._score_candidate_text(self.final_text(), trigger="tool_dry_run_candidate")
             return {
                 "continuation": self.codec.decode(continuation_ids),
+                "continuation_token_ids": [int(token_id) for token_id in continuation_ids],
                 "first_logits": first_logits,
                 "entropy": first_entropy,
                 "repeat_flag": self._repeat_flag(),

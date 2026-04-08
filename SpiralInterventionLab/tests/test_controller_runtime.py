@@ -16,7 +16,7 @@ from SpiralInterventionLab.runtime.policy import GlobalBudget, HarnessPolicy, Po
 from SpiralInterventionLab.runtime.rank1_bridge import HybridRank1VectorBridge, Rank1Geometry
 from SpiralInterventionLab.runtime.tlens_runtime import HookedTransformerRuntimeState
 from SpiralInterventionLab.runtime.trace_recorder import StepAlignedTrace
-from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime
+from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime, _TargetTokenSequence
 from SpiralInterventionLab.runtime.schema import (
     ControllerCommand,
     ControllerObservationPacket,
@@ -2006,6 +2006,219 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["token"]["value"], 0)
         self.assertTrue(packet["strategy_hints"]["kv_candidate_edits"][0]["canary_pass"])
 
+    def test_worker_runtime_packet_keeps_actionable_k_side_kv_candidate(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["term_x", "term_y"],
+            "entity_recall_terms": ["term_x", "term_y"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.33,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 3,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "alignment": 0.31,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.31}],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "term_y",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 4,
+                        "head": 1,
+                        "token_mode": "last",
+                        "alignment": 0.29,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.29}],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "alignment": 0.34,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.34}],
+                        "coverage_progress": 0.0,
+                    },
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "hypothesis": "loop_relief_only",
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "expected_effect": "break_loop",
+                "signal_profile": "stabilizing_only",
+                "verdict": "neutral",
+            }
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_annotate_kv_candidates_with_canary",
+            side_effect=lambda items: [dict(item, canary_checked=True, canary_pass=False, canary_reason="focus_token_flat") for item in items],
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        kv_candidates = packet["strategy_hints"]["kv_candidate_edits"]
+        self.assertGreaterEqual(len(kv_candidates), 2)
+        self.assertIn("k_cache", {item["site"] for item in kv_candidates})
+        self.assertIn("v_cache", {item["site"] for item in kv_candidates})
+        k_candidate = next(item for item in kv_candidates if item["site"] == "k_cache")
+        self.assertEqual(k_candidate["op"]["which"], "k")
+        self.assertEqual(k_candidate["site_preference"], "k_cache")
+        promoted_sites = {
+            surface["target"]["site"]
+            for surface in packet["surface_catalog"]
+            if isinstance(surface, dict) and isinstance(surface.get("target"), dict) and surface["target"].get("kind") == "cache"
+        }
+        self.assertIn("k_cache", promoted_sites)
+        self.assertIn("v_cache", promoted_sites)
+
+    def test_worker_runtime_packet_can_expand_k_candidate_from_surface_hits(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["term_x"],
+            "entity_recall_terms": ["term_x"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.3,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 2,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "alignment": 0.32,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.32}],
+                        "coverage_progress": 0.0,
+                    }
+                ],
+                "groups": [
+                    {
+                        "group": "required_terms",
+                        "polarity": "promote",
+                        "top_features": [
+                            {
+                                "feature": "term_x",
+                                "site": "v_cache",
+                                "layer": 3,
+                                "head": 1,
+                                "token_mode": "last",
+                                "alignment": 0.32,
+                                "argmax_pos": 0,
+                                "argmax_relative_index": -1,
+                                "argmax_piece": "p",
+                                "argmax_segment_kind": "prompt",
+                                "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.32}],
+                                "surface_hits": [
+                                    {
+                                        "site": "v_cache",
+                                        "layer": 3,
+                                        "head": 1,
+                                        "token_mode": "last",
+                                        "alignment": 0.32,
+                                        "argmax_pos": 0,
+                                        "argmax_relative_index": -1,
+                                        "argmax_piece": "p",
+                                        "argmax_segment_kind": "prompt",
+                                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.32}],
+                                    },
+                                    {
+                                        "site": "k_cache",
+                                        "layer": 3,
+                                        "head": 0,
+                                        "token_mode": "last",
+                                        "alignment": 0.31,
+                                        "argmax_pos": 0,
+                                        "argmax_relative_index": -1,
+                                        "argmax_piece": "p",
+                                        "argmax_segment_kind": "prompt",
+                                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.31}],
+                                    },
+                                ],
+                                "coverage_progress": 0.0,
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "hypothesis": "loop_relief_only",
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "expected_effect": "break_loop",
+                "signal_profile": "stabilizing_only",
+                "verdict": "neutral",
+            }
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_annotate_kv_candidates_with_canary",
+            side_effect=lambda items: [dict(item, canary_checked=True, canary_pass=False, canary_reason="focus_token_flat") for item in items],
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        self.assertIn("k_cache", {item["site"] for item in packet["strategy_hints"]["kv_candidate_edits"]})
+
     def test_worker_runtime_build_dry_run_command_accepts_kv_candidate_edit(self):
         worker_runtime = self._make_worker_runtime()
         worker_runtime.reset("p")
@@ -2093,6 +2306,276 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(parsed.edits[0].op.kind, "kv_mix")
         self.assertEqual(parsed.edits[0].target.surface_id, candidate_edit["surface_id"])
         validate_command_against_packet(command, packet)
+
+    def test_worker_runtime_kv_canary_accepts_two_token_prefix_progress(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["budget"],
+            "entity_recall_terms": ["budget"],
+        }
+        vocab_size = 6
+        baseline_logits = torch.zeros(vocab_size, dtype=torch.float32)
+        edited_logits = torch.zeros(vocab_size, dtype=torch.float32)
+        edited_logits[1] = 0.0006
+        candidate = {
+            "surface_id": "s_k_cache_l3_h0_last_promoted",
+            "kind": "kv_mix",
+            "site": "k_cache",
+            "source": {
+                "dtype": "cache_pair",
+                "k": {
+                    "ref": {
+                        "scope": "runtime",
+                        "worker": "os_0",
+                        "tensor": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token": {"mode": "index", "value": 4},
+                    }
+                },
+            },
+            "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+            "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.03, "revertible": True},
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_target_token_sequences",
+            return_value=[_TargetTokenSequence(term="budget", token_ids=(1, 2), variant=" budget")],
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "_simulate_decode",
+            side_effect=[
+                {
+                    "continuation": "zz",
+                    "continuation_token_ids": [5, 5],
+                    "first_logits": baseline_logits,
+                    "entropy": 1.0,
+                    "repeat_flag": False,
+                    "scoring": {
+                        "required_term_recall": 0.0,
+                        "required_term_span_progress": 0.0,
+                        "semantic_progress_score": 0.0,
+                    },
+                },
+                {
+                    "continuation": " ab",
+                    "continuation_token_ids": [1, 2],
+                    "first_logits": edited_logits,
+                    "entropy": 0.98,
+                    "repeat_flag": False,
+                    "scoring": {
+                        "required_term_recall": 0.0,
+                        "required_term_span_progress": 0.4,
+                        "semantic_progress_score": 0.02,
+                    },
+                },
+            ],
+        ):
+            annotated = worker_runtime._annotate_kv_candidates_with_canary([candidate])
+
+        self.assertTrue(annotated[0]["canary_checked"])
+        self.assertTrue(annotated[0]["canary_pass"])
+        self.assertEqual(annotated[0]["canary_reason"], "target_prefix_improved")
+        self.assertEqual(annotated[0]["canary_prefix_depth_delta"], 2)
+        self.assertGreater(annotated[0]["canary_space_focus_logit_delta"], 0.0)
+
+    def test_worker_runtime_kv_canary_accepts_target_rank_improvement(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["budget"],
+            "entity_recall_terms": ["budget"],
+        }
+        vocab_size = 8
+        baseline_logits = torch.tensor([0.7, 0.12, 0.55, 0.4, 0.35, 0.3, 0.2, 0.1], dtype=torch.float32)
+        edited_logits = torch.tensor([0.7, 0.48, 0.55, 0.4, 0.35, 0.3, 0.2, 0.1], dtype=torch.float32)
+        candidate = {
+            "surface_id": "s_k_cache_l3_h0_last_promoted",
+            "kind": "kv_mix",
+            "site": "k_cache",
+            "source": {
+                "dtype": "cache_pair",
+                "k": {
+                    "ref": {
+                        "scope": "runtime",
+                        "worker": "os_0",
+                        "tensor": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token": {"mode": "index", "value": 4},
+                    }
+                },
+            },
+            "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+            "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.03, "revertible": True},
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_target_token_sequences",
+            return_value=[_TargetTokenSequence(term="budget", token_ids=(1, 2), variant=" budget")],
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "_simulate_decode",
+            side_effect=[
+                {
+                    "continuation": "zz",
+                    "continuation_token_ids": [5, 5],
+                    "first_logits": baseline_logits,
+                    "entropy": 1.0,
+                    "repeat_flag": False,
+                    "scoring": {
+                        "required_term_recall": 0.0,
+                        "required_term_span_progress": 0.0,
+                        "semantic_progress_score": 0.0,
+                    },
+                },
+                {
+                    "continuation": "zz",
+                    "continuation_token_ids": [5, 5],
+                    "first_logits": edited_logits,
+                    "entropy": 0.99,
+                    "repeat_flag": False,
+                    "scoring": {
+                        "required_term_recall": 0.0,
+                        "required_term_span_progress": 0.0,
+                        "semantic_progress_score": 0.0,
+                    },
+                },
+            ],
+        ):
+            annotated = worker_runtime._annotate_kv_candidates_with_canary([candidate])
+
+        self.assertTrue(annotated[0]["canary_checked"])
+        self.assertTrue(annotated[0]["canary_pass"])
+        self.assertEqual(annotated[0]["canary_reason"], "target_rank_improved")
+        self.assertGreaterEqual(annotated[0]["canary_focus_rank_delta"], 4)
+        self.assertGreater(annotated[0]["canary_target_mass_delta"], 0.0)
+
+    def test_worker_runtime_actionable_kv_hits_demotes_recent_flat_probe(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["term_x", "term_y"],
+            "entity_recall_terms": ["term_x", "term_y"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.3,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 2,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "surface_id": "s_v_cache_l3_h1_last_promoted",
+                        "alignment": 0.36,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.36}],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "term_y",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "alignment": 0.32,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [{"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.32}],
+                        "coverage_progress": 0.0,
+                    },
+                ],
+            },
+        }
+        worker_runtime._tool_results = [
+            {
+                "tool": "dry_run_decode",
+                "status": "ok",
+                "candidate_edit": {"surface_id": "s_v_cache_l3_h1_last_promoted", "kind": "kv_mix"},
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "repeat_flag_delta": 0,
+                "topk_token_diff": [{"piece": "EW", "prob_delta": 0.0, "logit_delta": 0.0}],
+            },
+            {
+                "tool": "dry_run_decode",
+                "status": "ok",
+                "candidate_edit": {"surface_id": "s_k_cache_l3_h0_last_promoted", "kind": "kv_mix"},
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.2,
+                "semantic_progress_delta": 0.01,
+                "repeat_flag_delta": 0,
+                "topk_token_diff": [{"piece": " budget", "prob_delta": 0.0001, "logit_delta": 0.0008}],
+            },
+        ]
+
+        hits = worker_runtime._actionable_kv_hits(limit=2)
+
+        self.assertEqual(hits[0]["surface_id"], "s_k_cache_l3_h0_last_promoted")
+        self.assertEqual(hits[0]["recent_probe"]["label"], "positive")
+        self.assertEqual(hits[1]["surface_id"], "s_v_cache_l3_h1_last_promoted")
+        self.assertEqual(hits[1]["recent_probe"]["label"], "flat")
+
+    def test_worker_runtime_k_source_positions_prefer_term_like_prompt_piece(self):
+        worker_runtime = self._make_worker_runtime()
+        prototype = torch.tensor([1.0, 0.0], dtype=torch.float32)
+        cache_tensor = torch.tensor([[[[1.0, 0.0]], [[1.0, 0.0]]]], dtype=torch.float32)
+        position_records = [
+            {"position": 0, "relative_index": -2, "segment_kind": "prompt", "piece": ".\n"},
+            {"position": 1, "relative_index": -1, "segment_kind": "prompt", "piece": " budget"},
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_project_feature_into_kv_head",
+            return_value=torch.tensor([1.0, 0.0], dtype=torch.float32, device="cpu"),
+        ):
+            rows = worker_runtime._kv_source_positions_for_feature(
+                prototype,
+                feature="budget",
+                cache_tensor=cache_tensor,
+                layer=3,
+                site="k_cache",
+                head=0,
+                width=2,
+                head_count=1,
+                position_records=position_records,
+                max_positions=2,
+            )
+
+        self.assertEqual(rows[0]["piece"], " budget")
+        self.assertGreater(rows[0]["anchor_quality"], rows[1]["anchor_quality"])
 
     def test_worker_runtime_shot_mode_only_prefers_canary_passing_kv_candidates(self):
         worker_runtime = self._make_worker_runtime()
@@ -2296,6 +2779,114 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             "s_resid_pre_l4_last",
             [candidate["surface_id"] for candidate in packet["strategy_hints"]["shot_candidate_edits"]],
         )
+
+    def test_worker_runtime_packet_exposes_retryable_weak_positive_kv_candidate(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab"],
+            "entity_recall_terms": ["ab"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.3,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "alignment": 0.34,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "a",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "a", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    }
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "hypothesis": "loop_break_small_rescue",
+                "verdict": "neutral",
+                "signal_profile": "stabilizing_only",
+                "delta": {
+                    "required_term_recall": 0.0,
+                    "required_term_span_progress": 0.0,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                    "repeat_flag": -1.0,
+                    "no_progress_steps": -1.0,
+                },
+            }
+        ]
+        worker_runtime._tool_results = [
+            {
+                "tool": "dry_run_decode",
+                "status": "ok",
+                "candidate_edit": {
+                    "surface_id": "s_k_cache_l3_h0_last_promoted",
+                    "kind": "kv_mix",
+                    "site": "k_cache",
+                },
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "repeat_flag_delta": 0,
+                "target_mass_delta": 0.00002,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 5,
+                "rank_focus_delta": 5,
+                "topk_token_diff": [{"piece": "a", "prob_delta": 0.00002, "logit_delta": 0.0003}],
+            }
+        ]
+
+        def _annotate(items):
+            annotated = []
+            for item in items:
+                candidate = dict(item)
+                if str(candidate.get("retry_stage", "") or "") == "weak_positive_retry":
+                    candidate["canary_checked"] = True
+                    candidate["canary_pass"] = True
+                    candidate["canary_reason"] = "target_rank_improved"
+                else:
+                    candidate["canary_checked"] = True
+                    candidate["canary_pass"] = False
+                    candidate["canary_reason"] = "focus_token_flat"
+                annotated.append(candidate)
+            return annotated
+
+        with patch.object(HookedTransformerWorkerRuntime, "_annotate_kv_candidates_with_canary", side_effect=_annotate):
+            packet = worker_runtime.build_controller_packet()
+
+        self.assertEqual(packet["control_phase_hint"], "shot_mode")
+        self.assertTrue(packet["strategy_hints"]["kv_retry_needed"])
+        self.assertEqual(packet["strategy_hints"]["preferred_kv_retry_surface_id"], "s_k_cache_l3_h0_last_promoted")
+        self.assertEqual(packet["strategy_hints"]["preferred_kv_surface_id"], "s_k_cache_l3_h0_last_promoted")
+        self.assertEqual(packet["strategy_hints"]["kv_retry_candidate_edits"][0]["retry_stage"], "weak_positive_retry")
+        self.assertGreater(packet["strategy_hints"]["kv_retry_candidate_edits"][0]["op"]["alpha"], 0.03)
+        self.assertEqual(packet["strategy_hints"]["kv_retry_candidate_edits"][0]["canary_reason"], "target_rank_improved")
 
     def test_worker_runtime_dry_run_decode_tool_compares_small_candidate_edit(self):
         def task_feedback_fn(output):

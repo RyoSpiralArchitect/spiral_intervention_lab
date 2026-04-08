@@ -413,6 +413,7 @@ def _compact_tool_result(value: Any) -> dict[str, Any] | None:
         "entropy_delta",
         "repeat_flag_delta",
         "required_term_recall_delta",
+        "required_term_span_progress_delta",
         "semantic_progress_delta",
     ):
         if key in value and value.get(key) not in (None, ""):
