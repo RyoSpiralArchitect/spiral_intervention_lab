@@ -99,10 +99,21 @@ class ModelAdapter:
     ) -> OverlayHandle:
         raise NotImplementedError
 
-    def _select_positions(self, act: torch.Tensor, selector: Any | None) -> list[int]:
+    def _select_positions(
+        self,
+        act: torch.Tensor,
+        selector: Any | None,
+        *,
+        position_axis: int = -2,
+    ) -> list[int]:
         if act.ndim < 2:
             raise ValueError(f"expected tensor with position axis, got shape {tuple(act.shape)}")
-        seq_len = act.shape[-2]
+        axis = int(position_axis)
+        if axis < 0:
+            axis = act.ndim + axis
+        if axis < 0 or axis >= act.ndim:
+            raise IndexError(f"position axis {position_axis} out of range for shape {tuple(act.shape)}")
+        seq_len = act.shape[axis]
         if selector is None or selector.mode == "last":
             return [seq_len - 1]
         if selector.mode == "index":
@@ -175,7 +186,7 @@ class ModelAdapter:
             return self._mix_selected_tokens(act, vec, token_selector, alpha)
 
         out = act.clone()
-        positions = self._select_positions(out, token_selector)
+        positions = self._select_positions(out, token_selector, position_axis=-3)
         heads = out.shape[-2]
         width = out.shape[-1]
 
@@ -325,7 +336,7 @@ class HookedTransformerAdapter(ModelAdapter):
             return selected.mean(dim=0)
 
         if batch0.ndim == 3:
-            positions = self._select_positions(batch0.unsqueeze(0), selector)
+            positions = self._select_positions(raw_tensor, selector, position_axis=-3)
             selected = batch0[positions]
             pooled = (
                 selected[-1]

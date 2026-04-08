@@ -386,6 +386,8 @@ class HookedTransformerWorkerRuntime:
         self._last_observer_candidate_hash: str | None = None
         self._feature_prototype_cache: dict[str, torch.Tensor] = {}
         self._kv_projection_cache: dict[tuple[int, str, int, int, int], torch.Tensor | None] = {}
+        self._kv_canary_eval_active = False
+        self._last_simulate_decode_error: str | None = None
         self._last_decoder_control: dict[str, Any] = {
             "mode": self.decoder_control_mode,
             "track": _decoder_control_spec(self.decoder_control_mode)["track"],
@@ -718,6 +720,8 @@ class HookedTransformerWorkerRuntime:
         groups: list[dict[str, Any]] = []
         top_feature_hits: list[dict[str, Any]] = []
         term_progress = self._feedback_term_progress_by_term()
+        position_records = self._token_position_records()
+        cache_tensor_cache: dict[tuple[int, str], torch.Tensor | None] = {}
 
         for raw_group_name, raw_spec in feature_groups.items():
             group_name = " ".join(str(raw_group_name).split()).strip().lower().replace(" ", "_")
@@ -747,26 +751,47 @@ class HookedTransformerWorkerRuntime:
 
                 surface_hits: list[dict[str, Any]] = []
                 for cache_spec in cache_vectors:
-                    projected = self._project_feature_into_kv_head(
+                    cache_key = (int(cache_spec["layer"]), str(cache_spec["site"]))
+                    cache_tensor = cache_tensor_cache.get(cache_key)
+                    if cache_key not in cache_tensor_cache:
+                        cache_tensor = self._cache_tensor_for_scan(layer=int(cache_spec["layer"]), site=str(cache_spec["site"]))
+                        cache_tensor_cache[cache_key] = cache_tensor
+                    if cache_tensor is None:
+                        continue
+                    source_positions = self._kv_source_positions_for_feature(
                         prototype,
-                        layer=cache_spec["layer"],
-                        site=cache_spec["site"],
-                        head=cache_spec["head"],
-                        token_index=cache_spec["token_index"],
-                        width=cache_spec["width"],
-                        head_count=cache_spec["head_count"],
+                        cache_tensor=cache_tensor,
+                        layer=int(cache_spec["layer"]),
+                        site=str(cache_spec["site"]),
+                        head=int(cache_spec["head"]),
+                        width=int(cache_spec["width"]),
+                        head_count=int(cache_spec["head_count"]),
+                        position_records=position_records,
+                        max_positions=max_surface_hits + 1,
                     )
-                    if projected is None:
+                    if not source_positions:
                         continue
-                    alignment = _cosine_similarity(cache_spec["vector"], projected)
-                    if alignment is None:
-                        continue
+                    best_source = source_positions[0]
                     hit = {
                         "site": cache_spec["site"],
                         "layer": cache_spec["layer"],
                         "head": cache_spec["head"],
                         "token_mode": cache_spec["token_mode"],
-                        "alignment": round(max(0.0, float(alignment)), 6),
+                        "alignment": round(float(best_source["alignment"]), 6),
+                        "argmax_pos": int(best_source["position"]),
+                        "argmax_relative_index": int(best_source["relative_index"]),
+                        "argmax_piece": str(best_source["piece"]),
+                        "argmax_segment_kind": str(best_source["segment_kind"]),
+                        "source_positions": [
+                            {
+                                "position": int(item["position"]),
+                                "relative_index": int(item["relative_index"]),
+                                "segment_kind": str(item["segment_kind"]),
+                                "piece": str(item["piece"]),
+                                "alignment": round(float(item["alignment"]), 6),
+                            }
+                            for item in source_positions[: max(1, int(max_surface_hits))]
+                        ],
                     }
                     if cache_spec.get("surface_id"):
                         hit["surface_id"] = cache_spec["surface_id"]
@@ -793,6 +818,11 @@ class HookedTransformerWorkerRuntime:
                         "head": best_hit["head"],
                         "token_mode": best_hit["token_mode"],
                         "surface_id": best_hit.get("surface_id"),
+                        "argmax_pos": best_hit.get("argmax_pos"),
+                        "argmax_relative_index": best_hit.get("argmax_relative_index"),
+                        "argmax_piece": best_hit.get("argmax_piece"),
+                        "argmax_segment_kind": best_hit.get("argmax_segment_kind"),
+                        "source_positions": list(best_hit.get("source_positions", [])),
                         "surface_hits": surface_hits[: max(1, int(max_surface_hits))],
                         "coverage_progress": round(float(term_progress.get(term, 0.0) or 0.0), 6),
                     }
@@ -832,6 +862,11 @@ class HookedTransformerWorkerRuntime:
                         "token_mode": item["token_mode"],
                         "alignment": item["alignment"],
                         "surface_id": item.get("surface_id"),
+                        "argmax_pos": item.get("argmax_pos"),
+                        "argmax_relative_index": item.get("argmax_relative_index"),
+                        "argmax_piece": item.get("argmax_piece"),
+                        "argmax_segment_kind": item.get("argmax_segment_kind"),
+                        "source_positions": list(item.get("source_positions", [])),
                         "coverage_progress": item["coverage_progress"],
                     }
                 )
@@ -1059,6 +1094,8 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results = []
         self._pending_tool_events = []
         self._last_observer_candidate_hash = None
+        self._kv_canary_eval_active = False
+        self._last_simulate_decode_error = None
         self._last_decoder_control = {
             "mode": self.decoder_control_mode,
             "track": _decoder_control_spec(self.decoder_control_mode)["track"],
@@ -1691,8 +1728,16 @@ class HookedTransformerWorkerRuntime:
         stabilizing_only_count = self._recent_stabilizing_only_count()
         avoid_surfaces = ["s_resid_pre_l4_last"] if self._l4_term_nudge_cooldown_active() else []
         shot_candidate_edits = self._shot_candidate_edits(avoid_surfaces=avoid_surfaces)
-        kv_candidate_edits = self._kv_candidate_edits(promoted_cache_surfaces=promoted_cache_surfaces)
+        kv_candidate_edits = self._kv_candidate_edits(
+            promoted_cache_surfaces=promoted_cache_surfaces,
+            canary_enabled=control_phase_hint == "shot_mode" and not self._kv_canary_eval_active,
+        )
         shot_probe_needed = self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
+        kv_canary_checked = sum(1 for item in kv_candidate_edits if bool(item.get("canary_checked")))
+        kv_canary_positive_count = sum(1 for item in kv_candidate_edits if bool(item.get("canary_pass")))
+        kv_canary_rejected_count = sum(
+            1 for item in kv_candidate_edits if bool(item.get("canary_checked")) and not bool(item.get("canary_pass"))
+        )
         hints = {
             "control_phase_hint": control_phase_hint,
             "loop_severity": self._loop_severity_hint(),
@@ -1710,11 +1755,15 @@ class HookedTransformerWorkerRuntime:
             "loop_break_attempt_count": loop_break_attempt_count,
             "stabilizing_only_count": stabilizing_only_count,
             "shot_probe_needed": shot_probe_needed,
-            "kv_probe_needed": bool(shot_probe_needed and kv_candidate_edits),
+            "kv_probe_needed": bool(shot_probe_needed and kv_candidate_edits and kv_canary_checked == 0),
             "shot_candidate_edits": shot_candidate_edits,
             "kv_candidate_edits": kv_candidate_edits,
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
+        if kv_canary_checked > 0:
+            hints["kv_canary_checked"] = kv_canary_checked
+            hints["kv_canary_positive_count"] = kv_canary_positive_count
+            hints["kv_canary_rejected_count"] = kv_canary_rejected_count
         if hints["l4_term_nudge_cooldown"]:
             hints["avoid_recall_surfaces"] = list(avoid_surfaces)
         if control_phase_hint == "loop_break":
@@ -1727,10 +1776,16 @@ class HookedTransformerWorkerRuntime:
             if shot_candidate_edits:
                 hints["preferred_shot_surface_id"] = str(shot_candidate_edits[0]["surface_id"])
             if kv_candidate_edits:
-                hints["preferred_kv_surface_id"] = str(kv_candidate_edits[0]["surface_id"])
-                hints["phase_policy"] = (
-                    "De-loop already helped but coverage is still zero; prefer constraint_scorer plus dry_run_decode on shot or kv candidates before another loop-break."
-                )
+                passing_kv_candidates = [item for item in kv_candidate_edits if bool(item.get("canary_pass"))]
+                if passing_kv_candidates:
+                    hints["preferred_kv_surface_id"] = str(passing_kv_candidates[0]["surface_id"])
+                    hints["phase_policy"] = (
+                        "De-loop already helped but coverage is still zero; prefer constraint_scorer plus the canary-cleared shot or kv candidate before another loop-break."
+                    )
+                else:
+                    hints["phase_policy"] = (
+                        "De-loop already helped but coverage is still zero; if kv canaries fail, prefer constraint_scorer, residual shots, or noop over blind kv apply."
+                    )
         elif control_phase_hint == "entity_insertion":
             if prefer_auxiliary_entity_bias:
                 hints["phase_policy"] = (
@@ -2059,6 +2114,7 @@ class HookedTransformerWorkerRuntime:
         self,
         *,
         promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+        canary_enabled: bool = False,
     ) -> list[dict[str, Any]]:
         missing_terms = set(
             self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
@@ -2093,6 +2149,18 @@ class HookedTransformerWorkerRuntime:
             if not surface_id or surface_id in seen_surface_ids:
                 continue
             seen_surface_ids.add(surface_id)
+            source_position = hit.get("argmax_pos")
+            if isinstance(source_position, bool) or not isinstance(source_position, int):
+                source_positions = hit.get("source_positions")
+                if isinstance(source_positions, SequenceABC) and not isinstance(source_positions, (str, bytes, bytearray)):
+                    for item in source_positions:
+                        if isinstance(item, Mapping):
+                            candidate_pos = item.get("position")
+                            if isinstance(candidate_pos, int) and not isinstance(candidate_pos, bool):
+                                source_position = int(candidate_pos)
+                                break
+            if isinstance(source_position, bool) or not isinstance(source_position, int):
+                continue
             max_alpha = float(record.get("max_alpha", 0.06) or 0.06)
             alpha = min(max_alpha, 0.04 if site == "v_cache" else 0.03)
             step_cap = record.get("step_size")
@@ -2108,19 +2176,29 @@ class HookedTransformerWorkerRuntime:
                     "tensor": site,
                     "layer": int(layer),
                     "head": int(head),
-                    "token": {"mode": "index", "value": -2},
+                    "token": {"mode": "index", "value": int(source_position)},
                 }
             }
             candidate = {
                 "surface_id": surface_id,
                 "kind": "kv_mix",
-                "role": f"kv_shot_{which}_prev_anchor",
+                "role": f"kv_shot_{which}_source_anchor",
                 "site": site,
                 "layer": int(layer),
                 "head": int(head),
                 "token_mode": token_mode,
                 "focus_feature": feature,
                 "alignment": round(float(hit.get("alignment", 0.0) or 0.0), 6),
+                "source_position": int(source_position),
+                "source_relative_index": (
+                    int(hit.get("argmax_relative_index"))
+                    if isinstance(hit.get("argmax_relative_index"), int) and not isinstance(hit.get("argmax_relative_index"), bool)
+                    else None
+                ),
+                "source_piece": None if hit.get("argmax_piece") in (None, "") else str(hit.get("argmax_piece")),
+                "source_segment_kind": (
+                    None if hit.get("argmax_segment_kind") in (None, "") else str(hit.get("argmax_segment_kind"))
+                ),
                 "source": {
                     "dtype": "cache_pair",
                     which: source_expr,
@@ -2142,7 +2220,214 @@ class HookedTransformerWorkerRuntime:
             if len(candidates) >= 4:
                 continue
         candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], str(item[4]["surface_id"])))
-        return [candidate for _site_priority, _alignment, _layer, _head, candidate in candidates[:2]]
+        selected = [candidate for _site_priority, _alignment, _layer, _head, candidate in candidates[:2]]
+        if canary_enabled:
+            return self._annotate_kv_candidates_with_canary(selected)
+        return selected
+
+    def _kv_source_positions_for_feature(
+        self,
+        prototype: torch.Tensor,
+        *,
+        cache_tensor: torch.Tensor,
+        layer: int,
+        site: str,
+        head: int,
+        width: int,
+        head_count: int,
+        position_records: Sequence[Mapping[str, Any]],
+        max_positions: int,
+    ) -> list[dict[str, Any]]:
+        if not isinstance(cache_tensor, torch.Tensor) or cache_tensor.ndim != 4:
+            return []
+        if cache_tensor.shape[0] <= 0 or cache_tensor.shape[1] <= 0:
+            return []
+        if head < 0 or cache_tensor.shape[2] <= head:
+            return []
+        seq_len = int(cache_tensor.shape[1])
+        max_positions = max(1, int(max_positions))
+        rows: list[dict[str, Any]] = []
+        projection_cache: dict[int, torch.Tensor | None] = {}
+
+        def _segment_priority(kind: str) -> int:
+            if kind == "hint":
+                return 0
+            if kind == "prompt":
+                return 1
+            if kind == "output":
+                return 2
+            return 3
+
+        for position in range(seq_len):
+            projected = projection_cache.get(position)
+            if position not in projection_cache:
+                projected = self._project_feature_into_kv_head(
+                    prototype,
+                    layer=layer,
+                    site=site,
+                    head=head,
+                    token_index=position,
+                    width=width,
+                    head_count=head_count,
+                )
+                projection_cache[position] = projected
+            if projected is None:
+                continue
+            cache_vector = cache_tensor[0, position, head, :].detach().reshape(-1).cpu().float()
+            if cache_vector.numel() != int(width):
+                continue
+            alignment = _cosine_similarity(projected, cache_vector)
+            if alignment is None:
+                continue
+            record = position_records[position] if position < len(position_records) else {}
+            segment_kind = str(record.get("segment_kind", "unknown") or "unknown")
+            piece = str(record.get("piece", "") or "")
+            relative_index = record.get("relative_index")
+            if isinstance(relative_index, bool) or not isinstance(relative_index, int):
+                relative_index = int(position) - seq_len
+            rows.append(
+                {
+                    "position": int(position),
+                    "relative_index": int(relative_index),
+                    "segment_kind": segment_kind,
+                    "piece": piece,
+                    "alignment": float(alignment),
+                    "_segment_priority": _segment_priority(segment_kind),
+                }
+            )
+        rows.sort(
+            key=lambda item: (
+                int(item["_segment_priority"]),
+                -float(item["alignment"]),
+                abs(int(item["relative_index"])),
+                int(item["position"]),
+            )
+        )
+        return [
+            {
+                "position": int(item["position"]),
+                "relative_index": int(item["relative_index"]),
+                "segment_kind": str(item["segment_kind"]),
+                "piece": str(item["piece"]),
+                "alignment": float(item["alignment"]),
+            }
+            for item in rows[:max_positions]
+        ]
+
+    def _annotate_kv_candidates_with_canary(self, candidates: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        if not candidates:
+            return []
+        terms = self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
+        if not terms:
+            return [dict(candidate) for candidate in candidates]
+
+        baseline = self._simulate_decode(max_new_tokens=1, top_k=5)
+        if baseline is None:
+            return [dict(candidate) for candidate in candidates]
+
+        annotated: list[dict[str, Any]] = []
+        baseline_logits = baseline["first_logits"].detach().cpu().float()
+        baseline_probs = torch.softmax(baseline_logits, dim=-1)
+        vocab_size = int(baseline_logits.shape[-1])
+        for raw_candidate in candidates:
+            candidate = dict(raw_candidate)
+            focus_terms = []
+            feature = str(candidate.get("focus_feature", "") or "")
+            if feature:
+                focus_terms.append(feature)
+            for term in terms:
+                if term not in focus_terms:
+                    focus_terms.append(term)
+            target_sequences = self._target_token_sequences(focus_terms, vocab_size=vocab_size)
+            command = self._build_dry_run_command(candidate)
+            if not target_sequences or command is None:
+                candidate["canary_checked"] = False
+                candidate["canary_pass"] = False
+                candidate["canary_reason"] = "missing_target_sequence"
+                annotated.append(candidate)
+                continue
+            try:
+                self._kv_canary_eval_active = True
+                edited = self._simulate_decode(max_new_tokens=1, top_k=5, command=command)
+            finally:
+                self._kv_canary_eval_active = False
+            if edited is None:
+                candidate["canary_checked"] = False
+                candidate["canary_pass"] = False
+                candidate["canary_reason"] = "dry_run_failed"
+                if self._last_simulate_decode_error:
+                    candidate["canary_error"] = str(self._last_simulate_decode_error)
+                annotated.append(candidate)
+                continue
+
+            edited_logits = edited["first_logits"].detach().cpu().float()
+            edited_probs = torch.softmax(edited_logits, dim=-1)
+            best_focus: dict[str, Any] | None = None
+            seen_token_ids: set[int] = set()
+            for sequence in target_sequences:
+                token_id = int(sequence.token_ids[0])
+                if token_id in seen_token_ids:
+                    continue
+                seen_token_ids.add(token_id)
+                row = {
+                    "term": str(sequence.term),
+                    "variant": str(sequence.variant),
+                    "token_id": token_id,
+                    "piece": self.codec.decode([token_id]),
+                    "baseline_logit": float(baseline_logits[token_id].item()),
+                    "edited_logit": float(edited_logits[token_id].item()),
+                    "logit_delta": float(edited_logits[token_id].item() - baseline_logits[token_id].item()),
+                    "baseline_prob": float(baseline_probs[token_id].item()),
+                    "edited_prob": float(edited_probs[token_id].item()),
+                    "prob_delta": float(edited_probs[token_id].item() - baseline_probs[token_id].item()),
+                }
+                if best_focus is None or (
+                    float(row["prob_delta"]),
+                    float(row["logit_delta"]),
+                ) > (
+                    float(best_focus["prob_delta"]),
+                    float(best_focus["logit_delta"]),
+                ):
+                    best_focus = row
+
+            candidate["canary_checked"] = True
+            candidate["canary_repeat_flag_delta"] = int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"]))
+            candidate["canary_entropy_delta"] = round(float(edited["entropy"]) - float(baseline["entropy"]), 6)
+            edited_scoring = edited.get("scoring", {})
+            baseline_scoring = baseline.get("scoring", {})
+            candidate["canary_required_term_recall_delta"] = round(
+                float(edited_scoring.get("required_term_recall") or 0.0)
+                - float(baseline_scoring.get("required_term_recall") or 0.0),
+                6,
+            )
+            candidate["canary_semantic_progress_delta"] = round(
+                float(edited_scoring.get("semantic_progress_score") or 0.0)
+                - float(baseline_scoring.get("semantic_progress_score") or 0.0),
+                6,
+            )
+            if best_focus is not None:
+                candidate["canary_focus_term"] = str(best_focus["term"])
+                candidate["canary_focus_piece"] = str(best_focus["piece"])
+                candidate["canary_focus_token_id"] = int(best_focus["token_id"])
+                candidate["canary_focus_logit_delta"] = round(float(best_focus["logit_delta"]), 6)
+                candidate["canary_focus_prob_delta"] = round(float(best_focus["prob_delta"]), 6)
+            else:
+                candidate["canary_focus_logit_delta"] = 0.0
+                candidate["canary_focus_prob_delta"] = 0.0
+
+            focus_logit_delta = float(candidate.get("canary_focus_logit_delta", 0.0) or 0.0)
+            focus_prob_delta = float(candidate.get("canary_focus_prob_delta", 0.0) or 0.0)
+            recall_delta = float(candidate.get("canary_required_term_recall_delta", 0.0) or 0.0)
+            semantic_delta = float(candidate.get("canary_semantic_progress_delta", 0.0) or 0.0)
+            repeat_delta = int(candidate.get("canary_repeat_flag_delta", 0) or 0)
+            canary_pass = (
+                (recall_delta > 0.0)
+                or ((focus_logit_delta >= 0.001 or focus_prob_delta >= 0.0001) and repeat_delta <= 0 and semantic_delta >= -0.02)
+            )
+            candidate["canary_pass"] = bool(canary_pass)
+            candidate["canary_reason"] = "focus_token_improved" if canary_pass else "focus_token_flat"
+            annotated.append(candidate)
+        return annotated
 
     def _l4_term_nudge_cooldown_active(self) -> bool:
         for effect in reversed(self._recent_effects):
@@ -2216,6 +2501,25 @@ class HookedTransformerWorkerRuntime:
             if segment.kind == "output":
                 output_tokens.extend(segment.token_ids)
         return output_tokens
+
+    def _token_position_records(self) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        position = 0
+        for segment in self._segments:
+            for token_id in segment.token_ids:
+                records.append(
+                    {
+                        "position": int(position),
+                        "segment_kind": str(segment.kind),
+                        "token_id": int(token_id),
+                        "piece": str(self.codec.decode([int(token_id)])),
+                    }
+                )
+                position += 1
+        seq_len = len(records)
+        for record in records:
+            record["relative_index"] = int(record["position"]) - seq_len
+        return records
 
     def _compute_metrics(self, next_logits: torch.Tensor) -> dict[str, float]:
         probs = torch.softmax(next_logits.float(), dim=-1)
@@ -2705,6 +3009,7 @@ class HookedTransformerWorkerRuntime:
     ) -> dict[str, Any] | None:
         if max_new_tokens <= 0:
             return None
+        self._last_simulate_decode_error = None
         saved_segments = [_TokenSegment(kind=segment.kind, token_ids=list(segment.token_ids)) for segment in self._segments]
         saved_last_packet = self._last_packet
         saved_last_tokens = None if getattr(self.runtime_state, "last_tokens", None) is None else self.runtime_state.last_tokens.detach().clone()
@@ -2755,7 +3060,8 @@ class HookedTransformerWorkerRuntime:
                 "repeat_flag": self._repeat_flag(),
                 "scoring": scoring,
             }
-        except Exception:
+        except Exception as exc:
+            self._last_simulate_decode_error = f"{type(exc).__name__}: {exc}"
             return None
         finally:
             for compiled, ctx in reversed(temporary_edits):

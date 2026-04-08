@@ -189,9 +189,38 @@ def _compact_kv_feature_scan(value: Any) -> dict[str, Any] | None:
                         continue
                     feature_summary = {
                         key: feature.get(key)
-                        for key in ("feature", "polarity", "site", "layer", "head", "token_mode", "surface_id", "alignment", "coverage_progress")
+                        for key in (
+                            "feature",
+                            "polarity",
+                            "site",
+                            "layer",
+                            "head",
+                            "token_mode",
+                            "surface_id",
+                            "alignment",
+                            "coverage_progress",
+                            "argmax_pos",
+                            "argmax_relative_index",
+                            "argmax_piece",
+                            "argmax_segment_kind",
+                        )
                         if key in feature and feature.get(key) not in (None, "")
                     }
+                    source_positions = feature.get("source_positions")
+                    if isinstance(source_positions, Sequence) and not isinstance(source_positions, (str, bytes, bytearray)):
+                        compact_positions = []
+                        for position in source_positions[:2]:
+                            if not isinstance(position, Mapping):
+                                continue
+                            compact_positions.append(
+                                {
+                                    key: position.get(key)
+                                    for key in ("position", "relative_index", "segment_kind", "piece", "alignment")
+                                    if key in position and position.get(key) not in (None, "")
+                                }
+                            )
+                        if compact_positions:
+                            feature_summary["source_positions"] = compact_positions
                     if feature_summary:
                         top_features.append(feature_summary)
                 if top_features:
@@ -209,9 +238,39 @@ def _compact_kv_feature_scan(value: Any) -> dict[str, Any] | None:
                 continue
             hit_summary = {
                 key: item.get(key)
-                for key in ("group", "feature", "polarity", "site", "layer", "head", "token_mode", "surface_id", "alignment", "coverage_progress")
+                for key in (
+                    "group",
+                    "feature",
+                    "polarity",
+                    "site",
+                    "layer",
+                    "head",
+                    "token_mode",
+                    "surface_id",
+                    "alignment",
+                    "coverage_progress",
+                    "argmax_pos",
+                    "argmax_relative_index",
+                    "argmax_piece",
+                    "argmax_segment_kind",
+                )
                 if key in item and item.get(key) not in (None, "")
             }
+            source_positions = item.get("source_positions")
+            if isinstance(source_positions, Sequence) and not isinstance(source_positions, (str, bytes, bytearray)):
+                compact_positions = []
+                for position in source_positions[:2]:
+                    if not isinstance(position, Mapping):
+                        continue
+                    compact_positions.append(
+                        {
+                            key: position.get(key)
+                            for key in ("position", "relative_index", "segment_kind", "piece", "alignment")
+                            if key in position and position.get(key) not in (None, "")
+                        }
+                    )
+                if compact_positions:
+                    hit_summary["source_positions"] = compact_positions
             if hit_summary:
                 top_hits.append(hit_summary)
         if top_hits:
