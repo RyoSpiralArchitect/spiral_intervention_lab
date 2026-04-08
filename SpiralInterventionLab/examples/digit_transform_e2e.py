@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence as SequenceABC
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -594,6 +594,45 @@ class DigitTransformC1OnlyExperimentResult:
 
 
 @dataclass(frozen=True)
+class ShotModeProbeHarnessResult:
+    seed: int
+    task_id: str
+    worker_model_name: str
+    worker_decoder_control_mode: str
+    shot_mode_reached: bool
+    shot_mode_step: int | None
+    probe_mode: str
+    steps_executed: int
+    prompt: str
+    final_output: str
+    final_task_feedback: dict[str, Any]
+    observation_summary: dict[str, Any]
+    probe_round_count: int
+    probe_results: tuple[dict[str, Any], ...]
+    surface_ids: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "suite_mode": "shot_mode_probe_harness",
+            "seed": self.seed,
+            "task_id": self.task_id,
+            "worker_model_name": self.worker_model_name,
+            "worker_decoder_control_mode": self.worker_decoder_control_mode,
+            "shot_mode_reached": self.shot_mode_reached,
+            "shot_mode_step": self.shot_mode_step,
+            "probe_mode": self.probe_mode,
+            "steps_executed": self.steps_executed,
+            "prompt": self.prompt,
+            "final_output": self.final_output,
+            "final_task_feedback": dict(self.final_task_feedback),
+            "observation_summary": dict(self.observation_summary),
+            "probe_round_count": int(self.probe_round_count),
+            "probe_results": [dict(item) for item in self.probe_results],
+            "surface_ids": list(self.surface_ids),
+        }
+
+
+@dataclass(frozen=True)
 class DigitTransformSweepResult:
     seeds: tuple[int, ...]
     runs: tuple[DigitTransformExperimentResult, ...]
@@ -840,6 +879,301 @@ def run_digit_transform_c1_only_experiment(
         c1=c1,
     )
     _write_summary_artifact(log_dir, "experiment_summary.json", result.to_dict())
+    return result
+
+
+def run_shot_mode_probe_harness(
+    *,
+    worker_model_name: str,
+    seed: int = 0,
+    worker_model: Any | None = None,
+    task_env: ExperimentTaskEnv | None = None,
+    task_view_mode: str = "redacted",
+    log_dir: str | Path | None = None,
+    codec: Any | None = None,
+    surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    worker_model_path: str | Path | None = None,
+    worker_tokenizer_path: str | Path | None = None,
+    worker_device: str | None = None,
+    worker_dtype: str = "float32",
+    worker_first_n_layers: int | None = None,
+    worker_hf_offline: bool = False,
+    worker_trust_remote_code: bool = False,
+    worker_mps_mode: str = "auto",
+    controller_reflection_mode: str = "off",
+    controller_memory_window: int = 3,
+    semantic_critic_mode: str = "off",
+    semantic_critic_model_name: str | None = None,
+    worker_decoder_control_mode: str = "off",
+    worker_loop_rescue_edits_per_run: int = 0,
+    worker_loop_rescue_total_alpha: float = 0.0,
+    worker_loop_rescue_total_edit_cost: float | None = None,
+    max_steps: int = 8,
+    max_probe_candidates: int = 3,
+    bootstrap_after_steps: int = 4,
+) -> ShotModeProbeHarnessResult:
+    if max_steps <= 0:
+        raise ValueError("run_shot_mode_probe_harness requires max_steps >= 1")
+    if max_probe_candidates <= 0:
+        raise ValueError("run_shot_mode_probe_harness requires max_probe_candidates >= 1")
+    if bootstrap_after_steps <= 0:
+        raise ValueError("run_shot_mode_probe_harness requires bootstrap_after_steps >= 1")
+
+    env = task_env or SpiralDigitTransformEnv()
+    model = worker_model or load_worker_model(
+        worker_model_name,
+        model_path=worker_model_path,
+        tokenizer_path=worker_tokenizer_path,
+        device=worker_device,
+        dtype=worker_dtype,
+        first_n_layers=worker_first_n_layers,
+        hf_offline=worker_hf_offline,
+        trust_remote_code=worker_trust_remote_code,
+        mps_mode=worker_mps_mode,
+    )
+    worker = build_hooked_transformer_worker_runtime(
+        model,
+        env,
+        seed=seed,
+        task_view_mode=task_view_mode,
+        surface_catalog=surface_catalog,
+        codec=codec,
+        controller_reflection_mode=controller_reflection_mode,
+        controller_memory_window=controller_memory_window,
+        worker_decoder_control_mode=worker_decoder_control_mode,
+        worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+        worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
+        worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
+    )
+    prompt = env.reset(seed)
+    worker.reset(prompt)
+    logger_factory = _logger_factory(log_dir)
+    logger = None if logger_factory is None else logger_factory("shot_harness")
+    surface_ids = tuple(surface["surface_id"] for surface in worker._surface_catalog_raw)
+
+    shot_mode_packet: dict[str, Any] | None = None
+    probe_results: list[dict[str, Any]] = []
+    probe_round_count = 0
+    probe_mode = "not_reached"
+
+    def _packet_summary(packet: Mapping[str, Any]) -> dict[str, Any]:
+        strategy_hints = packet.get("strategy_hints") if isinstance(packet.get("strategy_hints"), Mapping) else {}
+        task_feedback = packet.get("task_feedback") if isinstance(packet.get("task_feedback"), Mapping) else {}
+        return {
+            "step": int(packet.get("step", 0) or 0),
+            "control_phase_hint": packet.get("control_phase_hint"),
+            "shot_mode_ready": bool(strategy_hints.get("shot_mode_ready", False)),
+            "shot_probe_needed": bool(strategy_hints.get("shot_probe_needed", False)),
+            "kv_probe_needed": bool(strategy_hints.get("kv_probe_needed", False)),
+            "preferred_shot_surface_id": strategy_hints.get("preferred_shot_surface_id"),
+            "preferred_kv_surface_id": strategy_hints.get("preferred_kv_surface_id"),
+            "shot_candidate_count": len(strategy_hints.get("shot_candidate_edits", []) or []),
+            "kv_candidate_count": len(strategy_hints.get("kv_candidate_edits", []) or []),
+            "required_term_recall": task_feedback.get("required_term_recall"),
+            "required_term_span_progress": task_feedback.get("required_term_span_progress"),
+            "partial_score": task_feedback.get("partial_score"),
+        }
+
+    def _candidate_pool(packet: Mapping[str, Any], *, limit: int | None = None) -> list[dict[str, Any]]:
+        strategy_hints = packet.get("strategy_hints") if isinstance(packet.get("strategy_hints"), Mapping) else {}
+        candidates: list[dict[str, Any]] = []
+        kv_candidates = strategy_hints.get("kv_candidate_edits")
+        if isinstance(kv_candidates, SequenceABC) and not isinstance(kv_candidates, (str, bytes, bytearray)):
+            candidates.extend(dict(item) for item in kv_candidates if isinstance(item, Mapping))
+        if not candidates:
+            shot_candidates = strategy_hints.get("shot_candidate_edits")
+            if isinstance(shot_candidates, SequenceABC) and not isinstance(shot_candidates, (str, bytes, bytearray)):
+                candidates.extend(dict(item) for item in shot_candidates if isinstance(item, Mapping))
+        if limit is not None:
+            return candidates[: max(0, int(limit))]
+        return candidates
+
+    def _select_probe_candidates(
+        packet: Mapping[str, Any],
+        *,
+        stage: int,
+        already_probed_surface_ids: set[str],
+    ) -> list[dict[str, Any]]:
+        if stage <= 1:
+            first_round_limit = 1 if max_probe_candidates <= 1 else max(1, int(max_probe_candidates) - 1)
+            return _candidate_pool(packet, limit=first_round_limit)
+
+        if max_probe_candidates <= 1:
+            return []
+
+        pool = _candidate_pool(packet)
+        positive_labels = {"positive", "weak_positive"}
+        selected: list[dict[str, Any]] = []
+        seen_surface_ids: set[str] = set()
+
+        def _candidate_surface_id(candidate: Mapping[str, Any]) -> str:
+            return str(candidate.get("surface_id", "") or "")
+
+        for candidate in pool:
+            surface_id = _candidate_surface_id(candidate)
+            if not surface_id or surface_id in seen_surface_ids or surface_id not in already_probed_surface_ids:
+                continue
+            recent_probe = candidate.get("recent_probe") if isinstance(candidate.get("recent_probe"), Mapping) else {}
+            label = str(recent_probe.get("label", "") or "")
+            if label not in positive_labels:
+                continue
+            selected.append(dict(candidate))
+            seen_surface_ids.add(surface_id)
+            if len(selected) >= 1:
+                return selected
+
+        for candidate in pool:
+            surface_id = _candidate_surface_id(candidate)
+            if not surface_id or surface_id in seen_surface_ids or surface_id in already_probed_surface_ids:
+                continue
+            selected.append(dict(candidate))
+            seen_surface_ids.add(surface_id)
+            if len(selected) >= 1:
+                return selected
+
+        return selected
+
+    for _ in range(max_steps):
+        packet = worker.build_controller_packet()
+        if (
+            packet.get("latest_observer_check") is None
+            and int(packet.get("step", 0) or 0) >= max(0, bootstrap_after_steps - 1)
+        ):
+            observer_result = worker.request_observer_check(
+                {"kind": "semantic_progress", "reason": "shot_harness_bootstrap"},
+                source="shot_harness",
+            )
+            if observer_result is not None:
+                packet = worker.build_controller_packet()
+        summary = _packet_summary(packet)
+        if logger is not None:
+            logger.log({"event": "shot_harness_observation"} | summary)
+        control_phase_hint = str(packet.get("control_phase_hint", "") or "")
+        strategy_hints = packet.get("strategy_hints") if isinstance(packet.get("strategy_hints"), Mapping) else {}
+        task_feedback = packet.get("task_feedback") if isinstance(packet.get("task_feedback"), Mapping) else {}
+        should_bootstrap_probe = (
+            control_phase_hint != "shot_mode"
+            and int(packet.get("step", 0) or 0) >= int(bootstrap_after_steps)
+            and float(task_feedback.get("required_term_recall", 0.0) or 0.0) <= 0.0
+            and str(strategy_hints.get("loop_severity", "low") or "low") != "high"
+        )
+        if control_phase_hint == "shot_mode" or should_bootstrap_probe:
+            shot_mode_packet = dict(packet)
+            probe_mode = "shot_mode" if control_phase_hint == "shot_mode" else "bootstrap_probe"
+            initial_candidates = _select_probe_candidates(packet, stage=1, already_probed_surface_ids=set())
+            if initial_candidates:
+                tool_requests = [
+                    {
+                        "tool": "dry_run_decode",
+                        "candidate_edit": candidate,
+                        "max_new_tokens": 2,
+                        "top_k": 8,
+                        "reason": "shot_harness_probe",
+                    }
+                    for candidate in initial_candidates
+                ]
+                probe_results = [
+                    dict(result, probe_stage=1)
+                    for result in worker.request_controller_tools(tool_requests, source="shot_harness")
+                ]
+                probe_round_count = 1 if probe_results else 0
+                if logger is not None:
+                    for result in probe_results:
+                        logger.log({"event": "shot_harness_probe", **dict(result)})
+                if max_probe_candidates > 1 and probe_results:
+                    reranked_packet = worker.build_controller_packet()
+                    shot_mode_packet = dict(reranked_packet)
+                    if logger is not None:
+                        logger.log({"event": "shot_harness_observation", "probe_stage": 2, **_packet_summary(reranked_packet)})
+                    probed_surface_ids = {
+                        str(result.get("candidate_edit", {}).get("surface_id", "") or "")
+                        for result in probe_results
+                        if isinstance(result.get("candidate_edit"), Mapping)
+                    }
+                    second_stage_candidates = _select_probe_candidates(
+                        reranked_packet,
+                        stage=2,
+                        already_probed_surface_ids={surface_id for surface_id in probed_surface_ids if surface_id},
+                    )
+                    if second_stage_candidates:
+                        second_stage_requests = [
+                            {
+                                "tool": "dry_run_decode",
+                                "candidate_edit": candidate,
+                                "max_new_tokens": 2,
+                                "top_k": 8,
+                                "reason": "shot_harness_probe_rerank",
+                            }
+                            for candidate in second_stage_candidates
+                        ]
+                        second_stage_results = [
+                            dict(result, probe_stage=2)
+                            for result in worker.request_controller_tools(second_stage_requests, source="shot_harness")
+                        ]
+                        if second_stage_results:
+                            probe_round_count = 2
+                            probe_results.extend(second_stage_results)
+                            if logger is not None:
+                                for result in second_stage_results:
+                                    logger.log({"event": "shot_harness_probe", **dict(result)})
+            break
+        if worker.done():
+            break
+        worker.step()
+
+    final_output = worker.final_text()
+    observation_summary = (
+        _packet_summary(shot_mode_packet)
+        if shot_mode_packet is not None
+        else {
+            "step": int(getattr(worker, "_steps", 0) or 0),
+            "control_phase_hint": "not_reached",
+            "shot_mode_ready": False,
+            "shot_probe_needed": False,
+            "kv_probe_needed": False,
+            "preferred_shot_surface_id": None,
+            "preferred_kv_surface_id": None,
+            "shot_candidate_count": 0,
+            "kv_candidate_count": 0,
+            "required_term_recall": worker._last_task_feedback.get("required_term_recall"),
+            "required_term_span_progress": worker._last_task_feedback.get("required_term_span_progress"),
+            "partial_score": worker._last_task_feedback.get("partial_score"),
+        }
+    )
+    result = ShotModeProbeHarnessResult(
+        seed=seed,
+        task_id=env.task_id,
+        worker_model_name=worker_model_name,
+        worker_decoder_control_mode=worker_decoder_control_mode,
+        shot_mode_reached=probe_mode == "shot_mode",
+        shot_mode_step=(
+            int(shot_mode_packet.get("step", 0) or 0)
+            if shot_mode_packet is not None and probe_mode == "shot_mode"
+            else None
+        ),
+        probe_mode=probe_mode,
+        steps_executed=int(getattr(worker, "_steps", 0) or 0),
+        prompt=prompt,
+        final_output=final_output,
+        final_task_feedback=dict(worker._last_task_feedback),
+        observation_summary=observation_summary,
+        probe_round_count=int(probe_round_count),
+        probe_results=tuple(dict(item) for item in probe_results),
+        surface_ids=surface_ids,
+    )
+    if logger is not None:
+        logger.log(
+            {
+                "event": "shot_harness_complete",
+                "shot_mode_reached": result.shot_mode_reached,
+                "shot_mode_step": result.shot_mode_step,
+                "probe_mode": result.probe_mode,
+                "steps_executed": result.steps_executed,
+                "probe_round_count": result.probe_round_count,
+                "probe_result_count": len(result.probe_results),
+            }
+        )
+    _write_summary_artifact(log_dir, "shot_harness_summary.json", result.to_dict())
     return result
 
 
