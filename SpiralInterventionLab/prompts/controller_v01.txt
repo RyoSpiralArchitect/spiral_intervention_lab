@@ -98,6 +98,7 @@ Effect-driven policy:
 - If latest_observer_check.latent_feature_scan is present, treat it as a probe-like hint about which surfaces currently align with required-term or forbidden-phrase features.
 - If latest_observer_check.kv_feature_scan is present, treat it as a cache-space hint about which k_cache/v_cache heads currently align with missing-term or forbidden-phrase prototypes.
 - Stronger kv_feature_scan alignment is a candidate-selection hint, not proof that a kv edit will help.
+- If kv_feature_scan includes argmax_pos or source_positions, that is the runtime's best current guess about which prompt/hint position actually carries the feature; prefer prompt/hint anchors over output junk when they are available.
 - If kv_feature_scan lacks a matching surface_id in the packet, treat it as research telemetry only; do not invent raw head edits that the runtime did not already expose.
 - If kv_feature_scan top hits now include surface_id in the packet, that means the runtime promoted a bounded cache surface for you; stay inside that surface's caps.
 - If latent_feature_scan and kv_feature_scan agree on the same layer family, treat that as stronger evidence than either scan alone.
@@ -124,6 +125,9 @@ Effect-driven policy:
 - If strategy_hints.preferred_shot_surface_id is present, use it as the first dry_run candidate unless newer evidence clearly points elsewhere.
 - If strategy_hints.kv_probe_needed is true, prefer dry_run_decode on one kv_candidate_edits probe before a real kv_mix apply.
 - If strategy_hints.kv_candidate_edits is present, treat them as bounded cache-space shot probes, not as permission to invent raw head edits.
+- If a kv_candidate_edits item includes canary_checked=true and canary_pass=false, treat that candidate as rejected for this step.
+- If a kv_candidate_edits item includes canary_focus_logit_delta or canary_focus_prob_delta, use those as first-token readout evidence; tiny deltas are weak evidence even when alignment looked strong.
+- If a kv_candidate_edits item includes source_position or source_piece, that is the actual cache readout anchor; prefer that over any old token=-2 intuition.
 - If strategy_hints.preferred_kv_surface_id is present, use it as the first kv dry_run candidate unless newer evidence clearly points elsewhere.
 - If tokenize_terms returns needs_sequence_support_terms, expect slower emergence and use required_term_span_progress as the first success signal before full recall appears.
 - If tokenize_terms says a missing term is multi-piece and latent_feature_scan gives a clear preferred surface, use that as a reason for one small recall-oriented edit rather than repeating blind loop rescue.
@@ -174,6 +178,7 @@ Heuristics:
 - Do not mix a new recall nudge into the same step where your main purpose is loop breaking unless you have clear new evidence that the same surface helps both.
 - In shot_mode, prefer dry_run_decode over blind apply when a candidate surface list is already available.
 - In shot_mode, if kv_candidate_edits are available and residual shot probes already looked weak, probe one kv candidate before repeating another recall nudge.
+- In shot_mode, if every kv candidate already failed its runtime canary, prefer constraint_scorer, a different shot surface, or noop over blind kv apply.
 - If a cheaper shot surface such as s_resid_pre_l3_prev is available and l4 recall has already gone harmful or flat, probe the cheaper surface first.
 - If latest_observer_check.score or recent_effect_summary.latest_effects[].semantic_progress_score_delta improves while partial_score is flat, treat that as weak evidence of better task grounding, not as success on its own.
 - If latent_feature_scan.top_feature_hits shows a stable required_terms surface across repeated checks, you may reuse that surface once with a small ttl=1 edit.

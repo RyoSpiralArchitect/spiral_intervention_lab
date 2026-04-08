@@ -308,6 +308,14 @@ class TestBackendsAndBridge(unittest.TestCase):
                             "site": "v_cache",
                             "layer": 4,
                             "head": 1,
+                            "source_position": 12,
+                            "source_relative_index": -6,
+                            "source_piece": " budget",
+                            "source_segment_kind": "prompt",
+                            "canary_checked": True,
+                            "canary_pass": True,
+                            "canary_focus_piece": " budget",
+                            "canary_focus_logit_delta": 0.012,
                             "source": {
                                 "dtype": "cache_pair",
                                 "v": {
@@ -317,13 +325,13 @@ class TestBackendsAndBridge(unittest.TestCase):
                                         "tensor": "v_cache",
                                         "layer": 4,
                                         "head": 1,
-                                        "token": {"mode": "index", "value": -2},
+                                        "token": {"mode": "index", "value": 12},
                                     }
                                 },
                             },
                             "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
                             "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": 0.04, "revertible": True},
-                            "role": "kv_shot_v_prev_anchor",
+                            "role": "kv_shot_v_source_anchor",
                         }
                     ],
                     "preferred_shot_surface_id": "s_resid_pre_l3_prev",
@@ -374,6 +382,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["strategy_hints"]["shot_candidate_edits"][0]["surface_id"], "s_resid_pre_l3_prev")
         self.assertEqual(trace["observation"]["strategy_hints"]["kv_candidate_edits"][0]["surface_id"], "s_v_cache_l4_h1_last_promoted")
         self.assertEqual(trace["observation"]["strategy_hints"]["kv_candidate_edits"][0]["op"]["kind"], "kv_mix")
+        self.assertTrue(trace["observation"]["strategy_hints"]["kv_candidate_edits"][0]["canary_pass"])
+        self.assertEqual(trace["observation"]["strategy_hints"]["kv_candidate_edits"][0]["source_position"], 12)
         self.assertTrue(trace["observation"]["strategy_hints"]["l4_term_nudge_cooldown"])
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["tool"], "tokenize_terms")
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["soft_logit_bias_ok_terms"], ["budget"])
@@ -676,6 +686,10 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("kv_candidate_edits", prompt)
         self.assertIn("preferred_shot_surface_id", prompt)
         self.assertIn("preferred_kv_surface_id", prompt)
+        self.assertIn("source_positions", prompt)
+        self.assertIn("argmax_pos", prompt)
+        self.assertIn("canary_pass", prompt)
+        self.assertIn("canary_focus_logit_delta", prompt)
         self.assertIn("l4_term_nudge_cooldown", prompt)
         self.assertIn("prefer_auxiliary_entity_bias", prompt)
         self.assertIn("direct_entity_edit_gate", prompt)
@@ -684,6 +698,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("s_resid_pre_l3_prev", prompt)
         self.assertIn("dry_run_decode on one kv_candidate_edits probe", prompt)
         self.assertIn("runtime promoted a bounded cache surface", prompt)
+        self.assertIn("prompt/hint anchors over output junk", prompt)
+        self.assertIn("every kv candidate already failed its runtime canary", prompt)
         self.assertNotIn("include meta.hypothesis and meta.confidence when useful", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):

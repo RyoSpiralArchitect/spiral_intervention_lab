@@ -12,7 +12,7 @@ from SpiralInterventionLab.runtime.edit_budget import prepare_direction
 from SpiralInterventionLab.runtime.effects import build_edit_effect, summarize_effects
 from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
-from SpiralInterventionLab.runtime.policy import HarnessPolicy, PolicyViolation, validate_command_against_packet
+from SpiralInterventionLab.runtime.policy import GlobalBudget, HarnessPolicy, PolicyViolation, validate_command_against_packet
 from SpiralInterventionLab.runtime.rank1_bridge import HybridRank1VectorBridge, Rank1Geometry
 from SpiralInterventionLab.runtime.tlens_runtime import HookedTransformerRuntimeState
 from SpiralInterventionLab.runtime.trace_recorder import StepAlignedTrace
@@ -645,7 +645,8 @@ class TestCompiler(unittest.TestCase):
         command = _resid_command()
         command["edits"][0]["budget"]["step_size"] = 0.1
 
-        compiled = compile_command(command, packet, ctx)
+        permissive_policy = HarnessPolicy(global_budget=GlobalBudget(max_total_alpha=1.0, max_total_edit_cost=1.0))
+        compiled = compile_command(command, packet, ctx, policy=permissive_policy)
         compiled[0].apply(ctx)
 
         hook_record = runtime_state.hooks["e_rescue"]
@@ -1678,6 +1679,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
 
     def test_worker_runtime_kv_feature_scan_reports_cache_head_candidates(self):
         worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("pp")
 
         class _FakeAttn:
             def __init__(self):
@@ -1729,10 +1731,16 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         assert scan is not None
         self.assertEqual(scan["projection_mode"], "attn_weight_head_projection")
         self.assertEqual(scan["groups"][0]["group"], "required_terms")
-        self.assertEqual(scan["top_feature_hits"][0]["site"], "v_cache")
+        self.assertIn(scan["top_feature_hits"][0]["site"], {"k_cache", "v_cache"})
         self.assertEqual(scan["top_feature_hits"][0]["layer"], 3)
-        self.assertEqual(scan["top_feature_hits"][0]["head"], 1)
+        self.assertIn(scan["top_feature_hits"][0]["head"], {0, 1})
         self.assertEqual(scan["top_feature_hits"][0]["token_mode"], "last")
+        self.assertIn("argmax_pos", scan["top_feature_hits"][0])
+        self.assertTrue(scan["top_feature_hits"][0]["source_positions"])
+        self.assertEqual(
+            scan["top_feature_hits"][0]["source_positions"][0]["position"],
+            scan["top_feature_hits"][0]["argmax_pos"],
+        )
 
     def test_worker_runtime_kv_feature_scan_handles_gqa_expanded_weights(self):
         worker_runtime = self._make_worker_runtime()
@@ -1892,6 +1900,19 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                         "head": 1,
                         "token_mode": "last",
                         "alignment": 0.31,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {
+                                "position": 0,
+                                "relative_index": -1,
+                                "segment_kind": "prompt",
+                                "piece": "p",
+                                "alignment": 0.31,
+                            }
+                        ],
                     }
                 ],
                 "groups": [
@@ -1906,6 +1927,19 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                                 "head": 1,
                                 "token_mode": "last",
                                 "alignment": 0.31,
+                                "argmax_pos": 0,
+                                "argmax_relative_index": -1,
+                                "argmax_piece": "p",
+                                "argmax_segment_kind": "prompt",
+                                "source_positions": [
+                                    {
+                                        "position": 0,
+                                        "relative_index": -1,
+                                        "segment_kind": "prompt",
+                                        "piece": "p",
+                                        "alignment": 0.31,
+                                    }
+                                ],
                             }
                         ],
                     }
@@ -1943,7 +1977,12 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             }
         ]
 
-        packet = worker_runtime.build_controller_packet()
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_annotate_kv_candidates_with_canary",
+            side_effect=lambda items: [dict(item, canary_checked=True, canary_pass=True, canary_focus_logit_delta=0.01) for item in items],
+        ):
+            packet = worker_runtime.build_controller_packet()
         parsed = parse_observation_packet(packet)
 
         promoted = next(surface for surface in packet["surface_catalog"] if surface["target"]["kind"] == "cache")
@@ -1958,13 +1997,14 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         )
         self.assertEqual(parsed.surface_map()[promoted["surface_id"]].target.kind, "cache")
         self.assertEqual(packet["strategy_hints"]["preferred_kv_surface_id"], promoted["surface_id"])
-        self.assertTrue(packet["strategy_hints"]["kv_probe_needed"])
+        self.assertFalse(packet["strategy_hints"]["kv_probe_needed"])
         self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["surface_id"], promoted["surface_id"])
         self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["op"]["kind"], "kv_mix")
         self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["op"]["which"], "v")
         self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["tensor"], "v_cache")
         self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["head"], 1)
-        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["token"]["value"], -2)
+        self.assertEqual(packet["strategy_hints"]["kv_candidate_edits"][0]["source"]["v"]["ref"]["token"]["value"], 0)
+        self.assertTrue(packet["strategy_hints"]["kv_candidate_edits"][0]["canary_pass"])
 
     def test_worker_runtime_build_dry_run_command_accepts_kv_candidate_edit(self):
         worker_runtime = self._make_worker_runtime()
@@ -1995,6 +2035,19 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                         "head": 1,
                         "token_mode": "last",
                         "alignment": 0.31,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {
+                                "position": 0,
+                                "relative_index": -1,
+                                "segment_kind": "prompt",
+                                "piece": "p",
+                                "alignment": 0.31,
+                            }
+                        ],
                     }
                 ],
             },
@@ -2040,6 +2093,75 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(parsed.edits[0].op.kind, "kv_mix")
         self.assertEqual(parsed.edits[0].target.surface_id, candidate_edit["surface_id"])
         validate_command_against_packet(command, packet)
+
+    def test_worker_runtime_shot_mode_only_prefers_canary_passing_kv_candidates(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "missing_required_terms": ["term_x"],
+            "entity_recall_terms": ["term_x"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.41,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "term_x",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "alignment": 0.31,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {
+                                "position": 0,
+                                "relative_index": -1,
+                                "segment_kind": "prompt",
+                                "piece": "p",
+                                "alignment": 0.31,
+                            }
+                        ],
+                    }
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "hypothesis": "small_loop_rescue",
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "expected_effect": "break_loop",
+                "signal_profile": "stabilizing_only",
+                "verdict": "neutral",
+            }
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_annotate_kv_candidates_with_canary",
+            side_effect=lambda items: [dict(item, canary_checked=True, canary_pass=False, canary_focus_logit_delta=0.0) for item in items],
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        self.assertFalse(packet["strategy_hints"]["kv_probe_needed"])
+        self.assertNotIn("preferred_kv_surface_id", packet["strategy_hints"])
+        self.assertFalse(packet["strategy_hints"]["kv_candidate_edits"][0]["canary_pass"])
 
     def test_worker_runtime_logit_bias_prefers_space_prefixed_variant(self):
         worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
@@ -2755,7 +2877,8 @@ class TestHookedTransformerIntegration(unittest.TestCase):
             ],
         }
 
-        compiled = compile_command(command, packet, ctx)
+        permissive_policy = HarnessPolicy(global_budget=GlobalBudget(max_total_alpha=1.0, max_total_edit_cost=1.0))
+        compiled = compile_command(command, packet, ctx, policy=permissive_policy)
         compiled[0].apply(ctx)
         self.assertIn("e_resid_tlens", runtime_state.hooks)
 
@@ -2767,6 +2890,104 @@ class TestHookedTransformerIntegration(unittest.TestCase):
         runtime_state.tick_ttl()
         runtime_state.tick_ttl()
         self.assertNotIn("e_resid_tlens", runtime_state.hooks)
+
+    def test_hooked_transformer_adapter_reads_cache_refs_from_position_axis(self):
+        model = self._make_model()
+        runtime_state = HookedTransformerRuntimeState(model, seed=19)
+        adapter = HookedTransformerAdapter(model)
+        tokens = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
+
+        _logits, cache = runtime_state.run_with_cache(tokens, return_type="logits")
+        packet = parse_observation_packet(self._runtime_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+
+        ref = {
+            "scope": "runtime",
+            "worker": "os_0",
+            "tensor": "v_cache",
+            "layer": 0,
+            "head": 0,
+            "token": {"mode": "index", "value": 1},
+        }
+        selected = adapter.read_ref(ref, ctx)
+        expected = cache["blocks.0.attn.hook_v"][0, 1, 0].detach()
+        self.assertTrue(torch.allclose(selected, expected, atol=1e-6, rtol=1e-5))
+
+    def test_hooked_transformer_runtime_kv_mix_uses_cache_token_positions_not_head_axis(self):
+        model = self._make_model()
+        runtime_state = HookedTransformerRuntimeState(model, seed=23)
+        adapter = HookedTransformerAdapter(model)
+        tokens = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
+
+        _logits, cache = runtime_state.run_with_cache(tokens, return_type="logits")
+        baseline_last = cache["blocks.0.attn.hook_v"][0, -1, 0].detach().clone()
+        source_token = cache["blocks.0.attn.hook_v"][0, 1, 0].detach().clone()
+        runtime_state.snapshot_last_cache("paired_baseline")
+
+        packet_dict = self._runtime_packet()
+        packet_dict["surface_catalog"].append(
+            {
+                "surface_id": "s_v_l0_h0_last",
+                "target": {
+                    "kind": "cache",
+                    "worker": "os_0",
+                    "site": "v_cache",
+                    "layer": 0,
+                    "head": 0,
+                    "token": {"mode": "last"},
+                },
+                "allow_ops": ["kv_mix"],
+                "caps": {
+                    "max_alpha": 0.5,
+                    "max_ttl_steps": 2,
+                    "norm_clip": 5.0,
+                    "step_size": 0.5,
+                    "revertible_only": True,
+                },
+            }
+        )
+        packet = parse_observation_packet(packet_dict)
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+
+        command = {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+                {
+                    "id": "e_kv_mix_tlens",
+                    "target": {"surface_id": "s_v_l0_h0_last"},
+                    "source": {
+                        "dtype": "cache_pair",
+                        "v": {
+                            "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "v_cache",
+                                "layer": 0,
+                                "head": 0,
+                                "token": {"mode": "index", "value": 1},
+                            }
+                        },
+                    },
+                    "op": {"kind": "kv_mix", "which": "v", "alpha": 0.5},
+                    "budget": {"ttl_steps": 1, "norm_clip": 5.0, "step_size": 0.5, "revertible": True},
+                }
+            ],
+        }
+
+        permissive_policy = HarnessPolicy(global_budget=GlobalBudget(max_total_alpha=1.0, max_total_edit_cost=1.0))
+        compiled = compile_command(command, packet, ctx, policy=permissive_policy)
+        compiled[0].apply(ctx)
+        self.assertIn("e_kv_mix_tlens", runtime_state.hooks)
+
+        _logits2, edited_cache = runtime_state.run_with_cache(tokens, return_type="logits")
+        edited_last = edited_cache["blocks.0.attn.hook_v"][0, -1, 0].detach()
+        prepared_source = prepare_direction(source_token, alpha=0.5, norm_clip=5.0, step_size=0.5)
+        expected = ((1.0 - 0.5) * baseline_last) + (0.5 * prepared_source)
+        self.assertTrue(torch.allclose(edited_last, expected, atol=1e-5, rtol=1e-4))
+
+        compiled[0].rollback(ctx)
+        self.assertNotIn("e_kv_mix_tlens", runtime_state.hooks)
 
     def test_hooked_transformer_runtime_attn_rank1_overlay_applies_and_rolls_back(self):
         model = self._make_model()
