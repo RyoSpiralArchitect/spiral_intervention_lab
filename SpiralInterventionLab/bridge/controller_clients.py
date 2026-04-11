@@ -415,9 +415,29 @@ def _compact_tool_result(value: Any) -> dict[str, Any] | None:
         "required_term_recall_delta",
         "required_term_span_progress_delta",
         "semantic_progress_delta",
+        "target_mass_delta",
+        "target_mass_edited",
+        "target_top20_hit_delta",
+        "target_top20_hits_edited",
+        "focus_logit_delta",
+        "focus_prob_delta",
+        "focus_rank_delta",
+        "focus_rank_edited",
+        "rank_focus_delta",
+        "rank_focus_rank_edited",
     ):
         if key in value and value.get(key) not in (None, ""):
             summary[key] = value.get(key)
+    candidate_edit = value.get("candidate_edit")
+    if isinstance(candidate_edit, Mapping):
+        for source_key, summary_key in (
+            ("surface_id", "candidate_surface_id"),
+            ("site", "candidate_site"),
+            ("focus_feature", "candidate_focus_feature"),
+            ("retry_stage", "retry_stage"),
+        ):
+            if candidate_edit.get(source_key) not in (None, ""):
+                summary[summary_key] = candidate_edit.get(source_key)
     if value.get("candidate_preview") not in (None, ""):
         summary["candidate_preview"] = _truncate_text(value.get("candidate_preview"), 80)
     for key in (
