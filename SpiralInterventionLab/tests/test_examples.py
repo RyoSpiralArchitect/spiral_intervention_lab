@@ -7,6 +7,7 @@ from unittest.mock import patch
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.examples import (
     create_task_env,
+    create_readout_sidecar_analyzer,
     build_default_activation_surface_catalog,
     build_allowed_token_ids_for_constraint,
     build_hooked_transformer_worker_runtime,
@@ -269,6 +270,31 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(runtime.decoder_control_mode, "logit_bias_entity_soft")
         self.assertEqual(packet["telemetry"]["decoder_control_mode"], "logit_bias_entity_soft")
         self.assertEqual(packet["telemetry"]["decoder_control_track"], "auxiliary")
+
+    def test_build_hooked_transformer_worker_runtime_wires_readout_sidecar_analyzer(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralConstrainedRewriteEnv()
+
+        def fake_sidecar(_capture):
+            return {"analyzer_name": "fake_sidecar"}
+
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=7,
+            codec=codec,
+            readout_sidecar_analyzer=fake_sidecar,
+        )
+
+        self.assertIs(runtime.readout_sidecar_analyzer, fake_sidecar)
+
+    def test_create_readout_sidecar_analyzer_supports_heuristic_mode(self):
+        analyzer = create_readout_sidecar_analyzer("heuristic")
+
+        self.assertTrue(callable(analyzer))
+
+    def test_create_readout_sidecar_analyzer_supports_off_mode(self):
+        self.assertIsNone(create_readout_sidecar_analyzer("off"))
 
     def test_build_hooked_transformer_worker_runtime_wires_semantic_observer(self):
         model, codec = self._make_model_and_codec()
