@@ -14,6 +14,11 @@ from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_epi
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
 from SpiralInterventionLab.runtime.policy import GlobalBudget, HarnessPolicy, PolicyViolation, validate_command_against_packet
 from SpiralInterventionLab.runtime.rank1_bridge import HybridRank1VectorBridge, Rank1Geometry
+from SpiralInterventionLab.runtime.sidecar import (
+    ReadoutSidecarCapture,
+    ReadoutSidecarSiteCapture,
+    build_heuristic_readout_sidecar_analyzer,
+)
 from SpiralInterventionLab.runtime.tlens_runtime import HookedTransformerRuntimeState
 from SpiralInterventionLab.runtime.trace_recorder import StepAlignedTrace
 from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime, _TargetTokenSequence
@@ -1581,6 +1586,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         task_feedback_fn=None,
         observer_check_fn=None,
         codec=None,
+        readout_sidecar_analyzer=None,
     ):
         codec = codec or CharacterCodec("pabc!? ")
         runtime_state = DeterministicRuntimeState(codec)
@@ -1601,6 +1607,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             task_feedback_fn=task_feedback_fn,
             observer_check_fn=observer_check_fn,
             decoder_control_mode=decoder_control_mode,
+            readout_sidecar_analyzer=readout_sidecar_analyzer,
         )
 
     def test_worker_runtime_packet_is_schema_shaped(self):
@@ -3144,6 +3151,172 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertTrue(all(candidate["provenance_class"] == "source_body" for candidate in kv_candidates))
         self.assertTrue(all(candidate.get("bundle_ready", False) for candidate in kv_candidates))
         self.assertEqual({candidate["site"] for candidate in kv_candidates}, {"k_cache", "v_cache"})
+
+    def test_heuristic_readout_sidecar_analyzer_prefers_more_reachable_term(self):
+        analyzer = build_heuristic_readout_sidecar_analyzer()
+        capture = ReadoutSidecarCapture(
+            run_id="run",
+            episode_id="ep",
+            worker_id="os_0",
+            step=1,
+            control_phase_hint="readout_escape",
+            answer_readout_canary={
+                "reachable_focus_term": "budget",
+                "reachable_focus_rank": 901,
+                "target_mass": 0.00012,
+                "attractor_family_mass": 0.24,
+                "attractor_family_overlap_tokens": ["EW", " EW"],
+            },
+            answer_sites=(
+                ReadoutSidecarSiteCapture(
+                    role="answer_boundary_prev",
+                    layer=3,
+                    token_selector={"mode": "index", "value": -2},
+                    vector=torch.tensor([1.0, 0.0, 0.0]),
+                ),
+                ReadoutSidecarSiteCapture(
+                    role="answer_boundary_last",
+                    layer=3,
+                    token_selector={"mode": "last"},
+                    vector=torch.tensor([0.9, 0.1, 0.0]),
+                ),
+            ),
+            source_sites=(
+                ReadoutSidecarSiteCapture(
+                    role="source_body_exact_span_mean",
+                    layer=3,
+                    token_selector={"mode": "span", "start": 10, "end": 12, "pool": "mean"},
+                    vector=torch.tensor([0.98, 0.02, 0.0]),
+                    term="Mira",
+                    provenance_class="source_body",
+                    span=(10, 12),
+                    piece=" Mira",
+                ),
+                ReadoutSidecarSiteCapture(
+                    role="source_body_exact_span_mean",
+                    layer=3,
+                    token_selector={"mode": "span", "start": 18, "end": 19, "pool": "mean"},
+                    vector=torch.tensor([0.25, 0.75, 0.0]),
+                    term="budget",
+                    provenance_class="source_body",
+                    span=(18, 19),
+                    piece=" budget",
+                ),
+            ),
+        )
+
+        hints = analyzer(capture)
+
+        self.assertEqual(hints["focus_term_override"], "Mira")
+        self.assertGreater(hints["candidate_support_terms"]["Mira"], hints["candidate_support_terms"]["budget"])
+        self.assertIn("kv_pair:Mira:source_body:10:12", hints["candidate_support_scores"])
+        self.assertTrue(hints["attractor_family_present"])
+
+    def test_worker_runtime_readout_sidecar_hints_shift_escape_target_terms(self):
+        prompt = (
+            "Keep these terms: budget Mira\n"
+            "SOURCE: Mira budget\n"
+            "ANSWER:"
+        )
+        codec = CharacterCodec("Keep these terms: budget Mira\nSOURCE: Mira budget\nANSWER:")
+        captured: dict[str, Any] = {}
+
+        def fake_sidecar(capture):
+            captured["capture"] = capture
+            return {
+                "analyzer_name": "fake_sidecar",
+                "focus_term_override": "Mira",
+                "candidate_support_terms": {"Mira": 1.4},
+                "term_anchor_strength_by_term": {"Mira": 0.9},
+            }
+
+        worker_runtime = self._make_worker_runtime(codec=codec, readout_sidecar_analyzer=fake_sidecar)
+        worker_runtime.reset(prompt)
+        worker_runtime.step()
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["budget", "Mira"],
+            "entity_recall_terms": ["budget", "Mira"],
+        }
+
+        actionable_hits = [
+            {
+                "group": "required_terms",
+                "feature": "budget",
+                "polarity": "promote",
+                "site": "v_cache",
+                "layer": 3,
+                "head": 1,
+                "token_mode": "last",
+                "surface_id": "s_v_cache_l3_h1_last_promoted",
+                "alignment": 0.33,
+                "argmax_pos": 17,
+                "argmax_relative_index": -17,
+                "argmax_piece": " budget",
+                "argmax_segment_kind": "prompt",
+                "source_positions": [
+                    {"position": 17, "relative_index": -17, "segment_kind": "prompt", "piece": " budget", "alignment": 0.33}
+                ],
+                "coverage_progress": 0.0,
+            },
+            {
+                "group": "required_terms",
+                "feature": "Mira",
+                "polarity": "promote",
+                "site": "k_cache",
+                "layer": 3,
+                "head": 0,
+                "token_mode": "last",
+                "surface_id": "s_k_cache_l3_h0_last_promoted",
+                "alignment": 0.31,
+                "argmax_pos": 12,
+                "argmax_relative_index": -22,
+                "argmax_piece": " Mira",
+                "argmax_segment_kind": "prompt",
+                "source_positions": [
+                    {"position": 12, "relative_index": -22, "segment_kind": "prompt", "piece": " Mira", "alignment": 0.31}
+                ],
+                "coverage_progress": 0.0,
+            },
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_actionable_kv_hits",
+            return_value=actionable_hits,
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "budget",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "budget",
+                "reachable_focus_piece": " budget",
+                "reachable_focus_rank": 901,
+                "target_mass": 0.00012,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.22,
+                "attractor_family_top_overlap": 2,
+                "attractor_family_overlap_tokens": ["EW", " EW"],
+                "top_tokens": ["EW", " EW", "inou"],
+            },
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        self.assertIn("capture", captured)
+        capture_summary = packet["worker_view"]["readout_sidecar_capture_summary"]
+        self.assertEqual(capture_summary["control_phase_hint"], "readout_escape")
+        self.assertGreaterEqual(capture_summary["source_provenance_counts"]["source_body"], 1)
+        hints = packet["strategy_hints"]
+        self.assertEqual(hints["readout_sidecar_hints"]["focus_term_override"], "Mira")
+        self.assertEqual(hints["readout_sidecar_focus_term_override"], "Mira")
+        self.assertEqual(hints["controller_focus_term"], "Mira")
+        self.assertEqual(hints["controller_focus_source"], "readout_sidecar")
+        self.assertEqual(hints["escape_builder_target_terms"][0], "Mira")
+        self.assertEqual(hints["kv_candidate_edits"][0]["focus_feature"], "Mira")
 
     def test_worker_runtime_shot_mode_prefers_source_bridge_candidate(self):
         worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")

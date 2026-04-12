@@ -37,6 +37,13 @@ from .schema import (
     parse_controller_command,
     parse_observation_packet,
 )
+from .sidecar import (
+    ReadoutSidecarAnalyzer,
+    ReadoutSidecarCapture,
+    ReadoutSidecarSiteCapture,
+    build_heuristic_readout_sidecar_analyzer,
+    normalize_readout_sidecar_hints,
+)
 
 __all__ = [
     "ActiveEdit",
@@ -63,6 +70,10 @@ __all__ = [
     "ModelTokenizerCodec",
     "Rank1Geometry",
     "Rank1VectorBridge",
+    "ReadoutSidecarAnalyzer",
+    "ReadoutSidecarCapture",
+    "ReadoutSidecarSiteCapture",
+    "build_heuristic_readout_sidecar_analyzer",
     "Op",
     "PolicyViolation",
     "PromptControllerClient",
@@ -87,6 +98,7 @@ __all__ = [
     "parse_controller_command",
     "parse_observation_packet",
     "resolve_text_codec",
+    "normalize_readout_sidecar_hints",
     "run_b0",
     "run_b1",
     "run_c1",

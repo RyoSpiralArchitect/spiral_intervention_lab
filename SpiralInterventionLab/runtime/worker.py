@@ -14,6 +14,12 @@ from .compiler import StepContext, compile_command
 from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
 from .effects import build_edit_effect, summarize_effects
 from .schema import SurfaceInfo
+from .sidecar import (
+    ReadoutSidecarAnalyzer,
+    ReadoutSidecarCapture,
+    ReadoutSidecarSiteCapture,
+    normalize_readout_sidecar_hints,
+)
 from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder
 
 
@@ -312,6 +318,7 @@ class HookedTransformerWorkerRuntime:
         observer_check_window: int = 4,
         max_tool_calls_per_run: int = 6,
         tool_result_window: int = 6,
+        readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
     ) -> None:
         self.runtime_state = runtime_state
         self.adapter = adapter
@@ -352,6 +359,7 @@ class HookedTransformerWorkerRuntime:
         self.observer_check_window = max(1, int(observer_check_window))
         self.max_tool_calls_per_run = max(0, int(max_tool_calls_per_run))
         self.tool_result_window = max(1, int(tool_result_window))
+        self.readout_sidecar_analyzer = readout_sidecar_analyzer
 
         self.surface_catalog = tuple(
             surface if isinstance(surface, SurfaceInfo) else SurfaceInfo.from_dict(surface) for surface in surface_catalog
@@ -402,6 +410,9 @@ class HookedTransformerWorkerRuntime:
         self._spent_loop_rescue_cost: dict[str, float] = {}
         self._last_packet: dict[str, Any] | None = None
         self._no_progress_steps = 0
+        self._latest_readout_sidecar_capture: ReadoutSidecarCapture | None = None
+        self._latest_readout_sidecar_capture_summary: dict[str, Any] | None = None
+        self._latest_readout_sidecar_hints: dict[str, Any] = {}
 
     def reset(self, prompt: str) -> None:
         self._clear_episode_state()
@@ -468,10 +479,18 @@ class HookedTransformerWorkerRuntime:
             promoted_cache_surfaces=promoted_cache_surfaces,
         )
         control_phase_hint = self._control_phase_hint(answer_readout_canary=answer_readout_canary)
+        readout_sidecar_capture = self._build_readout_sidecar_capture(
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+        )
+        readout_sidecar_hints = self._analyze_readout_sidecar_capture(readout_sidecar_capture)
+        if self._latest_readout_sidecar_hints:
+            readout_sidecar_hints = dict(self._latest_readout_sidecar_hints)
         strategy_hints = self._strategy_hints(
             control_phase_hint=control_phase_hint,
             promoted_cache_surfaces=promoted_cache_surfaces,
             answer_readout_canary=answer_readout_canary,
+            readout_sidecar_hints=readout_sidecar_hints,
         )
         latest_observer_check = self._observer_check_with_cache_surface_ids(
             self._latest_observer_check,
@@ -493,6 +512,12 @@ class HookedTransformerWorkerRuntime:
                 "attractor_family_overlap_tokens": list(answer_readout_canary.get("attractor_family_overlap_tokens", [])[:5]),
                 "top_tokens": list(answer_readout_canary.get("top_tokens", [])[:5]),
             }
+        if self._latest_readout_sidecar_capture_summary is not None:
+            worker_view["readout_sidecar_capture_summary"] = dict(self._latest_readout_sidecar_capture_summary)
+            strategy_hints["readout_sidecar_capture_summary"] = dict(self._latest_readout_sidecar_capture_summary)
+        if readout_sidecar_hints:
+            worker_view["readout_sidecar_hints"] = dict(readout_sidecar_hints)
+            strategy_hints["readout_sidecar_hints"] = dict(readout_sidecar_hints)
         packet = {
             "version": "0.1",
             "run_id": self.run_id,
@@ -1131,6 +1156,9 @@ class HookedTransformerWorkerRuntime:
         self._spent_loop_rescue_cost = {}
         self._last_packet = None
         self._no_progress_steps = 0
+        self._latest_readout_sidecar_capture = None
+        self._latest_readout_sidecar_capture_summary = None
+        self._latest_readout_sidecar_hints = {}
         if self.trace_recorder is not None:
             self.trace_recorder.reset()
 
@@ -1915,6 +1943,69 @@ class HookedTransformerWorkerRuntime:
             return f"{int(source_position)}:{int(source_position) + 1}"
         return "unknown"
 
+    def latest_readout_sidecar_capture(self) -> ReadoutSidecarCapture | None:
+        return self._latest_readout_sidecar_capture
+
+    def _candidate_sidecar_key(self, candidate: Mapping[str, Any]) -> str:
+        bundle_key = str(candidate.get("bundle_key", "") or "")
+        if bundle_key:
+            return bundle_key
+        focus_term = str(candidate.get("focus_feature", "") or "")
+        provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+        span_id = self._candidate_span_id(candidate)
+        family_kind = self._candidate_family_kind(candidate)
+        span_kind = str(candidate.get("span_kind", "") or "")
+        return f"{focus_term}|{provenance_class}|{span_id}|{family_kind}|{span_kind}"
+
+    def _candidate_sidecar_vetoed(self, candidate: Mapping[str, Any]) -> bool:
+        hints = self._latest_readout_sidecar_hints if isinstance(self._latest_readout_sidecar_hints, Mapping) else {}
+        key_vetoes = hints.get("candidate_key_vetoes")
+        if isinstance(key_vetoes, SequenceABC) and not isinstance(key_vetoes, (str, bytes, bytearray)):
+            if self._candidate_sidecar_key(candidate) in {str(item) for item in key_vetoes}:
+                return True
+        family_vetoes = hints.get("candidate_family_vetoes")
+        if isinstance(family_vetoes, SequenceABC) and not isinstance(family_vetoes, (str, bytes, bytearray)):
+            family_names = {str(item) for item in family_vetoes}
+            candidate_family = str(candidate.get("candidate_family", "") or "")
+            if candidate_family and candidate_family in family_names:
+                return True
+            if self._candidate_family_kind(candidate) in family_names:
+                return True
+        return False
+
+    def _candidate_sidecar_bonus(self, candidate: Mapping[str, Any]) -> float:
+        hints = self._latest_readout_sidecar_hints if isinstance(self._latest_readout_sidecar_hints, Mapping) else {}
+        bonus = 0.0
+        if self._candidate_sidecar_vetoed(candidate):
+            return -1.2
+        focus_term = str(candidate.get("focus_feature", "") or "")
+        term_strengths = hints.get("term_anchor_strength_by_term")
+        if isinstance(term_strengths, Mapping) and focus_term:
+            try:
+                term_strength = float(term_strengths.get(focus_term, 0.0) or 0.0)
+            except Exception:
+                term_strength = 0.0
+            bonus += max(-0.25, min(0.25, 0.2 * term_strength))
+        support_terms = hints.get("candidate_support_terms")
+        if isinstance(support_terms, Mapping) and focus_term:
+            try:
+                term_support = float(support_terms.get(focus_term, 0.0) or 0.0)
+            except Exception:
+                term_support = 0.0
+            bonus += max(-0.2, min(0.2, 0.15 * term_support))
+        support_scores = hints.get("candidate_support_scores")
+        if isinstance(support_scores, Mapping):
+            score_value = support_scores.get(self._candidate_sidecar_key(candidate))
+            if score_value is None and candidate.get("bundle_key") is not None:
+                score_value = support_scores.get(str(candidate.get("bundle_key", "") or ""))
+            if score_value is not None:
+                try:
+                    support_score = float(score_value)
+                except Exception:
+                    support_score = 0.0
+                bonus += max(-0.45, min(0.45, 0.3 * support_score))
+        return bonus
+
     def _candidate_builder_score(self, candidate: Mapping[str, Any]) -> float:
         provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
         family_kind = self._candidate_family_kind(candidate)
@@ -1934,6 +2025,7 @@ class HookedTransformerWorkerRuntime:
             + self._family_weight(family_kind)
             + self._span_weight(span_kind)
             + probe_bonus
+            + self._candidate_sidecar_bonus(candidate)
             + (0.5 * alignment)
         )
 
@@ -2100,8 +2192,12 @@ class HookedTransformerWorkerRuntime:
         kept_by_term_family: dict[tuple[str, str], dict[str, Any]] = {}
         same_term_family_drops = 0
         dominance_prune_drops = 0
+        sidecar_veto_drops = 0
 
         for candidate in ranked_candidates:
+            if self._candidate_sidecar_vetoed(candidate):
+                sidecar_veto_drops += 1
+                continue
             focus_term = str(candidate.get("focus_feature", "") or "")
             family_kind = self._candidate_family_kind(candidate)
             provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
@@ -2149,6 +2245,7 @@ class HookedTransformerWorkerRuntime:
         debug["candidate_provenance_counts_after_prune"] = dict(after_counts)
         debug["dominance_prune_drops"] = int(dominance_prune_drops)
         debug["same_term_family_drops"] = int(same_term_family_drops)
+        debug["sidecar_veto_drops"] = int(sidecar_veto_drops)
         debug["bundle_inputs"] = list(bundle_inputs)
         return selected
 
@@ -2157,6 +2254,7 @@ class HookedTransformerWorkerRuntime:
         *,
         control_phase_hint: str,
         answer_readout_canary: Mapping[str, Any] | None = None,
+        readout_sidecar_hints: Mapping[str, Any] | None = None,
         max_terms: int = 3,
     ) -> list[str]:
         missing_terms = self._feedback_terms(
@@ -2177,6 +2275,21 @@ class HookedTransformerWorkerRuntime:
             if isinstance(answer_readout_canary, Mapping)
             else ""
         )
+        sidecar_focus = (
+            str(readout_sidecar_hints.get("focus_term_override", "") or "")
+            if isinstance(readout_sidecar_hints, Mapping)
+            else ""
+        )
+        sidecar_term_scores = (
+            dict(readout_sidecar_hints.get("candidate_support_terms", {}))
+            if isinstance(readout_sidecar_hints, Mapping) and isinstance(readout_sidecar_hints.get("candidate_support_terms"), Mapping)
+            else {}
+        )
+        sidecar_anchor_strengths = (
+            dict(readout_sidecar_hints.get("term_anchor_strength_by_term", {}))
+            if isinstance(readout_sidecar_hints, Mapping) and isinstance(readout_sidecar_hints.get("term_anchor_strength_by_term"), Mapping)
+            else {}
+        )
         easy_terms = self._intersect_terms(latest_tokenize.get("soft_logit_bias_ok_terms"), allowed_terms)
         exact_span_terms = [
             term for term in missing_terms if self._prompt_term_spans(term, max_spans=1)
@@ -2191,8 +2304,25 @@ class HookedTransformerWorkerRuntime:
                 return
             ordered.append(normalized)
 
+        def _append_sidecar_ranked_terms() -> None:
+            ranked_terms = sorted(
+                allowed_terms,
+                key=lambda term: (
+                    -float(sidecar_term_scores.get(term, 0.0) or 0.0),
+                    -float(sidecar_anchor_strengths.get(term, 0.0) or 0.0),
+                    0 if term in exact_span_terms else 1,
+                    term,
+                ),
+            )
+            for term in ranked_terms:
+                if float(sidecar_term_scores.get(term, 0.0) or 0.0) <= 0.0 and float(sidecar_anchor_strengths.get(term, 0.0) or 0.0) <= 0.0:
+                    continue
+                _append(term)
+
         if control_phase_hint == "readout_escape":
+            _append(sidecar_focus)
             _append(reachable_focus)
+            _append_sidecar_ranked_terms()
             for term in exact_span_terms:
                 if term == reachable_focus:
                     continue
@@ -2203,6 +2333,8 @@ class HookedTransformerWorkerRuntime:
         else:
             _append(semantic_focus)
             _append(reachable_focus)
+            _append(sidecar_focus)
+            _append_sidecar_ranked_terms()
             for term in self._focus_terms_by_progress(easy_terms, progress_by_term, max_terms=len(easy_terms)):
                 _append(term)
             for term in exact_span_terms:
@@ -2551,6 +2683,7 @@ class HookedTransformerWorkerRuntime:
         control_phase_hint: str,
         promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
         answer_readout_canary: Mapping[str, Any] | None = None,
+        readout_sidecar_hints: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         latest_tokenize = self._latest_tokenize_terms_result()
         missing_terms = set(
@@ -2575,6 +2708,7 @@ class HookedTransformerWorkerRuntime:
             promoted_cache_surfaces=promoted_cache_surfaces,
             control_phase_hint=control_phase_hint,
             answer_readout_canary=answer_readout_canary,
+            readout_sidecar_hints=readout_sidecar_hints,
             canary_enabled=control_phase_hint in {"shot_mode", "readout_escape"} and not self._kv_canary_eval_active,
         )
         kv_candidate_edits, kv_effect_families = self._annotate_effect_families(kv_candidate_edits)
@@ -2596,12 +2730,25 @@ class HookedTransformerWorkerRuntime:
             answer_readout_canary=answer_readout_canary,
             kv_candidate_edits=kv_candidate_edits,
         )
-        controller_focus_term = (
-            answer_readout_canary.get("reachable_focus_term")
-            if readout_escape_needed and isinstance(answer_readout_canary, Mapping)
-            else semantic_focus.get("semantic_focus_term")
+        sidecar_focus_term = (
+            str(readout_sidecar_hints.get("focus_term_override", "") or "")
+            if isinstance(readout_sidecar_hints, Mapping)
+            else ""
         )
-        controller_focus_source = "reachable_focus" if readout_escape_needed else "semantic_focus"
+        controller_focus_term = (
+            sidecar_focus_term
+            if readout_escape_needed and sidecar_focus_term
+            else (
+                answer_readout_canary.get("reachable_focus_term")
+                if readout_escape_needed and isinstance(answer_readout_canary, Mapping)
+                else semantic_focus.get("semantic_focus_term")
+            )
+        )
+        controller_focus_source = (
+            "readout_sidecar"
+            if readout_escape_needed and sidecar_focus_term
+            else ("reachable_focus" if readout_escape_needed else "semantic_focus")
+        )
         hints = {
             "control_phase_hint": control_phase_hint,
             "loop_severity": self._loop_severity_hint(),
@@ -2626,6 +2773,11 @@ class HookedTransformerWorkerRuntime:
             "kv_retry_candidate_edits": kv_retry_candidate_edits,
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
+        if isinstance(readout_sidecar_hints, Mapping) and readout_sidecar_hints:
+            hints["readout_sidecar_active"] = True
+            hints["readout_sidecar_hints"] = dict(readout_sidecar_hints)
+            if readout_sidecar_hints.get("focus_term_override") not in (None, ""):
+                hints["readout_sidecar_focus_term_override"] = readout_sidecar_hints.get("focus_term_override")
         if semantic_focus:
             hints.update(semantic_focus)
         if controller_focus_term:
@@ -2677,6 +2829,7 @@ class HookedTransformerWorkerRuntime:
                 )
             hints["dominance_prune_drops"] = int(kv_candidate_builder.get("dominance_prune_drops", 0) or 0)
             hints["same_term_family_drops"] = int(kv_candidate_builder.get("same_term_family_drops", 0) or 0)
+            hints["sidecar_veto_drops"] = int(kv_candidate_builder.get("sidecar_veto_drops", 0) or 0)
             if isinstance(kv_candidate_builder.get("candidate_families"), SequenceABC) and not isinstance(
                 kv_candidate_builder.get("candidate_families"), (str, bytes, bytearray)
             ):
@@ -3447,6 +3600,7 @@ class HookedTransformerWorkerRuntime:
         promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
         control_phase_hint: str = "monitor",
         answer_readout_canary: Mapping[str, Any] | None = None,
+        readout_sidecar_hints: Mapping[str, Any] | None = None,
         canary_enabled: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         debug: dict[str, Any] = {
@@ -3464,6 +3618,7 @@ class HookedTransformerWorkerRuntime:
             "candidate_provenance_counts_after_prune": {},
             "dominance_prune_drops": 0,
             "same_term_family_drops": 0,
+            "sidecar_veto_drops": 0,
             "bundle_inputs": [],
         }
 
@@ -3474,6 +3629,7 @@ class HookedTransformerWorkerRuntime:
         missing_term_list = self._ordered_missing_terms_for_phase(
             control_phase_hint=control_phase_hint,
             answer_readout_canary=answer_readout_canary,
+            readout_sidecar_hints=readout_sidecar_hints,
             max_terms=2 if control_phase_hint == "readout_escape" else 3,
         )
         debug["target_terms"] = list(missing_term_list)
@@ -5759,6 +5915,214 @@ class HookedTransformerWorkerRuntime:
         if isinstance(registration, Mapping):
             return registration.get("metadata", {}) or {}
         return {}
+
+    def _resolve_token_selector_position(self, token_selector: Mapping[str, Any]) -> int | None:
+        if not isinstance(token_selector, Mapping):
+            return None
+        token_count = int(self._current_token_tensor().shape[-1])
+        if token_count <= 0:
+            return None
+        mode = str(token_selector.get("mode", "") or "")
+        if mode == "last":
+            return token_count - 1
+        if mode == "index":
+            value = token_selector.get("value")
+            if isinstance(value, bool) or not isinstance(value, int):
+                return None
+            index = int(value)
+            if index < 0:
+                index += token_count
+            if 0 <= index < token_count:
+                return index
+        return None
+
+    def _readout_sidecar_context(self) -> StepContext | None:
+        if getattr(self.runtime_state, "last_cache", None) is None:
+            return None
+        if hasattr(self.runtime_state, "set_trace_alignment"):
+            self.runtime_state.set_trace_alignment(self._steps)
+        return StepContext(
+            packet={"step": self._steps},
+            runtime_state=self.runtime_state,
+            traces={},
+            stats={},
+            adapter=self.adapter,
+            active_edits={},
+        )
+
+    def _readout_sidecar_boundary_sites(self, *, ctx: StepContext) -> tuple[ReadoutSidecarSiteCapture, ...]:
+        captures: list[ReadoutSidecarSiteCapture] = []
+        for surface in self.surface_catalog:
+            target = surface.target
+            if getattr(target, "kind", None) != "activation" or getattr(target, "site", None) != "resid_pre":
+                continue
+            token_selector = self._token_to_dict(target.token)
+            token_mode = str(token_selector.get("mode", "") or "")
+            token_value = token_selector.get("value")
+            if token_mode not in {"last", "index"}:
+                continue
+            if token_mode == "index" and token_value != -2:
+                continue
+            bound = self.adapter.bind_surface(surface)
+            vector = self._surface_probe_vector(surface, bound, ctx)
+            if vector is None:
+                continue
+            captures.append(
+                ReadoutSidecarSiteCapture(
+                    role="answer_boundary_prev" if token_mode == "index" else "answer_boundary_last",
+                    layer=int(getattr(target, "layer", 0) or 0),
+                    token_selector=token_selector,
+                    surface_id=str(surface.surface_id),
+                    position=self._resolve_token_selector_position(token_selector),
+                    piece=None,
+                    vector=vector.detach().reshape(-1).cpu().float(),
+                    metadata={"site": str(getattr(target, "site", "") or "")},
+                )
+            )
+        captures.sort(
+            key=lambda item: (
+                int(item.layer),
+                0 if item.role.endswith("prev") else 1,
+                str(item.surface_id or ""),
+            )
+        )
+        return tuple(captures[:6])
+
+    def _readout_sidecar_source_sites(
+        self,
+        *,
+        ctx: StepContext,
+        control_phase_hint: str,
+        answer_readout_canary: Mapping[str, Any] | None,
+        boundary_sites: Sequence[ReadoutSidecarSiteCapture],
+    ) -> tuple[ReadoutSidecarSiteCapture, ...]:
+        target_terms = self._ordered_missing_terms_for_phase(
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+            max_terms=2,
+        )
+        layers = sorted({int(site.layer) for site in boundary_sites})
+        if not layers:
+            layers = list(self._feature_scan_layers()[:2])
+        captures: list[ReadoutSidecarSiteCapture] = []
+        seen_keys: set[tuple[str, int, int, int]] = set()
+        for term in target_terms:
+            spans = self._prompt_term_spans(term, max_spans=3)
+            source_body_spans = [span for span in spans if str(span.get("provenance_class", "")) == "source_body"]
+            selected_spans = source_body_spans[:2] if source_body_spans else spans[:1]
+            for span in selected_spans:
+                start = int(span.get("start", 0) or 0)
+                end = int(span.get("end", start + 1) or (start + 1))
+                for layer in layers[:2]:
+                    capture_key = (str(term), int(layer), start, end)
+                    if capture_key in seen_keys:
+                        continue
+                    seen_keys.add(capture_key)
+                    ref = {
+                        "scope": "runtime",
+                        "worker": self.worker_id,
+                        "tensor": "hidden",
+                        "layer": int(layer),
+                        "token": {"mode": "span", "start": start, "end": end, "pool": "mean"},
+                    }
+                    try:
+                        vector = self.adapter.read_ref(ref, ctx).detach().reshape(-1).cpu().float()
+                    except Exception:
+                        continue
+                    captures.append(
+                        ReadoutSidecarSiteCapture(
+                            role="source_body_exact_span_mean",
+                            layer=int(layer),
+                            token_selector={"mode": "span", "start": start, "end": end, "pool": "mean"},
+                            vector=vector,
+                            term=str(term),
+                            provenance_class=str(span.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                            piece=str(span.get("text", "") or ""),
+                            span=(start, end),
+                            metadata={
+                                "span_kind": str(span.get("span_kind", "") or ""),
+                                "segment_kind": str(span.get("segment_kind", "") or ""),
+                            },
+                        )
+                    )
+        captures.sort(
+            key=lambda item: (
+                -self._provenance_weight(str(item.provenance_class or "misc_prompt")),
+                str(item.term or ""),
+                int(item.layer),
+                0 if item.role.endswith("mean") else 1,
+                int(item.span[0] if item.span is not None else 0),
+            )
+        )
+        return tuple(captures[:8])
+
+    def _build_readout_sidecar_capture(
+        self,
+        *,
+        control_phase_hint: str,
+        answer_readout_canary: Mapping[str, Any] | None,
+    ) -> ReadoutSidecarCapture | None:
+        self._latest_readout_sidecar_capture = None
+        self._latest_readout_sidecar_capture_summary = None
+        should_capture = self.readout_sidecar_analyzer is not None or control_phase_hint in {"readout_escape", "shot_mode"}
+        if not should_capture:
+            return None
+        if not isinstance(answer_readout_canary, Mapping):
+            return None
+        if not self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")):
+            return None
+        ctx = self._readout_sidecar_context()
+        if ctx is None:
+            return None
+        boundary_sites = self._readout_sidecar_boundary_sites(ctx=ctx)
+        source_sites = self._readout_sidecar_source_sites(
+            ctx=ctx,
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+            boundary_sites=boundary_sites,
+        )
+        if not boundary_sites and not source_sites:
+            return None
+        capture = ReadoutSidecarCapture(
+            run_id=self.run_id,
+            episode_id=self.episode_id,
+            worker_id=self.worker_id,
+            step=int(self._steps),
+            control_phase_hint=str(control_phase_hint),
+            answer_readout_canary=dict(answer_readout_canary),
+            answer_sites=tuple(boundary_sites),
+            source_sites=tuple(source_sites),
+            metadata={
+                "prompt_hash": hashlib.sha256(self.prompt.encode("utf-8")).hexdigest(),
+                "target_terms": self._ordered_missing_terms_for_phase(
+                    control_phase_hint=control_phase_hint,
+                    answer_readout_canary=answer_readout_canary,
+                    max_terms=3,
+                ),
+            },
+        )
+        self._latest_readout_sidecar_capture = capture
+        self._latest_readout_sidecar_capture_summary = capture.summary()
+        return capture
+
+    def _analyze_readout_sidecar_capture(self, capture: ReadoutSidecarCapture | None) -> dict[str, Any]:
+        self._latest_readout_sidecar_hints = {}
+        if capture is None or self.readout_sidecar_analyzer is None:
+            return {}
+        try:
+            raw_hints = self.readout_sidecar_analyzer(capture)
+        except Exception as exc:
+            analyzer_name = getattr(self.readout_sidecar_analyzer, "__name__", type(self.readout_sidecar_analyzer).__name__)
+            raw_hints = {"analyzer_name": analyzer_name, "analyzer_error": str(exc)}
+        hints = normalize_readout_sidecar_hints(raw_hints)
+        if "analyzer_name" not in hints:
+            hints["analyzer_name"] = getattr(
+                self.readout_sidecar_analyzer,
+                "__name__",
+                type(self.readout_sidecar_analyzer).__name__,
+            )
+        self._latest_readout_sidecar_hints = hints
+        return hints
 
     def _budget_state(self, active_edits: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         active_patch_slots = sum(1 for edit in active_edits if edit.get("op") == "rank1_patch")

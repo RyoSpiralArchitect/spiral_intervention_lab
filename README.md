@@ -1,19 +1,20 @@
 # spiral_intervention_lab
 
-Minimal scaffold for bounded internal intervention experiments.
+Research scaffold for bounded runtime intervention experiments.
 
 Core question:
 
-> Can a controller LLM improve a smaller worker model only through bounded internal interventions?
+> Can a controller LLM improve a smaller worker model only through bounded internal interventions, without directly generating the task answer itself?
 
-This repository currently focuses on the v0 backbone:
+The current project framing is closer to an inference-time intervention system or runtime control architecture than to ordinary prompting, RAG, or agent orchestration:
 
-- task-swappable runtime interfaces
-- a typed JSON edit DSL
-- strict harness and budget validation
-- TransformerLens-compatible activation and rank-1 intervention plumbing
-- step-aligned trace recording for paired baseline replay
-- minimal baseline runners for `B0`, `B1`, and `C1`
+- the worker model remains the surface actor
+- the controller emits typed intervention commands, not task answers
+- the runtime/compiler resolves those commands into bounded edits
+- task feedback and effect summaries are used to search over interventions
+- auxiliary controls and sidecars are allowed only when they stay bounded, auditable, and clearly secondary to the worker
+
+The repo has now moved beyond the initial v0 scaffold. It includes the intervention loop, structured reflection, multiple task environments, readout-collapse diagnostics, provenance-aware candidate compilation, and an offline readout sidecar path.
 
 ## Layout
 
@@ -30,27 +31,111 @@ This repository currently focuses on the v0 backbone:
 - `SpiralInterventionLab/examples/`
   End-to-end runnable examples that wire tasks, worker runtimes, and black-box controllers together.
 - `SpiralInterventionLab/tasks/`
-  Seeded exact-match task environments.
+  Seeded task environments, including digit, rewrite, ordering, entailment, and structured-summary tasks.
 - `SpiralInterventionLab/prompts/`
   Controller prompt assets.
 - `SpiralInterventionLab/tests/`
   Focused smoke and integration tests.
+- `docs/`
+  Research notes and control-plane design docs.
 
-## Current cut
+## Current Status
 
 The current implementation includes:
 
-- `resid_add`, `kv_mix`, and `rank1_patch` in the controller DSL
-- reversible, TTL-scoped runtime edits
-- a HookedTransformer runtime state with cache snapshots, trace bank support, rollback, and live hook management
-- a step-aligned trace recorder that stores selected-surface snapshots per generation step and replays them through the same trace channel
-- a rank-1 bridge layer that absorbs `u/v` dimensional mismatch before parameter overlays land
-- an autoregressive worker runtime that emits the controller observation packet and tracks recent edit effects
-- minimal `B0`, `B1`, and `C1` runners
-- a first real `TaskEnv`: `SpiralDigitTransformEnv`, a seeded exact-match digit rewrite task with strict scoring plus partial progress feedback
-- capability-based local worker backends, including a practical HF Transformers path and shallow MLX / llama.cpp paths
-- strict black-box controller adapters that normalize OpenAI / Anthropic / Mistral / Google responses into `ControllerCommand`
-- a first end-to-end example runner that binds `ProviderControllerClient + HookedTransformerWorkerRuntime + SpiralDigitTransformEnv`
+- a typed controller DSL with `resid_add`, `kv_mix`, and `rank1_patch`
+- reversible, TTL-scoped runtime edits with strict budget validation
+- structured controller reflection via `controller_memory`
+- task-grounded effect labeling driven by `partial_score`, coverage, repetition, and violations
+- multiple local bounded tools such as `dry_run_decode`, `constraint_scorer`, and `tokenize_terms`
+- readout diagnostics for answer-start collapse, including attractor-family and reachable-focus signals
+- provenance-aware candidate compilation with `source_body > answer_prefix > constraint_header > misc_prompt`
+- same-term / same-family dominance pruning and clean `kv_pair` bundle metadata
+- shot-mode and readout-escape phases, separated from loop-break / stabilization phases
+- a minimal offline readout sidecar scaffold that can analyze captured sites and feed small hints back into candidate ranking
+
+## Current Bottleneck
+
+The project is no longer stuck in a “nothing is visible” failure mode. The current bottleneck is narrower and more interesting:
+
+- semantic support can often be detected
+- source positions and candidate spans can be resolved
+- some probes are weakly positive
+- but first-token answer readout still often collapses into attractor basins such as repetition or junk subword families
+
+In practice, this means the current system is better at:
+
+- detecting collapse
+- opening `readout_escape`
+- compiling cleaner candidates
+- reranking candidates with auxiliary evidence
+
+than it is at:
+
+- making those candidates win at the answer boundary
+- escaping the attractor basin strongly enough to re-enter a healthy answer-start manifold
+
+The main research question has therefore sharpened from “can we intervene at all?” to:
+
+> Which bounded, auditable runtime controls actually improve readout competitiveness at the answer boundary?
+
+## What We Have Learned
+
+Several concrete lessons have come out of the recent runs:
+
+- Stability is not progress. Lower entropy or higher margin can still reinforce a bad local attractor.
+- Loop relief is useful but insufficient. It can improve local behavior without moving task score.
+- Semantic focus and reachable focus are different. A term can be semantically relevant but unreachable at the current decode state.
+- Candidate quality matters more than candidate count. Many nominally different candidates collapse into the same effect family.
+- Source provenance matters. `SOURCE:` body spans are usually more useful than header-only constraint spans for escape and recall.
+- Sidecars are promising when kept bounded. The best use so far is to improve candidate ranking and vetoes, not to become a hidden answer channel.
+
+## Readout Sidecar Status
+
+The new sidecar path is intentionally minimal and offline-oriented.
+
+It currently:
+
+- captures answer-boundary and source-body sites
+- allows an external analyzer to inspect them
+- feeds back only small hints such as:
+  - `focus_term_override`
+  - `term_anchor_strength_by_term`
+  - `candidate_support_terms`
+  - `candidate_support_scores`
+  - optional family/key vetoes
+
+It currently does **not**:
+
+- inject raw feature vectors into the controller
+- force task answers
+- replace runtime actuation with a heavyweight analysis stack
+
+This is deliberate. The sidecar is meant to improve the candidate compiler’s eyes, not to smuggle in a second generator.
+
+## Near-Term Roadmap
+
+The next steps are now fairly concrete:
+
+1. Improve candidate quality after escape opens.
+   Focus on stronger post-bundle reranking, family quotas, and support-aware selection.
+2. Compare `off` vs `heuristic` sidecar in more realistic direct-scan and replay settings.
+   The current smoke already shows that sidecar hints can flip target-term priority.
+3. Strengthen readout-escape scoring.
+   Prefer metrics that measure “can this candidate win at the boundary?” over purely semantic similarity.
+4. Only after that, consider a heavier offline analyzer such as a SAELens-style sidecar.
+   If used, it should remain a sidecar that returns small hints rather than becoming a runtime dependency.
+
+## Design Guardrails
+
+The current design tries hard not to drift into hidden-answer injection.
+
+- The worker remains the main actor.
+- The controller chooses bounded interventions, not free-form answers.
+- Auxiliary controls stay soft, local, and inspectable.
+- Sidecars are allowed to rank, veto, or focus candidates, but not to become covert channels for task solutions.
+
+For the current “healthy tweaking” framing, see [healthy_tweaking_control_planes.md](docs/healthy_tweaking_control_planes.md).
 
 ## Quick start
 
@@ -65,6 +150,18 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --provider openai \
   --controller-model gpt-4.1-mini \
   --worker-model gpt2-small \
+  --seed 7
+```
+
+To enable the current heuristic readout sidecar while keeping it strictly bounded:
+
+```bash
+python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
+  --provider openai \
+  --controller-model gpt-4.1-mini \
+  --worker-model gpt2-small \
+  --task constrained_rewrite \
+  --readout-sidecar-analyzer heuristic \
   --seed 7
 ```
 
