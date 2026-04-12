@@ -464,15 +464,35 @@ class HookedTransformerWorkerRuntime:
             self.runtime_state.set_trace_alignment(self._steps)
         active_edits = self._collect_active_edits()
         promoted_cache_surfaces = self._promoted_cache_surfaces()
-        control_phase_hint = self._control_phase_hint()
+        answer_readout_canary = self._current_answer_readout_canary(
+            promoted_cache_surfaces=promoted_cache_surfaces,
+        )
+        control_phase_hint = self._control_phase_hint(answer_readout_canary=answer_readout_canary)
         strategy_hints = self._strategy_hints(
             control_phase_hint=control_phase_hint,
             promoted_cache_surfaces=promoted_cache_surfaces,
+            answer_readout_canary=answer_readout_canary,
         )
         latest_observer_check = self._observer_check_with_cache_surface_ids(
             self._latest_observer_check,
             promoted_cache_surfaces=promoted_cache_surfaces,
         )
+        worker_view = self._worker_view()
+        if answer_readout_canary is not None:
+            worker_view["answer_readout_canary"] = answer_readout_canary
+            strategy_hints["answer_readout_summary"] = {
+                "semantic_focus_term": answer_readout_canary.get("semantic_focus_term"),
+                "semantic_focus_source": answer_readout_canary.get("semantic_focus_source"),
+                "reachable_focus_term": answer_readout_canary.get("reachable_focus_term"),
+                "reachable_focus_piece": answer_readout_canary.get("reachable_focus_piece"),
+                "reachable_focus_rank": answer_readout_canary.get("reachable_focus_rank"),
+                "target_mass": answer_readout_canary.get("target_mass"),
+                "target_top20_hits": answer_readout_canary.get("target_top20_hits"),
+                "attractor_family_mass": answer_readout_canary.get("attractor_family_mass"),
+                "attractor_family_top_overlap": answer_readout_canary.get("attractor_family_top_overlap"),
+                "attractor_family_overlap_tokens": list(answer_readout_canary.get("attractor_family_overlap_tokens", [])[:5]),
+                "top_tokens": list(answer_readout_canary.get("top_tokens", [])[:5]),
+            }
         packet = {
             "version": "0.1",
             "run_id": self.run_id,
@@ -485,7 +505,7 @@ class HookedTransformerWorkerRuntime:
                 "done": self.done(),
             },
             "task_view": self._task_view(),
-            "worker_view": self._worker_view(),
+            "worker_view": worker_view,
             "telemetry": dict(self._last_metrics)
             | {
                 "repeat_flag": self._repeat_flag(),
@@ -1631,87 +1651,566 @@ class HookedTransformerWorkerRuntime:
                 count += 1
         return count
 
-    def _recent_kv_probe_outcomes(self, *, window: int = 8) -> dict[str, dict[str, Any]]:
-        outcomes: dict[str, dict[str, Any]] = {}
+    def _canonical_effect_family_piece(self, value: Any) -> str:
+        raw = "".join(ch for ch in str(value).lower().strip() if ch.isalnum())
+        return raw[:16]
+
+    def _effect_family_signature_from_probe_item(self, item: Mapping[str, Any]) -> tuple[str, ...]:
+        signature: list[str] = []
+        sampled = item.get("sampled_continuations")
+        if isinstance(sampled, SequenceABC) and not isinstance(sampled, (str, bytes, bytearray)):
+            for entry in sampled:
+                if not isinstance(entry, Mapping):
+                    continue
+                if str(entry.get("variant", "") or "") != "candidate":
+                    continue
+                anchor = self._canonical_effect_family_piece(entry.get("text", ""))
+                if anchor:
+                    signature.append(f"cont:{anchor}")
+                    break
+        topk = item.get("topk_token_diff")
+        if isinstance(topk, SequenceABC) and not isinstance(topk, (str, bytes, bytearray)):
+            rows: list[tuple[float, str]] = []
+            for token_row in topk:
+                if not isinstance(token_row, Mapping):
+                    continue
+                piece = self._canonical_effect_family_piece(token_row.get("piece", ""))
+                if not piece:
+                    continue
+                prob_delta = float(token_row.get("prob_delta", 0.0) or 0.0)
+                logit_delta = float(token_row.get("logit_delta", 0.0) or 0.0)
+                magnitude = max(abs(prob_delta), abs(logit_delta))
+                if magnitude <= 0.0:
+                    continue
+                direction = "up" if (prob_delta > 0.0 or (prob_delta == 0.0 and logit_delta > 0.0)) else "down"
+                rows.append((magnitude, f"{direction}:{piece}"))
+            rows.sort(key=lambda item: (-float(item[0]), item[1]))
+            for _magnitude, label in rows[:3]:
+                if label not in signature:
+                    signature.append(label)
+        return tuple(signature[:4])
+
+    def _classify_kv_probe_result(self, item: Mapping[str, Any]) -> dict[str, Any] | None:
+        candidate_edit = item.get("candidate_edit")
+        if not isinstance(candidate_edit, Mapping):
+            return None
+        if str(candidate_edit.get("kind", "") or "") != "kv_mix":
+            return None
+        surface_id = str(candidate_edit.get("surface_id", "") or "")
+        if not surface_id:
+            return None
+        recall_delta = float(item.get("required_term_recall_delta", 0.0) or 0.0)
+        span_delta = float(item.get("required_term_span_progress_delta", 0.0) or 0.0)
+        semantic_delta = float(item.get("semantic_progress_delta", 0.0) or 0.0)
+        repeat_delta = int(item.get("repeat_flag_delta", 0) or 0)
+        target_mass_delta = float(item.get("target_mass_delta", 0.0) or 0.0)
+        target_mass_edited = float(item.get("target_mass_edited", 0.0) or 0.0)
+        target_top20_hits_edited = int(item.get("target_top20_hits_edited", 0) or 0)
+        target_top20_hit_delta = int(item.get("target_top20_hit_delta", 0) or 0)
+        focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
+        focus_rank_edited = int(item.get("focus_rank_edited", 0) or 0)
+        rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
+        rank_focus_rank_edited = int(item.get("rank_focus_rank_edited", 0) or 0)
+        focus_logit_delta = float(item.get("focus_logit_delta", 0.0) or 0.0)
+        focus_prob_delta = float(item.get("focus_prob_delta", 0.0) or 0.0)
+        candidate_meta = candidate_edit.get("meta") if isinstance(candidate_edit.get("meta"), Mapping) else {}
+        retry_stage = (
+            str(candidate_edit.get("retry_stage", "") or "")
+            or str(candidate_meta.get("retry_stage", "") or "")
+        )
+        topk = item.get("topk_token_diff")
+        max_logit_delta = 0.0
+        max_prob_delta = 0.0
+        if isinstance(topk, SequenceABC) and not isinstance(topk, (str, bytes, bytearray)):
+            for token_row in topk:
+                if not isinstance(token_row, Mapping):
+                    continue
+                max_logit_delta = max(max_logit_delta, float(token_row.get("logit_delta", 0.0) or 0.0))
+                max_prob_delta = max(max_prob_delta, float(token_row.get("prob_delta", 0.0) or 0.0))
+        semantic_focus_term = str(candidate_edit.get("focus_feature", "") or "")
+        reachable_focus_term = str(
+            item.get("rank_focus_term")
+            or item.get("focus_term")
+            or semantic_focus_term
+            or ""
+        )
+        reachable_focus_rank = 10**9
+        if item.get("rank_focus_term") not in (None, "") and rank_focus_rank_edited > 0:
+            reachable_focus_rank = int(rank_focus_rank_edited)
+        elif item.get("focus_term") not in (None, "") and focus_rank_edited > 0:
+            reachable_focus_rank = int(focus_rank_edited)
+        effect_family_signature = self._effect_family_signature_from_probe_item(item)
+        effect_family_key = "|".join(effect_family_signature) if effect_family_signature else f"surface:{surface_id}"
+
+        if recall_delta > 0.0 or span_delta > 0.0:
+            label = "positive"
+            score = 3.0 + recall_delta + span_delta + max(0.0, semantic_delta)
+        elif repeat_delta > 0 or semantic_delta < -0.01:
+            label = "harmful"
+            score = -2.0 + semantic_delta - float(repeat_delta)
+        elif (
+            target_top20_hit_delta <= 0
+            and target_mass_delta <= 0.00001
+            and abs(focus_logit_delta) < 0.001
+            and abs(focus_prob_delta) < 0.00005
+            and focus_rank_delta < 4
+            and rank_focus_delta < 4
+        ):
+            label = "dead_actuator"
+            score = -1.5
+        elif (
+            target_top20_hits_edited > 0
+            or target_mass_edited >= 0.001
+            or reachable_focus_rank <= 150
+        ):
+            label = "actionable_positive"
+            score = (
+                2.0
+                + min(1.5, 500.0 * target_mass_edited)
+                + (0.4 * float(target_top20_hits_edited))
+                + min(1.0, max(0.0, (150.0 - float(reachable_focus_rank)) / 150.0))
+                + max_logit_delta
+                + (100.0 * max_prob_delta)
+            )
+        elif (
+            target_top20_hit_delta > 0
+            or target_mass_delta > 0.0
+            or focus_rank_delta >= 4
+            or rank_focus_delta >= 4
+            or max_logit_delta >= 0.0005
+            or max_prob_delta >= 0.00005
+            or semantic_delta > 0.0
+        ):
+            label = "weak_positive_subthreshold"
+            score = (
+                0.75
+                + max_logit_delta
+                + (100.0 * max_prob_delta)
+                + semantic_delta
+                + min(0.8, 1000.0 * target_mass_delta)
+                + (0.05 * float(target_top20_hit_delta))
+                + (0.015 * float(max(focus_rank_delta, rank_focus_delta)))
+            )
+        else:
+            label = "flat"
+            score = -1.0
+
+        return {
+            "surface_id": surface_id,
+            "label": label,
+            "score": round(float(score), 6),
+            "required_term_recall_delta": round(recall_delta, 6),
+            "required_term_span_progress_delta": round(span_delta, 6),
+            "semantic_progress_delta": round(semantic_delta, 6),
+            "repeat_flag_delta": int(repeat_delta),
+            "target_mass_delta": round(target_mass_delta, 6),
+            "target_mass_edited": round(target_mass_edited, 6),
+            "target_top20_hit_delta": int(target_top20_hit_delta),
+            "target_top20_hits_edited": int(target_top20_hits_edited),
+            "focus_logit_delta": round(focus_logit_delta, 6),
+            "focus_prob_delta": round(focus_prob_delta, 6),
+            "focus_rank_delta": int(focus_rank_delta),
+            "focus_rank_edited": int(focus_rank_edited),
+            "rank_focus_delta": int(rank_focus_delta),
+            "rank_focus_rank_edited": int(rank_focus_rank_edited),
+            "max_logit_delta": round(max_logit_delta, 6),
+            "max_prob_delta": round(max_prob_delta, 6),
+            "semantic_focus_term": semantic_focus_term or None,
+            "reachable_focus_term": reachable_focus_term or None,
+            "reachable_focus_rank": None if reachable_focus_rank == 10**9 else int(reachable_focus_rank),
+            "effect_family_key": effect_family_key,
+            "effect_family_signature": list(effect_family_signature),
+            "dead_actuator": bool(label == "dead_actuator"),
+            "subthreshold_only": bool(label == "weak_positive_subthreshold"),
+            "was_retry": bool(retry_stage),
+        }
+
+    def _recent_kv_probe_history(self, *, window: int = 8) -> list[dict[str, Any]]:
+        history: list[dict[str, Any]] = []
         for item in reversed(list(self._tool_results)[-window:]):
             if not isinstance(item, Mapping):
                 continue
             if str(item.get("tool", "") or "") != "dry_run_decode":
                 continue
-            candidate_edit = item.get("candidate_edit")
-            if not isinstance(candidate_edit, Mapping):
-                continue
-            if str(candidate_edit.get("kind", "") or "") != "kv_mix":
-                continue
-            surface_id = str(candidate_edit.get("surface_id", "") or "")
+            summary = self._classify_kv_probe_result(item)
+            if summary is not None:
+                history.append(summary)
+        return history
+
+    def _recent_kv_probe_outcomes(self, *, window: int = 8) -> dict[str, dict[str, Any]]:
+        outcomes: dict[str, dict[str, Any]] = {}
+        for summary in self._recent_kv_probe_history(window=window):
+            surface_id = str(summary.get("surface_id", "") or "")
             if not surface_id or surface_id in outcomes:
                 continue
-            recall_delta = float(item.get("required_term_recall_delta", 0.0) or 0.0)
-            span_delta = float(item.get("required_term_span_progress_delta", 0.0) or 0.0)
-            semantic_delta = float(item.get("semantic_progress_delta", 0.0) or 0.0)
-            repeat_delta = int(item.get("repeat_flag_delta", 0) or 0)
-            target_mass_delta = float(item.get("target_mass_delta", 0.0) or 0.0)
-            target_top20_hit_delta = int(item.get("target_top20_hit_delta", 0) or 0)
-            focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
-            rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
-            candidate_meta = candidate_edit.get("meta") if isinstance(candidate_edit.get("meta"), Mapping) else {}
-            retry_stage = (
-                str(candidate_edit.get("retry_stage", "") or "")
-                or str(candidate_meta.get("retry_stage", "") or "")
-            )
-            topk = item.get("topk_token_diff")
-            max_logit_delta = 0.0
-            max_prob_delta = 0.0
-            if isinstance(topk, SequenceABC) and not isinstance(topk, (str, bytes, bytearray)):
-                for token_row in topk:
-                    if not isinstance(token_row, Mapping):
-                        continue
-                    max_logit_delta = max(max_logit_delta, float(token_row.get("logit_delta", 0.0) or 0.0))
-                    max_prob_delta = max(max_prob_delta, float(token_row.get("prob_delta", 0.0) or 0.0))
-            if recall_delta > 0.0 or span_delta > 0.0:
-                label = "positive"
-                score = 3.0 + recall_delta + span_delta + max(0.0, semantic_delta)
-            elif repeat_delta > 0 or semantic_delta < -0.01:
-                label = "harmful"
-                score = -2.0 + semantic_delta - float(repeat_delta)
-            elif (
-                target_top20_hit_delta > 0
-                or target_mass_delta >= 0.00001
-                or focus_rank_delta >= 4
-                or rank_focus_delta >= 4
-                or max_logit_delta >= 0.0005
-                or max_prob_delta >= 0.00005
-                or semantic_delta > 0.0
-            ):
-                label = "weak_positive"
-                score = (
-                    1.0
-                    + max_logit_delta
-                    + (100.0 * max_prob_delta)
-                    + semantic_delta
-                    + min(1.0, 1000.0 * target_mass_delta)
-                    + (0.1 * float(target_top20_hit_delta))
-                    + (0.02 * float(max(focus_rank_delta, rank_focus_delta)))
-                )
-            else:
-                label = "flat"
-                score = -1.0
-            outcomes[surface_id] = {
-                "label": label,
-                "score": round(float(score), 6),
-                "required_term_recall_delta": round(recall_delta, 6),
-                "required_term_span_progress_delta": round(span_delta, 6),
-                "semantic_progress_delta": round(semantic_delta, 6),
-                "repeat_flag_delta": int(repeat_delta),
-                "target_mass_delta": round(target_mass_delta, 6),
-                "target_top20_hit_delta": int(target_top20_hit_delta),
-                "focus_rank_delta": int(focus_rank_delta),
-                "rank_focus_delta": int(rank_focus_delta),
-                "max_logit_delta": round(max_logit_delta, 6),
-                "max_prob_delta": round(max_prob_delta, 6),
-                "was_retry": bool(retry_stage),
-            }
+            outcomes[surface_id] = dict(summary)
         return outcomes
+
+    def _encode_text_token_ids(self, text: str) -> list[int]:
+        try:
+            encoded = self.codec.encode(text)
+        except Exception:
+            return []
+        if isinstance(encoded, torch.Tensor):
+            return encoded.detach().reshape(-1).to(dtype=torch.long).tolist()
+        if isinstance(encoded, SequenceABC) and not isinstance(encoded, (str, bytes, bytearray)):
+            token_ids: list[int] = []
+            for item in encoded:
+                if isinstance(item, bool) or not isinstance(item, int):
+                    return []
+                token_ids.append(int(item))
+            return token_ids
+        return []
+
+    def _provenance_weight(self, provenance_class: str) -> float:
+        return {
+            "source_body": 1.0,
+            "answer_prefix": 0.2,
+            "constraint_header": -0.3,
+            "misc_prompt": -0.5,
+        }.get(str(provenance_class), -0.75)
+
+    def _family_weight(self, family_kind: str) -> float:
+        return {
+            "kv_pair_ready": 1.3,
+            "kv_v": 1.0,
+            "kv_k": 0.9,
+            "shot_bridge": 0.45,
+            "resid_add": 0.2,
+        }.get(str(family_kind), 0.0)
+
+    def _span_weight(self, span_kind: str) -> float:
+        return {
+            "exact_prompt_span_mean": 0.4,
+            "exact_prompt_piece": 0.35,
+            "source_position_single": 0.1,
+        }.get(str(span_kind), 0.0)
+
+    def _candidate_family_kind(self, candidate: Mapping[str, Any]) -> str:
+        kind = str(candidate.get("kind", "") or "")
+        site = str(candidate.get("site", "") or "")
+        role = str(candidate.get("role", "") or "")
+        if kind == "kv_mix":
+            if site == "v_cache":
+                return "kv_v"
+            if site == "k_cache":
+                return "kv_k"
+        if kind == "resid_add":
+            if role.startswith("shot_source_bridge"):
+                return "shot_bridge"
+            return "resid_add"
+        return kind or "unknown"
+
+    def _candidate_span_id(self, candidate: Mapping[str, Any]) -> str:
+        source_span = candidate.get("source_span")
+        if isinstance(source_span, Mapping):
+            try:
+                start = int(source_span.get("start", 0) or 0)
+                end = int(source_span.get("end", start + 1) or (start + 1))
+                return f"{start}:{end}"
+            except Exception:
+                pass
+        source_position = candidate.get("source_position")
+        if isinstance(source_position, int) and not isinstance(source_position, bool):
+            return f"{int(source_position)}:{int(source_position) + 1}"
+        return "unknown"
+
+    def _candidate_builder_score(self, candidate: Mapping[str, Any]) -> float:
+        provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+        family_kind = self._candidate_family_kind(candidate)
+        span_kind = str(candidate.get("span_kind", "") or "")
+        alignment = float(candidate.get("alignment", 0.0) or 0.0)
+        recent_probe = candidate.get("recent_probe") if isinstance(candidate.get("recent_probe"), Mapping) else {}
+        probe_bonus = 0.0
+        label = str(recent_probe.get("label", "") or "")
+        if label == "actionable_positive":
+            probe_bonus = 0.4
+        elif label == "weak_positive_subthreshold":
+            probe_bonus = 0.15
+        elif label == "dead_actuator":
+            probe_bonus = -0.6
+        return (
+            (4.0 * self._provenance_weight(provenance_class))
+            + self._family_weight(family_kind)
+            + self._span_weight(span_kind)
+            + probe_bonus
+            + (0.5 * alignment)
+        )
+
+    def _prompt_term_spans(self, term: str, *, max_spans: int = 2) -> list[dict[str, Any]]:
+        normalized_term = " ".join(str(term).split()).strip()
+        if not normalized_term:
+            return []
+        records = self._token_position_records()
+        if not records:
+            return []
+        variant_token_ids: list[tuple[str, list[int]]] = []
+        seen_variants: set[tuple[int, ...]] = set()
+        for raw_text in (f" {normalized_term}", normalized_term):
+            token_ids = self._encode_text_token_ids(raw_text)
+            token_key = tuple(int(token_id) for token_id in token_ids)
+            if not token_key or token_key in seen_variants:
+                continue
+            seen_variants.add(token_key)
+            variant_token_ids.append((raw_text, list(token_key)))
+
+        matches: list[dict[str, Any]] = []
+        seen_spans: set[tuple[int, int]] = set()
+        for _raw_text, token_ids in variant_token_ids:
+            width = len(token_ids)
+            for start in range(0, len(records) - width + 1):
+                window = records[start : start + width]
+                if not window:
+                    continue
+                if any(str(item.get("segment_kind", "")) not in {"prompt", "hint"} for item in window):
+                    continue
+                if [int(item.get("token_id", -1)) for item in window] != token_ids:
+                    continue
+                span_key = (int(window[0]["position"]), int(window[-1]["position"]) + 1)
+                if span_key in seen_spans:
+                    continue
+                seen_spans.add(span_key)
+                provenance_counts: dict[str, int] = {}
+                for item in window:
+                    provenance_class = str(item.get("provenance_class", "misc_prompt") or "misc_prompt")
+                    provenance_counts[provenance_class] = int(provenance_counts.get(provenance_class, 0) or 0) + 1
+                provenance_class = max(
+                    provenance_counts,
+                    key=lambda key: (self._provenance_weight(key), provenance_counts.get(key, 0), key),
+                )
+                matches.append(
+                    {
+                        "start": int(window[0]["position"]),
+                        "end": int(window[-1]["position"]) + 1,
+                        "length": len(window),
+                        "segment_kind": str(window[0].get("segment_kind", "prompt") or "prompt"),
+                        "provenance_class": provenance_class,
+                        "pieces": [str(item.get("piece", "")) for item in window],
+                        "text": "".join(str(item.get("piece", "")) for item in window),
+                        "span_kind": "exact_prompt_span",
+                    }
+                )
+        collapsed_matches: list[dict[str, Any]] = []
+        for item in matches:
+            replaced = False
+            normalized_text = " ".join(str(item.get("text", "")).split()).strip().lower()
+            for index, existing in enumerate(collapsed_matches):
+                existing_text = " ".join(str(existing.get("text", "")).split()).strip().lower()
+                overlaps = not (int(item["end"]) <= int(existing["start"]) or int(existing["end"]) <= int(item["start"]))
+                if normalized_text and normalized_text == existing_text and overlaps:
+                    if int(item["length"]) > int(existing["length"]):
+                        collapsed_matches[index] = item
+                    replaced = True
+                    break
+            if not replaced:
+                collapsed_matches.append(item)
+        matches = collapsed_matches
+        matches.sort(
+            key=lambda item: (
+                -self._provenance_weight(str(item.get("provenance_class", "misc_prompt") or "misc_prompt")),
+                0 if str(item["segment_kind"]) == "prompt" else 1,
+                -int(item["end"]),
+                -int(item["length"]),
+                int(item["start"]),
+            )
+        )
+        return matches[: max(1, int(max_spans))]
+
+    def _bundle_inputs_for_candidates(self, candidates: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for raw_candidate in candidates:
+            if not isinstance(raw_candidate, Mapping):
+                continue
+            family_kind = self._candidate_family_kind(raw_candidate)
+            if family_kind not in {"kv_v", "kv_k"}:
+                continue
+            focus_term = str(raw_candidate.get("focus_feature", "") or "")
+            if not focus_term:
+                continue
+            provenance_class = str(raw_candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+            span_id = self._candidate_span_id(raw_candidate)
+            group_key = (focus_term, provenance_class, span_id)
+            group = grouped.setdefault(
+                group_key,
+                {
+                    "term": focus_term,
+                    "provenance_class": provenance_class,
+                    "span_id": span_id,
+                    "span_kind": str(raw_candidate.get("span_kind", "") or ""),
+                    "source_span": dict(raw_candidate["source_span"]) if isinstance(raw_candidate.get("source_span"), Mapping) else None,
+                    "families": {},
+                },
+            )
+            group["families"][family_kind] = {
+                "surface_id": str(raw_candidate.get("surface_id", "") or ""),
+                "candidate_family": str(raw_candidate.get("candidate_family", "") or ""),
+            }
+        bundles: list[dict[str, Any]] = []
+        for group in grouped.values():
+            families = group.get("families", {})
+            if not isinstance(families, Mapping) or "kv_v" not in families or "kv_k" not in families:
+                continue
+            bundle_key = (
+                f"kv_pair:{group['term']}:{group['provenance_class']}:{group['span_id']}"
+            )
+            bundles.append(
+                {
+                    "bundle_key": bundle_key,
+                    "term": group["term"],
+                    "provenance_class": group["provenance_class"],
+                    "span_kind": group["span_kind"],
+                    "source_span": group.get("source_span"),
+                    "v": dict(families["kv_v"]),
+                    "k": dict(families["kv_k"]),
+                }
+            )
+        bundles.sort(
+            key=lambda item: (
+                -self._provenance_weight(str(item.get("provenance_class", "misc_prompt") or "misc_prompt")),
+                str(item.get("term", "")),
+                str(item.get("bundle_key", "")),
+            )
+        )
+        return bundles[:4]
+
+    def _prune_escape_candidates(
+        self,
+        candidates: Sequence[Mapping[str, Any]],
+        *,
+        debug: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        before_counts: dict[str, int] = {}
+        for raw_candidate in candidates:
+            if not isinstance(raw_candidate, Mapping):
+                continue
+            provenance_class = str(raw_candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+            before_counts[provenance_class] = int(before_counts.get(provenance_class, 0) or 0) + 1
+        debug["candidate_provenance_counts_before_prune"] = dict(before_counts)
+
+        ranked_candidates = sorted(
+            (dict(candidate) for candidate in candidates if isinstance(candidate, Mapping)),
+            key=lambda item: (
+                -self._candidate_builder_score(item),
+                int(item.get("surface_id", "") == ""),
+                str(item.get("surface_id", "")),
+            ),
+        )
+        selected: list[dict[str, Any]] = []
+        seen_exact: set[tuple[str, str, str, str, str]] = set()
+        kept_by_term_family: dict[tuple[str, str], dict[str, Any]] = {}
+        same_term_family_drops = 0
+        dominance_prune_drops = 0
+
+        for candidate in ranked_candidates:
+            focus_term = str(candidate.get("focus_feature", "") or "")
+            family_kind = self._candidate_family_kind(candidate)
+            provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+            span_kind = str(candidate.get("span_kind", "") or "")
+            span_id = self._candidate_span_id(candidate)
+            exact_key = (focus_term, provenance_class, span_id, family_kind, span_kind)
+            if exact_key in seen_exact:
+                same_term_family_drops += 1
+                continue
+            seen_exact.add(exact_key)
+            term_family_key = (focus_term, family_kind)
+            if term_family_key in kept_by_term_family:
+                kept = kept_by_term_family[term_family_key]
+                kept_provenance = str(kept.get("provenance_class", "misc_prompt") or "misc_prompt")
+                if self._provenance_weight(provenance_class) < self._provenance_weight(kept_provenance):
+                    dominance_prune_drops += 1
+                    continue
+                same_term_family_drops += 1
+                continue
+            kept_by_term_family[term_family_key] = candidate
+            selected.append(candidate)
+
+        bundle_inputs = self._bundle_inputs_for_candidates(selected)
+        bundle_keys_by_surface_id: dict[str, str] = {}
+        for bundle in bundle_inputs:
+            bundle_key = str(bundle.get("bundle_key", "") or "")
+            v_surface_id = str(((bundle.get("v") or {}).get("surface_id", "")) or "")
+            k_surface_id = str(((bundle.get("k") or {}).get("surface_id", "")) or "")
+            if v_surface_id:
+                bundle_keys_by_surface_id[v_surface_id] = bundle_key
+            if k_surface_id:
+                bundle_keys_by_surface_id[k_surface_id] = bundle_key
+        for candidate in selected:
+            surface_id = str(candidate.get("surface_id", "") or "")
+            bundle_key = bundle_keys_by_surface_id.get(surface_id)
+            if bundle_key:
+                candidate["bundle_key"] = bundle_key
+                candidate["bundle_ready"] = True
+                candidate["bundle_family"] = "kv_pair_source_anchor"
+
+        after_counts: dict[str, int] = {}
+        for candidate in selected:
+            provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+            after_counts[provenance_class] = int(after_counts.get(provenance_class, 0) or 0) + 1
+        debug["candidate_provenance_counts_after_prune"] = dict(after_counts)
+        debug["dominance_prune_drops"] = int(dominance_prune_drops)
+        debug["same_term_family_drops"] = int(same_term_family_drops)
+        debug["bundle_inputs"] = list(bundle_inputs)
+        return selected
+
+    def _ordered_missing_terms_for_phase(
+        self,
+        *,
+        control_phase_hint: str,
+        answer_readout_canary: Mapping[str, Any] | None = None,
+        max_terms: int = 3,
+    ) -> list[str]:
+        missing_terms = self._feedback_terms(
+            ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
+        )
+        if not missing_terms:
+            return []
+        progress_by_term = self._feedback_term_progress_by_term()
+        latest_tokenize = self._latest_tokenize_terms_result()
+        allowed_terms = {str(term) for term in missing_terms}
+        semantic_focus = (
+            str(answer_readout_canary.get("semantic_focus_term", "") or "")
+            if isinstance(answer_readout_canary, Mapping)
+            else ""
+        ) or self._semantic_focus_summary().get("semantic_focus_term")
+        reachable_focus = (
+            str(answer_readout_canary.get("reachable_focus_term", "") or "")
+            if isinstance(answer_readout_canary, Mapping)
+            else ""
+        )
+        easy_terms = self._intersect_terms(latest_tokenize.get("soft_logit_bias_ok_terms"), allowed_terms)
+        exact_span_terms = [
+            term for term in missing_terms if self._prompt_term_spans(term, max_spans=1)
+        ]
+        ordered: list[str] = []
+
+        def _append(term: str | None) -> None:
+            if term is None:
+                return
+            normalized = " ".join(str(term).split()).strip()
+            if not normalized or normalized not in allowed_terms or normalized in ordered:
+                return
+            ordered.append(normalized)
+
+        if control_phase_hint == "readout_escape":
+            _append(reachable_focus)
+            for term in exact_span_terms:
+                if term == reachable_focus:
+                    continue
+                _append(term)
+            for term in self._focus_terms_by_progress(easy_terms, progress_by_term, max_terms=len(easy_terms)):
+                _append(term)
+            _append(semantic_focus)
+        else:
+            _append(semantic_focus)
+            _append(reachable_focus)
+            for term in self._focus_terms_by_progress(easy_terms, progress_by_term, max_terms=len(easy_terms)):
+                _append(term)
+            for term in exact_span_terms:
+                _append(term)
+
+        for term in self._focus_terms_by_progress(missing_terms, progress_by_term, max_terms=len(missing_terms)):
+            _append(term)
+        return ordered[: max(1, int(max_terms))]
 
     def _shot_mode_ready(self) -> bool:
         missing_terms = self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
@@ -1730,8 +2229,207 @@ class HookedTransformerWorkerRuntime:
         loop_break_attempt_count = self._recent_loop_break_attempt_count()
         return stabilizing_only_count >= 1 or recall_failure_count >= 1 or loop_break_attempt_count >= 2
 
-    def _shot_candidate_edits(self, *, avoid_surfaces: Sequence[str] = ()) -> list[dict[str, Any]]:
+    def _source_bridge_shot_candidate_edits(
+        self,
+        *,
+        avoid_surfaces: Sequence[str] = (),
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+        control_phase_hint: str = "monitor",
+        answer_readout_canary: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         avoid = {str(surface_id) for surface_id in avoid_surfaces}
+        activation_surfaces: dict[tuple[int, str], Any] = {}
+        target_terms = self._ordered_missing_terms_for_phase(
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+            max_terms=2 if control_phase_hint == "readout_escape" else 3,
+        )
+        target_term_priority = {str(term): index for index, term in enumerate(target_terms)}
+        for surface in self.surface_catalog:
+            target = getattr(surface, "target", None)
+            if getattr(target, "kind", None) != "activation" or getattr(target, "site", None) != "resid_pre":
+                continue
+            surface_id = str(surface.surface_id)
+            if surface_id in avoid:
+                continue
+            token = getattr(target, "token", None)
+            mode = getattr(token, "mode", None)
+            if mode == "index" and getattr(token, "value", None) == -2:
+                activation_surfaces[(int(getattr(target, "layer", 0) or 0), "prev")] = surface
+            elif mode == "last":
+                activation_surfaces[(int(getattr(target, "layer", 0) or 0), "last")] = surface
+
+        candidates: list[tuple[int, int, int, float, dict[str, Any]]] = []
+        seen_keys: set[tuple[str, str, int, int, str]] = set()
+        for hit in self._actionable_kv_hits(limit=4, promoted_cache_surfaces=promoted_cache_surfaces):
+            layer = hit.get("layer")
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                continue
+            feature = str(hit.get("feature", "") or "")
+            if target_terms and feature and feature not in target_term_priority:
+                continue
+            source_position = self._kv_hit_source_position(hit)
+            if source_position is None:
+                continue
+            recent_probe = hit.get("recent_probe") if isinstance(hit.get("recent_probe"), Mapping) else {}
+            if str(recent_probe.get("label", "") or "") == "dead_actuator":
+                continue
+            chosen_surface = activation_surfaces.get((int(layer), "prev")) or activation_surfaces.get((int(layer), "last"))
+            if chosen_surface is None:
+                continue
+            surface_id = str(chosen_surface.surface_id)
+            target = getattr(chosen_surface, "target", None)
+            surface_caps = getattr(chosen_surface, "caps", None)
+            mode = "prev" if getattr(getattr(target, "token", None), "mode", None) == "index" else "last"
+            norm_clip = 1.0 if getattr(surface_caps, "norm_clip", None) is None else float(surface_caps.norm_clip)
+            alpha_cap = float(getattr(surface_caps, "max_alpha", 0.08) or 0.08)
+            step_cap = getattr(surface_caps, "step_size", None)
+            prompt_spans = self._prompt_term_spans(feature, max_spans=1)
+            source_variants: list[dict[str, Any]] = []
+            if control_phase_hint == "readout_escape":
+                for span in prompt_spans:
+                    selector = (
+                        {"mode": "span", "start": int(span["start"]), "end": int(span["end"]), "pool": "mean"}
+                        if int(span["length"]) > 1
+                        else {"mode": "index", "value": int(span["start"])}
+                    )
+                    source_variants.append(
+                        {
+                            "variant_priority": 0,
+                            "role": "shot_source_bridge_span_mean" if int(span["length"]) > 1 else f"shot_source_bridge_{mode}",
+                            "span_kind": "exact_prompt_span_mean" if int(span["length"]) > 1 else "exact_prompt_piece",
+                            "provenance_class": str(span.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                            "source_position": int(span["start"]),
+                            "source_span": {"start": int(span["start"]), "end": int(span["end"])},
+                            "source_piece": str(span["text"]),
+                            "source_segment_kind": str(span["segment_kind"]),
+                            "token_selector": selector,
+                            "candidate_family": f"resid_bridge:{feature}:exact_prompt_span",
+                            "phase_objective": "readout_escape",
+                        }
+                    )
+            source_variants.append(
+                {
+                    "variant_priority": 1,
+                    "role": f"shot_source_bridge_{mode}",
+                    "span_kind": "source_position_single",
+                    "provenance_class": "misc_prompt",
+                    "source_position": int(source_position),
+                    "source_span": None,
+                    "source_piece": None if hit.get("argmax_piece") in (None, "") else str(hit.get("argmax_piece")),
+                    "source_segment_kind": None
+                    if hit.get("argmax_segment_kind") in (None, "")
+                    else str(hit.get("argmax_segment_kind")),
+                    "token_selector": {"mode": "index", "value": int(source_position)},
+                    "candidate_family": f"resid_bridge:{feature}:source_position",
+                    "phase_objective": "readout_escape" if control_phase_hint == "readout_escape" else "entity_insertion",
+                }
+            )
+
+            for variant in source_variants:
+                dedupe_key = (
+                    surface_id,
+                    str(feature),
+                    int(variant["source_position"]),
+                    int((variant.get("source_span") or {}).get("end", variant["source_position"] + 1)),
+                    str(variant["span_kind"]),
+                )
+                if dedupe_key in seen_keys:
+                    continue
+                seen_keys.add(dedupe_key)
+                base_alpha = 0.035 if str(variant["span_kind"]).startswith("exact_prompt_span") else (0.04 if mode == "prev" else 0.045)
+                alpha = min(alpha_cap, base_alpha)
+                step_size = float(alpha if step_cap is None else min(float(step_cap), alpha))
+                candidate = {
+                    "surface_id": surface_id,
+                    "kind": "resid_add",
+                    "role": str(variant["role"]),
+                    "focus_feature": feature,
+                    "candidate_family": str(variant["candidate_family"]),
+                    "phase_objective": str(variant["phase_objective"]),
+                    "span_kind": str(variant["span_kind"]),
+                    "provenance_class": str(variant.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                    "read_source_resolved": True,
+                    "write_target_resolved": True,
+                    "source_position": int(variant["source_position"]),
+                    "source_piece": variant["source_piece"],
+                    "source_segment_kind": variant["source_segment_kind"],
+                    "recent_probe": dict(recent_probe),
+                    "target": {"surface_id": surface_id},
+                    "source": {
+                        "dtype": "vector",
+                        "expr": {
+                            "fn": "clip_norm",
+                            "max_norm": float(norm_clip),
+                            "arg": {
+                                "fn": "scale",
+                                "by": float(step_size),
+                                "arg": {
+                                    "fn": "normalize",
+                                    "arg": {
+                                        "ref": {
+                                            "scope": "runtime",
+                                            "worker": self.worker_id,
+                                            "tensor": "hidden",
+                                            "layer": int(layer),
+                                            "token": dict(variant["token_selector"]),
+                                        }
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    "op": {"kind": "resid_add", "alpha": float(alpha)},
+                    "budget": {
+                        "ttl_steps": 1,
+                        "norm_clip": float(norm_clip),
+                        "step_size": float(step_size),
+                        "revertible": True,
+                    },
+                    "meta": {
+                        "hypothesis": "source_position_residual_bridge",
+                        "expected_effect": "source_anchor_readout_bridge",
+                    },
+                }
+                if isinstance(variant.get("source_span"), Mapping):
+                    candidate["source_span"] = dict(variant["source_span"])
+                term_priority = int(target_term_priority.get(feature, 99))
+                token_priority = 0 if str(variant["span_kind"]).startswith("exact_prompt_span") else (1 if mode == "prev" else 2)
+                candidates.append(
+                    (
+                        term_priority,
+                        token_priority + int(variant["variant_priority"]),
+                        -self._provenance_weight(str(variant.get("provenance_class", "misc_prompt") or "misc_prompt")),
+                        int(layer),
+                        -float(hit.get("alignment", 0.0) or 0.0),
+                        candidate,
+                    )
+                )
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], str(item[5]["surface_id"])))
+        return [candidate for _term_priority, _variant_priority, _provenance, _layer, _alignment, candidate in candidates[:3]]
+
+    def _shot_candidate_edits(
+        self,
+        *,
+        avoid_surfaces: Sequence[str] = (),
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+        control_phase_hint: str = "monitor",
+        answer_readout_canary: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        avoid = {str(surface_id) for surface_id in avoid_surfaces}
+        selected: list[dict[str, Any]] = []
+        seen_surface_ids: set[str] = set()
+        for candidate in self._source_bridge_shot_candidate_edits(
+            avoid_surfaces=avoid_surfaces,
+            promoted_cache_surfaces=promoted_cache_surfaces,
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+        ):
+            surface_id = str(candidate.get("surface_id", "") or "")
+            if not surface_id or surface_id in seen_surface_ids:
+                continue
+            selected.append(candidate)
+            seen_surface_ids.add(surface_id)
         candidates: list[tuple[int, int, dict[str, Any]]] = []
         for surface in self.surface_catalog:
             target = getattr(surface, "target", None)
@@ -1771,7 +2469,15 @@ class HookedTransformerWorkerRuntime:
                 )
             )
         candidates.sort(key=lambda item: (item[0], item[1], str(item[2]["surface_id"])))
-        return [candidate for _priority, _layer, candidate in candidates[:3]]
+        for _priority, _layer, candidate in candidates:
+            surface_id = str(candidate.get("surface_id", "") or "")
+            if not surface_id or surface_id in seen_surface_ids:
+                continue
+            selected.append(candidate)
+            seen_surface_ids.add(surface_id)
+            if len(selected) >= 3:
+                break
+        return selected[:3]
 
     def _shot_probe_needed(self, *, shot_mode_ready: bool) -> bool:
         if not shot_mode_ready:
@@ -1780,14 +2486,61 @@ class HookedTransformerWorkerRuntime:
             return False
         return self._recent_tool_result_count(("constraint_scorer", "dry_run_decode"), window=4) == 0
 
-    def _control_phase_hint(self) -> str:
-        if self._loop_severity_hint() == "high":
-            return "loop_break"
+    def _preprobe_readout_escape_state(
+        self,
+        answer_readout_canary: Mapping[str, Any] | None,
+    ) -> tuple[bool, dict[str, Any]]:
+        if not isinstance(answer_readout_canary, Mapping):
+            return False, {
+                "mass_below_threshold": False,
+                "rank_bad": False,
+                "top20_hits_zero": False,
+                "attractor_mass_high": False,
+                "overlap_high": False,
+                "preprobe_collapse": False,
+            }
+        target_top20_hits = int(answer_readout_canary.get("target_top20_hits", 0) or 0)
+        target_mass = float(answer_readout_canary.get("target_mass", 0.0) or 0.0)
+        reachable_focus_rank = answer_readout_canary.get("reachable_focus_rank")
+        reachable_focus_rank_value = (
+            10**9
+            if isinstance(reachable_focus_rank, bool) or not isinstance(reachable_focus_rank, int)
+            else int(reachable_focus_rank)
+        )
+        attractor_family_mass = float(answer_readout_canary.get("attractor_family_mass", 0.0) or 0.0)
+        attractor_family_top_overlap = int(answer_readout_canary.get("attractor_family_top_overlap", 0) or 0)
+        flags = {
+            "mass_below_threshold": bool(target_mass < 0.001),
+            "rank_bad": bool(reachable_focus_rank_value > 512),
+            "top20_hits_zero": bool(target_top20_hits == 0),
+            "attractor_mass_high": bool(attractor_family_mass > 0.20),
+            "overlap_high": bool(attractor_family_top_overlap >= 2),
+        }
+        preprobe_collapse = (
+            flags["top20_hits_zero"]
+            and flags["mass_below_threshold"]
+            and flags["rank_bad"]
+            and flags["attractor_mass_high"]
+        )
+        return preprobe_collapse, flags | {"preprobe_collapse": bool(preprobe_collapse)}
+
+    def _control_phase_hint(
+        self,
+        *,
+        answer_readout_canary: Mapping[str, Any] | None = None,
+    ) -> str:
         missing_terms = self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
         if missing_terms:
+            preprobe_collapse, _preprobe_flags = self._preprobe_readout_escape_state(answer_readout_canary)
+            if preprobe_collapse:
+                return "readout_escape"
+            if self._loop_severity_hint() == "high":
+                return "loop_break"
             if self._shot_mode_ready():
                 return "shot_mode"
             return "entity_insertion"
+        if self._loop_severity_hint() == "high":
+            return "loop_break"
         if self._loop_severity_hint() == "low":
             return "loop_break"
         return "monitor"
@@ -1797,29 +2550,40 @@ class HookedTransformerWorkerRuntime:
         *,
         control_phase_hint: str,
         promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+        answer_readout_canary: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         latest_tokenize = self._latest_tokenize_terms_result()
         missing_terms = set(
             self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
         )
+        preprobe_collapse, preprobe_block_reason = self._preprobe_readout_escape_state(answer_readout_canary)
         easy_terms = self._intersect_terms(latest_tokenize.get("soft_logit_bias_ok_terms"), missing_terms)
         hard_terms = self._intersect_terms(latest_tokenize.get("needs_sequence_support_terms"), missing_terms)
         watch_terms = self._intersect_terms(latest_tokenize.get("span_progress_watch_terms"), missing_terms)
         prefer_auxiliary_entity_bias = bool(easy_terms) and self.decoder_control_mode == "logit_bias_entity_soft"
-        shot_mode_ready = self._shot_mode_ready()
+        shot_mode_ready = self._shot_mode_ready() or preprobe_collapse or control_phase_hint == "readout_escape"
         loop_break_attempt_count = self._recent_loop_break_attempt_count()
         stabilizing_only_count = self._recent_stabilizing_only_count()
         avoid_surfaces = ["s_resid_pre_l4_last"] if self._l4_term_nudge_cooldown_active() else []
-        shot_candidate_edits = self._shot_candidate_edits(avoid_surfaces=avoid_surfaces)
-        kv_candidate_edits = self._kv_candidate_edits(
+        shot_candidate_edits = self._shot_candidate_edits(
+            avoid_surfaces=avoid_surfaces,
             promoted_cache_surfaces=promoted_cache_surfaces,
-            canary_enabled=control_phase_hint == "shot_mode" and not self._kv_canary_eval_active,
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
         )
+        kv_candidate_edits, kv_candidate_builder = self._kv_candidate_edits(
+            promoted_cache_surfaces=promoted_cache_surfaces,
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+            canary_enabled=control_phase_hint in {"shot_mode", "readout_escape"} and not self._kv_canary_eval_active,
+        )
+        kv_candidate_edits, kv_effect_families = self._annotate_effect_families(kv_candidate_edits)
         kv_retry_candidate_edits = self._kv_retry_candidate_edits(
             base_candidates=kv_candidate_edits,
-            canary_enabled=control_phase_hint == "shot_mode" and not self._kv_canary_eval_active,
+            canary_enabled=control_phase_hint in {"shot_mode", "readout_escape"} and not self._kv_canary_eval_active,
         )
-        shot_probe_needed = self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
+        kv_retry_candidate_edits, kv_retry_effect_families = self._annotate_effect_families(kv_retry_candidate_edits)
+        shot_probe_needed = False if preprobe_collapse else self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
         kv_canary_checked = sum(1 for item in kv_candidate_edits if bool(item.get("canary_checked")))
         kv_canary_positive_count = sum(1 for item in kv_candidate_edits if bool(item.get("canary_pass")))
         kv_canary_rejected_count = sum(
@@ -1827,6 +2591,17 @@ class HookedTransformerWorkerRuntime:
         )
         kv_retry_canary_checked = sum(1 for item in kv_retry_candidate_edits if bool(item.get("canary_checked")))
         kv_retry_positive_count = sum(1 for item in kv_retry_candidate_edits if bool(item.get("canary_pass")))
+        semantic_focus = self._semantic_focus_summary(promoted_cache_surfaces=promoted_cache_surfaces)
+        readout_escape_needed, readout_escape_reason, readout_escape_block_reason = self._readout_escape_needed(
+            answer_readout_canary=answer_readout_canary,
+            kv_candidate_edits=kv_candidate_edits,
+        )
+        controller_focus_term = (
+            answer_readout_canary.get("reachable_focus_term")
+            if readout_escape_needed and isinstance(answer_readout_canary, Mapping)
+            else semantic_focus.get("semantic_focus_term")
+        )
+        controller_focus_source = "reachable_focus" if readout_escape_needed else "semantic_focus"
         hints = {
             "control_phase_hint": control_phase_hint,
             "loop_severity": self._loop_severity_hint(),
@@ -1834,7 +2609,7 @@ class HookedTransformerWorkerRuntime:
             "prefer_auxiliary_entity_bias": prefer_auxiliary_entity_bias,
             "direct_entity_edit_gate": (
                 "shot_mode_first"
-                if control_phase_hint == "shot_mode"
+                if control_phase_hint in {"shot_mode", "readout_escape"}
                 else ("auxiliary_first" if prefer_auxiliary_entity_bias else "direct_edit_ok")
             ),
             "easy_entity_terms": easy_terms,
@@ -1844,13 +2619,76 @@ class HookedTransformerWorkerRuntime:
             "loop_break_attempt_count": loop_break_attempt_count,
             "stabilizing_only_count": stabilizing_only_count,
             "shot_probe_needed": shot_probe_needed,
-            "kv_probe_needed": bool(shot_probe_needed and kv_candidate_edits and kv_canary_checked == 0),
+            "kv_probe_needed": bool(shot_probe_needed and kv_candidate_edits and kv_canary_checked == 0 and not readout_escape_needed),
             "kv_retry_needed": bool(control_phase_hint == "shot_mode" and kv_retry_candidate_edits),
             "shot_candidate_edits": shot_candidate_edits,
             "kv_candidate_edits": kv_candidate_edits,
             "kv_retry_candidate_edits": kv_retry_candidate_edits,
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
+        if semantic_focus:
+            hints.update(semantic_focus)
+        if controller_focus_term:
+            hints["controller_focus_term"] = str(controller_focus_term)
+            hints["controller_focus_source"] = str(controller_focus_source)
+        if isinstance(answer_readout_canary, Mapping):
+            hints["reachable_focus_term"] = answer_readout_canary.get("reachable_focus_term")
+            hints["reachable_focus_rank"] = answer_readout_canary.get("reachable_focus_rank")
+            hints["target_mass"] = answer_readout_canary.get("target_mass")
+            hints["target_top20_hits"] = answer_readout_canary.get("target_top20_hits")
+            hints["attractor_family_mass"] = answer_readout_canary.get("attractor_family_mass")
+            hints["attractor_family_top_overlap"] = answer_readout_canary.get("attractor_family_top_overlap")
+            hints["attractor_family_overlap_tokens"] = list(answer_readout_canary.get("attractor_family_overlap_tokens", [])[:5])
+        hints["kv_effect_family_count"] = len([key for key in kv_effect_families if str(key)])
+        hints["kv_effect_family_collapsed"] = bool(kv_candidate_edits) and len([key for key in kv_effect_families if str(key)]) < len(kv_candidate_edits)
+        if kv_retry_candidate_edits:
+            hints["kv_retry_effect_family_count"] = len([key for key in kv_retry_effect_families if str(key)])
+        readout_escape_block_reason = dict(readout_escape_block_reason)
+        readout_escape_block_reason["shot_mode_not_ready"] = bool(not shot_mode_ready)
+        readout_escape_block_reason["no_candidates"] = bool(not kv_candidate_edits)
+        hints["readout_escape_block_reason"] = readout_escape_block_reason
+        if readout_escape_needed:
+            hints["readout_escape_needed"] = True
+            if readout_escape_reason:
+                hints["readout_escape_reason"] = str(readout_escape_reason)
+        hints["kv_candidate_builder_called"] = bool(kv_candidate_builder.get("called"))
+        hints["kv_candidate_builder_source"] = kv_candidate_builder.get("source")
+        hints["kv_candidate_builder_stage"] = kv_candidate_builder.get("stage")
+        hints["kv_candidate_builder_input_count"] = int(kv_candidate_builder.get("input_hit_count", 0) or 0)
+        hints["kv_candidate_builder_output_count"] = int(kv_candidate_builder.get("output_count", 0) or 0)
+        hints["kv_candidate_builder_prune_reasons"] = list(kv_candidate_builder.get("prune_reasons", [])[:8])
+        if isinstance(kv_candidate_builder.get("prune_reason_counts"), Mapping):
+            hints["kv_candidate_builder_prune_reason_counts"] = dict(kv_candidate_builder["prune_reason_counts"])
+        if control_phase_hint == "readout_escape":
+            hints["escape_builder_called"] = True
+            hints["escape_builder_target_terms"] = list(kv_candidate_builder.get("target_terms", [])[:4])
+            hints["escape_builder_candidates_before_prune"] = int(
+                kv_candidate_builder.get("candidate_count_before_select", 0) or 0
+            )
+            hints["escape_builder_candidates_after_prune"] = int(kv_candidate_builder.get("output_count", 0) or 0)
+            hints["escape_builder_prune_reasons"] = list(kv_candidate_builder.get("prune_reasons", [])[:8])
+            if isinstance(kv_candidate_builder.get("candidate_provenance_counts_before_prune"), Mapping):
+                hints["candidate_provenance_counts_before_prune"] = dict(
+                    kv_candidate_builder.get("candidate_provenance_counts_before_prune", {})
+                )
+            if isinstance(kv_candidate_builder.get("candidate_provenance_counts_after_prune"), Mapping):
+                hints["candidate_provenance_counts_after_prune"] = dict(
+                    kv_candidate_builder.get("candidate_provenance_counts_after_prune", {})
+                )
+            hints["dominance_prune_drops"] = int(kv_candidate_builder.get("dominance_prune_drops", 0) or 0)
+            hints["same_term_family_drops"] = int(kv_candidate_builder.get("same_term_family_drops", 0) or 0)
+            if isinstance(kv_candidate_builder.get("candidate_families"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("candidate_families"), (str, bytes, bytearray)
+            ):
+                hints["escape_builder_candidate_families"] = [
+                    str(item) for item in kv_candidate_builder.get("candidate_families", [])[:6] if str(item)
+                ]
+            if isinstance(kv_candidate_builder.get("bundle_inputs"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("bundle_inputs"), (str, bytes, bytearray)
+            ):
+                hints["bundle_inputs"] = [
+                    dict(item) for item in kv_candidate_builder.get("bundle_inputs", [])[:4] if isinstance(item, Mapping)
+                ]
         if kv_canary_checked > 0:
             hints["kv_canary_checked"] = kv_canary_checked
             hints["kv_canary_positive_count"] = kv_canary_positive_count
@@ -1858,10 +2696,22 @@ class HookedTransformerWorkerRuntime:
         if kv_retry_canary_checked > 0:
             hints["kv_retry_canary_checked"] = kv_retry_canary_checked
             hints["kv_retry_positive_count"] = kv_retry_positive_count
+        dead_kv_surface_ids = [
+            str(item.get("surface_id", "") or "")
+            for item in kv_candidate_edits
+            if str(((item.get("recent_probe") or {}).get("label", "") if isinstance(item.get("recent_probe"), Mapping) else "") or "")
+            == "dead_actuator"
+        ]
+        if dead_kv_surface_ids:
+            hints["dead_kv_surface_ids"] = dead_kv_surface_ids
         if hints["l4_term_nudge_cooldown"]:
             hints["avoid_recall_surfaces"] = list(avoid_surfaces)
         if control_phase_hint == "loop_break":
             hints["phase_policy"] = "Prefer loop relief, patience, or observer/tool checks before entity insertion edits."
+        elif control_phase_hint == "readout_escape":
+            hints["phase_policy"] = (
+                "First-token readout is already collapsed into a junk attractor; prefer escape-oriented moves, patience, or noop before another recall probe."
+            )
         elif control_phase_hint == "shot_mode":
             hints["phase_policy"] = (
                 "De-loop already helped but coverage is still zero; prefer constraint_scorer, dry_run_decode, or a dedicated shot edit before another loop-break."
@@ -1892,6 +2742,10 @@ class HookedTransformerWorkerRuntime:
                     hints["phase_policy"] = (
                         "A prior kv probe showed weak first-token readout progress; prefer the bounded retry candidate or noop over switching to a totally new blind kv surface."
                     )
+            if readout_escape_needed:
+                hints["phase_policy"] = (
+                    "Recent kv probes only nudged first-token reachability below threshold while the same attractor family still dominates; stop repeating recall probes and prefer escape-oriented moves, patience, or noop."
+                )
         elif control_phase_hint == "entity_insertion":
             if prefer_auxiliary_entity_bias:
                 hints["phase_policy"] = (
@@ -1920,16 +2774,33 @@ class HookedTransformerWorkerRuntime:
             terms.append(term)
         return terms[:6]
 
-    def _latest_kv_feature_scan(self) -> Mapping[str, Any]:
+    def _latest_kv_feature_scan(
+        self,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> Mapping[str, Any]:
         if not isinstance(self._latest_observer_check, Mapping):
             return {}
-        value = self._latest_observer_check.get("kv_feature_scan")
+        normalized = self._observer_check_with_cache_surface_ids(
+            self._latest_observer_check,
+            promoted_cache_surfaces=promoted_cache_surfaces,
+        )
+        value = None if normalized is None else normalized.get("kv_feature_scan")
         if not isinstance(value, Mapping):
             return {}
         return value
 
-    def _kv_feature_hits(self, value: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
-        scan = value if isinstance(value, Mapping) else self._latest_kv_feature_scan()
+    def _kv_feature_hits(
+        self,
+        value: Mapping[str, Any] | None = None,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
+        scan = (
+            value
+            if isinstance(value, Mapping)
+            else self._latest_kv_feature_scan(promoted_cache_surfaces=promoted_cache_surfaces)
+        )
         hits: list[dict[str, Any]] = []
         seen_keys: set[tuple[str, str, str, int, int, str]] = set()
 
@@ -2022,9 +2893,14 @@ class HookedTransformerWorkerRuntime:
         )
         return hits
 
-    def _kv_feature_site_preferences(self, *, missing_terms: set[str] | None = None) -> dict[str, str]:
+    def _kv_feature_site_preferences(
+        self,
+        *,
+        missing_terms: set[str] | None = None,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, str]:
         term_sites: dict[str, dict[str, float]] = {}
-        for hit in self._kv_feature_hits():
+        for hit in self._kv_feature_hits(promoted_cache_surfaces=promoted_cache_surfaces):
             if str(hit.get("polarity", "promote") or "promote") != "promote":
                 continue
             if str(hit.get("group", "") or "").startswith("forbidden"):
@@ -2061,13 +2937,21 @@ class HookedTransformerWorkerRuntime:
                 preferences[feature] = "balanced"
         return preferences
 
-    def _actionable_kv_hits(self, *, limit: int = 3) -> list[dict[str, Any]]:
+    def _actionable_kv_hits(
+        self,
+        *,
+        limit: int = 3,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> list[dict[str, Any]]:
         missing_terms = set(
             self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
         )
         if not missing_terms:
             return []
-        site_preferences = self._kv_feature_site_preferences(missing_terms=missing_terms)
+        site_preferences = self._kv_feature_site_preferences(
+            missing_terms=missing_terms,
+            promoted_cache_surfaces=promoted_cache_surfaces,
+        )
         recent_probe_outcomes = self._recent_kv_probe_outcomes()
         ranked_hits: list[dict[str, Any]] = []
 
@@ -2084,7 +2968,7 @@ class HookedTransformerWorkerRuntime:
         def _site_role(site: str) -> str:
             return "retrieval_query_probe" if site == "k_cache" else "content_value_probe"
 
-        for raw_hit in self._kv_feature_hits():
+        for raw_hit in self._kv_feature_hits(promoted_cache_surfaces=promoted_cache_surfaces):
             if str(raw_hit.get("polarity", "promote") or "promote") != "promote":
                 continue
             if str(raw_hit.get("group", "") or "").startswith("forbidden"):
@@ -2157,6 +3041,141 @@ class HookedTransformerWorkerRuntime:
                 break
             _append_if_fresh(item)
         return selected[: max(1, int(limit))]
+
+    def _kv_hit_source_position(self, hit: Mapping[str, Any]) -> int | None:
+        source_position = hit.get("argmax_pos")
+        if isinstance(source_position, int) and not isinstance(source_position, bool):
+            return int(source_position)
+        source_positions = hit.get("source_positions")
+        if isinstance(source_positions, SequenceABC) and not isinstance(source_positions, (str, bytes, bytearray)):
+            for item in source_positions:
+                if not isinstance(item, Mapping):
+                    continue
+                candidate_pos = item.get("position")
+                if isinstance(candidate_pos, int) and not isinstance(candidate_pos, bool):
+                    return int(candidate_pos)
+        return None
+
+    def _semantic_focus_summary(
+        self,
+        *,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any]:
+        missing_terms = self._feedback_terms(
+            ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
+        )
+        if not missing_terms:
+            return {}
+        normalized = self._observer_check_with_cache_surface_ids(
+            self._latest_observer_check,
+            promoted_cache_surfaces=promoted_cache_surfaces,
+        )
+        if isinstance(normalized, Mapping):
+            for scan_name in ("kv_feature_scan", "latent_feature_scan"):
+                scan = normalized.get(scan_name)
+                if not isinstance(scan, Mapping):
+                    continue
+                top_hits = scan.get("top_feature_hits")
+                if not isinstance(top_hits, SequenceABC) or isinstance(top_hits, (str, bytes, bytearray)):
+                    continue
+                for item in top_hits:
+                    if not isinstance(item, Mapping):
+                        continue
+                    feature = str(item.get("feature", "") or "")
+                    if feature and feature in missing_terms:
+                        return {
+                            "semantic_focus_term": feature,
+                            "semantic_focus_source": str(scan_name),
+                            "semantic_focus_alignment": round(float(item.get("alignment", 0.0) or 0.0), 6),
+                        }
+        return {
+            "semantic_focus_term": str(missing_terms[0]),
+            "semantic_focus_source": "missing_terms_fallback",
+        }
+
+    def _annotate_effect_families(
+        self,
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, int]]:
+        family_counts: dict[str, int] = {}
+        annotated: list[dict[str, Any]] = []
+        for raw_candidate in candidates:
+            if not isinstance(raw_candidate, Mapping):
+                continue
+            recent_probe = raw_candidate.get("recent_probe") if isinstance(raw_candidate.get("recent_probe"), Mapping) else {}
+            family_key = str(
+                recent_probe.get("effect_family_key")
+                or raw_candidate.get("effect_family_key")
+                or raw_candidate.get("surface_id")
+                or "unknown_family"
+            )
+            family_counts[family_key] = int(family_counts.get(family_key, 0) or 0) + 1
+            candidate = dict(raw_candidate)
+            candidate["effect_family_key"] = family_key
+            signature = recent_probe.get("effect_family_signature")
+            if isinstance(signature, SequenceABC) and not isinstance(signature, (str, bytes, bytearray)):
+                candidate["effect_family_signature"] = [str(item) for item in signature[:4] if str(item)]
+            annotated.append(candidate)
+        for candidate in annotated:
+            family_key = str(candidate.get("effect_family_key", "") or "unknown_family")
+            candidate["effect_family_size"] = int(family_counts.get(family_key, 1) or 1)
+            candidate["effect_family_collapsed_member"] = bool(int(candidate["effect_family_size"]) > 1)
+        return annotated, family_counts
+
+    def _readout_escape_needed(
+        self,
+        *,
+        answer_readout_canary: Mapping[str, Any] | None,
+        kv_candidate_edits: Sequence[Mapping[str, Any]],
+    ) -> tuple[bool, str | None, dict[str, Any]]:
+        preprobe_collapse, block_reason = self._preprobe_readout_escape_state(answer_readout_canary)
+        if not isinstance(answer_readout_canary, Mapping):
+            return False, None, dict(block_reason)
+        if preprobe_collapse:
+            block_reason["needs_probe_history"] = False
+            block_reason["probe_history_subthreshold_count"] = 0
+            block_reason["probe_history_actionable_count"] = 0
+            block_reason["candidate_family_count"] = len(
+                [
+                    str(candidate.get("effect_family_key", "") or "")
+                    for candidate in kv_candidate_edits
+                    if isinstance(candidate, Mapping) and str(candidate.get("effect_family_key", "") or "")
+                ]
+            )
+            block_reason["no_candidates"] = bool(not kv_candidate_edits)
+            return True, "preprobe_first_token_collapse", dict(block_reason)
+        history = self._recent_kv_probe_history(window=6)
+        actionable_count = sum(1 for item in history if str(item.get("label", "") or "") in {"positive", "actionable_positive"})
+        subthreshold_count = sum(1 for item in history if str(item.get("label", "") or "") == "weak_positive_subthreshold")
+        block_reason["needs_probe_history"] = bool(actionable_count <= 0 and subthreshold_count < 2)
+        block_reason["probe_history_subthreshold_count"] = int(subthreshold_count)
+        block_reason["probe_history_actionable_count"] = int(actionable_count)
+        if actionable_count > 0 or subthreshold_count < 2:
+            return False, None, dict(block_reason)
+        target_top20_hits = int(answer_readout_canary.get("target_top20_hits", 0) or 0)
+        target_mass = float(answer_readout_canary.get("target_mass", 0.0) or 0.0)
+        reachable_focus_rank = answer_readout_canary.get("reachable_focus_rank")
+        reachable_focus_rank_value = (
+            10**9
+            if isinstance(reachable_focus_rank, bool) or not isinstance(reachable_focus_rank, int)
+            else int(reachable_focus_rank)
+        )
+        attractor_family_mass = float(answer_readout_canary.get("attractor_family_mass", 0.0) or 0.0)
+        attractor_family_top_overlap = int(answer_readout_canary.get("attractor_family_top_overlap", 0) or 0)
+        if target_top20_hits > 0 or target_mass >= 0.001 or reachable_focus_rank_value <= 150:
+            return False, None, dict(block_reason)
+        if attractor_family_top_overlap < 2 and attractor_family_mass < max(0.0005, target_mass * 2.0):
+            return False, None, dict(block_reason)
+        family_keys = {
+            str(candidate.get("effect_family_key", "") or "")
+            for candidate in kv_candidate_edits
+            if isinstance(candidate, Mapping)
+        }
+        block_reason["candidate_family_count"] = len([key for key in family_keys if key])
+        block_reason["no_candidates"] = bool(not kv_candidate_edits)
+        if len([key for key in family_keys if key]) <= 1:
+            return True, "collapsed_decode_basin", dict(block_reason)
+        return True, "subthreshold_readout_stall", dict(block_reason)
 
     def _promoted_cache_surface_id(self, *, site: str, layer: int, head: int, token_mode: str) -> str:
         return f"s_{str(site)}_l{int(layer)}_h{int(head)}_{str(token_mode)}_promoted"
@@ -2362,127 +3381,288 @@ class HookedTransformerWorkerRuntime:
             seen_surface_ids.add(surface_id)
         return catalog
 
+    def _kv_source_variants_for_hit(
+        self,
+        hit: Mapping[str, Any],
+        *,
+        control_phase_hint: str,
+    ) -> list[dict[str, Any]]:
+        feature = str(hit.get("feature", "") or "")
+        source_position = self._kv_hit_source_position(hit)
+        variants: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, int, int]] = set()
+        if control_phase_hint == "readout_escape":
+            for span in self._prompt_term_spans(feature, max_spans=2):
+                start = int(span["start"])
+                end = int(span["end"])
+                span_key = ("span", start, end)
+                if span_key in seen_keys:
+                    continue
+                seen_keys.add(span_key)
+                variants.append(
+                    {
+                        "variant_priority": 0,
+                        "span_kind": "exact_prompt_span_mean" if int(span["length"]) > 1 else "exact_prompt_piece",
+                        "provenance_class": str(span.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                        "token_selector": (
+                            {"mode": "span", "start": start, "end": end, "pool": "mean"}
+                            if int(span["length"]) > 1
+                            else {"mode": "index", "value": start}
+                        ),
+                        "source_position": start,
+                        "source_span": {"start": start, "end": end},
+                        "source_piece": str(span["text"]),
+                        "source_segment_kind": str(span["segment_kind"]),
+                        "candidate_family": f"kv_anchor:{feature}:exact_prompt_span",
+                        "phase_objective": "readout_escape",
+                    }
+                )
+        if source_position is not None:
+            single_key = ("index", int(source_position), int(source_position) + 1)
+            if single_key not in seen_keys:
+                seen_keys.add(single_key)
+                variants.append(
+                    {
+                        "variant_priority": 1,
+                        "span_kind": "source_position_single",
+                        "provenance_class": "misc_prompt",
+                        "token_selector": {"mode": "index", "value": int(source_position)},
+                        "source_position": int(source_position),
+                        "source_span": None,
+                        "source_piece": None if hit.get("argmax_piece") in (None, "") else str(hit.get("argmax_piece")),
+                        "source_segment_kind": (
+                            None
+                            if hit.get("argmax_segment_kind") in (None, "")
+                            else str(hit.get("argmax_segment_kind"))
+                        ),
+                        "candidate_family": f"kv_anchor:{feature}:source_position",
+                        "phase_objective": "readout_escape" if control_phase_hint == "readout_escape" else "shot_mode",
+                    }
+                )
+        return variants
+
     def _kv_candidate_edits(
         self,
         *,
         promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+        control_phase_hint: str = "monitor",
+        answer_readout_canary: Mapping[str, Any] | None = None,
         canary_enabled: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        debug: dict[str, Any] = {
+            "called": True,
+            "source": "runtime",
+            "stage": "kv_candidate_builder",
+            "input_hit_count": 0,
+            "candidate_count_before_select": 0,
+            "output_count": 0,
+            "prune_reasons": [],
+            "prune_reason_counts": {},
+            "target_terms": [],
+            "candidate_families": [],
+            "candidate_provenance_counts_before_prune": {},
+            "candidate_provenance_counts_after_prune": {},
+            "dominance_prune_drops": 0,
+            "same_term_family_drops": 0,
+            "bundle_inputs": [],
+        }
+
+        def _note_prune(reason: str) -> None:
+            counts = debug["prune_reason_counts"]
+            counts[str(reason)] = int(counts.get(str(reason), 0) or 0) + 1
+
+        missing_term_list = self._ordered_missing_terms_for_phase(
+            control_phase_hint=control_phase_hint,
+            answer_readout_canary=answer_readout_canary,
+            max_terms=2 if control_phase_hint == "readout_escape" else 3,
+        )
+        debug["target_terms"] = list(missing_term_list)
         missing_terms = set(
             self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
         )
         if not missing_terms:
-            return []
+            _note_prune("no_missing_terms")
+            debug["prune_reasons"] = sorted(debug["prune_reason_counts"])
+            return [], debug
         surface_lookup = self._cache_surface_lookup(promoted_cache_surfaces=promoted_cache_surfaces)
-        candidates: list[tuple[int, int, float, int, int, dict[str, Any]]] = []
-        seen_surface_ids: set[str] = set()
-        for hit in self._actionable_kv_hits(limit=3):
+        term_priority = {str(term): index for index, term in enumerate(missing_term_list)}
+        candidates: list[tuple[int, int, int, int, float, int, int, dict[str, Any]]] = []
+        seen_keys: set[tuple[str, str, int, int, str]] = set()
+        actionable_hits = self._actionable_kv_hits(limit=3, promoted_cache_surfaces=promoted_cache_surfaces)
+        debug["input_hit_count"] = len(actionable_hits)
+        if not actionable_hits:
+            _note_prune("no_feature_hits")
+        for hit in actionable_hits:
             if str(hit.get("polarity", "promote") or "promote") != "promote":
+                _note_prune("non_promote_hit")
                 continue
             if str(hit.get("group", "") or "").startswith("forbidden"):
+                _note_prune("forbidden_group")
                 continue
             feature = str(hit.get("feature", "") or "")
             if feature and feature not in missing_terms:
+                _note_prune("feature_not_missing")
+                continue
+            if term_priority and feature and feature not in term_priority:
+                _note_prune("feature_not_selected")
                 continue
             site = str(hit.get("site", "") or "")
             token_mode = str(hit.get("token_mode", "last") or "last")
             layer = hit.get("layer")
             head = hit.get("head")
             if site not in {"k_cache", "v_cache"} or token_mode != "last":
+                _note_prune("unsupported_site_or_token_mode")
                 continue
             if isinstance(layer, bool) or not isinstance(layer, int):
+                _note_prune("invalid_layer")
                 continue
             if isinstance(head, bool) or not isinstance(head, int):
+                _note_prune("invalid_head")
                 continue
             record = surface_lookup.get((site, int(layer), int(head), token_mode))
             if record is None:
+                _note_prune("surface_lookup_miss")
                 continue
             surface_id = str(record.get("surface_id", "") or "")
-            if not surface_id or surface_id in seen_surface_ids:
+            if not surface_id:
+                _note_prune("surface_lookup_miss")
                 continue
-            seen_surface_ids.add(surface_id)
-            source_position = hit.get("argmax_pos")
-            if isinstance(source_position, bool) or not isinstance(source_position, int):
-                source_positions = hit.get("source_positions")
-                if isinstance(source_positions, SequenceABC) and not isinstance(source_positions, (str, bytes, bytearray)):
-                    for item in source_positions:
-                        if isinstance(item, Mapping):
-                            candidate_pos = item.get("position")
-                            if isinstance(candidate_pos, int) and not isinstance(candidate_pos, bool):
-                                source_position = int(candidate_pos)
-                                break
-            if isinstance(source_position, bool) or not isinstance(source_position, int):
+            recent_probe = hit.get("recent_probe") if isinstance(hit.get("recent_probe"), Mapping) else {}
+            if str(recent_probe.get("label", "") or "") == "dead_actuator":
+                _note_prune("dead_actuator")
+                continue
+            source_variants = self._kv_source_variants_for_hit(hit, control_phase_hint=control_phase_hint)
+            if not source_variants:
+                _note_prune("missing_source_position")
                 continue
             max_alpha = float(record.get("max_alpha", 0.06) or 0.06)
-            alpha = min(max_alpha, 0.04 if site == "v_cache" else 0.03)
             step_cap = record.get("step_size")
-            step_size = float(alpha if step_cap is None else min(float(step_cap), alpha))
             norm_clip = record.get("norm_clip")
             if norm_clip is None:
                 norm_clip = 1.0
             which = "v" if site == "v_cache" else "k"
-            source_expr = {
-                "ref": {
-                    "scope": "runtime",
-                    "worker": self.worker_id,
-                    "tensor": site,
+            for variant in source_variants:
+                source_span = variant.get("source_span") if isinstance(variant.get("source_span"), Mapping) else None
+                source_position = int(variant.get("source_position", 0) or 0)
+                source_end = source_position + 1 if source_span is None else int(source_span.get("end", source_position + 1))
+                dedupe_key = (
+                    surface_id,
+                    str(feature),
+                    source_position,
+                    source_end,
+                    str(variant.get("span_kind", "")),
+                )
+                if dedupe_key in seen_keys:
+                    _note_prune("duplicate_surface_variant")
+                    continue
+                seen_keys.add(dedupe_key)
+                base_alpha = 0.03 if site == "k_cache" else 0.04
+                if str(variant.get("span_kind", "")).startswith("exact_prompt_span"):
+                    base_alpha = 0.035 if site == "k_cache" else 0.045
+                alpha = min(max_alpha, base_alpha)
+                step_size = float(alpha if step_cap is None else min(float(step_cap), alpha))
+                source_expr = {
+                    "ref": {
+                        "scope": "runtime",
+                        "worker": self.worker_id,
+                        "tensor": site,
+                        "layer": int(layer),
+                        "head": int(head),
+                        "token": dict(variant["token_selector"]),
+                    }
+                }
+                candidate = {
+                    "surface_id": surface_id,
+                    "kind": "kv_mix",
+                    "role": f"kv_shot_{which}_{'span_anchor' if str(variant.get('span_kind', '')).startswith('exact_prompt_span') else 'source_anchor'}",
+                    "site": site,
                     "layer": int(layer),
                     "head": int(head),
-                    "token": {"mode": "index", "value": int(source_position)},
+                    "token_mode": token_mode,
+                    "focus_feature": feature,
+                    "alignment": round(float(hit.get("alignment", 0.0) or 0.0), 6),
+                    "candidate_family": str(variant.get("candidate_family", "")),
+                    "phase_objective": str(variant.get("phase_objective", "shot_mode")),
+                    "span_kind": str(variant.get("span_kind", "source_position_single")),
+                    "provenance_class": str(variant.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                    "read_source_resolved": True,
+                    "write_target_resolved": True,
+                    "source_position": int(source_position),
+                    "source_relative_index": (
+                        int(hit.get("argmax_relative_index"))
+                        if isinstance(hit.get("argmax_relative_index"), int) and not isinstance(hit.get("argmax_relative_index"), bool)
+                        else None
+                    ),
+                    "source_piece": variant.get("source_piece"),
+                    "source_segment_kind": variant.get("source_segment_kind"),
+                    "site_preference": str(hit.get("site_preference", "balanced") or "balanced"),
+                    "site_role": str(hit.get("site_role", "") or ""),
+                    "recent_probe": dict(recent_probe),
+                    "source": {
+                        "dtype": "cache_pair",
+                        which: source_expr,
+                    },
+                    "op": {"kind": "kv_mix", "alpha": float(alpha), "which": which},
+                    "budget": {
+                        "ttl_steps": 1,
+                        "norm_clip": float(norm_clip),
+                        "step_size": float(step_size),
+                        "revertible": True,
+                    },
+                    "meta": {
+                        "hypothesis": f"kv_{which}_recall_probe",
+                        "expected_effect": "small_cache_recall_support",
+                    },
                 }
-            }
-            candidate = {
-                "surface_id": surface_id,
-                "kind": "kv_mix",
-                "role": f"kv_shot_{which}_source_anchor",
-                "site": site,
-                "layer": int(layer),
-                "head": int(head),
-                "token_mode": token_mode,
-                "focus_feature": feature,
-                "alignment": round(float(hit.get("alignment", 0.0) or 0.0), 6),
-                "source_position": int(source_position),
-                "source_relative_index": (
-                    int(hit.get("argmax_relative_index"))
-                    if isinstance(hit.get("argmax_relative_index"), int) and not isinstance(hit.get("argmax_relative_index"), bool)
-                    else None
-                ),
-                "source_piece": None if hit.get("argmax_piece") in (None, "") else str(hit.get("argmax_piece")),
-                "source_segment_kind": (
-                    None if hit.get("argmax_segment_kind") in (None, "") else str(hit.get("argmax_segment_kind"))
-                ),
-                "site_preference": str(hit.get("site_preference", "balanced") or "balanced"),
-                "site_role": str(hit.get("site_role", "") or ""),
-                "recent_probe": dict(hit.get("recent_probe", {})) if isinstance(hit.get("recent_probe"), Mapping) else {},
-                "source": {
-                    "dtype": "cache_pair",
-                    which: source_expr,
-                },
-                "op": {"kind": "kv_mix", "alpha": float(alpha), "which": which},
-                "budget": {
-                    "ttl_steps": 1,
-                    "norm_clip": float(norm_clip),
-                    "step_size": float(step_size),
-                    "revertible": True,
-                },
-                "meta": {
-                    "hypothesis": f"kv_{which}_recall_probe",
-                    "expected_effect": "small_cache_recall_support",
-                },
-            }
-            preferred_site = str(hit.get("site_preference", "balanced") or "balanced")
-            preferred_priority = 0 if preferred_site in {"k_cache", "v_cache"} and site == preferred_site else 1
-            site_priority = 0 if site == "k_cache" else 1
-            candidates.append(
-                (preferred_priority, site_priority, -float(candidate["alignment"]), int(layer), int(head), candidate)
+                if source_span is not None:
+                    candidate["source_span"] = {"start": int(source_span["start"]), "end": int(source_span["end"])}
+                preferred_site = str(hit.get("site_preference", "balanced") or "balanced")
+                preferred_priority = 0 if preferred_site in {"k_cache", "v_cache"} and site == preferred_site else 1
+                site_priority = 0 if site == "k_cache" else 1
+                candidates.append(
+                    (
+                        int(term_priority.get(feature, 99)),
+                        int(variant.get("variant_priority", 1)),
+                        preferred_priority,
+                        site_priority,
+                        -float(candidate["alignment"]),
+                        int(layer),
+                        int(head),
+                        candidate,
+                    )
+                )
+        debug["candidate_count_before_select"] = len(candidates)
+        debug["candidate_families"] = [
+            str(candidate.get("candidate_family", "") or "")
+            for _term_priority, _variant_priority, _preferred, _site_priority, _alignment, _layer, _head, candidate in candidates
+            if str(candidate.get("candidate_family", "") or "")
+        ]
+        candidates.sort(
+            key=lambda item: (item[0], item[1], item[2], item[3], item[4], item[5], item[6], str(item[7]["surface_id"]))
+        )
+        selected = [candidate for _t, _v, _p, _s, _a, _l, _h, candidate in candidates]
+        if control_phase_hint == "readout_escape":
+            selected = self._prune_escape_candidates(selected, debug=debug)
+            selected.sort(
+                key=lambda item: (
+                    0 if bool(item.get("bundle_ready", False)) else 1,
+                    int(missing_term_list.index(str(item.get("focus_feature", "") or "")))
+                    if str(item.get("focus_feature", "") or "") in missing_term_list
+                    else 99,
+                    -self._candidate_builder_score(item),
+                    str(item.get("surface_id", "") or ""),
+                )
             )
-            if len(candidates) >= 6:
-                continue
-        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4], str(item[5]["surface_id"])))
-        selected = [candidate for _preferred, _site_priority, _alignment, _layer, _head, candidate in candidates[:3]]
+            selected = selected[:4]
+        else:
+            selected = selected[:3]
+        if not selected and debug["input_hit_count"] > 0 and not debug["prune_reason_counts"]:
+            _note_prune("selection_empty")
         if canary_enabled:
-            return self._annotate_kv_candidates_with_canary(selected)
-        return selected
+            selected = self._annotate_kv_candidates_with_canary(selected)
+        debug["output_count"] = len(selected)
+        debug["prune_reasons"] = sorted(debug["prune_reason_counts"])
+        return selected, debug
 
     def _kv_retry_candidate_edits(
         self,
@@ -2498,7 +3678,7 @@ class HookedTransformerWorkerRuntime:
             recent_probe = raw_candidate.get("recent_probe")
             if not isinstance(recent_probe, Mapping):
                 continue
-            if str(recent_probe.get("label", "") or "") != "weak_positive":
+            if str(recent_probe.get("label", "") or "") != "weak_positive_subthreshold":
                 continue
             if bool(recent_probe.get("was_retry", False)):
                 continue
@@ -3128,11 +4308,121 @@ class HookedTransformerWorkerRuntime:
             metrics["focus_logit_delta"] = round(float(best_focus["logit_delta"]), 6)
             metrics["focus_prob_delta"] = round(float(best_focus["prob_delta"]), 6)
             metrics["focus_rank_delta"] = int(best_focus["rank_delta"])
+            metrics["focus_rank_baseline"] = int(best_focus["baseline_rank"])
+            metrics["focus_rank_edited"] = int(best_focus["edited_rank"])
         if best_rank_focus is not None:
             metrics["rank_focus_term"] = str(best_rank_focus["term"])
             metrics["rank_focus_piece"] = str(best_rank_focus["piece"])
             metrics["rank_focus_delta"] = int(best_rank_focus["rank_delta"])
+            metrics["rank_focus_rank_baseline"] = int(best_rank_focus["baseline_rank"])
+            metrics["rank_focus_rank_edited"] = int(best_rank_focus["edited_rank"])
         return metrics
+
+    def _current_answer_readout_canary(
+        self,
+        *,
+        top_k: int = 20,
+        promoted_cache_surfaces: Sequence[Mapping[str, Any]] = (),
+    ) -> dict[str, Any] | None:
+        focus_terms = self._feedback_terms(
+            ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
+        )
+        if not focus_terms:
+            return None
+        tokens = self._current_token_tensor()
+        saved_last_tokens = None if getattr(self.runtime_state, "last_tokens", None) is None else self.runtime_state.last_tokens.detach().clone()
+        saved_last_logits = None if getattr(self.runtime_state, "last_logits", None) is None else self.runtime_state.last_logits.detach().clone()
+        saved_last_cache = None
+        if getattr(self.runtime_state, "last_cache", None) is not None:
+            saved_last_cache = {str(name): tensor.detach().clone() for name, tensor in self.runtime_state.last_cache.items()}
+        try:
+            logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
+            next_logits = self._apply_token_constraints(logits[0, -1].detach())
+            next_logits, _decoder_state = self._apply_decoder_control(next_logits)
+        except Exception:
+            return None
+        finally:
+            self.runtime_state.last_tokens = saved_last_tokens
+            self.runtime_state.last_logits = saved_last_logits
+            self.runtime_state.last_cache = saved_last_cache
+
+        next_logits = next_logits.detach().cpu().float()
+        probs = torch.softmax(next_logits, dim=-1)
+        vocab_size = int(next_logits.shape[-1])
+        top_width = min(max(1, int(top_k)), vocab_size)
+        top_ids = torch.topk(next_logits, k=top_width).indices.detach().cpu().tolist()
+        top_id_set = {int(token_id) for token_id in top_ids}
+        target_sequences = self._target_token_sequences(focus_terms, vocab_size=vocab_size)
+        target_token_ids = sorted({int(sequence.token_ids[0]) for sequence in target_sequences if sequence.token_ids})
+        best_focus: dict[str, Any] | None = None
+        for sequence in target_sequences:
+            token_id = int(sequence.token_ids[0])
+            rank = self._token_rank_for_logits(next_logits, token_id)
+            row = {
+                "term": str(sequence.term),
+                "piece": self.codec.decode([token_id]),
+                "rank": int(rank),
+                "logit": float(next_logits[token_id].item()),
+                "prob": float(probs[token_id].item()),
+                "variant": str(sequence.variant),
+            }
+            if best_focus is None or (
+                -int(row["rank"]),
+                float(row["prob"]),
+                float(row["logit"]),
+                1 if str(sequence.variant).startswith(" ") else 0,
+            ) > (
+                -int(best_focus["rank"]),
+                float(best_focus["prob"]),
+                float(best_focus["logit"]),
+                1 if str(best_focus["variant"]).startswith(" ") else 0,
+            ):
+                best_focus = row
+
+        semantic_focus = self._semantic_focus_summary(promoted_cache_surfaces=promoted_cache_surfaces)
+        recent_output_ids = []
+        seen_recent_output_ids: set[int] = set()
+        recent_output_piece_keys: set[str] = set()
+        for token_id in reversed(self._output_token_ids()[-6:]):
+            token_value = int(token_id)
+            if token_value in seen_recent_output_ids or token_value < 0 or token_value >= vocab_size:
+                continue
+            seen_recent_output_ids.add(token_value)
+            recent_output_ids.append(token_value)
+            piece_key = self._canonical_effect_family_piece(self.codec.decode([token_value]))
+            if piece_key:
+                recent_output_piece_keys.add(piece_key)
+        recent_output_ids.reverse()
+        attractor_family_mass = sum(float(probs[token_id].item()) for token_id in recent_output_ids)
+        attractor_family_overlap_tokens: list[str] = []
+        for token_id in top_ids[:5]:
+            token_piece = self.codec.decode([int(token_id)])
+            token_key = self._canonical_effect_family_piece(token_piece)
+            if token_key and token_key in recent_output_piece_keys and token_piece not in attractor_family_overlap_tokens:
+                attractor_family_overlap_tokens.append(token_piece)
+        attractor_family_top_overlap = len(attractor_family_overlap_tokens)
+        attractor_family_top_overlap_exact = sum(1 for token_id in top_ids[:5] if int(token_id) in seen_recent_output_ids)
+
+        return {
+            "semantic_focus_term": semantic_focus.get("semantic_focus_term"),
+            "semantic_focus_source": semantic_focus.get("semantic_focus_source"),
+            "target_mass": round(sum(float(probs[token_id].item()) for token_id in target_token_ids), 6),
+            "target_top20_hits": sum(1 for token_id in target_token_ids if token_id in top_id_set),
+            "reachable_focus_term": None if best_focus is None else str(best_focus["term"]),
+            "reachable_focus_piece": None if best_focus is None else str(best_focus["piece"]),
+            "reachable_focus_rank": None if best_focus is None else int(best_focus["rank"]),
+            "reachable_focus_prob": None if best_focus is None else round(float(best_focus["prob"]), 6),
+            "focus_term": None if best_focus is None else str(best_focus["term"]),
+            "focus_piece": None if best_focus is None else str(best_focus["piece"]),
+            "focus_rank": None if best_focus is None else int(best_focus["rank"]),
+            "focus_prob": None if best_focus is None else round(float(best_focus["prob"]), 6),
+            "attractor_family_mass": round(float(attractor_family_mass), 6),
+            "attractor_family_top_overlap": int(attractor_family_top_overlap),
+            "attractor_family_top_overlap_exact": int(attractor_family_top_overlap_exact),
+            "attractor_family_overlap_tokens": list(attractor_family_overlap_tokens),
+            "attractor_family_tokens": [self.codec.decode([int(token_id)]) for token_id in recent_output_ids[:5]],
+            "top_tokens": [self.codec.decode([int(token_id)]) for token_id in top_ids],
+        }
 
     def _output_token_ids(self) -> list[int]:
         output_tokens: list[int] = []
@@ -3158,6 +4448,40 @@ class HookedTransformerWorkerRuntime:
         seq_len = len(records)
         for record in records:
             record["relative_index"] = int(record["position"]) - seq_len
+            record["provenance_class"] = "misc_prompt"
+
+        prompt_records = [record for record in records if str(record.get("segment_kind", "")) == "prompt"]
+        prompt_text = ""
+        prompt_offset = 0
+        for record in prompt_records:
+            piece = str(record.get("piece", ""))
+            record["decoded_start"] = int(prompt_offset)
+            prompt_offset += len(piece)
+            record["decoded_end"] = int(prompt_offset)
+            prompt_text += piece
+
+        source_marker_index = prompt_text.find("SOURCE:")
+        answer_marker_index = prompt_text.find("ANSWER:")
+        source_marker_end = source_marker_index + len("SOURCE:") if source_marker_index >= 0 else -1
+        for record in records:
+            segment_kind = str(record.get("segment_kind", "") or "")
+            if segment_kind == "output":
+                record["provenance_class"] = "output"
+                continue
+            if segment_kind != "prompt":
+                record["provenance_class"] = "misc_prompt"
+                continue
+            decoded_start = int(record.get("decoded_start", 0) or 0)
+            decoded_end = int(record.get("decoded_end", decoded_start) or decoded_start)
+            midpoint = decoded_start if decoded_end <= decoded_start else (decoded_start + ((decoded_end - decoded_start) / 2.0))
+            if source_marker_index >= 0 and midpoint < source_marker_index:
+                record["provenance_class"] = "constraint_header"
+            elif source_marker_index >= 0 and midpoint >= source_marker_end and (answer_marker_index < 0 or midpoint < answer_marker_index):
+                record["provenance_class"] = "source_body"
+            elif answer_marker_index >= 0 and midpoint >= answer_marker_index:
+                record["provenance_class"] = "answer_prefix"
+            else:
+                record["provenance_class"] = "misc_prompt"
         return records
 
     def _compute_metrics(self, next_logits: torch.Tensor) -> dict[str, float]:

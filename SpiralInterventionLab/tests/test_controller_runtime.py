@@ -1580,8 +1580,9 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         decoder_control_mode: str = "off",
         task_feedback_fn=None,
         observer_check_fn=None,
+        codec=None,
     ):
-        codec = CharacterCodec("pabc!? ")
+        codec = codec or CharacterCodec("pabc!? ")
         runtime_state = DeterministicRuntimeState(codec)
         adapter = FakeAdapter()
         return HookedTransformerWorkerRuntime(
@@ -2545,7 +2546,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(hits[0]["surface_id"], "s_k_cache_l3_h0_last_promoted")
         self.assertEqual(hits[0]["recent_probe"]["label"], "positive")
         self.assertEqual(hits[1]["surface_id"], "s_v_cache_l3_h1_last_promoted")
-        self.assertEqual(hits[1]["recent_probe"]["label"], "flat")
+        self.assertEqual(hits[1]["recent_probe"]["label"], "dead_actuator")
 
     def test_worker_runtime_k_source_positions_prefer_term_like_prompt_piece(self):
         worker_runtime = self._make_worker_runtime()
@@ -2780,6 +2781,439 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             [candidate["surface_id"] for candidate in packet["strategy_hints"]["shot_candidate_edits"]],
         )
 
+    def test_worker_runtime_packet_exposes_answer_readout_canary_for_missing_terms(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab"],
+            "entity_recall_terms": ["ab"],
+        }
+
+        packet = worker_runtime.build_controller_packet()
+
+        canary = packet["worker_view"]["answer_readout_canary"]
+        self.assertIn("top_tokens", canary)
+        self.assertTrue(canary["top_tokens"])
+        self.assertIn("target_mass", canary)
+        self.assertIn("focus_rank", canary)
+        self.assertEqual(
+            packet["strategy_hints"]["answer_readout_summary"]["semantic_focus_term"],
+            canary["semantic_focus_term"],
+        )
+        self.assertEqual(
+            packet["strategy_hints"]["answer_readout_summary"]["reachable_focus_term"],
+            canary["reachable_focus_term"],
+        )
+        self.assertEqual(
+            packet["strategy_hints"]["answer_readout_summary"]["reachable_focus_rank"],
+            canary["reachable_focus_rank"],
+        )
+        self.assertEqual(
+            packet["strategy_hints"]["answer_readout_summary"]["attractor_family_overlap_tokens"],
+            canary["attractor_family_overlap_tokens"],
+        )
+
+    def test_worker_runtime_strategy_hints_arm_preprobe_readout_escape_from_canary(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["budget", "Mira"],
+            "entity_recall_terms": ["budget", "Mira"],
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "Mira",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "budget",
+                "reachable_focus_piece": " budget",
+                "reachable_focus_rank": 901,
+                "target_mass": 0.000142,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.300192,
+                "attractor_family_top_overlap": 4,
+                "attractor_family_overlap_tokens": ["EW", " EW", "inou", " shards"],
+                "top_tokens": ["EW", " EW", "inou", " shards", "Lawson"],
+            },
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        hints = packet["strategy_hints"]
+        self.assertEqual(packet["control_phase_hint"], "readout_escape")
+        self.assertTrue(hints["shot_mode_ready"])
+        self.assertTrue(hints["readout_escape_needed"])
+        self.assertEqual(hints["readout_escape_reason"], "preprobe_first_token_collapse")
+        self.assertEqual(hints["controller_focus_term"], "budget")
+        self.assertEqual(hints["controller_focus_source"], "reachable_focus")
+        self.assertEqual(hints["attractor_family_overlap_tokens"], ["EW", " EW", "inou", " shards"])
+        self.assertTrue(hints["readout_escape_block_reason"]["preprobe_collapse"])
+        self.assertTrue(hints["readout_escape_block_reason"]["mass_below_threshold"])
+        self.assertTrue(hints["readout_escape_block_reason"]["rank_bad"])
+        self.assertTrue(hints["readout_escape_block_reason"]["top20_hits_zero"])
+        self.assertTrue(hints["readout_escape_block_reason"]["attractor_mass_high"])
+        self.assertFalse(hints["readout_escape_block_reason"]["shot_mode_not_ready"])
+        self.assertTrue(hints["readout_escape_block_reason"]["no_candidates"])
+        self.assertTrue(hints["kv_candidate_builder_called"])
+        self.assertEqual(hints["kv_candidate_builder_source"], "runtime")
+        self.assertEqual(hints["kv_candidate_builder_stage"], "kv_candidate_builder")
+        self.assertEqual(hints["kv_candidate_builder_output_count"], 0)
+        self.assertIn("no_feature_hits", hints["kv_candidate_builder_prune_reasons"])
+
+    def test_worker_runtime_readout_escape_builder_prefers_reachable_term_and_exact_prompt_span(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p ab c")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab", "c"],
+            "entity_recall_terms": ["ab", "c"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.2,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 2,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "alignment": 0.34,
+                        "argmax_pos": 2,
+                        "argmax_relative_index": -4,
+                        "argmax_piece": "a",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 2, "relative_index": -4, "segment_kind": "prompt", "piece": "a", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "c",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "surface_id": "s_v_cache_l3_h1_last_promoted",
+                        "alignment": 0.36,
+                        "argmax_pos": 5,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "c",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 5, "relative_index": -1, "segment_kind": "prompt", "piece": "c", "alignment": 0.36}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                ],
+            },
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "c",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "ab",
+                "reachable_focus_piece": "ab",
+                "reachable_focus_rank": 901,
+                "target_mass": 0.00012,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.22,
+                "attractor_family_top_overlap": 2,
+                "attractor_family_overlap_tokens": ["EW", " EW"],
+                "top_tokens": ["EW", " EW", "inou"],
+            },
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        hints = packet["strategy_hints"]
+        candidate = hints["kv_candidate_edits"][0]
+        self.assertEqual(packet["control_phase_hint"], "readout_escape")
+        self.assertEqual(hints["escape_builder_target_terms"][0], "ab")
+        self.assertGreaterEqual(hints["escape_builder_candidates_before_prune"], 2)
+        self.assertEqual(candidate["focus_feature"], "ab")
+        self.assertEqual(candidate["span_kind"], "exact_prompt_span_mean")
+        self.assertEqual(candidate["phase_objective"], "readout_escape")
+        self.assertTrue(candidate["read_source_resolved"])
+        self.assertTrue(candidate["write_target_resolved"])
+        self.assertEqual(candidate["source_span"], {"start": 1, "end": 4})
+        self.assertEqual(candidate["candidate_family"], "kv_anchor:ab:exact_prompt_span")
+        self.assertEqual(candidate["provenance_class"], "misc_prompt")
+
+    def test_worker_runtime_readout_escape_source_bridge_uses_exact_prompt_span_mean(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p ab c")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab", "c"],
+            "entity_recall_terms": ["ab", "c"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.2,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "alignment": 0.34,
+                        "argmax_pos": 2,
+                        "argmax_relative_index": -4,
+                        "argmax_piece": "a",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 2, "relative_index": -4, "segment_kind": "prompt", "piece": "a", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    }
+                ],
+            },
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "c",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "ab",
+                "reachable_focus_piece": "ab",
+                "reachable_focus_rank": 901,
+                "target_mass": 0.00012,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.22,
+                "attractor_family_top_overlap": 2,
+                "attractor_family_overlap_tokens": ["EW", " EW"],
+                "top_tokens": ["EW", " EW", "inou"],
+            },
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        matching = [
+            candidate
+            for candidate in packet["strategy_hints"]["shot_candidate_edits"]
+            if candidate.get("role") == "shot_source_bridge_span_mean"
+        ]
+        self.assertTrue(matching)
+        self.assertEqual(matching[0]["focus_feature"], "ab")
+        self.assertEqual(matching[0]["span_kind"], "exact_prompt_span_mean")
+        self.assertEqual(matching[0]["phase_objective"], "readout_escape")
+        self.assertEqual(matching[0]["source_span"], {"start": 1, "end": 4})
+        self.assertEqual(matching[0]["provenance_class"], "misc_prompt")
+
+    def test_worker_runtime_readout_escape_builder_prefers_source_body_and_emits_clean_bundle_inputs(self):
+        prompt = (
+            "Keep these terms: budget\n"
+            "SOURCE: budget update\n"
+            "ANSWER:"
+        )
+        codec = CharacterCodec("Keep these terms: budget\nSOURCE: update\nANSWER:")
+        worker_runtime = self._make_worker_runtime(codec=codec)
+        worker_runtime.reset(prompt)
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["budget"],
+            "entity_recall_terms": ["budget"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.2,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 2,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "budget",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "alignment": 0.34,
+                        "argmax_pos": 18,
+                        "argmax_relative_index": -18,
+                        "argmax_piece": "b",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 18, "relative_index": -18, "segment_kind": "prompt", "piece": "b", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "budget",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "surface_id": "s_v_cache_l3_h1_last_promoted",
+                        "alignment": 0.36,
+                        "argmax_pos": 18,
+                        "argmax_relative_index": -18,
+                        "argmax_piece": "b",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 18, "relative_index": -18, "segment_kind": "prompt", "piece": "b", "alignment": 0.36}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                ],
+            },
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "budget",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "budget",
+                "reachable_focus_piece": "budget",
+                "reachable_focus_rank": 901,
+                "target_mass": 0.00012,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.22,
+                "attractor_family_top_overlap": 2,
+                "attractor_family_overlap_tokens": ["EW", " EW"],
+                "top_tokens": ["EW", " EW", "inou"],
+            },
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        hints = packet["strategy_hints"]
+        self.assertEqual(packet["control_phase_hint"], "readout_escape")
+        self.assertEqual(hints["candidate_provenance_counts_before_prune"]["constraint_header"], 2)
+        self.assertEqual(hints["candidate_provenance_counts_before_prune"]["source_body"], 2)
+        self.assertEqual(hints["candidate_provenance_counts_before_prune"]["misc_prompt"], 2)
+        self.assertEqual(hints["candidate_provenance_counts_after_prune"], {"source_body": 2})
+        self.assertEqual(hints["dominance_prune_drops"], 4)
+        self.assertEqual(hints["same_term_family_drops"], 0)
+        bundle_inputs = hints["bundle_inputs"]
+        self.assertEqual(len(bundle_inputs), 1)
+        self.assertEqual(bundle_inputs[0]["term"], "budget")
+        self.assertEqual(bundle_inputs[0]["provenance_class"], "source_body")
+        kv_candidates = hints["kv_candidate_edits"]
+        self.assertEqual(len(kv_candidates), 2)
+        self.assertTrue(all(candidate["provenance_class"] == "source_body" for candidate in kv_candidates))
+        self.assertTrue(all(candidate.get("bundle_ready", False) for candidate in kv_candidates))
+        self.assertEqual({candidate["site"] for candidate in kv_candidates}, {"k_cache", "v_cache"})
+
+    def test_worker_runtime_shot_mode_prefers_source_bridge_candidate(self):
+        worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab"],
+            "entity_recall_terms": ["ab"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.3,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "alignment": 0.34,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    }
+                ],
+            },
+        }
+        worker_runtime._recent_effects = [
+            {
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "hypothesis": "loop_break_small_rescue",
+                "verdict": "neutral",
+                "signal_profile": "stabilizing_only",
+                "delta": {
+                    "required_term_recall": 0.0,
+                    "required_term_span_progress": 0.0,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                    "repeat_flag": -1.0,
+                    "no_progress_steps": -1.0,
+                },
+            }
+        ]
+
+        packet = worker_runtime.build_controller_packet()
+
+        candidate = packet["strategy_hints"]["shot_candidate_edits"][0]
+        self.assertEqual(candidate["surface_id"], "s_resid_pre_l3_prev")
+        self.assertEqual(candidate["role"], "shot_source_bridge_prev")
+        self.assertEqual(candidate["source_position"], 0)
+        self.assertEqual(candidate["source"]["expr"]["arg"]["arg"]["arg"]["ref"]["token"]["value"], 0)
+
     def test_worker_runtime_packet_exposes_retryable_weak_positive_kv_candidate(self):
         worker_runtime = self._make_worker_runtime(decoder_control_mode="logit_bias_entity_soft")
         worker_runtime.reset("p")
@@ -2887,6 +3321,246 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["strategy_hints"]["kv_retry_candidate_edits"][0]["retry_stage"], "weak_positive_retry")
         self.assertGreater(packet["strategy_hints"]["kv_retry_candidate_edits"][0]["op"]["alpha"], 0.03)
         self.assertEqual(packet["strategy_hints"]["kv_retry_candidate_edits"][0]["canary_reason"], "target_rank_improved")
+
+    def test_worker_runtime_kv_candidates_pick_up_recent_probe_from_raw_scan(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab"],
+            "entity_recall_terms": ["ab"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.3,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 1,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "alignment": 0.34,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    }
+                ],
+            },
+        }
+        worker_runtime._tool_results = [
+            {
+                "tool": "dry_run_decode",
+                "status": "ok",
+                "candidate_edit": {
+                    "surface_id": "s_k_cache_l3_h0_last_promoted",
+                    "kind": "kv_mix",
+                    "site": "k_cache",
+                },
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "repeat_flag_delta": 0,
+                "target_mass_delta": 0.00002,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 5,
+                "rank_focus_delta": 5,
+                "focus_logit_delta": 0.0008,
+                "focus_prob_delta": 0.00002,
+                "topk_token_diff": [{"piece": "a", "prob_delta": 0.00002, "logit_delta": 0.0003}],
+            }
+        ]
+
+        packet = worker_runtime.build_controller_packet()
+
+        matching = [
+            candidate
+            for candidate in packet["strategy_hints"]["kv_candidate_edits"]
+            if candidate["surface_id"] == "s_k_cache_l3_h0_last_promoted"
+        ]
+        self.assertEqual(matching[0]["recent_probe"]["label"], "weak_positive_subthreshold")
+
+    def test_worker_runtime_strategy_hints_flag_readout_escape_for_collapsed_probe_family(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("p")
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["ab"],
+            "entity_recall_terms": ["ab"],
+        }
+        worker_runtime._recent_effects = [
+            {
+                "edit_id": "e_loop_rescue",
+                "surface_id": "s_resid_pre_l3_last",
+                "op": "resid_add",
+                "hypothesis": "loop_break_small_rescue",
+                "verdict": "neutral",
+                "signal_profile": "stabilizing_only",
+                "delta": {
+                    "required_term_recall": 0.0,
+                    "required_term_span_progress": 0.0,
+                    "partial_score": 0.0,
+                    "semantic_progress_score": 0.0,
+                    "repeat_flag": -1.0,
+                    "no_progress_steps": -1.0,
+                },
+            }
+        ]
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.2,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 2,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "token_mode": "last",
+                        "surface_id": "s_v_cache_l3_h1_last_promoted",
+                        "alignment": 0.34,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.34}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "ab",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "alignment": 0.33,
+                        "argmax_pos": 0,
+                        "argmax_relative_index": -1,
+                        "argmax_piece": "p",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 0, "relative_index": -1, "segment_kind": "prompt", "piece": "p", "alignment": 0.33}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                ],
+            },
+        }
+        worker_runtime._tool_results = [
+            {
+                "tool": "dry_run_decode",
+                "status": "ok",
+                "candidate_edit": {
+                    "surface_id": "s_v_cache_l3_h1_last_promoted",
+                    "kind": "kv_mix",
+                    "site": "v_cache",
+                    "focus_feature": "ab",
+                },
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "repeat_flag_delta": 0,
+                "target_mass_delta": 0.00002,
+                "target_mass_edited": 0.00021,
+                "target_top20_hit_delta": 0,
+                "target_top20_hits_edited": 0,
+                "focus_rank_delta": 8,
+                "focus_rank_edited": 620,
+                "rank_focus_delta": 10,
+                "rank_focus_rank_edited": 512,
+                "focus_logit_delta": 0.0007,
+                "focus_prob_delta": 0.00002,
+                "sampled_continuations": [{"variant": "candidate", "text": " shards shard"}],
+                "topk_token_diff": [{"piece": "shards", "prob_delta": 0.00002, "logit_delta": 0.0003}],
+            },
+            {
+                "tool": "dry_run_decode",
+                "status": "ok",
+                "candidate_edit": {
+                    "surface_id": "s_k_cache_l3_h0_last_promoted",
+                    "kind": "kv_mix",
+                    "site": "k_cache",
+                    "focus_feature": "ab",
+                },
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "repeat_flag_delta": 0,
+                "target_mass_delta": 0.00003,
+                "target_mass_edited": 0.00024,
+                "target_top20_hit_delta": 0,
+                "target_top20_hits_edited": 0,
+                "focus_rank_delta": 9,
+                "focus_rank_edited": 604,
+                "rank_focus_delta": 11,
+                "rank_focus_rank_edited": 501,
+                "focus_logit_delta": 0.0008,
+                "focus_prob_delta": 0.00003,
+                "sampled_continuations": [{"variant": "candidate", "text": " shards shard"}],
+                "topk_token_diff": [{"piece": "shards", "prob_delta": 0.00003, "logit_delta": 0.00035}],
+            },
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "ab",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "ab",
+                "reachable_focus_piece": " ab",
+                "reachable_focus_rank": 804,
+                "target_mass": 0.0003,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.0042,
+                "attractor_family_top_overlap": 3,
+                "top_tokens": ["EW", "inou", "shards"],
+            },
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        hints = packet["strategy_hints"]
+        self.assertEqual(packet["control_phase_hint"], "shot_mode")
+        self.assertTrue(hints["readout_escape_needed"])
+        self.assertEqual(hints["readout_escape_reason"], "collapsed_decode_basin")
+        self.assertTrue(hints["kv_effect_family_collapsed"])
+        self.assertEqual(hints["kv_effect_family_count"], 1)
+        self.assertEqual(hints["semantic_focus_term"], "ab")
+        self.assertEqual(hints["reachable_focus_term"], "ab")
+        self.assertEqual(hints["reachable_focus_rank"], 804)
+        self.assertEqual(hints["controller_focus_term"], "ab")
+        self.assertEqual(hints["controller_focus_source"], "reachable_focus")
+        self.assertIn("candidate_family_count", hints["readout_escape_block_reason"])
 
     def test_worker_runtime_dry_run_decode_tool_compares_small_candidate_edit(self):
         def task_feedback_fn(output):
