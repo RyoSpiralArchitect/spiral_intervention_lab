@@ -113,6 +113,23 @@ It currently does **not**:
 
 This is deliberate. The sidecar is meant to improve the candidate compiler’s eyes, not to smuggle in a second generator.
 
+## Decision Ownership
+
+The current runtime is intentionally moving toward a stricter separation of powers:
+
+- the `controller` is the only policy owner and is responsible for the final `apply / noop / rollback` decision
+- the `readout analyzer` is an evidence emitter that may suggest focus terms or bundle support, but does not own final selection
+- the `gate` is treated as an evaluation/report layer rather than a shadow selector
+- runtime guardrails remain outside the controller for purely mechanical invariants such as budget, compile validity, and tensor safety
+
+This split now also shows up in logs:
+
+- `sidecar_suggested_*` records what the analyzer suggested
+- `gate_report_*` records what the bounded runtime evaluation reported
+- `controller_selected_bundle_key` and `controller_rejected_signals` record what the controller actually adopted or rejected
+
+That distinction matters for research hygiene. If a bundle changes and we cannot explain the change from controller-visible evidence, the helper stack is too strong.
+
 ## Near-Term Roadmap
 
 The next steps are now fairly concrete:
@@ -133,7 +150,7 @@ The current design tries hard not to drift into hidden-answer injection.
 - The worker remains the main actor.
 - The controller chooses bounded interventions, not free-form answers.
 - Auxiliary controls stay soft, local, and inspectable.
-- Sidecars are allowed to rank, veto, or focus candidates, but not to become covert channels for task solutions.
+- Sidecars are allowed to emit evidence, focus suggestions, and veto signals, but not to become covert channels or de facto policy owners.
 
 For the current “healthy tweaking” framing, see [healthy_tweaking_control_planes.md](docs/healthy_tweaking_control_planes.md).
 
@@ -153,7 +170,7 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --seed 7
 ```
 
-To enable the current heuristic readout sidecar while keeping it strictly bounded:
+To enable the current heuristic readout analyzer while keeping it strictly bounded:
 
 ```bash
 python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
@@ -161,9 +178,12 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --controller-model gpt-4.1-mini \
   --worker-model gpt2-small \
   --task constrained_rewrite \
-  --readout-sidecar-analyzer heuristic \
+  --readout-analyzer heuristic \
   --seed 7
 ```
+
+`--readout-sidecar-analyzer` remains available as a backward-compatible alias, but
+`--readout-analyzer` is now the preferred public name.
 
 To force a fully local Hugging Face worker load:
 

@@ -7,6 +7,7 @@ from unittest.mock import patch
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.examples import (
     create_task_env,
+    create_readout_analyzer,
     create_readout_sidecar_analyzer,
     build_default_activation_surface_catalog,
     build_allowed_token_ids_for_constraint,
@@ -18,6 +19,7 @@ from SpiralInterventionLab.examples import (
     run_digit_transform_sweep,
 )
 from SpiralInterventionLab.examples.digit_transform_e2e import (
+    _build_parser,
     _configure_torch_default_device_for_worker,
     _infer_tlens_model_ref,
     _resolve_worker_device,
@@ -288,13 +290,51 @@ class TestExamples(unittest.TestCase):
 
         self.assertIs(runtime.readout_sidecar_analyzer, fake_sidecar)
 
+    def test_build_hooked_transformer_worker_runtime_wires_readout_analyzer_rerank_mode(self):
+        model, codec = self._make_model_and_codec()
+        env = SpiralConstrainedRewriteEnv()
+
+        runtime = build_hooked_transformer_worker_runtime(
+            model,
+            env,
+            seed=7,
+            codec=codec,
+            readout_analyzer_rerank_mode="shadow",
+        )
+
+        self.assertEqual(runtime.readout_analyzer_rerank_mode, "shadow")
+
     def test_create_readout_sidecar_analyzer_supports_heuristic_mode(self):
         analyzer = create_readout_sidecar_analyzer("heuristic")
 
         self.assertTrue(callable(analyzer))
 
+    def test_create_readout_analyzer_supports_heuristic_mode(self):
+        analyzer = create_readout_analyzer("heuristic")
+
+        self.assertTrue(callable(analyzer))
+
     def test_create_readout_sidecar_analyzer_supports_off_mode(self):
         self.assertIsNone(create_readout_sidecar_analyzer("off"))
+
+    def test_create_readout_analyzer_supports_off_mode(self):
+        self.assertIsNone(create_readout_analyzer("off"))
+
+    def test_parser_accepts_readout_analyzer_rerank_mode(self):
+        parser = _build_parser()
+
+        args = parser.parse_args(
+            [
+                "--provider",
+                "openai",
+                "--controller-model",
+                "gpt-5.2",
+                "--readout-analyzer-rerank-mode",
+                "shadow",
+            ]
+        )
+
+        self.assertEqual(args.readout_analyzer_rerank_mode, "shadow")
 
     def test_build_hooked_transformer_worker_runtime_wires_semantic_observer(self):
         model, codec = self._make_model_and_codec()

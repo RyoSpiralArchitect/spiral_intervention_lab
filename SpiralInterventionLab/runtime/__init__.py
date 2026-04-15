@@ -38,10 +38,15 @@ from .schema import (
     parse_observation_packet,
 )
 from .sidecar import (
+    ReadoutAnalyzer,
+    ReadoutAnalyzerCapture,
+    ReadoutAnalyzerSiteCapture,
     ReadoutSidecarAnalyzer,
     ReadoutSidecarCapture,
     ReadoutSidecarSiteCapture,
+    build_heuristic_readout_analyzer,
     build_heuristic_readout_sidecar_analyzer,
+    normalize_readout_analyzer_hints,
     normalize_readout_sidecar_hints,
 )
 
@@ -70,9 +75,13 @@ __all__ = [
     "ModelTokenizerCodec",
     "Rank1Geometry",
     "Rank1VectorBridge",
+    "ReadoutAnalyzer",
+    "ReadoutAnalyzerCapture",
+    "ReadoutAnalyzerSiteCapture",
     "ReadoutSidecarAnalyzer",
     "ReadoutSidecarCapture",
     "ReadoutSidecarSiteCapture",
+    "build_heuristic_readout_analyzer",
     "build_heuristic_readout_sidecar_analyzer",
     "Op",
     "PolicyViolation",
@@ -98,6 +107,7 @@ __all__ = [
     "parse_controller_command",
     "parse_observation_packet",
     "resolve_text_codec",
+    "normalize_readout_analyzer_hints",
     "normalize_readout_sidecar_hints",
     "run_b0",
     "run_b1",

@@ -19,7 +19,9 @@ from ..runtime import (
     HookedTransformerRuntimeState,
     HookedTransformerWorkerRuntime,
     JSONLStructuredLogger,
+    ReadoutAnalyzer,
     ReadoutSidecarAnalyzer,
+    build_heuristic_readout_analyzer,
     build_heuristic_readout_sidecar_analyzer,
     resolve_text_codec,
     run_c1,
@@ -51,7 +53,8 @@ _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
 _WORKER_MPS_MODES = ("auto", "conservative")
 _CONTROLLER_REFLECTION_MODES = ("off", "structured")
 _SEMANTIC_CRITIC_MODES = ("off", "minilm")
-_READOUT_SIDECAR_ANALYZER_MODES = ("off", "heuristic")
+_READOUT_ANALYZER_MODES = ("off", "heuristic")
+_READOUT_ANALYZER_RERANK_MODES = ("off", "shadow", "apply")
 _WORKER_DECODER_CONTROL_MODES = (
     "off",
     "loop_aware",
@@ -217,6 +220,7 @@ def build_hooked_transformer_worker_runtime(
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+    readout_analyzer_rerank_mode: str = "apply",
 ) -> HookedTransformerWorkerRuntime:
     runtime_state = HookedTransformerRuntimeState(model, seed=seed)
     adapter = HookedTransformerAdapter(model)
@@ -263,6 +267,7 @@ def build_hooked_transformer_worker_runtime(
         max_loop_rescue_edit_cost=worker_loop_rescue_total_edit_cost,
         allowed_token_ids=allowed_token_ids,
         readout_sidecar_analyzer=readout_sidecar_analyzer,
+        readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
         trace_metadata={
             "paired_baseline": {
                 "origin": "paired_baseline",
@@ -501,13 +506,17 @@ def create_semantic_critic(
     raise ValueError(f"unknown semantic critic mode '{mode}'")
 
 
-def create_readout_sidecar_analyzer(mode: str) -> ReadoutSidecarAnalyzer | None:
+def create_readout_analyzer(mode: str) -> ReadoutAnalyzer | None:
     normalized = str(mode).strip().lower().replace("-", "_")
     if normalized == "off":
         return None
     if normalized == "heuristic":
-        return build_heuristic_readout_sidecar_analyzer()
-    raise ValueError(f"unknown readout sidecar analyzer mode '{mode}'")
+        return build_heuristic_readout_analyzer()
+    raise ValueError(f"unknown readout analyzer mode '{mode}'")
+
+
+def create_readout_sidecar_analyzer(mode: str) -> ReadoutSidecarAnalyzer | None:
+    return create_readout_analyzer(mode)
 
 
 def create_task_env(task_name: str, *, semantic_critic: Any | None = None) -> ExperimentTaskEnv:
@@ -723,6 +732,7 @@ def run_digit_transform_experiment(
     semantic_critic_mode: str = "off",
     semantic_critic_model_name: str | None = None,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+    readout_analyzer_rerank_mode: str = "apply",
     worker_decoder_control_mode: str = "off",
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
@@ -763,6 +773,7 @@ def run_digit_transform_experiment(
             controller_reflection_mode=controller_reflection_mode,
             controller_memory_window=controller_memory_window,
             readout_sidecar_analyzer=readout_sidecar_analyzer,
+            readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
             worker_decoder_control_mode=worker_decoder_control_mode,
             worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
@@ -830,6 +841,7 @@ def run_digit_transform_c1_only_experiment(
     semantic_critic_mode: str = "off",
     semantic_critic_model_name: str | None = None,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+    readout_analyzer_rerank_mode: str = "apply",
     worker_decoder_control_mode: str = "off",
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
@@ -863,6 +875,7 @@ def run_digit_transform_c1_only_experiment(
         controller_reflection_mode=controller_reflection_mode,
         controller_memory_window=controller_memory_window,
         readout_sidecar_analyzer=readout_sidecar_analyzer,
+        readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
         worker_decoder_control_mode=worker_decoder_control_mode,
         worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
         worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
@@ -927,6 +940,7 @@ def run_shot_mode_probe_harness(
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+    readout_analyzer_rerank_mode: str = "apply",
     max_steps: int = 8,
     max_probe_candidates: int = 3,
     bootstrap_after_steps: int = 4,
@@ -964,6 +978,7 @@ def run_shot_mode_probe_harness(
         worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
         worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
         readout_sidecar_analyzer=readout_sidecar_analyzer,
+        readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
     )
     prompt = env.reset(seed)
     worker.reset(prompt)
@@ -1226,6 +1241,7 @@ def run_digit_transform_sweep(
     semantic_critic_mode: str = "off",
     semantic_critic_model_name: str | None = None,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+    readout_analyzer_rerank_mode: str = "apply",
     worker_decoder_control_mode: str = "off",
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
@@ -1281,6 +1297,7 @@ def run_digit_transform_sweep(
                 semantic_critic_mode=semantic_critic_mode,
                 semantic_critic_model_name=semantic_critic_model_name,
                 readout_sidecar_analyzer=readout_sidecar_analyzer,
+                readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
                 worker_decoder_control_mode=worker_decoder_control_mode,
                 worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
                 worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
@@ -1359,10 +1376,23 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Device for the semantic critic model, e.g. cpu or mps",
     )
     parser.add_argument(
+        "--readout-analyzer",
+        default=None,
+        choices=list(_READOUT_ANALYZER_MODES),
+        help="Optional bounded readout analyzer used only to rerank / veto readout-escape candidates without changing runtime actuation APIs.",
+    )
+    parser.add_argument(
         "--readout-sidecar-analyzer",
-        default="off",
-        choices=list(_READOUT_SIDECAR_ANALYZER_MODES),
-        help="Optional offline sidecar analyzer used only to rerank / veto readout-escape candidates without changing runtime actuation APIs.",
+        dest="readout_sidecar_analyzer",
+        default=None,
+        choices=list(_READOUT_ANALYZER_MODES),
+        help="Deprecated alias for --readout-analyzer.",
+    )
+    parser.add_argument(
+        "--readout-analyzer-rerank-mode",
+        default="apply",
+        choices=list(_READOUT_ANALYZER_RERANK_MODES),
+        help="How the bounded readout analyzer may affect final bundle selection: off disables rerank, shadow records challenger decisions without applying them, apply allows bounded pairwise promotion.",
     )
     parser.add_argument(
         "--worker-decoder-control-mode",
@@ -1422,7 +1452,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         model_name=args.semantic_critic_model,
         device=args.semantic_critic_device,
     )
-    readout_sidecar_analyzer = create_readout_sidecar_analyzer(args.readout_sidecar_analyzer)
+    readout_analyzer_mode = (
+        args.readout_analyzer
+        if args.readout_analyzer is not None
+        else (args.readout_sidecar_analyzer if args.readout_sidecar_analyzer is not None else "off")
+    )
+    readout_sidecar_analyzer = create_readout_analyzer(readout_analyzer_mode)
 
     if args.c1_only:
         result = run_digit_transform_c1_only_experiment(
@@ -1447,6 +1482,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             semantic_critic_mode=args.semantic_critic_mode,
             semantic_critic_model_name=None if semantic_critic is None else args.semantic_critic_model,
             readout_sidecar_analyzer=readout_sidecar_analyzer,
+            readout_analyzer_rerank_mode=args.readout_analyzer_rerank_mode,
             worker_decoder_control_mode=args.worker_decoder_control_mode,
             worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
@@ -1477,6 +1513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             semantic_critic_mode=args.semantic_critic_mode,
             semantic_critic_model_name=None if semantic_critic is None else args.semantic_critic_model,
             readout_sidecar_analyzer=readout_sidecar_analyzer,
+            readout_analyzer_rerank_mode=args.readout_analyzer_rerank_mode,
             worker_decoder_control_mode=args.worker_decoder_control_mode,
             worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
@@ -1507,6 +1544,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             semantic_critic_mode=args.semantic_critic_mode,
             semantic_critic_model_name=None if semantic_critic is None else args.semantic_critic_model,
             readout_sidecar_analyzer=readout_sidecar_analyzer,
+            readout_analyzer_rerank_mode=args.readout_analyzer_rerank_mode,
             worker_decoder_control_mode=args.worker_decoder_control_mode,
             worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
