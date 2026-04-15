@@ -3,8 +3,8 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Sequence as SequenceABC
-from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Sequence
+from dataclasses import dataclass, replace
+from typing import Any, Callable, Collection, Mapping, Sequence
 
 import torch
 
@@ -13,6 +13,7 @@ from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
 from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
 from .effects import build_edit_effect, summarize_effects
+from .policy import GlobalBudget, HarnessPolicy
 from .schema import SurfaceInfo
 from .sidecar import (
     ReadoutSidecarAnalyzer,
@@ -24,6 +25,7 @@ from .trace_recorder import StepAlignedTrace, StepAlignedTraceRecorder
 
 
 _CONTROLLER_REFLECTION_MODES = {"off", "structured"}
+_READOUT_ANALYZER_RERANK_MODES = {"off", "shadow", "apply"}
 _DECODER_CONTROL_MODE_SPECS = {
     "off": {
         "track": "baseline",
@@ -59,7 +61,13 @@ _CONTROLLER_MEMORY_STRING_FIELDS = (
     "why_failed_or_helped",
     "next_change",
     "stop_condition",
+    "focus_term",
 )
+_CONTROLLER_MEMORY_LABEL_FIELDS = {
+    "noop_reason": 48,
+    "apply_block_reason": 64,
+    "surface_family_key": 96,
+}
 _CONTROLLER_MEMORY_ALLOWED_OUTCOMES = {"unknown", "helpful", "harmful", "neutral", "mixed"}
 _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "wait",
@@ -116,6 +124,15 @@ def _normalize_decoder_control_mode(value: str) -> str:
     return normalized
 
 
+def _normalize_readout_analyzer_rerank_mode(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    if normalized not in _READOUT_ANALYZER_RERANK_MODES:
+        raise ValueError(
+            f"Unsupported readout analyzer rerank mode '{value}'; expected one of {sorted(_READOUT_ANALYZER_RERANK_MODES)}"
+        )
+    return normalized
+
+
 def _decoder_control_spec(mode: str) -> Mapping[str, str]:
     normalized = _normalize_decoder_control_mode(mode)
     return _DECODER_CONTROL_MODE_SPECS[normalized]
@@ -163,9 +180,34 @@ def _normalize_controller_memory_entry(
     next_action = _normalize_controller_memory_label(value.get("next_action"), limit=32)
     if next_action in _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS:
         entry["next_action"] = next_action
+    for key, limit in _CONTROLLER_MEMORY_LABEL_FIELDS.items():
+        label = _normalize_controller_memory_label(value.get(key), limit=limit)
+        if label is not None:
+            entry[key] = label
     confidence = value.get("confidence")
     if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
         entry["confidence"] = max(0.0, min(1.0, float(confidence)))
+    for key in ("transfer_confidence", "same_family_escalation_risk"):
+        raw_value = value.get(key)
+        if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool):
+            entry[key] = max(0.0, min(1.0, float(raw_value)))
+    finish_budget_reserved = value.get("finish_budget_reserved")
+    if isinstance(finish_budget_reserved, bool):
+        entry["finish_budget_reserved"] = finish_budget_reserved
+    elif isinstance(finish_budget_reserved, (int, float)) and not isinstance(finish_budget_reserved, bool):
+        entry["finish_budget_reserved"] = max(0, min(8, int(round(float(finish_budget_reserved)))))
+    raw_bullets = value.get("evidence_bullets")
+    if isinstance(raw_bullets, SequenceABC) and not isinstance(raw_bullets, (str, bytes, bytearray)):
+        bullets: list[str] = []
+        for item in raw_bullets:
+            text = _clean_controller_memory_text(item, limit=96)
+            if text is None or text in bullets:
+                continue
+            bullets.append(text)
+            if len(bullets) >= 4:
+                break
+        if bullets:
+            entry["evidence_bullets"] = bullets
     if decision is not None:
         entry["decision"] = str(decision)
     if recorded_step is not None:
@@ -319,6 +361,7 @@ class HookedTransformerWorkerRuntime:
         max_tool_calls_per_run: int = 6,
         tool_result_window: int = 6,
         readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+        readout_analyzer_rerank_mode: str = "apply",
     ) -> None:
         self.runtime_state = runtime_state
         self.adapter = adapter
@@ -360,6 +403,7 @@ class HookedTransformerWorkerRuntime:
         self.max_tool_calls_per_run = max(0, int(max_tool_calls_per_run))
         self.tool_result_window = max(1, int(tool_result_window))
         self.readout_sidecar_analyzer = readout_sidecar_analyzer
+        self.readout_analyzer_rerank_mode = _normalize_readout_analyzer_rerank_mode(readout_analyzer_rerank_mode)
 
         self.surface_catalog = tuple(
             surface if isinstance(surface, SurfaceInfo) else SurfaceInfo.from_dict(surface) for surface in surface_catalog
@@ -413,6 +457,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_readout_sidecar_capture: ReadoutSidecarCapture | None = None
         self._latest_readout_sidecar_capture_summary: dict[str, Any] | None = None
         self._latest_readout_sidecar_hints: dict[str, Any] = {}
+        self._operator_certification_table: dict[str, dict[str, Any]] = {}
 
     def reset(self, prompt: str) -> None:
         self._clear_episode_state()
@@ -515,9 +560,13 @@ class HookedTransformerWorkerRuntime:
         if self._latest_readout_sidecar_capture_summary is not None:
             worker_view["readout_sidecar_capture_summary"] = dict(self._latest_readout_sidecar_capture_summary)
             strategy_hints["readout_sidecar_capture_summary"] = dict(self._latest_readout_sidecar_capture_summary)
+            worker_view["readout_analyzer_capture_summary"] = dict(self._latest_readout_sidecar_capture_summary)
+            strategy_hints["readout_analyzer_capture_summary"] = dict(self._latest_readout_sidecar_capture_summary)
         if readout_sidecar_hints:
             worker_view["readout_sidecar_hints"] = dict(readout_sidecar_hints)
             strategy_hints["readout_sidecar_hints"] = dict(readout_sidecar_hints)
+            worker_view["readout_analyzer_hints"] = dict(readout_sidecar_hints)
+            strategy_hints["readout_analyzer_hints"] = dict(readout_sidecar_hints)
         packet = {
             "version": "0.1",
             "run_id": self.run_id,
@@ -570,6 +619,23 @@ class HookedTransformerWorkerRuntime:
             "control_phase_hint": control_phase_hint,
             "strategy_hints": strategy_hints,
         }
+        missing_required_terms = packet["task_feedback"].get("missing_required_terms")
+        if not isinstance(missing_required_terms, SequenceABC) or isinstance(
+            missing_required_terms, (str, bytes, bytearray)
+        ):
+            missing_required_terms = ()
+        edits_left_this_run = int(packet["budget"].get("edits_left_this_run", 0) or 0)
+        if control_phase_hint in {"shot_mode", "readout_escape"}:
+            if len(tuple(missing_required_terms)) == 1 and edits_left_this_run <= 1:
+                strategy_hints["finish_budget_reserve_suggested"] = True
+                strategy_hints["finish_budget_reserve_reason"] = "single_missing_term_with_low_budget"
+                strategy_hints.setdefault("suggested_noop_reason", "hold_finish_budget")
+            if strategy_hints.get("selected_bundle_key") not in (None, "") and int(
+                strategy_hints.get("target_top20_hits", 0) or 0
+            ) == 0:
+                strategy_hints["same_family_alpha_escalation_requires_gain"] = True
+                strategy_hints["same_family_alpha_escalation_reason"] = "no_first_token_hit_yet"
+                strategy_hints.setdefault("suggested_noop_reason", "needs_canary_gain")
         if latest_observer_check is not None:
             packet["latest_observer_check"] = latest_observer_check
         if self._observer_checks:
@@ -1718,15 +1784,36 @@ class HookedTransformerWorkerRuntime:
                     signature.append(label)
         return tuple(signature[:4])
 
-    def _classify_kv_probe_result(self, item: Mapping[str, Any]) -> dict[str, Any] | None:
+    def _probe_family_kind(self, candidate_edit: Mapping[str, Any]) -> str:
+        family_kind = self._candidate_family_kind(candidate_edit)
+        return family_kind if family_kind and family_kind != "unknown" else str(candidate_edit.get("kind", "") or "unknown")
+
+    def _probe_phase_profile(self, candidate_edit: Mapping[str, Any]) -> str:
+        phase_objective = str(candidate_edit.get("phase_objective", "") or "")
+        if phase_objective == "readout_escape":
+            return "readout_escape"
+        if phase_objective in {"shot_mode", "entity_insertion", "composition"}:
+            return "composition"
+        if phase_objective == "loop_break":
+            return "trajectory"
+        family_kind = self._probe_family_kind(candidate_edit)
+        if family_kind in {"kv_v", "kv_k", "kv_mix"}:
+            return "readout_escape"
+        if family_kind in {"shot_bridge", "resid_add"}:
+            return "composition"
+        return "balanced"
+
+    def _classify_probe_result(self, item: Mapping[str, Any]) -> dict[str, Any] | None:
         candidate_edit = item.get("candidate_edit")
         if not isinstance(candidate_edit, Mapping):
-            return None
-        if str(candidate_edit.get("kind", "") or "") != "kv_mix":
             return None
         surface_id = str(candidate_edit.get("surface_id", "") or "")
         if not surface_id:
             return None
+        probe_family = self._probe_family_kind(candidate_edit)
+        if not probe_family:
+            return None
+        phase_profile = self._probe_phase_profile(candidate_edit)
         recall_delta = float(item.get("required_term_recall_delta", 0.0) or 0.0)
         span_delta = float(item.get("required_term_span_progress_delta", 0.0) or 0.0)
         semantic_delta = float(item.get("semantic_progress_delta", 0.0) or 0.0)
@@ -1745,6 +1832,9 @@ class HookedTransformerWorkerRuntime:
         retry_stage = (
             str(candidate_edit.get("retry_stage", "") or "")
             or str(candidate_meta.get("retry_stage", "") or "")
+        )
+        prefix_depth_delta = int(
+            item.get("prefix_depth_delta", item.get("canary_prefix_depth_delta", 0)) or 0
         )
         topk = item.get("topk_token_diff")
         max_logit_delta = 0.0
@@ -1769,64 +1859,159 @@ class HookedTransformerWorkerRuntime:
             reachable_focus_rank = int(focus_rank_edited)
         effect_family_signature = self._effect_family_signature_from_probe_item(item)
         effect_family_key = "|".join(effect_family_signature) if effect_family_signature else f"surface:{surface_id}"
+        candidate_key = self._candidate_sidecar_key(candidate_edit)
 
-        if recall_delta > 0.0 or span_delta > 0.0:
-            label = "positive"
-            score = 3.0 + recall_delta + span_delta + max(0.0, semantic_delta)
-        elif repeat_delta > 0 or semantic_delta < -0.01:
-            label = "harmful"
-            score = -2.0 + semantic_delta - float(repeat_delta)
-        elif (
+        readout_score = 0.0
+        if target_top20_hit_delta > 0:
+            readout_score += 1.25 + (0.15 * float(target_top20_hit_delta))
+        if target_top20_hits_edited > 0:
+            readout_score += min(0.75, 0.25 * float(target_top20_hits_edited))
+        readout_score += min(0.9, 900.0 * max(0.0, target_mass_delta))
+        readout_score += min(0.9, 700.0 * max(0.0, target_mass_edited))
+        readout_score += min(0.75, 0.04 * float(max(0, focus_rank_delta, rank_focus_delta)))
+        if reachable_focus_rank != 10**9 and reachable_focus_rank > 0:
+            readout_score += min(0.85, max(0.0, (512.0 - min(float(reachable_focus_rank), 512.0)) / 512.0))
+        readout_score += min(0.6, 600.0 * max(0.0, max_logit_delta))
+        readout_score += min(0.6, 6000.0 * max(0.0, max_prob_delta))
+        if prefix_depth_delta > 0:
+            readout_score += min(0.75, 0.35 * float(prefix_depth_delta))
+
+        constraint_score = 0.0
+        if recall_delta > 0.0:
+            constraint_score += min(1.5, 4.0 * recall_delta)
+        if span_delta > 0.0:
+            constraint_score += min(1.2, 3.0 * span_delta)
+        if semantic_delta > 0.0:
+            constraint_score += min(0.8, 6.0 * semantic_delta)
+
+        trajectory_score = 0.0
+        if repeat_delta < 0:
+            trajectory_score += min(1.0, 0.75 * abs(float(repeat_delta)))
+        if prefix_depth_delta > 0:
+            trajectory_score += min(0.5, 0.2 * float(prefix_depth_delta))
+        if semantic_delta > 0.0:
+            trajectory_score += min(0.4, 3.0 * semantic_delta)
+        if target_top20_hit_delta > 0 or focus_rank_delta > 0 or rank_focus_delta > 0:
+            trajectory_score += min(0.4, 0.01 * float(max(target_top20_hit_delta, focus_rank_delta, rank_focus_delta)))
+
+        positive_axes: list[str] = []
+        if (
+            target_top20_hit_delta > 0
+            or target_mass_delta > 0.00001
+            or target_mass_edited >= 0.0003
+            or focus_rank_delta >= 4
+            or rank_focus_delta >= 4
+            or max_logit_delta >= 0.0005
+            or max_prob_delta >= 0.00005
+            or prefix_depth_delta > 0
+            or readout_score >= 0.35
+        ):
+            positive_axes.append("readout")
+        if (
+            recall_delta > 0.0
+            or span_delta > 0.0
+            or semantic_delta > 0.01
+            or constraint_score >= 0.4
+        ):
+            positive_axes.append("constraint")
+        if repeat_delta < 0 or prefix_depth_delta > 0 or trajectory_score >= 0.35:
+            positive_axes.append("trajectory")
+
+        actionable_axes: list[str] = []
+        if (
+            target_top20_hits_edited > 0
+            or target_mass_edited >= 0.001
+            or reachable_focus_rank <= 150
+            or prefix_depth_delta > 0
+        ):
+            actionable_axes.append("readout")
+        if recall_delta > 0.0 or span_delta > 0.0 or semantic_delta >= 0.03:
+            actionable_axes.append("constraint")
+        if repeat_delta < 0 and (target_top20_hit_delta > 0 or target_mass_delta > 0.0 or semantic_delta > 0.0):
+            actionable_axes.append("trajectory")
+
+        weight_map = {
+            "readout_escape": {"readout": 0.6, "constraint": 0.2, "trajectory": 0.2},
+            "composition": {"readout": 0.2, "constraint": 0.6, "trajectory": 0.2},
+            "trajectory": {"readout": 0.15, "constraint": 0.15, "trajectory": 0.7},
+            "balanced": {"readout": 0.34, "constraint": 0.43, "trajectory": 0.23},
+        }
+        weights = weight_map.get(phase_profile, weight_map["balanced"])
+        composite_score = (
+            (weights["readout"] * readout_score)
+            + (weights["constraint"] * constraint_score)
+            + (weights["trajectory"] * trajectory_score)
+        )
+
+        harmful_signal = bool(repeat_delta > 0 or semantic_delta < -0.01)
+        dead_actuator_signal = bool(
             target_top20_hit_delta <= 0
             and target_mass_delta <= 0.00001
             and abs(focus_logit_delta) < 0.001
             and abs(focus_prob_delta) < 0.00005
             and focus_rank_delta < 4
             and rank_focus_delta < 4
-        ):
+            and recall_delta <= 0.0
+            and span_delta <= 0.0
+            and semantic_delta <= 0.01
+            and prefix_depth_delta <= 0
+        )
+
+        if harmful_signal:
+            label = "harmful"
+            score = -2.0 - (0.75 * max(0, repeat_delta)) - (12.0 * max(0.0, -semantic_delta))
+        elif dead_actuator_signal:
             label = "dead_actuator"
             score = -1.5
-        elif (
-            target_top20_hits_edited > 0
-            or target_mass_edited >= 0.001
-            or reachable_focus_rank <= 150
-        ):
-            label = "actionable_positive"
-            score = (
-                2.0
-                + min(1.5, 500.0 * target_mass_edited)
-                + (0.4 * float(target_top20_hits_edited))
-                + min(1.0, max(0.0, (150.0 - float(reachable_focus_rank)) / 150.0))
-                + max_logit_delta
-                + (100.0 * max_prob_delta)
-            )
-        elif (
-            target_top20_hit_delta > 0
-            or target_mass_delta > 0.0
-            or focus_rank_delta >= 4
-            or rank_focus_delta >= 4
-            or max_logit_delta >= 0.0005
-            or max_prob_delta >= 0.00005
-            or semantic_delta > 0.0
-        ):
-            label = "weak_positive_subthreshold"
-            score = (
-                0.75
-                + max_logit_delta
-                + (100.0 * max_prob_delta)
-                + semantic_delta
-                + min(0.8, 1000.0 * target_mass_delta)
-                + (0.05 * float(target_top20_hit_delta))
-                + (0.015 * float(max(focus_rank_delta, rank_focus_delta)))
-            )
         else:
-            label = "flat"
-            score = -1.0
+            if phase_profile == "readout_escape":
+                actionable = bool("readout" in actionable_axes or (readout_score >= 1.6 and "readout" in positive_axes))
+                strong_positive = bool(
+                    readout_score >= 1.15
+                    or ("readout" in positive_axes and "trajectory" in positive_axes)
+                    or constraint_score >= 0.6
+                )
+            elif phase_profile == "composition":
+                actionable = bool(
+                    "constraint" in actionable_axes or (constraint_score >= 1.0 and "constraint" in positive_axes)
+                )
+                strong_positive = bool(
+                    constraint_score >= 0.75
+                    or ("constraint" in positive_axes and ("readout" in positive_axes or "trajectory" in positive_axes))
+                )
+            elif phase_profile == "trajectory":
+                actionable = bool("trajectory" in actionable_axes or trajectory_score >= 0.9)
+                strong_positive = bool(trajectory_score >= 0.5 or "trajectory" in positive_axes)
+            else:
+                actionable = bool(actionable_axes)
+                strong_positive = bool(composite_score >= 0.85 or len(positive_axes) >= 2)
+
+            if actionable:
+                label = "actionable_positive"
+                score = 1.75 + composite_score
+            elif strong_positive:
+                label = "positive"
+                score = 1.0 + composite_score
+            elif positive_axes:
+                label = "weak_positive_subthreshold"
+                score = 0.45 + composite_score
+            else:
+                label = "flat"
+                score = -1.0 + composite_score
 
         return {
             "surface_id": surface_id,
+            "candidate_key": candidate_key,
+            "probe_family": probe_family,
+            "probe_phase_profile": phase_profile,
             "label": label,
             "score": round(float(score), 6),
+            "readout_score": round(float(readout_score), 6),
+            "constraint_score": round(float(constraint_score), 6),
+            "trajectory_score": round(float(trajectory_score), 6),
+            "composite_score": round(float(composite_score), 6),
+            "positive_axes": list(positive_axes),
+            "actionable_axes": list(actionable_axes),
             "required_term_recall_delta": round(recall_delta, 6),
             "required_term_span_progress_delta": round(span_delta, 6),
             "semantic_progress_delta": round(semantic_delta, 6),
@@ -1841,6 +2026,7 @@ class HookedTransformerWorkerRuntime:
             "focus_rank_edited": int(focus_rank_edited),
             "rank_focus_delta": int(rank_focus_delta),
             "rank_focus_rank_edited": int(rank_focus_rank_edited),
+            "prefix_depth_delta": int(prefix_depth_delta),
             "max_logit_delta": round(max_logit_delta, 6),
             "max_prob_delta": round(max_prob_delta, 6),
             "semantic_focus_term": semantic_focus_term or None,
@@ -1853,21 +2039,64 @@ class HookedTransformerWorkerRuntime:
             "was_retry": bool(retry_stage),
         }
 
-    def _recent_kv_probe_history(self, *, window: int = 8) -> list[dict[str, Any]]:
+    def _classify_kv_probe_result(self, item: Mapping[str, Any]) -> dict[str, Any] | None:
+        summary = self._classify_probe_result(item)
+        if summary is None:
+            return None
+        if str(summary.get("probe_family", "") or "") not in {"kv_v", "kv_k", "kv_mix"}:
+            return None
+        return summary
+
+    def _recent_probe_history(
+        self,
+        *,
+        window: int = 8,
+        probe_families: Collection[str] | None = None,
+        phase_profiles: Collection[str] | None = None,
+    ) -> list[dict[str, Any]]:
         history: list[dict[str, Any]] = []
+        allowed_families = {str(item) for item in probe_families} if probe_families is not None else None
+        allowed_profiles = {str(item) for item in phase_profiles} if phase_profiles is not None else None
         for item in reversed(list(self._tool_results)[-window:]):
             if not isinstance(item, Mapping):
                 continue
             if str(item.get("tool", "") or "") != "dry_run_decode":
                 continue
-            summary = self._classify_kv_probe_result(item)
-            if summary is not None:
-                history.append(summary)
+            summary = self._classify_probe_result(item)
+            if summary is None:
+                continue
+            if allowed_families is not None and str(summary.get("probe_family", "") or "") not in allowed_families:
+                continue
+            if allowed_profiles is not None and str(summary.get("probe_phase_profile", "") or "") not in allowed_profiles:
+                continue
+            history.append(summary)
         return history
+
+    def _recent_kv_probe_history(self, *, window: int = 8) -> list[dict[str, Any]]:
+        return self._recent_probe_history(window=window, probe_families={"kv_v", "kv_k", "kv_mix"})
+
+    def _recent_probe_outcomes_by_candidate_key(
+        self,
+        *,
+        window: int = 8,
+        probe_families: Collection[str] | None = None,
+        phase_profiles: Collection[str] | None = None,
+    ) -> dict[str, dict[str, Any]]:
+        outcomes: dict[str, dict[str, Any]] = {}
+        for summary in self._recent_probe_history(
+            window=window,
+            probe_families=probe_families,
+            phase_profiles=phase_profiles,
+        ):
+            candidate_key = str(summary.get("candidate_key", "") or "")
+            if not candidate_key or candidate_key in outcomes:
+                continue
+            outcomes[candidate_key] = dict(summary)
+        return outcomes
 
     def _recent_kv_probe_outcomes(self, *, window: int = 8) -> dict[str, dict[str, Any]]:
         outcomes: dict[str, dict[str, Any]] = {}
-        for summary in self._recent_kv_probe_history(window=window):
+        for summary in self._recent_probe_history(window=window, probe_families={"kv_v", "kv_k", "kv_mix"}):
             surface_id = str(summary.get("surface_id", "") or "")
             if not surface_id or surface_id in outcomes:
                 continue
@@ -1943,6 +2172,209 @@ class HookedTransformerWorkerRuntime:
             return f"{int(source_position)}:{int(source_position) + 1}"
         return "unknown"
 
+    def _operator_recipe_id(self, item: Mapping[str, Any]) -> str:
+        phase_objective = str(
+            item.get("phase_objective")
+            or item.get("probe_phase_profile")
+            or item.get("control_phase_hint")
+            or "unknown"
+        )
+        family = str(item.get("bundle_family", "") or "")
+        if not family:
+            family = self._candidate_family_kind(item)
+        provenance_class = str(item.get("provenance_class", "") or "unknown")
+        localization = str(
+            item.get("recipe_localization")
+            or item.get("span_kind")
+            or "unknown"
+        )
+        pooling = str(item.get("recipe_pooling", "") or "unknown")
+        contrast_mode = str(item.get("contrast_mode", "") or "none")
+        if family == "kv_pair_source_anchor":
+            k_alpha = float(item.get("recipe_k_alpha", item.get("k_alpha", 0.0)) or 0.0)
+            v_alpha = float(item.get("recipe_v_alpha", item.get("v_alpha", 0.0)) or 0.0)
+            alpha_key = f"k{round(k_alpha, 4):.4f}|v{round(v_alpha, 4):.4f}"
+        else:
+            alpha = float(item.get("recipe_alpha", item.get("alpha", item.get("op", {}).get("alpha", 0.0))) or 0.0)
+            alpha_key = f"a{round(alpha, 4):.4f}"
+        return f"{phase_objective}|{family}|{provenance_class}|{localization}|{pooling}|{contrast_mode}|{alpha_key}"
+
+    def _operator_family_key(self, item: Mapping[str, Any]) -> str:
+        phase_objective = str(
+            item.get("phase_objective")
+            or item.get("probe_phase_profile")
+            or item.get("control_phase_hint")
+            or "unknown"
+        )
+        family = str(item.get("bundle_family", "") or "")
+        if not family:
+            family = self._candidate_family_kind(item)
+        provenance_class = str(item.get("provenance_class", "") or "unknown")
+        span_kind = str(item.get("span_kind", "") or "unknown")
+        return f"{phase_objective}|{family}|{provenance_class}|{span_kind}"
+
+    def _classify_actual_delta_result(self, item: Mapping[str, Any]) -> str:
+        continuation_baseline = str(item.get("continuation_baseline", "") or "")
+        continuation_candidate = str(item.get("continuation_candidate", "") or "")
+        continuation_changed = continuation_baseline != continuation_candidate
+        recall_delta = float(item.get("required_term_recall_delta", 0.0) or 0.0)
+        span_delta = float(item.get("required_term_span_progress_delta", 0.0) or 0.0)
+        semantic_delta = float(item.get("semantic_progress_delta", 0.0) or 0.0)
+        repeat_delta = int(item.get("repeat_flag_delta", 0) or 0)
+        target_mass_delta = float(item.get("target_mass_delta", 0.0) or 0.0)
+        target_top20_hit_delta = int(item.get("target_top20_hit_delta", 0) or 0)
+        focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
+        rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
+        prefix_depth_delta = int(item.get("prefix_depth_delta", item.get("canary_prefix_depth_delta", 0)) or 0)
+        if repeat_delta > 0 or semantic_delta < -0.03 or recall_delta < 0.0 or span_delta < 0.0:
+            return "harmful"
+        if (
+            recall_delta > 0.0
+            or span_delta > 0.0
+            or target_top20_hit_delta > 0
+            or target_mass_delta > 0.00002
+            or focus_rank_delta >= 6
+            or rank_focus_delta >= 6
+            or prefix_depth_delta > 0
+        ):
+            return "target_lift"
+        if (
+            continuation_changed
+            and recall_delta <= 0.0
+            and span_delta <= 0.0
+            and semantic_delta <= 0.01
+            and (target_mass_delta < -0.0001 or target_top20_hit_delta < 0)
+        ):
+            return "collapse_isomorphic"
+        if (
+            not continuation_changed
+            and abs(target_mass_delta) <= 0.00001
+            and target_top20_hit_delta == 0
+            and focus_rank_delta < 4
+            and rank_focus_delta < 4
+            and abs(semantic_delta) <= 0.01
+            and recall_delta <= 0.0
+            and span_delta <= 0.0
+        ):
+            return "dead_actuator"
+        return "neutral"
+
+    def _replay_policy(self, *, max_edits_per_step_override: int | None = None) -> HarnessPolicy | None:
+        if max_edits_per_step_override is None:
+            return None
+        base_policy = HarnessPolicy.default_v0()
+        global_budget = replace(
+            base_policy.global_budget,
+            max_edits_per_step=max(1, int(max_edits_per_step_override)),
+        )
+        return replace(base_policy, global_budget=global_budget)
+
+    def _summarize_operator_certifications(
+        self,
+        evaluations: Sequence[Mapping[str, Any]],
+        *,
+        key_field: str = "operator_family_key",
+    ) -> list[dict[str, Any]]:
+        grouped: dict[str, list[Mapping[str, Any]]] = {}
+        for item in evaluations:
+            if not isinstance(item, Mapping):
+                continue
+            certification_key = str(item.get(key_field, "") or "")
+            if not certification_key:
+                continue
+            grouped.setdefault(certification_key, []).append(item)
+        summaries: list[dict[str, Any]] = []
+        for certification_key, items in grouped.items():
+            class_counts: dict[str, int] = {}
+            best_target_mass_delta = 0.0
+            best_target_top20_hit_delta = 0
+            best_readout_probe_score = 0.0
+            family_labels: set[str] = set()
+            for item in items:
+                cls = str(item.get("actual_delta_class", "neutral") or "neutral")
+                class_counts[cls] = int(class_counts.get(cls, 0) or 0) + 1
+                best_target_mass_delta = max(best_target_mass_delta, float(item.get("target_mass_delta", 0.0) or 0.0))
+                best_target_top20_hit_delta = max(
+                    best_target_top20_hit_delta,
+                    int(item.get("target_top20_hit_delta", 0) or 0),
+                )
+                probe_summary = item.get("probe_summary") if isinstance(item.get("probe_summary"), Mapping) else {}
+                best_readout_probe_score = max(
+                    best_readout_probe_score,
+                    float(probe_summary.get("readout_score", 0.0) or 0.0),
+                )
+                if item.get("label") not in (None, ""):
+                    family_labels.add(str(item.get("label")))
+            target_lift_count = int(class_counts.get("target_lift", 0) or 0)
+            harmful_count = int(class_counts.get("harmful", 0) or 0)
+            collapse_count = int(class_counts.get("collapse_isomorphic", 0) or 0)
+            dead_count = int(class_counts.get("dead_actuator", 0) or 0)
+            neutral_count = int(class_counts.get("neutral", 0) or 0)
+            if harmful_count > 0:
+                status = "veto"
+                certified_for_apply = False
+                reason = "harmful_actual_delta_seen"
+            elif target_lift_count > 0:
+                status = "apply_eligible"
+                certified_for_apply = True
+                reason = "target_lift_observed"
+            else:
+                status = "shadow_only"
+                certified_for_apply = False
+                reason = "no_target_lift_yet"
+            family_prior_score = (
+                (1.0 * target_lift_count)
+                + (0.1 * neutral_count)
+                - (0.25 * dead_count)
+                - (0.5 * collapse_count)
+                - (1.0 * harmful_count)
+            ) / max(len(items), 1)
+            summaries.append(
+                {
+                    key_field: certification_key,
+                    "certification_key": certification_key,
+                    "certified_for_apply": bool(certified_for_apply),
+                    "certification_status": status,
+                    "certification_reason": reason,
+                    "family_prior_score": round(float(family_prior_score), 6),
+                    "evaluation_count": len(items),
+                    "actual_delta_class_counts": dict(sorted(class_counts.items())),
+                    "best_target_mass_delta": round(float(best_target_mass_delta), 6),
+                    "best_target_top20_hit_delta": int(best_target_top20_hit_delta),
+                    "best_readout_probe_score": round(float(best_readout_probe_score), 6),
+                    "labels": sorted(family_labels),
+                }
+            )
+        summaries.sort(
+            key=lambda item: (
+                0 if bool(item.get("certified_for_apply", False)) else 1,
+                -float(item.get("family_prior_score", 0.0) or 0.0),
+                str(item.get("certification_key", "") or ""),
+            )
+        )
+        return summaries
+
+    def _attach_operator_certifications(
+        self,
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        attached: list[dict[str, Any]] = []
+        for item in candidates:
+            if not isinstance(item, Mapping):
+                continue
+            candidate = dict(item)
+            family_key = str(candidate.get("operator_family_key", "") or self._operator_family_key(candidate))
+            candidate["operator_family_key"] = family_key
+            certification = self._operator_certification_table.get(family_key)
+            if certification is not None:
+                candidate["operator_certification"] = dict(certification)
+                candidate["operator_certified_for_apply"] = bool(certification.get("certified_for_apply", False))
+                candidate["operator_certification_status"] = str(
+                    certification.get("certification_status", "shadow_only") or "shadow_only"
+                )
+            attached.append(candidate)
+        return attached
+
     def latest_readout_sidecar_capture(self) -> ReadoutSidecarCapture | None:
         return self._latest_readout_sidecar_capture
 
@@ -2006,7 +2438,12 @@ class HookedTransformerWorkerRuntime:
                 bonus += max(-0.45, min(0.45, 0.3 * support_score))
         return bonus
 
-    def _candidate_builder_score(self, candidate: Mapping[str, Any]) -> float:
+    def _candidate_builder_score(
+        self,
+        candidate: Mapping[str, Any],
+        *,
+        include_sidecar: bool = True,
+    ) -> float:
         provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
         family_kind = self._candidate_family_kind(candidate)
         span_kind = str(candidate.get("span_kind", "") or "")
@@ -2020,14 +2457,1030 @@ class HookedTransformerWorkerRuntime:
             probe_bonus = 0.15
         elif label == "dead_actuator":
             probe_bonus = -0.6
-        return (
+        phase_objective = str(candidate.get("phase_objective", "") or "")
+        target_term_priority = candidate.get("target_term_priority")
+        term_priority_bonus = 0.0
+        if phase_objective == "readout_escape" and isinstance(target_term_priority, int) and not isinstance(target_term_priority, bool):
+            bounded_priority = max(0, min(int(target_term_priority), 3))
+            term_priority_bonus = 0.18 * float(3 - bounded_priority)
+        score = (
             (4.0 * self._provenance_weight(provenance_class))
             + self._family_weight(family_kind)
             + self._span_weight(span_kind)
             + probe_bonus
-            + self._candidate_sidecar_bonus(candidate)
+            + term_priority_bonus
             + (0.5 * alignment)
         )
+        if include_sidecar:
+            score += self._candidate_sidecar_bonus(candidate)
+        return score
+
+    def _candidate_sidecar_support_score(self, candidate: Mapping[str, Any]) -> float:
+        hints = self._latest_readout_sidecar_hints if isinstance(self._latest_readout_sidecar_hints, Mapping) else {}
+        support_scores = hints.get("candidate_support_scores")
+        if not isinstance(support_scores, Mapping):
+            return 0.0
+        keys = [self._candidate_sidecar_key(candidate)]
+        bundle_key = str(candidate.get("bundle_key", "") or "")
+        if bundle_key:
+            keys.insert(0, bundle_key)
+        for key in keys:
+            try:
+                value = float(support_scores.get(key, 0.0) or 0.0)
+            except Exception:
+                value = 0.0
+            if value != 0.0:
+                return value
+        return 0.0
+
+    def _bundle_sidecar_support_score(self, bundle_key: str) -> float:
+        if not bundle_key:
+            return 0.0
+        hints = self._latest_readout_sidecar_hints if isinstance(self._latest_readout_sidecar_hints, Mapping) else {}
+        bundle_scores = hints.get("bundle_support_scores")
+        if isinstance(bundle_scores, Mapping):
+            try:
+                bundle_value = float(bundle_scores.get(bundle_key, 0.0) or 0.0)
+            except Exception:
+                bundle_value = 0.0
+            if bundle_value != 0.0:
+                return bundle_value
+        support_scores = hints.get("candidate_support_scores")
+        if isinstance(support_scores, Mapping):
+            try:
+                support_value = float(support_scores.get(bundle_key, 0.0) or 0.0)
+            except Exception:
+                support_value = 0.0
+            if support_value != 0.0:
+                return support_value
+        return 0.0
+
+    def _bundle_group_key(self, candidate: Mapping[str, Any]) -> str:
+        bundle_key = str(candidate.get("bundle_key", "") or "")
+        if bundle_key:
+            return bundle_key
+        return self._candidate_sidecar_key(candidate)
+
+    def _bundle_groups(
+        self,
+        candidates: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        groups: dict[str, dict[str, Any]] = {}
+        ordered_keys: list[str] = []
+        for raw_candidate in candidates:
+            if not isinstance(raw_candidate, Mapping):
+                continue
+            candidate = dict(raw_candidate)
+            group_key = self._bundle_group_key(candidate)
+            if group_key not in groups:
+                ordered_keys.append(group_key)
+                groups[group_key] = {
+                    "group_key": group_key,
+                    "bundle_key": str(candidate.get("bundle_key", "") or "") or None,
+                    "bundle_ready": bool(candidate.get("bundle_ready", False)),
+                    "focus_term": str(candidate.get("focus_feature", "") or ""),
+                    "provenance_class": str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                    "span_kind": str(candidate.get("span_kind", "") or ""),
+                    "members": [],
+                }
+            groups[group_key]["members"].append(candidate)
+        return [groups[key] for key in ordered_keys]
+
+    def _bundle_base_score(self, members: Sequence[Mapping[str, Any]]) -> float:
+        member_scores = sorted(
+            (
+                self._candidate_builder_score(item, include_sidecar=False)
+                for item in members
+                if isinstance(item, Mapping)
+            ),
+            reverse=True,
+        )
+        if not member_scores:
+            return -10.0
+        top = float(member_scores[0])
+        second = float(member_scores[1]) if len(member_scores) > 1 else 0.0
+        return top + (0.4 * second)
+
+    def _bundle_sidecar_support(self, bundle: Mapping[str, Any]) -> float:
+        members = bundle.get("members")
+        if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
+            return 0.0
+        support_values: list[float] = []
+        bundle_key = str(bundle.get("bundle_key", "") or "")
+        if bundle_key:
+            bundle_score = self._bundle_sidecar_support_score(bundle_key)
+            if bundle_score != 0.0:
+                support_values.append(bundle_score)
+        for member in members:
+            if not isinstance(member, Mapping):
+                continue
+            support_value = self._candidate_sidecar_support_score(member)
+            if support_value != 0.0:
+                support_values.append(float(support_value))
+        if not support_values:
+            return 0.0
+        support_values = sorted(set(round(float(value), 6) for value in support_values), reverse=True)
+        top = float(support_values[0])
+        second = float(support_values[1]) if len(support_values) > 1 else 0.0
+        return top + (0.4 * max(0.0, second))
+
+    def _bundle_sidecar_support_margin(self, bundle: Mapping[str, Any]) -> float:
+        focus_term = str(bundle.get("focus_term", "") or "")
+        if not focus_term:
+            return 0.0
+        hints = self._latest_readout_sidecar_hints if isinstance(self._latest_readout_sidecar_hints, Mapping) else {}
+        support_terms = hints.get("candidate_support_terms")
+        if not isinstance(support_terms, Mapping):
+            return 0.0
+        try:
+            focus_score = float(support_terms.get(focus_term, 0.0) or 0.0)
+        except Exception:
+            focus_score = 0.0
+        other_scores: list[float] = []
+        for raw_term, raw_value in support_terms.items():
+            if str(raw_term) == focus_term:
+                continue
+            try:
+                other_scores.append(float(raw_value or 0.0))
+            except Exception:
+                continue
+        other_max = max(other_scores, default=0.0)
+        return focus_score - other_max
+
+    def _bundle_sidecar_evidence(self, bundle: Mapping[str, Any]) -> dict[str, Any]:
+        hints = self._latest_readout_sidecar_hints if isinstance(self._latest_readout_sidecar_hints, Mapping) else {}
+        bundle_key = str(bundle.get("bundle_key", "") or bundle.get("group_key", "") or "")
+        evidence_vectors = hints.get("bundle_evidence_vectors")
+        raw_vector = evidence_vectors.get(bundle_key) if isinstance(evidence_vectors, Mapping) else None
+        vector = raw_vector if isinstance(raw_vector, Mapping) else {}
+        focus_term = str(bundle.get("focus_term", "") or "")
+        term_strengths = hints.get("term_anchor_strength_by_term")
+        fallback_anchor = 0.0
+        if isinstance(term_strengths, Mapping) and focus_term:
+            try:
+                fallback_anchor = float(term_strengths.get(focus_term, 0.0) or 0.0)
+            except Exception:
+                fallback_anchor = 0.0
+        provenance_class = str(vector.get("provenance_class", bundle.get("provenance_class", "misc_prompt")) or "misc_prompt")
+        span_kind = str(vector.get("span_kind", "") or "")
+        if provenance_class == "source_body":
+            fallback_tier = 1.0
+        elif provenance_class == "answer_prefix":
+            fallback_tier = 0.4
+        elif provenance_class == "constraint_header":
+            fallback_tier = 0.2
+        else:
+            fallback_tier = 0.0
+        if span_kind.startswith("exact_prompt_span"):
+            fallback_span_precision = 1.0
+        elif span_kind.startswith("exact_prompt"):
+            fallback_span_precision = 0.82
+        else:
+            fallback_span_precision = 0.45 if provenance_class == "source_body" else 0.2
+        semantic_support = self._bundle_sidecar_support(bundle)
+        try:
+            semantic_support = float(vector.get("semantic_residual_support", semantic_support) or semantic_support)
+        except Exception:
+            semantic_support = float(semantic_support)
+        try:
+            anchor_strength = float(vector.get("anchor_strength", fallback_anchor) or fallback_anchor)
+        except Exception:
+            anchor_strength = float(fallback_anchor)
+        try:
+            span_precision = float(vector.get("span_precision", fallback_span_precision) or fallback_span_precision)
+        except Exception:
+            span_precision = float(fallback_span_precision)
+        try:
+            provenance_tier_hint = float(vector.get("provenance_tier_hint", fallback_tier) or fallback_tier)
+        except Exception:
+            provenance_tier_hint = float(fallback_tier)
+        source_body_exact = bool(
+            vector.get(
+                "source_body_exact",
+                provenance_class == "source_body" and span_kind.startswith("exact_prompt"),
+            )
+        )
+        return {
+            "semantic_residual_support": round(float(semantic_support), 6),
+            "anchor_strength": round(float(anchor_strength), 6),
+            "span_precision": round(float(span_precision), 6),
+            "provenance_tier_hint": round(float(provenance_tier_hint), 6),
+            "source_body_exact": bool(source_body_exact),
+            "provenance_class": provenance_class,
+            "span_kind": span_kind,
+        }
+
+    def _bundle_first_piece_reachability(
+        self,
+        bundle: Mapping[str, Any],
+        *,
+        answer_readout_canary: Mapping[str, Any] | None,
+    ) -> float:
+        if not isinstance(answer_readout_canary, Mapping):
+            return 0.0
+        focus_term = str(bundle.get("focus_term", "") or "")
+        reachable_term = str(answer_readout_canary.get("reachable_focus_term", "") or "")
+        reachable_piece = self._canonical_effect_family_piece(answer_readout_canary.get("reachable_focus_piece", ""))
+        try:
+            reachable_rank = int(answer_readout_canary.get("reachable_focus_rank", 10**9) or 10**9)
+        except Exception:
+            reachable_rank = 10**9
+        try:
+            target_mass = float(answer_readout_canary.get("target_mass", 0.0) or 0.0)
+        except Exception:
+            target_mass = 0.0
+        target_top20_hits = int(answer_readout_canary.get("target_top20_hits", 0) or 0)
+        rank_score = max(0.0, min(1.0, (1024.0 - min(float(reachable_rank), 1024.0)) / 1024.0))
+        mass_score = max(0.0, min(1.0, target_mass / 0.001))
+        hit_score = 1.0 if target_top20_hits > 0 else 0.0
+        piece_match = False
+        members = bundle.get("members")
+        if isinstance(members, SequenceABC) and not isinstance(members, (str, bytes, bytearray)) and reachable_piece:
+            for member in members:
+                if not isinstance(member, Mapping):
+                    continue
+                source_piece = self._canonical_effect_family_piece(member.get("source_piece", ""))
+                if source_piece and source_piece == reachable_piece:
+                    piece_match = True
+                    break
+        score = 0.0
+        if focus_term and focus_term == reachable_term:
+            score += (0.55 * rank_score) + (0.25 * mass_score) + (0.2 * hit_score)
+        if piece_match:
+            score += 0.15
+        return round(min(1.25, score), 6)
+
+    def _bundle_probe_bonus(self, bundle: Mapping[str, Any]) -> float:
+        members = bundle.get("members")
+        if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
+            return 0.0
+        best = 0.0
+        for member in members:
+            if not isinstance(member, Mapping):
+                continue
+            recent_probe = member.get("recent_probe") if isinstance(member.get("recent_probe"), Mapping) else {}
+            label = str(recent_probe.get("label", "") or "")
+            if label == "actionable_positive":
+                best = max(best, 1.0)
+            elif label == "weak_positive_subthreshold":
+                best = max(best, 0.6)
+            elif label == "positive":
+                best = max(best, 0.8)
+        return best
+
+    def _bundle_probe_axis_scores(self, bundle: Mapping[str, Any]) -> dict[str, float]:
+        members = bundle.get("members")
+        if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
+            return {
+                "readout_score": 0.0,
+                "constraint_score": 0.0,
+                "trajectory_score": 0.0,
+            }
+        readout_score = 0.0
+        constraint_score = 0.0
+        trajectory_score = 0.0
+        for member in members:
+            if not isinstance(member, Mapping):
+                continue
+            recent_probe = member.get("recent_probe") if isinstance(member.get("recent_probe"), Mapping) else {}
+            probe_summary = recent_probe.get("probe_summary") if isinstance(recent_probe.get("probe_summary"), Mapping) else {}
+            try:
+                readout_score = max(
+                    readout_score,
+                    float(
+                        recent_probe.get(
+                            "readout_score",
+                            probe_summary.get("readout_score", 0.0),
+                        )
+                        or 0.0
+                    ),
+                )
+            except Exception:
+                pass
+            try:
+                constraint_score = max(
+                    constraint_score,
+                    float(
+                        recent_probe.get(
+                            "constraint_score",
+                            probe_summary.get("constraint_score", 0.0),
+                        )
+                        or 0.0
+                    ),
+                )
+            except Exception:
+                pass
+            try:
+                trajectory_score = max(
+                    trajectory_score,
+                    float(
+                        recent_probe.get(
+                            "trajectory_score",
+                            probe_summary.get("trajectory_score", 0.0),
+                        )
+                        or 0.0
+                    ),
+                )
+            except Exception:
+                pass
+        return {
+            "readout_score": round(float(readout_score), 6),
+            "constraint_score": round(float(constraint_score), 6),
+            "trajectory_score": round(float(trajectory_score), 6),
+        }
+
+    def _bundle_harmful_family_penalty(self, bundle: Mapping[str, Any]) -> float:
+        members = bundle.get("members")
+        if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
+            return 0.0
+        penalty = 0.0
+        for member in members:
+            if not isinstance(member, Mapping):
+                continue
+            recent_probe = member.get("recent_probe") if isinstance(member.get("recent_probe"), Mapping) else {}
+            label = str(recent_probe.get("label", "") or "")
+            if label == "harmful":
+                penalty = max(penalty, 1.0)
+            elif label == "dead_actuator":
+                penalty = max(penalty, 0.7)
+            if bool(member.get("effect_family_collapsed_member", False)):
+                penalty = max(penalty, 0.35)
+        return penalty
+
+    def _bundle_duplicate_family_penalty(
+        self,
+        bundle: Mapping[str, Any],
+        *,
+        term_counts: Mapping[str, int],
+    ) -> float:
+        focus_term = str(bundle.get("focus_term", "") or "")
+        members = bundle.get("members")
+        if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
+            return 0.0
+        penalty = 0.0
+        if int(term_counts.get(focus_term, 0) or 0) > 1 and not bool(bundle.get("bundle_ready", False)):
+            penalty += 0.4
+        family_kinds = {
+            self._candidate_family_kind(member)
+            for member in members
+            if isinstance(member, Mapping)
+        }
+        if len(family_kinds) == 1 and "shot_bridge" in family_kinds:
+            penalty += 0.25
+        elif len(family_kinds) == 1 and ("kv_v" in family_kinds or "kv_k" in family_kinds):
+            penalty += 0.15
+        return penalty
+
+    def _bundle_support_confident(
+        self,
+        *,
+        sidecar_support: float,
+        sidecar_margin: float,
+    ) -> bool:
+        return bool(
+            sidecar_margin >= 0.08
+            and (sidecar_support >= 0.45 or (sidecar_support >= 0.3 and sidecar_margin >= 0.12))
+        )
+
+    def _bundle_evidence_agreement(
+        self,
+        bundle: Mapping[str, Any],
+        *,
+        first_piece_reachability: float,
+        probe_bonus: float,
+    ) -> bool:
+        provenance_class = str(bundle.get("provenance_class", "misc_prompt") or "misc_prompt")
+        bundle_ready = bool(bundle.get("bundle_ready", False))
+        if provenance_class != "source_body":
+            return False
+        return bool(bundle_ready or first_piece_reachability >= 0.08 or probe_bonus >= 0.6)
+
+    def _bundle_is_actionable_candidate(
+        self,
+        bundle: Mapping[str, Any],
+        *,
+        first_piece_reachability: float,
+        probe_bonus: float,
+        harmful_penalty: float,
+    ) -> bool:
+        if harmful_penalty >= 0.7:
+            return False
+        if probe_bonus >= 1.0:
+            return True
+        if bool(bundle.get("bundle_ready", False)) and first_piece_reachability >= 0.12:
+            return True
+        if self._bundle_provenance_tier(bundle) >= 3 and first_piece_reachability >= 0.2:
+            return True
+        return False
+
+    def _bundle_provenance_tier(self, bundle: Mapping[str, Any]) -> int:
+        provenance_class = str(bundle.get("provenance_class", "misc_prompt") or "misc_prompt")
+        members = bundle.get("members")
+        if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
+            return 0
+        family_kinds = {
+            self._candidate_family_kind(member)
+            for member in members
+            if isinstance(member, Mapping)
+        }
+        span_kinds = {
+            str(member.get("span_kind", "") or "")
+            for member in members
+            if isinstance(member, Mapping)
+        }
+        exact_prompt = any(kind.startswith("exact_prompt") for kind in span_kinds)
+        if provenance_class == "source_body":
+            if exact_prompt and any(kind in {"kv_v", "kv_k"} for kind in family_kinds):
+                return 3
+            if exact_prompt or any(kind == "shot_bridge" for kind in family_kinds):
+                return 2
+            return 1
+        if provenance_class in {"constraint_header", "answer_prefix"}:
+            return 1
+        return 0
+
+    def _bundle_rerank_vetoes(
+        self,
+        bundle: Mapping[str, Any],
+        *,
+        harmful_penalty: float,
+        duplicate_penalty: float,
+    ) -> list[str]:
+        vetoes: list[str] = []
+        members = bundle.get("members")
+        if isinstance(members, SequenceABC) and not isinstance(members, (str, bytes, bytearray)):
+            labels = {
+                str(((member.get("recent_probe") if isinstance(member.get("recent_probe"), Mapping) else {}) or {}).get("label", "") or "")
+                for member in members
+                if isinstance(member, Mapping)
+            }
+            if "harmful" in labels:
+                vetoes.append("recent_harmful_family")
+            if "dead_actuator" in labels:
+                vetoes.append("dead_actuator_family")
+            if any(bool(member.get("effect_family_collapsed_member", False)) for member in members if isinstance(member, Mapping)):
+                vetoes.append("family_collapse")
+        if duplicate_penalty >= 0.4:
+            vetoes.append("duplicate_overflow")
+        if harmful_penalty >= 0.7 and "recent_harmful_family" not in vetoes and "dead_actuator_family" not in vetoes:
+            vetoes.append("harmful_family_block")
+        return vetoes
+
+    def _bundle_member_sort_key(self, candidate: Mapping[str, Any]) -> tuple[float, float, int, str]:
+        family_kind = self._candidate_family_kind(candidate)
+        family_priority = {
+            "kv_v": 0,
+            "kv_k": 1,
+            "shot_bridge": 2,
+            "resid_add": 3,
+        }.get(family_kind, 4)
+        return (
+            -self._candidate_builder_score(candidate, include_sidecar=False),
+            family_priority,
+            str(candidate.get("surface_id", "") or ""),
+        )
+
+    def _selector_phase_weights(self, control_phase_hint: str) -> dict[str, float]:
+        if control_phase_hint == "readout_escape":
+            return {
+                "sidecar_support": 0.35,
+                "sidecar_margin": 0.15,
+                "first_piece": 0.15,
+                "probe_bonus": 0.10,
+                "duplicate_penalty": 0.15,
+                "harmful_penalty": 0.20,
+                "top_k": 5.0,
+                "base_gap_threshold": 0.65,
+                "rerank_gap_threshold": 0.05,
+            }
+        if control_phase_hint in {"shot_mode", "composition", "entity_insertion"}:
+            return {
+                "sidecar_support": 0.08,
+                "sidecar_margin": 0.04,
+                "first_piece": 0.03,
+                "probe_bonus": 0.08,
+                "duplicate_penalty": 0.10,
+                "harmful_penalty": 0.16,
+                "top_k": 4.0,
+                "base_gap_threshold": 0.20,
+                "rerank_gap_threshold": 0.18,
+            }
+        if control_phase_hint == "loop_break":
+            return {
+                "sidecar_support": 0.02,
+                "sidecar_margin": 0.0,
+                "first_piece": 0.0,
+                "probe_bonus": 0.04,
+                "duplicate_penalty": 0.06,
+                "harmful_penalty": 0.22,
+                "top_k": 3.0,
+                "base_gap_threshold": 0.12,
+                "rerank_gap_threshold": 0.20,
+            }
+        return {
+            "sidecar_support": 0.02,
+            "sidecar_margin": 0.0,
+            "first_piece": 0.0,
+            "probe_bonus": 0.04,
+            "duplicate_penalty": 0.06,
+            "harmful_penalty": 0.12,
+            "top_k": 3.0,
+            "base_gap_threshold": 0.08,
+            "rerank_gap_threshold": 0.20,
+        }
+
+    def _post_bundle_rerank(
+        self,
+        candidates: Sequence[Mapping[str, Any]],
+        *,
+        answer_readout_canary: Mapping[str, Any] | None,
+        debug: dict[str, Any],
+        control_phase_hint: str,
+    ) -> list[dict[str, Any]]:
+        bundle_groups = self._bundle_groups(candidates)
+        phase_weights = self._selector_phase_weights(control_phase_hint)
+        if len(bundle_groups) <= 1:
+            if bundle_groups:
+                debug["selected_bundle_key"] = bundle_groups[0].get("bundle_key") or bundle_groups[0].get("group_key")
+            debug["bundle_score_debug"] = [
+                {
+                    "bundle_key": str(group.get("bundle_key") or group.get("group_key") or ""),
+                    "focus_term": str(group.get("focus_term", "") or ""),
+                    "bundle_ready": bool(group.get("bundle_ready", False)),
+                    "base_bundle_score": round(self._bundle_base_score(group.get("members", [])), 6),
+                    "rerank_score": round(self._bundle_base_score(group.get("members", [])), 6),
+                    "selected": True,
+                }
+                for group in bundle_groups
+            ]
+            debug["bundle_reorder_applied"] = False
+            debug["bundle_reorder_reason"] = "single_bundle"
+            debug["bundle_selector_phase"] = str(control_phase_hint)
+            debug["bundle_rerank_gate_open"] = False
+            debug["bundle_rerank_gate_reasons"] = ["single_bundle"]
+            return [
+                member
+                for group in bundle_groups
+                for member in sorted(
+                    [dict(item) for item in group.get("members", []) if isinstance(item, Mapping)],
+                    key=self._bundle_member_sort_key,
+                )
+            ]
+
+        term_counts: dict[str, int] = {}
+        for group in bundle_groups:
+            focus_term = str(group.get("focus_term", "") or "")
+            if focus_term:
+                term_counts[focus_term] = int(term_counts.get(focus_term, 0) or 0) + 1
+
+        scored_groups: list[dict[str, Any]] = []
+        for group in bundle_groups:
+            members = [dict(item) for item in group.get("members", []) if isinstance(item, Mapping)]
+            base_score = self._bundle_base_score(members)
+            sidecar_support = self._bundle_sidecar_support(group)
+            sidecar_margin = self._bundle_sidecar_support_margin(group)
+            sidecar_evidence = self._bundle_sidecar_evidence(group)
+            first_piece_reachability = self._bundle_first_piece_reachability(
+                group,
+                answer_readout_canary=answer_readout_canary,
+            )
+            probe_bonus = self._bundle_probe_bonus(group)
+            probe_axis_scores = self._bundle_probe_axis_scores(group)
+            duplicate_penalty = self._bundle_duplicate_family_penalty(group, term_counts=term_counts)
+            harmful_penalty = self._bundle_harmful_family_penalty(group)
+            support_confident = self._bundle_support_confident(
+                sidecar_support=sidecar_support,
+                sidecar_margin=sidecar_margin,
+            )
+            evidence_agreement = self._bundle_evidence_agreement(
+                group,
+                first_piece_reachability=first_piece_reachability,
+                probe_bonus=probe_bonus,
+            )
+            actionable_candidate = self._bundle_is_actionable_candidate(
+                group,
+                first_piece_reachability=first_piece_reachability,
+                probe_bonus=probe_bonus,
+                harmful_penalty=harmful_penalty,
+            )
+            rerank_score = (
+                base_score
+                + (0.08 * float(sidecar_evidence.get("semantic_residual_support", 0.0) or 0.0))
+                + (0.04 * float(sidecar_evidence.get("anchor_strength", 0.0) or 0.0))
+                + (phase_weights["first_piece"] * first_piece_reachability)
+                + (0.08 * float(probe_axis_scores.get("readout_score", 0.0) or 0.0))
+                + (0.04 * float(probe_axis_scores.get("constraint_score", 0.0) or 0.0))
+                + (phase_weights["probe_bonus"] * probe_bonus)
+                - (phase_weights["duplicate_penalty"] * duplicate_penalty)
+                - (phase_weights["harmful_penalty"] * harmful_penalty)
+            )
+            scored_groups.append(
+                {
+                    **dict(group),
+                    "members": members,
+                    "operator_family_key": self._operator_family_key(group),
+                    "base_bundle_score": float(base_score),
+                    "sidecar_bundle_support": float(sidecar_support),
+                    "sidecar_support_margin": float(sidecar_margin),
+                    "sidecar_evidence": dict(sidecar_evidence),
+                    "first_piece_reachability": float(first_piece_reachability),
+                    "probe_bonus": float(probe_bonus),
+                    "readout_probe_score": float(probe_axis_scores.get("readout_score", 0.0) or 0.0),
+                    "constraint_probe_score": float(probe_axis_scores.get("constraint_score", 0.0) or 0.0),
+                    "trajectory_probe_score": float(probe_axis_scores.get("trajectory_score", 0.0) or 0.0),
+                    "duplicate_family_penalty": float(duplicate_penalty),
+                    "harmful_family_penalty": float(harmful_penalty),
+                    "bundle_support_confident": bool(support_confident),
+                    "bundle_evidence_agreement": bool(evidence_agreement),
+                    "bundle_is_actionable_candidate": bool(actionable_candidate),
+                    "bundle_provenance_tier": int(self._bundle_provenance_tier(group)),
+                    "rerank_vetoes": self._bundle_rerank_vetoes(
+                        group,
+                        harmful_penalty=harmful_penalty,
+                        duplicate_penalty=duplicate_penalty,
+                    ),
+                    "rerank_score": float(rerank_score),
+                }
+            )
+
+        base_sorted = sorted(
+            scored_groups,
+            key=lambda item: (
+                -float(item["base_bundle_score"]),
+                0 if bool(item.get("bundle_ready", False)) else 1,
+                str(item.get("bundle_key") or item.get("group_key") or ""),
+            ),
+        )
+        top_k = min(max(1, int(phase_weights["top_k"])), len(base_sorted))
+        rerank_candidates = list(base_sorted[:top_k])
+        best_first_piece = max((float(item.get("first_piece_reachability", 0.0) or 0.0) for item in rerank_candidates), default=0.0)
+        for item in rerank_candidates:
+            reachability_ratio = (
+                1.0
+                if best_first_piece <= 1e-6
+                else float(item.get("first_piece_reachability", 0.0) or 0.0) / max(best_first_piece, 1e-6)
+            )
+            item["reachability_ratio"] = round(float(min(1.25, max(0.0, reachability_ratio))), 6)
+            eligibility_reasons: list[str] = []
+            if control_phase_hint != "readout_escape":
+                eligibility_reasons.append("not_readout_escape")
+            if not bool(item.get("bundle_ready", False)):
+                eligibility_reasons.append("bundle_not_ready")
+            if int(item.get("bundle_provenance_tier", 0) or 0) < 2:
+                eligibility_reasons.append("provenance_tier_low")
+            if item.get("rerank_vetoes"):
+                eligibility_reasons.append("has_vetoes")
+            item["eligibility_reasons"] = list(eligibility_reasons)
+            item["eligible_for_rerank"] = not eligibility_reasons
+            evidence_votes = 0
+            if bool(item.get("bundle_support_confident", False)):
+                evidence_votes += 1
+            if int(item.get("bundle_provenance_tier", 0) or 0) >= 2:
+                evidence_votes += 1
+            if float(item.get("probe_bonus", 0.0) or 0.0) >= 0.6 and float(item.get("harmful_family_penalty", 0.0) or 0.0) < 0.7:
+                evidence_votes += 1
+            if float(item.get("reachability_ratio", 0.0) or 0.0) >= 0.75:
+                evidence_votes += 1
+            item["evidence_votes"] = int(evidence_votes)
+
+        rerank_mode = self.readout_analyzer_rerank_mode
+        reorder_applied = False
+        reorder_reason = "base_order_kept"
+        gate_open = False
+        gate_reasons: list[str] = []
+        rerank_vetoes: list[str] = []
+        selection_source = "base"
+        rerank_gate_mode = "none"
+        base_winner = rerank_candidates[0] if rerank_candidates else None
+        challenger = None
+        hard_margin = 0.0
+        soft_margin = 0.0
+        pairwise_delta = 0.0
+        base_gap = 10.0
+        base_gap_norm = 10.0
+        pairwise_margin_breakdown: dict[str, float] = {}
+        common_mode_evidence: dict[str, Any] = {}
+        support_common_vs_discriminative: dict[str, float] = {}
+        controller_pairwise_reason_text = ""
+        if base_winner is not None:
+            eligible_challengers = [item for item in rerank_candidates[1:] if bool(item.get("eligible_for_rerank", False))]
+            pairwise_rows: list[tuple[dict[str, Any], dict[str, float], dict[str, Any], dict[str, float]]] = []
+            if eligible_challengers:
+                base_evidence = (
+                    dict(base_winner.get("sidecar_evidence", {}))
+                    if isinstance(base_winner.get("sidecar_evidence"), Mapping)
+                    else {}
+                )
+                base_support = float(base_winner.get("sidecar_bundle_support", 0.0) or 0.0)
+                base_readout_probe = float(base_winner.get("readout_probe_score", 0.0) or 0.0)
+                base_constraint_probe = float(base_winner.get("constraint_probe_score", 0.0) or 0.0)
+                base_trajectory_probe = float(base_winner.get("trajectory_probe_score", 0.0) or 0.0)
+                base_span_precision = float(base_evidence.get("span_precision", 0.0) or 0.0)
+                base_semantic_support = float(base_evidence.get("semantic_residual_support", base_support) or base_support)
+                base_anchor_strength = float(base_evidence.get("anchor_strength", 0.0) or 0.0)
+                base_reachability_ratio = float(base_winner.get("reachability_ratio", 0.0) or 0.0)
+                base_first_piece = float(base_winner.get("first_piece_reachability", 0.0) or 0.0)
+                base_actionable = 1.0 if bool(base_winner.get("bundle_is_actionable_candidate", False)) else 0.0
+
+                def _clip_unit(value: float) -> float:
+                    return max(-1.0, min(1.0, float(value)))
+
+                for item in eligible_challengers:
+                    item_evidence = (
+                        dict(item.get("sidecar_evidence", {}))
+                        if isinstance(item.get("sidecar_evidence"), Mapping)
+                        else {}
+                    )
+                    challenger_support = float(item.get("sidecar_bundle_support", 0.0) or 0.0)
+                    challenger_readout_probe = float(item.get("readout_probe_score", 0.0) or 0.0)
+                    challenger_constraint_probe = float(item.get("constraint_probe_score", 0.0) or 0.0)
+                    challenger_trajectory_probe = float(item.get("trajectory_probe_score", 0.0) or 0.0)
+                    challenger_span_precision = float(item_evidence.get("span_precision", 0.0) or 0.0)
+                    challenger_semantic_support = float(
+                        item_evidence.get("semantic_residual_support", challenger_support) or challenger_support
+                    )
+                    challenger_anchor_strength = float(item_evidence.get("anchor_strength", 0.0) or 0.0)
+                    reachability_adv = max(0.0, float(item.get("reachability_ratio", 0.0) or 0.0) - base_reachability_ratio)
+                    first_piece_adv = max(
+                        0.0,
+                        float(item.get("first_piece_reachability", 0.0) or 0.0) - base_first_piece,
+                    )
+                    actionable_adv = max(
+                        0.0,
+                        (1.0 if bool(item.get("bundle_is_actionable_candidate", False)) else 0.0) - base_actionable,
+                    )
+                    probe_readout_adv = _clip_unit(challenger_readout_probe - base_readout_probe)
+                    probe_constraint_adv = _clip_unit(challenger_constraint_probe - base_constraint_probe)
+                    probe_trajectory_adv = _clip_unit(challenger_trajectory_probe - base_trajectory_probe)
+                    span_precision_adv = max(0.0, challenger_span_precision - base_span_precision)
+                    harmful_penalty_adv = max(
+                        0.0,
+                        float(item.get("harmful_family_penalty", 0.0) or 0.0)
+                        - float(base_winner.get("harmful_family_penalty", 0.0) or 0.0),
+                    )
+                    duplicate_penalty_adv = max(
+                        0.0,
+                        float(item.get("duplicate_family_penalty", 0.0) or 0.0)
+                        - float(base_winner.get("duplicate_family_penalty", 0.0) or 0.0),
+                    )
+                    semantic_residual_adv = _clip_unit(challenger_semantic_support - base_semantic_support)
+                    anchor_strength_adv = _clip_unit(challenger_anchor_strength - base_anchor_strength)
+                    hard_candidate = (
+                        (0.55 * reachability_adv)
+                        + (0.35 * first_piece_adv)
+                        + (0.40 * actionable_adv)
+                        + (0.30 * probe_readout_adv)
+                        + (0.10 * probe_constraint_adv)
+                        + (0.05 * probe_trajectory_adv)
+                        + (0.15 * span_precision_adv)
+                        - (0.40 * harmful_penalty_adv)
+                        - (0.20 * duplicate_penalty_adv)
+                    )
+                    soft_candidate = (0.20 * semantic_residual_adv) + (0.10 * anchor_strength_adv)
+                    common_candidate = {
+                        "source_body_exact_both": bool(
+                            base_evidence.get("source_body_exact", False) and item_evidence.get("source_body_exact", False)
+                        ),
+                        "bundle_ready_both": bool(base_winner.get("bundle_ready", False) and item.get("bundle_ready", False)),
+                        "evidence_agreement_both": bool(
+                            base_winner.get("bundle_evidence_agreement", False)
+                            and item.get("bundle_evidence_agreement", False)
+                        ),
+                        "same_provenance_tier": bool(
+                            int(base_winner.get("bundle_provenance_tier", 0) or 0)
+                            == int(item.get("bundle_provenance_tier", 0) or 0)
+                        ),
+                    }
+                    breakdown = {
+                        "reachability_adv": round(float(reachability_adv), 6),
+                        "first_piece_adv": round(float(first_piece_adv), 6),
+                        "actionable_adv": round(float(actionable_adv), 6),
+                        "probe_readout_adv": round(float(probe_readout_adv), 6),
+                        "probe_constraint_adv": round(float(probe_constraint_adv), 6),
+                        "probe_trajectory_adv": round(float(probe_trajectory_adv), 6),
+                        "span_precision_adv": round(float(span_precision_adv), 6),
+                        "harmful_penalty": round(float(harmful_penalty_adv), 6),
+                        "duplicate_penalty": round(float(duplicate_penalty_adv), 6),
+                        "soft_semantic_adv": round(float(semantic_residual_adv), 6),
+                        "soft_anchor_adv": round(float(anchor_strength_adv), 6),
+                        "hard_margin": round(float(hard_candidate), 6),
+                        "soft_margin": round(float(soft_candidate), 6),
+                    }
+                    support_split = {
+                        "common": round(float(min(base_support, challenger_support)), 6),
+                        "discriminative": round(float(max(abs(semantic_residual_adv), abs(anchor_strength_adv))), 6),
+                    }
+                    pairwise_rows.append((item, breakdown, common_candidate, support_split))
+            if pairwise_rows:
+                challenger, pairwise_margin_breakdown, common_mode_evidence, support_common_vs_discriminative = max(
+                    pairwise_rows,
+                    key=lambda row: (
+                        float(row[1].get("hard_margin", 0.0) or 0.0),
+                        float(row[1].get("soft_margin", 0.0) or 0.0),
+                        float(row[0].get("reachability_ratio", 0.0) or 0.0),
+                        float(row[0].get("base_bundle_score", -10.0) or -10.0),
+                        -float(row[0].get("harmful_family_penalty", 0.0) or 0.0),
+                        str(row[0].get("bundle_key") or row[0].get("group_key") or ""),
+                    ),
+                )
+            if rerank_mode == "off":
+                gate_reasons.append("mode_off")
+            elif control_phase_hint != "readout_escape":
+                gate_reasons.append("not_readout_escape")
+            elif challenger is None:
+                gate_reasons.append("no_eligible_challenger")
+            else:
+                rerank_vetoes = list(challenger.get("rerank_vetoes", []) or [])
+                gate_reasons.extend(rerank_vetoes)
+                base_gap = float(base_winner.get("base_bundle_score", 0.0) or 0.0) - float(challenger.get("base_bundle_score", 0.0) or 0.0)
+                base_gap_norm = base_gap / max(abs(float(base_winner.get("base_bundle_score", 0.0) or 0.0)), 1.0)
+                hard_margin = float(pairwise_margin_breakdown.get("hard_margin", 0.0) or 0.0)
+                soft_margin = float(pairwise_margin_breakdown.get("soft_margin", 0.0) or 0.0)
+                pairwise_delta = hard_margin + (soft_margin if hard_margin >= 0.25 else 0.0)
+                if base_gap_norm >= 0.08:
+                    gate_reasons.append("base_gap_large")
+                min_reachability = max(0.6, float(base_winner.get("reachability_ratio", 0.0) or 0.0) - 0.25)
+                if float(challenger.get("reachability_ratio", 0.0) or 0.0) < min_reachability:
+                    gate_reasons.append("reachability_too_low")
+                if int(challenger.get("evidence_votes", 0) or 0) < 2:
+                    gate_reasons.append("insufficient_evidence_votes")
+                if hard_margin <= 0.18:
+                    gate_reasons.append("hard_margin_insufficient")
+                if (
+                    float(base_winner.get("probe_bonus", 0.0) or 0.0) >= 1.0
+                    and float(challenger.get("probe_bonus", 0.0) or 0.0) < 1.0
+                ):
+                    gate_reasons.append("base_actionable_winner")
+                shadow_gate_open = not gate_reasons
+                if shadow_gate_open and rerank_mode == "shadow":
+                    gate_open = True
+                    reorder_applied = False
+                    reorder_reason = f"{control_phase_hint}_pairwise_shadow"
+                    selection_source = "base_shadow"
+                    rerank_gate_mode = "shadow"
+                elif shadow_gate_open and rerank_mode == "apply":
+                    apply_ready = bool(
+                        hard_margin >= 1.1
+                        or float(pairwise_margin_breakdown.get("probe_readout_adv", 0.0) or 0.0) > 0.15
+                        or float(challenger.get("probe_bonus", 0.0) or 0.0) >= 1.0
+                        or (hard_margin >= 0.45 and soft_margin > 0.08)
+                    )
+                    if not apply_ready:
+                        gate_reasons.append("apply_evidence_insufficient")
+                    else:
+                        gate_open = True
+                        reorder_applied = True
+                        reorder_reason = f"{control_phase_hint}_pairwise_promote"
+                        selection_source = "sidecar_tiebreak"
+                        rerank_gate_mode = (
+                            "promote_body" if int(challenger.get("bundle_provenance_tier", 0) or 0) >= 3 else "tiebreak"
+                        )
+                elif "base_actionable_winner" in gate_reasons:
+                    selection_source = "probe_lock"
+                reason_parts: list[str] = []
+                if float(pairwise_margin_breakdown.get("reachability_adv", 0.0) or 0.0) > 0.0:
+                    reason_parts.append("challenger had better reachability")
+                if float(pairwise_margin_breakdown.get("actionable_adv", 0.0) or 0.0) > 0.0:
+                    reason_parts.append("challenger was actionable while base was not")
+                if float(pairwise_margin_breakdown.get("first_piece_adv", 0.0) or 0.0) > 0.0:
+                    reason_parts.append("challenger had stronger first-piece readout")
+                if not rerank_vetoes:
+                    reason_parts.append("no veto applied")
+                controller_pairwise_reason_text = "; ".join(reason_parts[:3]) if reason_parts else "base winner remained preferred"
+
+        debug["base_winner_bundle_key"] = (
+            str(base_winner.get("bundle_key") or base_winner.get("group_key") or "") if base_winner is not None else None
+        )
+        debug["challenger_bundle_key"] = (
+            str(challenger.get("bundle_key") or challenger.get("group_key") or "") if challenger is not None else None
+        )
+        debug["bundle_base_gap"] = round(float(base_gap), 6)
+        debug["base_gap_norm"] = round(float(base_gap_norm), 6)
+        debug["bundle_rerank_gap"] = round(float(pairwise_delta), 6)
+        debug["hard_margin"] = round(float(hard_margin), 6)
+        debug["soft_margin"] = round(float(soft_margin), 6)
+        debug["pairwise_delta"] = round(float(pairwise_delta), 6)
+        debug["pairwise_margin_breakdown"] = dict(pairwise_margin_breakdown)
+        debug["common_mode_evidence"] = dict(common_mode_evidence)
+        debug["support_common_vs_discriminative"] = dict(support_common_vs_discriminative)
+        debug["controller_pairwise_reason_text"] = controller_pairwise_reason_text
+        debug["rerank_vetoes"] = list(rerank_vetoes)
+        debug["selection_source"] = str(selection_source)
+        debug["rerank_gate_mode"] = str(rerank_gate_mode)
+        debug["gate_report_base_winner_bundle_key"] = debug["base_winner_bundle_key"]
+        debug["gate_report_challenger_bundle_key"] = debug["challenger_bundle_key"]
+        debug["gate_report_vetoes"] = list(rerank_vetoes)
+        debug["gate_report_selection_source"] = str(selection_source)
+        debug["gate_report_mode"] = str(rerank_gate_mode)
+        debug["gate_report_pairwise_reason_text"] = controller_pairwise_reason_text
+
+        if reorder_applied and challenger is not None and base_winner is not None:
+            final_frontier = [challenger, base_winner] + [
+                group
+                for group in rerank_candidates[1:]
+                if str(group.get("bundle_key") or group.get("group_key") or "")
+                != str(challenger.get("bundle_key") or challenger.get("group_key") or "")
+            ]
+        else:
+            final_frontier = list(rerank_candidates)
+        final_groups = list(final_frontier) + list(base_sorted[top_k:])
+
+        selected_key = str(final_groups[0].get("bundle_key") or final_groups[0].get("group_key") or "")
+        debug["selected_bundle_key"] = selected_key
+        debug["gate_report_frontier_bundle_key"] = selected_key
+        debug["bundle_reorder_applied"] = bool(reorder_applied)
+        debug["bundle_reorder_reason"] = str(reorder_reason)
+        debug["bundle_selector_phase"] = str(control_phase_hint)
+        debug["bundle_rerank_mode"] = str(rerank_mode)
+        debug["bundle_rerank_gate_open"] = bool(gate_open)
+        debug["bundle_rerank_gate_reasons"] = list(gate_reasons)
+        debug["gate_report_open"] = bool(gate_open)
+        debug["gate_report_reasons"] = list(gate_reasons)
+        debug["gate_report_rejected_signals"] = list(dict.fromkeys([*gate_reasons, *rerank_vetoes]))
+        debug["bundle_score_debug"] = [
+            {
+                "bundle_key": str(group.get("bundle_key") or group.get("group_key") or ""),
+                "focus_term": str(group.get("focus_term", "") or ""),
+                "operator_family_key": str(group.get("operator_family_key", "") or ""),
+                "bundle_ready": bool(group.get("bundle_ready", False)),
+                "member_count": len(group.get("members", [])),
+                "base_bundle_score": round(float(group["base_bundle_score"]), 6),
+                "sidecar_bundle_support": round(float(group["sidecar_bundle_support"]), 6),
+                "sidecar_support_margin": round(float(group["sidecar_support_margin"]), 6),
+                "sidecar_evidence": dict(group.get("sidecar_evidence", {})),
+                "first_piece_reachability": round(float(group["first_piece_reachability"]), 6),
+                "probe_bonus": round(float(group["probe_bonus"]), 6),
+                "readout_probe_score": round(float(group.get("readout_probe_score", 0.0) or 0.0), 6),
+                "constraint_probe_score": round(float(group.get("constraint_probe_score", 0.0) or 0.0), 6),
+                "trajectory_probe_score": round(float(group.get("trajectory_probe_score", 0.0) or 0.0), 6),
+                "duplicate_family_penalty": round(float(group["duplicate_family_penalty"]), 6),
+                "harmful_family_penalty": round(float(group["harmful_family_penalty"]), 6),
+                "bundle_support_confident": bool(group["bundle_support_confident"]),
+                "bundle_evidence_agreement": bool(group["bundle_evidence_agreement"]),
+                "bundle_is_actionable_candidate": bool(group["bundle_is_actionable_candidate"]),
+                "bundle_provenance_tier": int(group.get("bundle_provenance_tier", 0) or 0),
+                "rerank_vetoes": list(group.get("rerank_vetoes", []) or []),
+                "eligibility_reasons": list(group.get("eligibility_reasons", []) or []),
+                "eligible_for_rerank": bool(group.get("eligible_for_rerank", False)),
+                "reachability_ratio": round(float(group.get("reachability_ratio", 0.0) or 0.0), 6),
+                "evidence_votes": int(group.get("evidence_votes", 0) or 0),
+                "pairwise_delta_vs_base": round(
+                    float(pairwise_delta)
+                    if (
+                        challenger is not None
+                        and str(group.get("bundle_key") or group.get("group_key") or "")
+                        == str(challenger.get("bundle_key") or challenger.get("group_key") or "")
+                    )
+                    else 0.0,
+                    6,
+                ),
+                "pairwise_margin_breakdown_vs_base": (
+                    dict(pairwise_margin_breakdown)
+                    if (
+                        challenger is not None
+                        and str(group.get("bundle_key") or group.get("group_key") or "")
+                        == str(challenger.get("bundle_key") or challenger.get("group_key") or "")
+                    )
+                    else {}
+                ),
+                "common_mode_evidence_vs_base": (
+                    dict(common_mode_evidence)
+                    if (
+                        challenger is not None
+                        and str(group.get("bundle_key") or group.get("group_key") or "")
+                        == str(challenger.get("bundle_key") or challenger.get("group_key") or "")
+                    )
+                    else {}
+                ),
+                "support_common_vs_discriminative": (
+                    dict(support_common_vs_discriminative)
+                    if (
+                        challenger is not None
+                        and str(group.get("bundle_key") or group.get("group_key") or "")
+                        == str(challenger.get("bundle_key") or challenger.get("group_key") or "")
+                    )
+                    else {}
+                ),
+                "operator_certification": (
+                    dict(self._operator_certification_table.get(str(group.get("operator_family_key", "") or ""), {}))
+                    if str(group.get("operator_family_key", "") or "") in self._operator_certification_table
+                    else {}
+                ),
+                "rerank_score": round(float(group["rerank_score"]), 6),
+                "selected": bool(str(group.get("bundle_key") or group.get("group_key") or "") == selected_key),
+            }
+            for group in final_groups[:top_k]
+        ]
+        ordered_candidates: list[dict[str, Any]] = []
+        for group in final_groups:
+            members = [
+                dict(item)
+                for item in group.get("members", [])
+                if isinstance(item, Mapping)
+            ]
+            members.sort(key=self._bundle_member_sort_key)
+            ordered_candidates.extend(members)
+        return ordered_candidates
 
     def _prompt_term_spans(self, term: str, *, max_spans: int = 2) -> list[dict[str, Any]]:
         normalized_term = " ".join(str(term).split()).strip()
@@ -2165,6 +3618,289 @@ class HookedTransformerWorkerRuntime:
         )
         return bundles[:4]
 
+    def _prompt_records_for_span(self, start: int, end: int) -> list[dict[str, Any]]:
+        def _position(record: Mapping[str, Any]) -> int:
+            value = record.get("position", -1)
+            return int(-1 if value is None else value)
+
+        return [
+            dict(record)
+            for record in self._token_position_records()
+            if str(record.get("segment_kind", "") or "") == "prompt"
+            and _position(record) >= int(start)
+            and _position(record) < int(end)
+        ]
+
+    def _prompt_window_positions(self, start: int, end: int, *, padding: int = 0) -> list[int]:
+        def _position(record: Mapping[str, Any]) -> int:
+            value = record.get("position", -1)
+            return int(-1 if value is None else value)
+
+        prompt_positions = [
+            _position(record)
+            for record in self._token_position_records()
+            if str(record.get("segment_kind", "") or "") == "prompt"
+        ]
+        prompt_positions = sorted(position for position in prompt_positions if position >= 0)
+        if not prompt_positions:
+            return []
+        try:
+            start_index = prompt_positions.index(int(start))
+        except ValueError:
+            return []
+        end_position = int(end) - 1
+        try:
+            end_index = prompt_positions.index(end_position)
+        except ValueError:
+            end_index = start_index
+        left = max(0, start_index - max(0, int(padding)))
+        right = min(len(prompt_positions), end_index + 1 + max(0, int(padding)))
+        return prompt_positions[left:right]
+
+    def _content_piece_score(self, piece: str) -> tuple[float, int, str]:
+        text = str(piece or "")
+        normalized = "".join(ch for ch in text.strip().lower() if ch.isalnum())
+        if not normalized:
+            return (0.0, 0, text)
+        starts_with_space = 1 if text.startswith(" ") else 0
+        return (1.0 + (0.2 * starts_with_space) + min(0.6, len(normalized) / 8.0), len(normalized), normalized)
+
+    def _cache_ref_expr(
+        self,
+        *,
+        site: str,
+        layer: int,
+        head: int,
+        token_selector: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "ref": {
+                "scope": "runtime",
+                "worker": self.worker_id,
+                "tensor": str(site),
+                "layer": int(layer),
+                "head": int(head),
+                "token": dict(token_selector),
+            }
+        }
+
+    def _expr_weighted_mean(
+        self,
+        refs_with_weights: Sequence[tuple[dict[str, Any], float]],
+    ) -> dict[str, Any]:
+        filtered = [(dict(expr), float(weight)) for expr, weight in refs_with_weights if abs(float(weight)) > 1e-8]
+        if not filtered:
+            raise ValueError("weighted mean requires at least one non-zero term")
+        total_weight = sum(float(weight) for _expr, weight in filtered)
+        if len(filtered) == 1:
+            expr, weight = filtered[0]
+            if abs(weight - 1.0) <= 1e-8:
+                return expr
+            return {"fn": "scale", "by": float(weight), "arg": expr}
+        args: list[dict[str, Any]] = []
+        for expr, weight in filtered:
+            if abs(weight - 1.0) <= 1e-8:
+                args.append(expr)
+            else:
+                args.append({"fn": "scale", "by": float(weight), "arg": expr})
+        summed: dict[str, Any] = {"fn": "add", "args": args}
+        if abs(total_weight - 1.0) <= 1e-8:
+            return summed
+        return {"fn": "scale", "by": float(1.0 / total_weight), "arg": summed}
+
+    def _candidate_recipe_source_expr(
+        self,
+        candidate: Mapping[str, Any],
+        *,
+        localization: str,
+        pooling: str,
+        contrast_mode: str = "none",
+        competitor_candidate: Mapping[str, Any] | None = None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        site = str(candidate.get("site", "") or "")
+        layer = candidate.get("layer")
+        head = candidate.get("head")
+        source_span = candidate.get("source_span") if isinstance(candidate.get("source_span"), Mapping) else None
+        if site not in {"k_cache", "v_cache"} or isinstance(layer, bool) or not isinstance(layer, int):
+            return None, {}
+        if isinstance(head, bool) or not isinstance(head, int):
+            return None, {}
+        if source_span is None:
+            selector = candidate.get("source", {}).get("dtype") if isinstance(candidate.get("source"), Mapping) else None
+            if selector is None:
+                return None, {}
+            token_selector = {"mode": "index", "value": int(candidate.get("source_position", 0) or 0)}
+            expr = self._cache_ref_expr(site=site, layer=int(layer), head=int(head), token_selector=token_selector)
+            metadata = {
+                "recipe_localization": "source_position_single",
+                "recipe_pooling": "single",
+                "contrast_mode": str(contrast_mode or "none"),
+                "source_positions": [int(candidate.get("source_position", 0) or 0)],
+            }
+            return expr, metadata
+
+        start = int(source_span.get("start", 0) or 0)
+        end = int(source_span.get("end", start + 1) or (start + 1))
+        span_records = self._prompt_records_for_span(start, end)
+        span_positions: list[int] = []
+        for record in span_records:
+            value = record.get("position", -1)
+            position = int(-1 if value is None else value)
+            if position >= 0:
+                span_positions.append(position)
+        if not span_positions:
+            return None, {}
+
+        recipe_localization = str(localization or "exact_prompt_span_mean")
+        recipe_pooling = str(pooling or "mean")
+        refs_with_weights: list[tuple[dict[str, Any], float]] = []
+        metadata_positions: list[int] = []
+
+        if recipe_localization == "exact_prompt_span_mean":
+            expr = self._cache_ref_expr(
+                site=site,
+                layer=int(layer),
+                head=int(head),
+                token_selector={"mode": "span", "start": start, "end": end, "pool": "mean"},
+            )
+            metadata_positions = list(span_positions)
+        elif recipe_localization == "exact_term_token":
+            best_record = max(
+                span_records,
+                key=lambda record: self._content_piece_score(str(record.get("piece", ""))),
+            )
+            token_position = int(best_record.get("position", start) or start)
+            expr = self._cache_ref_expr(
+                site=site,
+                layer=int(layer),
+                head=int(head),
+                token_selector={"mode": "index", "value": token_position},
+            )
+            metadata_positions = [token_position]
+        elif recipe_localization in {"exact_term_window_pm1_weighted", "exact_term_window_pm2_weighted"}:
+            padding = 1 if recipe_localization.endswith("pm1_weighted") else 2
+            window_positions = self._prompt_window_positions(start, end, padding=padding)
+            if not window_positions:
+                return None, {}
+            metadata_positions = list(window_positions)
+            for position in window_positions:
+                if start <= position < end:
+                    weight = 1.0
+                else:
+                    distance = min(abs(position - start), abs(position - (end - 1)))
+                    weight = 0.5 if distance <= 1 else 0.25
+                refs_with_weights.append(
+                    (
+                        self._cache_ref_expr(
+                            site=site,
+                            layer=int(layer),
+                            head=int(head),
+                            token_selector={"mode": "index", "value": int(position)},
+                        ),
+                        float(weight),
+                    )
+                )
+            expr = self._expr_weighted_mean(refs_with_weights)
+        elif recipe_localization == "head_tail_mean":
+            positions = [int(span_positions[0])]
+            if int(span_positions[-1]) != int(span_positions[0]):
+                positions.append(int(span_positions[-1]))
+            metadata_positions = list(positions)
+            expr = self._expr_weighted_mean(
+                [
+                    (
+                        self._cache_ref_expr(
+                            site=site,
+                            layer=int(layer),
+                            head=int(head),
+                            token_selector={"mode": "index", "value": int(position)},
+                        ),
+                        1.0,
+                    )
+                    for position in positions
+                ]
+            )
+        elif recipe_localization == "content_token_only_mean":
+            content_records = [
+                record for record in span_records if self._content_piece_score(str(record.get("piece", "")))[0] > 0.0
+            ] or span_records
+            metadata_positions = [int(record.get("position", start) or start) for record in content_records]
+            expr = self._expr_weighted_mean(
+                [
+                    (
+                        self._cache_ref_expr(
+                            site=site,
+                            layer=int(layer),
+                            head=int(head),
+                            token_selector={"mode": "index", "value": int(position)},
+                        ),
+                        1.0,
+                    )
+                    for position in metadata_positions
+                ]
+            )
+        else:
+            return None, {}
+
+        if contrast_mode == "minus_base":
+            if not isinstance(competitor_candidate, Mapping):
+                return None, {}
+            competitor_expr, competitor_meta = self._candidate_recipe_source_expr(
+                competitor_candidate,
+                localization=localization,
+                pooling=pooling,
+                contrast_mode="none",
+            )
+            if competitor_expr is None:
+                return None, {}
+            metadata_positions = list(dict.fromkeys(metadata_positions + list(competitor_meta.get("source_positions", []))))
+            expr = {"fn": "sub", "args": [expr, competitor_expr]}
+        metadata = {
+            "recipe_localization": recipe_localization,
+            "recipe_pooling": recipe_pooling,
+            "contrast_mode": str(contrast_mode or "none"),
+            "source_positions": metadata_positions,
+        }
+        return expr, metadata
+
+    def _materialize_recipe_candidate(
+        self,
+        candidate: Mapping[str, Any],
+        *,
+        localization: str,
+        pooling: str,
+        contrast_mode: str = "none",
+        competitor_candidate: Mapping[str, Any] | None = None,
+        alpha_override: float | None = None,
+    ) -> dict[str, Any] | None:
+        expr, metadata = self._candidate_recipe_source_expr(
+            candidate,
+            localization=localization,
+            pooling=pooling,
+            contrast_mode=contrast_mode,
+            competitor_candidate=competitor_candidate,
+        )
+        if expr is None:
+            return None
+        materialized = dict(candidate)
+        source = dict(materialized.get("source", {}))
+        source["dtype"] = "cache_pair"
+        which = "v" if str(materialized.get("site", "") or "") == "v_cache" else "k"
+        source[which] = expr
+        materialized["source"] = source
+        op = dict(materialized.get("op", {}))
+        if alpha_override is not None:
+            op["alpha"] = float(alpha_override)
+        materialized["op"] = op
+        materialized["recipe_localization"] = str(metadata.get("recipe_localization", localization))
+        materialized["recipe_pooling"] = str(metadata.get("recipe_pooling", pooling))
+        materialized["contrast_mode"] = str(metadata.get("contrast_mode", contrast_mode))
+        materialized["recipe_source_positions"] = list(metadata.get("source_positions", []))
+        materialized["recipe_alpha"] = float(op.get("alpha", 0.0) or 0.0)
+        materialized["operator_family_key"] = self._operator_family_key(materialized)
+        materialized["operator_recipe_id"] = self._operator_recipe_id(materialized)
+        return materialized
+
     def _prune_escape_candidates(
         self,
         candidates: Sequence[Mapping[str, Any]],
@@ -2182,7 +3918,7 @@ class HookedTransformerWorkerRuntime:
         ranked_candidates = sorted(
             (dict(candidate) for candidate in candidates if isinstance(candidate, Mapping)),
             key=lambda item: (
-                -self._candidate_builder_score(item),
+                -self._candidate_builder_score(item, include_sidecar=False),
                 int(item.get("surface_id", "") == ""),
                 str(item.get("surface_id", "")),
             ),
@@ -2275,21 +4011,6 @@ class HookedTransformerWorkerRuntime:
             if isinstance(answer_readout_canary, Mapping)
             else ""
         )
-        sidecar_focus = (
-            str(readout_sidecar_hints.get("focus_term_override", "") or "")
-            if isinstance(readout_sidecar_hints, Mapping)
-            else ""
-        )
-        sidecar_term_scores = (
-            dict(readout_sidecar_hints.get("candidate_support_terms", {}))
-            if isinstance(readout_sidecar_hints, Mapping) and isinstance(readout_sidecar_hints.get("candidate_support_terms"), Mapping)
-            else {}
-        )
-        sidecar_anchor_strengths = (
-            dict(readout_sidecar_hints.get("term_anchor_strength_by_term", {}))
-            if isinstance(readout_sidecar_hints, Mapping) and isinstance(readout_sidecar_hints.get("term_anchor_strength_by_term"), Mapping)
-            else {}
-        )
         easy_terms = self._intersect_terms(latest_tokenize.get("soft_logit_bias_ok_terms"), allowed_terms)
         exact_span_terms = [
             term for term in missing_terms if self._prompt_term_spans(term, max_spans=1)
@@ -2304,25 +4025,8 @@ class HookedTransformerWorkerRuntime:
                 return
             ordered.append(normalized)
 
-        def _append_sidecar_ranked_terms() -> None:
-            ranked_terms = sorted(
-                allowed_terms,
-                key=lambda term: (
-                    -float(sidecar_term_scores.get(term, 0.0) or 0.0),
-                    -float(sidecar_anchor_strengths.get(term, 0.0) or 0.0),
-                    0 if term in exact_span_terms else 1,
-                    term,
-                ),
-            )
-            for term in ranked_terms:
-                if float(sidecar_term_scores.get(term, 0.0) or 0.0) <= 0.0 and float(sidecar_anchor_strengths.get(term, 0.0) or 0.0) <= 0.0:
-                    continue
-                _append(term)
-
         if control_phase_hint == "readout_escape":
-            _append(sidecar_focus)
             _append(reachable_focus)
-            _append_sidecar_ranked_terms()
             for term in exact_span_terms:
                 if term == reachable_focus:
                     continue
@@ -2333,15 +4037,16 @@ class HookedTransformerWorkerRuntime:
         else:
             _append(semantic_focus)
             _append(reachable_focus)
-            _append(sidecar_focus)
-            _append_sidecar_ranked_terms()
             for term in self._focus_terms_by_progress(easy_terms, progress_by_term, max_terms=len(easy_terms)):
                 _append(term)
             for term in exact_span_terms:
                 _append(term)
+            for term in self._focus_terms_by_progress(missing_terms, progress_by_term, max_terms=len(missing_terms)):
+                _append(term)
 
-        for term in self._focus_terms_by_progress(missing_terms, progress_by_term, max_terms=len(missing_terms)):
-            _append(term)
+        if control_phase_hint == "readout_escape":
+            for term in self._focus_terms_by_progress(missing_terms, progress_by_term, max_terms=len(missing_terms)):
+                _append(term)
         return ordered[: max(1, int(max_terms))]
 
     def _shot_mode_ready(self) -> bool:
@@ -2551,17 +4256,31 @@ class HookedTransformerWorkerRuntime:
         avoid = {str(surface_id) for surface_id in avoid_surfaces}
         selected: list[dict[str, Any]] = []
         seen_surface_ids: set[str] = set()
+        recent_probe_outcomes = self._recent_probe_outcomes_by_candidate_key(
+            window=8,
+            probe_families={"shot_bridge", "resid_add"},
+        )
+        anchored_selected: list[dict[str, Any]] = []
         for candidate in self._source_bridge_shot_candidate_edits(
             avoid_surfaces=avoid_surfaces,
             promoted_cache_surfaces=promoted_cache_surfaces,
             control_phase_hint=control_phase_hint,
             answer_readout_canary=answer_readout_canary,
         ):
+            candidate_key = self._candidate_sidecar_key(candidate)
+            if candidate_key in recent_probe_outcomes:
+                candidate["recent_probe"] = dict(recent_probe_outcomes[candidate_key])
+            recent_probe = candidate.get("recent_probe") if isinstance(candidate.get("recent_probe"), Mapping) else {}
+            if str(recent_probe.get("label", "") or "") == "dead_actuator":
+                continue
             surface_id = str(candidate.get("surface_id", "") or "")
             if not surface_id or surface_id in seen_surface_ids:
                 continue
-            selected.append(candidate)
+            anchored_selected.append(candidate)
             seen_surface_ids.add(surface_id)
+        selected.extend(anchored_selected)
+        if control_phase_hint == "readout_escape" and anchored_selected:
+            return selected[:3]
         candidates: list[tuple[int, int, dict[str, Any]]] = []
         for surface in self.surface_catalog:
             target = getattr(surface, "target", None)
@@ -2602,6 +4321,12 @@ class HookedTransformerWorkerRuntime:
             )
         candidates.sort(key=lambda item: (item[0], item[1], str(item[2]["surface_id"])))
         for _priority, _layer, candidate in candidates:
+            candidate_key = self._candidate_sidecar_key(candidate)
+            if candidate_key in recent_probe_outcomes:
+                candidate["recent_probe"] = dict(recent_probe_outcomes[candidate_key])
+            recent_probe = candidate.get("recent_probe") if isinstance(candidate.get("recent_probe"), Mapping) else {}
+            if control_phase_hint == "readout_escape" and str(recent_probe.get("label", "") or "") == "dead_actuator":
+                continue
             surface_id = str(candidate.get("surface_id", "") or "")
             if not surface_id or surface_id in seen_surface_ids:
                 continue
@@ -2609,6 +4334,10 @@ class HookedTransformerWorkerRuntime:
             seen_surface_ids.add(surface_id)
             if len(selected) >= 3:
                 break
+        for candidate in selected:
+            candidate_key = self._candidate_sidecar_key(candidate)
+            if candidate_key in recent_probe_outcomes:
+                candidate["recent_probe"] = dict(recent_probe_outcomes[candidate_key])
         return selected[:3]
 
     def _shot_probe_needed(self, *, shot_mode_ready: bool) -> bool:
@@ -2712,11 +4441,13 @@ class HookedTransformerWorkerRuntime:
             canary_enabled=control_phase_hint in {"shot_mode", "readout_escape"} and not self._kv_canary_eval_active,
         )
         kv_candidate_edits, kv_effect_families = self._annotate_effect_families(kv_candidate_edits)
+        kv_candidate_edits = self._attach_operator_certifications(kv_candidate_edits)
         kv_retry_candidate_edits = self._kv_retry_candidate_edits(
             base_candidates=kv_candidate_edits,
             canary_enabled=control_phase_hint in {"shot_mode", "readout_escape"} and not self._kv_canary_eval_active,
         )
         kv_retry_candidate_edits, kv_retry_effect_families = self._annotate_effect_families(kv_retry_candidate_edits)
+        kv_retry_candidate_edits = self._attach_operator_certifications(kv_retry_candidate_edits)
         shot_probe_needed = False if preprobe_collapse else self._shot_probe_needed(shot_mode_ready=shot_mode_ready)
         kv_canary_checked = sum(1 for item in kv_candidate_edits if bool(item.get("canary_checked")))
         kv_canary_positive_count = sum(1 for item in kv_candidate_edits if bool(item.get("canary_pass")))
@@ -2731,24 +4462,19 @@ class HookedTransformerWorkerRuntime:
             kv_candidate_edits=kv_candidate_edits,
         )
         sidecar_focus_term = (
-            str(readout_sidecar_hints.get("focus_term_override", "") or "")
+            str(
+                readout_sidecar_hints.get("suggested_focus_term", readout_sidecar_hints.get("focus_term_override", ""))
+                or ""
+            )
             if isinstance(readout_sidecar_hints, Mapping)
             else ""
         )
         controller_focus_term = (
-            sidecar_focus_term
-            if readout_escape_needed and sidecar_focus_term
-            else (
-                answer_readout_canary.get("reachable_focus_term")
-                if readout_escape_needed and isinstance(answer_readout_canary, Mapping)
-                else semantic_focus.get("semantic_focus_term")
-            )
+            answer_readout_canary.get("reachable_focus_term")
+            if readout_escape_needed and isinstance(answer_readout_canary, Mapping)
+            else semantic_focus.get("semantic_focus_term")
         )
-        controller_focus_source = (
-            "readout_sidecar"
-            if readout_escape_needed and sidecar_focus_term
-            else ("reachable_focus" if readout_escape_needed else "semantic_focus")
-        )
+        controller_focus_source = "reachable_focus" if readout_escape_needed else "semantic_focus"
         hints = {
             "control_phase_hint": control_phase_hint,
             "loop_severity": self._loop_severity_hint(),
@@ -2776,8 +4502,23 @@ class HookedTransformerWorkerRuntime:
         if isinstance(readout_sidecar_hints, Mapping) and readout_sidecar_hints:
             hints["readout_sidecar_active"] = True
             hints["readout_sidecar_hints"] = dict(readout_sidecar_hints)
-            if readout_sidecar_hints.get("focus_term_override") not in (None, ""):
-                hints["readout_sidecar_focus_term_override"] = readout_sidecar_hints.get("focus_term_override")
+            hints["readout_sidecar_report"] = dict(readout_sidecar_hints)
+            hints["readout_analyzer_active"] = True
+            hints["readout_analyzer_hints"] = dict(readout_sidecar_hints)
+            hints["readout_analyzer_report"] = dict(readout_sidecar_hints)
+            suggested_focus_term = readout_sidecar_hints.get(
+                "suggested_focus_term",
+                readout_sidecar_hints.get("focus_term_override"),
+            )
+            if suggested_focus_term not in (None, ""):
+                hints["readout_sidecar_suggested_focus_term"] = suggested_focus_term
+                hints["readout_analyzer_suggested_focus_term"] = suggested_focus_term
+                hints["readout_sidecar_focus_term_override"] = suggested_focus_term
+                hints["readout_analyzer_focus_term_override"] = suggested_focus_term
+            suggested_bundle_key = readout_sidecar_hints.get("suggested_bundle_key")
+            if suggested_bundle_key not in (None, ""):
+                hints["readout_sidecar_suggested_bundle_key"] = str(suggested_bundle_key)
+                hints["readout_analyzer_suggested_bundle_key"] = str(suggested_bundle_key)
         if semantic_focus:
             hints.update(semantic_focus)
         if controller_focus_term:
@@ -2791,6 +4532,17 @@ class HookedTransformerWorkerRuntime:
             hints["attractor_family_mass"] = answer_readout_canary.get("attractor_family_mass")
             hints["attractor_family_top_overlap"] = answer_readout_canary.get("attractor_family_top_overlap")
             hints["attractor_family_overlap_tokens"] = list(answer_readout_canary.get("attractor_family_overlap_tokens", [])[:5])
+        if self._operator_certification_table:
+            hints["operator_certification_count"] = len(self._operator_certification_table)
+            hints["operator_certification_families"] = [
+                {
+                    "operator_family_key": str(key),
+                    "certification_status": str(value.get("certification_status", "shadow_only") or "shadow_only"),
+                    "certified_for_apply": bool(value.get("certified_for_apply", False)),
+                    "family_prior_score": value.get("family_prior_score"),
+                }
+                for key, value in list(self._operator_certification_table.items())[:6]
+            ]
         hints["kv_effect_family_count"] = len([key for key in kv_effect_families if str(key)])
         hints["kv_effect_family_collapsed"] = bool(kv_candidate_edits) and len([key for key in kv_effect_families if str(key)]) < len(kv_candidate_edits)
         if kv_retry_candidate_edits:
@@ -2841,6 +4593,91 @@ class HookedTransformerWorkerRuntime:
             ):
                 hints["bundle_inputs"] = [
                     dict(item) for item in kv_candidate_builder.get("bundle_inputs", [])[:4] if isinstance(item, Mapping)
+                ]
+            if kv_candidate_builder.get("selected_bundle_key") not in (None, ""):
+                hints["selected_bundle_key"] = str(kv_candidate_builder.get("selected_bundle_key"))
+            if kv_candidate_builder.get("gate_report_frontier_bundle_key") not in (None, ""):
+                hints["gate_report_frontier_bundle_key"] = str(kv_candidate_builder.get("gate_report_frontier_bundle_key"))
+            hints["bundle_reorder_applied"] = bool(kv_candidate_builder.get("bundle_reorder_applied", False))
+            if kv_candidate_builder.get("bundle_reorder_reason") not in (None, ""):
+                hints["bundle_reorder_reason"] = str(kv_candidate_builder.get("bundle_reorder_reason"))
+            hints["bundle_rerank_gate_open"] = bool(kv_candidate_builder.get("bundle_rerank_gate_open", False))
+            hints["gate_report_open"] = bool(kv_candidate_builder.get("gate_report_open", False))
+            if isinstance(kv_candidate_builder.get("bundle_rerank_gate_reasons"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("bundle_rerank_gate_reasons"), (str, bytes, bytearray)
+            ):
+                hints["bundle_rerank_gate_reasons"] = [
+                    str(item) for item in kv_candidate_builder.get("bundle_rerank_gate_reasons", [])[:8] if str(item)
+                ]
+            if isinstance(kv_candidate_builder.get("gate_report_reasons"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("gate_report_reasons"), (str, bytes, bytearray)
+            ):
+                hints["gate_report_reasons"] = [
+                    str(item) for item in kv_candidate_builder.get("gate_report_reasons", [])[:8] if str(item)
+                ]
+            if isinstance(kv_candidate_builder.get("rerank_vetoes"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("rerank_vetoes"), (str, bytes, bytearray)
+            ):
+                hints["rerank_vetoes"] = [str(item) for item in kv_candidate_builder.get("rerank_vetoes", [])[:8] if str(item)]
+            if isinstance(kv_candidate_builder.get("gate_report_vetoes"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("gate_report_vetoes"), (str, bytes, bytearray)
+            ):
+                hints["gate_report_vetoes"] = [
+                    str(item) for item in kv_candidate_builder.get("gate_report_vetoes", [])[:8] if str(item)
+                ]
+            if isinstance(kv_candidate_builder.get("gate_report_rejected_signals"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("gate_report_rejected_signals"), (str, bytes, bytearray)
+            ):
+                hints["gate_report_rejected_signals"] = [
+                    str(item) for item in kv_candidate_builder.get("gate_report_rejected_signals", [])[:8] if str(item)
+                ]
+            if kv_candidate_builder.get("bundle_selector_phase") not in (None, ""):
+                hints["bundle_selector_phase"] = str(kv_candidate_builder.get("bundle_selector_phase"))
+            if kv_candidate_builder.get("bundle_rerank_mode") not in (None, ""):
+                hints["bundle_rerank_mode"] = str(kv_candidate_builder.get("bundle_rerank_mode"))
+            if kv_candidate_builder.get("rerank_gate_mode") not in (None, ""):
+                hints["rerank_gate_mode"] = str(kv_candidate_builder.get("rerank_gate_mode"))
+            if kv_candidate_builder.get("selection_source") not in (None, ""):
+                hints["selection_source"] = str(kv_candidate_builder.get("selection_source"))
+            if kv_candidate_builder.get("gate_report_selection_source") not in (None, ""):
+                hints["gate_report_selection_source"] = str(kv_candidate_builder.get("gate_report_selection_source"))
+            if kv_candidate_builder.get("base_winner_bundle_key") not in (None, ""):
+                hints["base_winner_bundle_key"] = kv_candidate_builder.get("base_winner_bundle_key")
+            if kv_candidate_builder.get("gate_report_base_winner_bundle_key") not in (None, ""):
+                hints["gate_report_base_winner_bundle_key"] = kv_candidate_builder.get("gate_report_base_winner_bundle_key")
+            if kv_candidate_builder.get("challenger_bundle_key") not in (None, ""):
+                hints["challenger_bundle_key"] = kv_candidate_builder.get("challenger_bundle_key")
+            if kv_candidate_builder.get("gate_report_challenger_bundle_key") not in (None, ""):
+                hints["gate_report_challenger_bundle_key"] = kv_candidate_builder.get("gate_report_challenger_bundle_key")
+            if kv_candidate_builder.get("bundle_base_gap") not in (None, ""):
+                hints["bundle_base_gap"] = kv_candidate_builder.get("bundle_base_gap")
+            if kv_candidate_builder.get("base_gap_norm") not in (None, ""):
+                hints["base_gap_norm"] = kv_candidate_builder.get("base_gap_norm")
+            if kv_candidate_builder.get("bundle_rerank_gap") not in (None, ""):
+                hints["bundle_rerank_gap"] = kv_candidate_builder.get("bundle_rerank_gap")
+            if kv_candidate_builder.get("hard_margin") not in (None, ""):
+                hints["hard_margin"] = kv_candidate_builder.get("hard_margin")
+            if kv_candidate_builder.get("soft_margin") not in (None, ""):
+                hints["soft_margin"] = kv_candidate_builder.get("soft_margin")
+            if kv_candidate_builder.get("pairwise_delta") not in (None, ""):
+                hints["pairwise_delta"] = kv_candidate_builder.get("pairwise_delta")
+            if isinstance(kv_candidate_builder.get("pairwise_margin_breakdown"), Mapping):
+                hints["pairwise_margin_breakdown"] = dict(kv_candidate_builder.get("pairwise_margin_breakdown", {}))
+            if isinstance(kv_candidate_builder.get("common_mode_evidence"), Mapping):
+                hints["common_mode_evidence"] = dict(kv_candidate_builder.get("common_mode_evidence", {}))
+            if isinstance(kv_candidate_builder.get("support_common_vs_discriminative"), Mapping):
+                hints["support_common_vs_discriminative"] = dict(
+                    kv_candidate_builder.get("support_common_vs_discriminative", {})
+                )
+            if kv_candidate_builder.get("controller_pairwise_reason_text") not in (None, ""):
+                hints["controller_pairwise_reason_text"] = str(kv_candidate_builder.get("controller_pairwise_reason_text"))
+            if kv_candidate_builder.get("gate_report_pairwise_reason_text") not in (None, ""):
+                hints["gate_report_pairwise_reason_text"] = str(kv_candidate_builder.get("gate_report_pairwise_reason_text"))
+            if isinstance(kv_candidate_builder.get("bundle_score_debug"), SequenceABC) and not isinstance(
+                kv_candidate_builder.get("bundle_score_debug"), (str, bytes, bytearray)
+            ):
+                hints["bundle_score_debug"] = [
+                    dict(item) for item in kv_candidate_builder.get("bundle_score_debug", [])[:5] if isinstance(item, Mapping)
                 ]
         if kv_canary_checked > 0:
             hints["kv_canary_checked"] = kv_canary_checked
@@ -3297,7 +5134,7 @@ class HookedTransformerWorkerRuntime:
             )
             block_reason["no_candidates"] = bool(not kv_candidate_edits)
             return True, "preprobe_first_token_collapse", dict(block_reason)
-        history = self._recent_kv_probe_history(window=6)
+        history = self._recent_probe_history(window=6, phase_profiles={"readout_escape"})
         actionable_count = sum(1 for item in history if str(item.get("label", "") or "") in {"positive", "actionable_positive"})
         subthreshold_count = sum(1 for item in history if str(item.get("label", "") or "") == "weak_positive_subthreshold")
         block_reason["needs_probe_history"] = bool(actionable_count <= 0 and subthreshold_count < 2)
@@ -3620,6 +5457,12 @@ class HookedTransformerWorkerRuntime:
             "same_term_family_drops": 0,
             "sidecar_veto_drops": 0,
             "bundle_inputs": [],
+            "bundle_score_debug": [],
+            "selected_bundle_key": None,
+            "bundle_reorder_applied": False,
+            "bundle_reorder_reason": "not_applicable",
+            "bundle_rerank_gate_open": False,
+            "bundle_rerank_gate_reasons": [],
         }
 
         def _note_prune(reason: str) -> None:
@@ -3645,6 +5488,10 @@ class HookedTransformerWorkerRuntime:
         candidates: list[tuple[int, int, int, int, float, int, int, dict[str, Any]]] = []
         seen_keys: set[tuple[str, str, int, int, str]] = set()
         actionable_hits = self._actionable_kv_hits(limit=3, promoted_cache_surfaces=promoted_cache_surfaces)
+        recent_probe_by_candidate_key = self._recent_probe_outcomes_by_candidate_key(
+            window=8,
+            probe_families={"kv_v", "kv_k", "kv_mix"},
+        )
         debug["input_hit_count"] = len(actionable_hits)
         if not actionable_hits:
             _note_prune("no_feature_hits")
@@ -3739,7 +5586,13 @@ class HookedTransformerWorkerRuntime:
                     "alignment": round(float(hit.get("alignment", 0.0) or 0.0), 6),
                     "candidate_family": str(variant.get("candidate_family", "")),
                     "phase_objective": str(variant.get("phase_objective", "shot_mode")),
+                    "target_term_priority": int(term_priority.get(feature, 99)),
                     "span_kind": str(variant.get("span_kind", "source_position_single")),
+                    "recipe_localization": str(variant.get("span_kind", "source_position_single")),
+                    "recipe_pooling": "mean"
+                    if str(variant.get("span_kind", "")).startswith("exact_prompt_span")
+                    else "single",
+                    "contrast_mode": "none",
                     "provenance_class": str(variant.get("provenance_class", "misc_prompt") or "misc_prompt"),
                     "read_source_resolved": True,
                     "write_target_resolved": True,
@@ -3772,6 +5625,11 @@ class HookedTransformerWorkerRuntime:
                 }
                 if source_span is not None:
                     candidate["source_span"] = {"start": int(source_span["start"]), "end": int(source_span["end"])}
+                candidate["operator_family_key"] = self._operator_family_key(candidate)
+                candidate["operator_recipe_id"] = self._operator_recipe_id(candidate)
+                candidate_key = self._candidate_sidecar_key(candidate)
+                if candidate_key in recent_probe_by_candidate_key:
+                    candidate["recent_probe"] = dict(recent_probe_by_candidate_key[candidate_key])
                 preferred_site = str(hit.get("site_preference", "balanced") or "balanced")
                 preferred_priority = 0 if preferred_site in {"k_cache", "v_cache"} and site == preferred_site else 1
                 site_priority = 0 if site == "k_cache" else 1
@@ -3799,15 +5657,11 @@ class HookedTransformerWorkerRuntime:
         selected = [candidate for _t, _v, _p, _s, _a, _l, _h, candidate in candidates]
         if control_phase_hint == "readout_escape":
             selected = self._prune_escape_candidates(selected, debug=debug)
-            selected.sort(
-                key=lambda item: (
-                    0 if bool(item.get("bundle_ready", False)) else 1,
-                    int(missing_term_list.index(str(item.get("focus_feature", "") or "")))
-                    if str(item.get("focus_feature", "") or "") in missing_term_list
-                    else 99,
-                    -self._candidate_builder_score(item),
-                    str(item.get("surface_id", "") or ""),
-                )
+            selected = self._post_bundle_rerank(
+                selected,
+                answer_readout_canary=answer_readout_canary,
+                debug=debug,
+                control_phase_hint=control_phase_hint,
             )
             selected = selected[:4]
         else:
@@ -5067,7 +6921,399 @@ class HookedTransformerWorkerRuntime:
         )
         if readout_metrics:
             result.update(readout_metrics)
+        probe_summary = self._classify_probe_result(result)
+        if probe_summary is not None:
+            result["probe_family"] = probe_summary.get("probe_family")
+            result["probe_phase_profile"] = probe_summary.get("probe_phase_profile")
+            result["probe_label"] = probe_summary.get("label")
+            result["probe_score"] = probe_summary.get("score")
+            result["readout_probe_score"] = probe_summary.get("readout_score")
+            result["constraint_probe_score"] = probe_summary.get("constraint_score")
+            result["trajectory_probe_score"] = probe_summary.get("trajectory_score")
+            result["positive_axes"] = list(probe_summary.get("positive_axes", [])[:4])
+            result["actionable_axes"] = list(probe_summary.get("actionable_axes", [])[:4])
+            result["probe_summary"] = dict(probe_summary)
         return result
+
+    def replay_candidate_edits_actual_delta(
+        self,
+        candidate_edits: Sequence[Mapping[str, Any]],
+        *,
+        max_new_tokens: int = 3,
+        top_k: int = 8,
+        max_edits_per_step_override: int | None = None,
+        label: str | None = None,
+    ) -> dict[str, Any]:
+        edits = [dict(item) for item in candidate_edits if isinstance(item, Mapping)]
+        if not edits:
+            return {"status": "error", "error": "missing_candidate_edits", "label": label}
+        baseline = self._simulate_decode(max_new_tokens=max_new_tokens, top_k=top_k)
+        if baseline is None:
+            return {
+                "status": "error",
+                "error": "baseline_simulate_failed",
+                "label": label,
+                "simulate_error": self._last_simulate_decode_error,
+            }
+        prepared_edits: list[dict[str, Any]] = []
+        focus_terms: list[str] = []
+        operator_family_keys: list[str] = []
+        operator_recipe_ids: list[str] = []
+        for index, raw_edit in enumerate(edits):
+            edit = dict(raw_edit)
+            edit.setdefault("id", f"replay_{self._steps}_{index}")
+            edit.setdefault("target", {"surface_id": raw_edit.get("surface_id")})
+            prepared_edits.append(edit)
+            feature = str(raw_edit.get("focus_feature", "") or "")
+            if feature and feature not in focus_terms:
+                focus_terms.append(feature)
+            operator_family_keys.append(self._operator_family_key(raw_edit))
+            operator_recipe_ids.append(self._operator_recipe_id(raw_edit))
+        for term in self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")):
+            if term not in focus_terms:
+                focus_terms.append(term)
+        command = {"version": "0.1", "decision": "apply", "edits": prepared_edits}
+        policy_override = self._replay_policy(max_edits_per_step_override=max_edits_per_step_override)
+        edited = self._simulate_decode(
+            max_new_tokens=max_new_tokens,
+            top_k=top_k,
+            command=command,
+            policy_override=policy_override,
+        )
+        if edited is None:
+            return {
+                "status": "error",
+                "error": "simulate_decode_failed",
+                "label": label,
+                "simulate_error": self._last_simulate_decode_error,
+                "bundle_keys": sorted({str(item.get("bundle_key", "") or "") for item in edits if str(item.get("bundle_key", "") or "")}),
+                "operator_family_keys": sorted({str(key) for key in operator_family_keys if str(key)}),
+            }
+        baseline_score = baseline.get("scoring", {})
+        edited_score = edited.get("scoring", {})
+        result = {
+            "status": "ok",
+            "label": label,
+            "edit_count": len(prepared_edits),
+            "candidate_edits": [dict(item) for item in edits],
+            "bundle_keys": sorted({str(item.get("bundle_key", "") or "") for item in edits if str(item.get("bundle_key", "") or "")}),
+            "operator_family_key": operator_family_keys[0] if operator_family_keys else "unknown",
+            "operator_family_keys": sorted({str(key) for key in operator_family_keys if str(key)}),
+            "operator_recipe_id": operator_recipe_ids[0] if operator_recipe_ids else "unknown",
+            "operator_recipe_ids": sorted({str(key) for key in operator_recipe_ids if str(key)}),
+            "focus_terms": list(focus_terms),
+            "continuation_baseline": baseline["continuation"],
+            "continuation_candidate": edited["continuation"],
+            "topk_token_diff": self._topk_token_diff(baseline["first_logits"], edited["first_logits"], top_k=top_k),
+            "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
+            "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"])),
+            "required_term_recall_delta": round(
+                float(edited_score.get("required_term_recall") or 0.0) - float(baseline_score.get("required_term_recall") or 0.0),
+                6,
+            ),
+            "required_term_span_progress_delta": round(
+                float(edited_score.get("required_term_span_progress") or 0.0)
+                - float(baseline_score.get("required_term_span_progress") or 0.0),
+                6,
+            ),
+            "semantic_progress_delta": round(
+                float(edited_score.get("semantic_progress_score") or 0.0)
+                - float(baseline_score.get("semantic_progress_score") or 0.0),
+                6,
+            ),
+        }
+        readout_metrics = self._first_token_target_readout_metrics(
+            baseline["first_logits"],
+            edited["first_logits"],
+            focus_terms=focus_terms,
+        )
+        if readout_metrics:
+            result.update(readout_metrics)
+        probe_summary = self._classify_probe_result(
+            {
+                **result,
+                "candidate_edit": prepared_edits[0],
+            }
+        )
+        if probe_summary is not None:
+            result["probe_summary"] = dict(probe_summary)
+        result["actual_delta_class"] = self._classify_actual_delta_result(result)
+        return result
+
+    def _default_operator_recipe_specs(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "recipe_name": "baseline_span_mean",
+                "localization": "exact_prompt_span_mean",
+                "pooling": "mean",
+                "contrast_mode": "none",
+                "modes": ("kv_v", "kv_k", "kv_pair"),
+            },
+            {
+                "recipe_name": "term_token",
+                "localization": "exact_term_token",
+                "pooling": "single",
+                "contrast_mode": "none",
+                "modes": ("kv_v", "kv_k", "kv_pair"),
+            },
+            {
+                "recipe_name": "term_window_pm1_weighted",
+                "localization": "exact_term_window_pm1_weighted",
+                "pooling": "weighted_mean",
+                "contrast_mode": "none",
+                "modes": ("kv_v", "kv_k", "kv_pair", "kv_pair_asymmetric"),
+            },
+            {
+                "recipe_name": "term_window_pm1_weighted_minus_base",
+                "localization": "exact_term_window_pm1_weighted",
+                "pooling": "weighted_mean",
+                "contrast_mode": "minus_base",
+                "modes": ("kv_v", "kv_k", "kv_pair", "kv_pair_asymmetric"),
+            },
+        ]
+
+    def replay_operator_recipe_matrix(
+        self,
+        *,
+        bundle_keys: Sequence[str] | None = None,
+        recipe_specs: Sequence[Mapping[str, Any]] | None = None,
+        max_new_tokens: int = 3,
+        top_k: int = 8,
+        max_edits_per_step_override: int = 2,
+    ) -> dict[str, Any]:
+        packet = self.build_controller_packet()
+        strategy_hints = packet.get("strategy_hints") if isinstance(packet.get("strategy_hints"), Mapping) else {}
+        candidate_edits = strategy_hints.get("kv_candidate_edits")
+        if not isinstance(candidate_edits, SequenceABC) or isinstance(candidate_edits, (str, bytes, bytearray)):
+            candidate_edits = []
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for item in candidate_edits:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("bundle_key", "") or "")
+            if not bundle_key:
+                continue
+            grouped.setdefault(bundle_key, []).append(dict(item))
+        chosen_bundle_keys = [str(item) for item in (bundle_keys or ()) if str(item)]
+        if not chosen_bundle_keys:
+            for key in (
+                strategy_hints.get("base_winner_bundle_key"),
+                strategy_hints.get("challenger_bundle_key"),
+            ):
+                if key not in (None, "") and str(key) not in chosen_bundle_keys:
+                    chosen_bundle_keys.append(str(key))
+        specs = [dict(item) for item in (recipe_specs or self._default_operator_recipe_specs()) if isinstance(item, Mapping)]
+        base_bundle_key = str(strategy_hints.get("base_winner_bundle_key", "") or "")
+        base_members = grouped.get(base_bundle_key, [])
+        evaluations: list[dict[str, Any]] = []
+        for bundle_key in chosen_bundle_keys:
+            members = grouped.get(bundle_key, [])
+            if not members:
+                continue
+            competitor_members = base_members if base_bundle_key and bundle_key != base_bundle_key else []
+            competitor_by_site = {
+                str(item.get("site", "") or ""): dict(item)
+                for item in competitor_members
+                if isinstance(item, Mapping)
+            }
+            members_by_site = {
+                str(item.get("site", "") or ""): dict(item)
+                for item in members
+                if isinstance(item, Mapping)
+            }
+            for spec in specs:
+                localization = str(spec.get("localization", "exact_prompt_span_mean") or "exact_prompt_span_mean")
+                pooling = str(spec.get("pooling", "mean") or "mean")
+                contrast_mode = str(spec.get("contrast_mode", "none") or "none")
+                recipe_name = str(spec.get("recipe_name", localization) or localization)
+                for mode in tuple(spec.get("modes", ("kv_pair",))):
+                    if mode == "kv_pair":
+                        pair_members: list[dict[str, Any]] = []
+                        for site in ("v_cache", "k_cache"):
+                            member = members_by_site.get(site)
+                            if member is None:
+                                pair_members = []
+                                break
+                            pair_members.append(
+                                self._materialize_recipe_candidate(
+                                    member,
+                                    localization=localization,
+                                    pooling=pooling,
+                                    contrast_mode=contrast_mode,
+                                    competitor_candidate=competitor_by_site.get(site),
+                                )
+                            )
+                        if pair_members and all(member is not None for member in pair_members):
+                            prepared_pair = [dict(member) for member in pair_members if isinstance(member, Mapping)]
+                            if len(prepared_pair) == 2:
+                                pair_recipe_id = self._operator_recipe_id(
+                                    {
+                                        "phase_objective": prepared_pair[0].get("phase_objective"),
+                                        "bundle_family": "kv_pair_source_anchor",
+                                        "provenance_class": prepared_pair[0].get("provenance_class"),
+                                        "recipe_localization": localization,
+                                        "recipe_pooling": pooling,
+                                        "contrast_mode": contrast_mode,
+                                        "recipe_k_alpha": prepared_pair[1].get("recipe_alpha", prepared_pair[1].get("op", {}).get("alpha", 0.0)),
+                                        "recipe_v_alpha": prepared_pair[0].get("recipe_alpha", prepared_pair[0].get("op", {}).get("alpha", 0.0)),
+                                    }
+                                )
+                                result = self.replay_candidate_edits_actual_delta(
+                                    prepared_pair,
+                                    max_new_tokens=max_new_tokens,
+                                    top_k=top_k,
+                                    max_edits_per_step_override=max_edits_per_step_override,
+                                    label=f"{recipe_name}:pair:{bundle_key}",
+                                )
+                                result["operator_recipe_id"] = pair_recipe_id
+                                evaluations.append(result)
+                    elif mode == "kv_pair_asymmetric":
+                        v_member = members_by_site.get("v_cache")
+                        k_member = members_by_site.get("k_cache")
+                        if v_member is None or k_member is None:
+                            continue
+                        prepared_v = self._materialize_recipe_candidate(
+                            v_member,
+                            localization=localization,
+                            pooling=pooling,
+                            contrast_mode=contrast_mode,
+                            competitor_candidate=competitor_by_site.get("v_cache"),
+                            alpha_override=0.045,
+                        )
+                        prepared_k = self._materialize_recipe_candidate(
+                            k_member,
+                            localization=localization,
+                            pooling=pooling,
+                            contrast_mode=contrast_mode,
+                            competitor_candidate=competitor_by_site.get("k_cache"),
+                            alpha_override=0.03,
+                        )
+                        if prepared_v is None or prepared_k is None:
+                            continue
+                        asym_pair = [prepared_v, prepared_k]
+                        pair_recipe_id = self._operator_recipe_id(
+                            {
+                                "phase_objective": prepared_v.get("phase_objective"),
+                                "bundle_family": "kv_pair_source_anchor",
+                                "provenance_class": prepared_v.get("provenance_class"),
+                                "recipe_localization": localization,
+                                "recipe_pooling": pooling,
+                                "contrast_mode": contrast_mode,
+                                "recipe_k_alpha": 0.03,
+                                "recipe_v_alpha": 0.045,
+                            }
+                        )
+                        result = self.replay_candidate_edits_actual_delta(
+                            asym_pair,
+                            max_new_tokens=max_new_tokens,
+                            top_k=top_k,
+                            max_edits_per_step_override=max_edits_per_step_override,
+                            label=f"{recipe_name}:pair_asym:{bundle_key}",
+                        )
+                        result["operator_recipe_id"] = pair_recipe_id
+                        evaluations.append(result)
+                    else:
+                        site = "v_cache" if mode == "kv_v" else "k_cache"
+                        member = members_by_site.get(site)
+                        if member is None:
+                            continue
+                        prepared = self._materialize_recipe_candidate(
+                            member,
+                            localization=localization,
+                            pooling=pooling,
+                            contrast_mode=contrast_mode,
+                            competitor_candidate=competitor_by_site.get(site),
+                        )
+                        if prepared is None:
+                            continue
+                        result = self.replay_candidate_edits_actual_delta(
+                            [prepared],
+                            max_new_tokens=max_new_tokens,
+                            top_k=top_k,
+                            label=f"{recipe_name}:{mode}:{bundle_key}",
+                        )
+                        result["operator_recipe_id"] = str(prepared.get("operator_recipe_id", self._operator_recipe_id(prepared)))
+                        evaluations.append(result)
+        recipe_certifications = self._summarize_operator_certifications(
+            evaluations,
+            key_field="operator_recipe_id",
+        )
+        return {
+            "base_winner_bundle_key": strategy_hints.get("base_winner_bundle_key"),
+            "challenger_bundle_key": strategy_hints.get("challenger_bundle_key"),
+            "selected_bundle_key": strategy_hints.get("selected_bundle_key"),
+            "selection_source": strategy_hints.get("selection_source"),
+            "evaluations": evaluations,
+            "operator_recipe_certifications": recipe_certifications,
+        }
+
+    def replay_operator_certification(
+        self,
+        *,
+        bundle_keys: Sequence[str] | None = None,
+        max_new_tokens: int = 3,
+        top_k: int = 8,
+        max_edits_per_step_override: int = 2,
+    ) -> dict[str, Any]:
+        packet = self.build_controller_packet()
+        strategy_hints = packet.get("strategy_hints") if isinstance(packet.get("strategy_hints"), Mapping) else {}
+        candidate_edits = strategy_hints.get("kv_candidate_edits")
+        if not isinstance(candidate_edits, SequenceABC) or isinstance(candidate_edits, (str, bytes, bytearray)):
+            candidate_edits = []
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for item in candidate_edits:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("bundle_key", "") or "")
+            if not bundle_key:
+                continue
+            grouped.setdefault(bundle_key, []).append(dict(item))
+        chosen_bundle_keys = [str(item) for item in (bundle_keys or ()) if str(item)]
+        if not chosen_bundle_keys:
+            for key in (
+                strategy_hints.get("base_winner_bundle_key"),
+                strategy_hints.get("challenger_bundle_key"),
+            ):
+                if key not in (None, "") and str(key) not in chosen_bundle_keys:
+                    chosen_bundle_keys.append(str(key))
+        evaluations: list[dict[str, Any]] = []
+        for bundle_key in chosen_bundle_keys:
+            members = grouped.get(bundle_key, [])
+            if not members:
+                continue
+            for member in members:
+                evaluations.append(
+                    self.replay_candidate_edits_actual_delta(
+                        [member],
+                        max_new_tokens=max_new_tokens,
+                        top_k=top_k,
+                        label=f"single:{bundle_key}:{member.get('site')}",
+                    )
+                )
+            if len(members) > 1:
+                evaluations.append(
+                    self.replay_candidate_edits_actual_delta(
+                        members,
+                        max_new_tokens=max_new_tokens,
+                        top_k=top_k,
+                        max_edits_per_step_override=max_edits_per_step_override,
+                        label=f"pair:{bundle_key}",
+                    )
+                )
+        certifications = self._summarize_operator_certifications(evaluations)
+        self._operator_certification_table = {
+            str(item.get("operator_family_key", "") or ""): dict(item)
+            for item in certifications
+            if str(item.get("operator_family_key", "") or "")
+        }
+        return {
+            "base_winner_bundle_key": strategy_hints.get("base_winner_bundle_key"),
+            "challenger_bundle_key": strategy_hints.get("challenger_bundle_key"),
+            "selected_bundle_key": strategy_hints.get("selected_bundle_key"),
+            "selection_source": strategy_hints.get("selection_source"),
+            "evaluations": evaluations,
+            "operator_certifications": certifications,
+        }
 
     def _build_dry_run_command(self, candidate_edit: Mapping[str, Any]) -> dict[str, Any] | None:
         if "source" in candidate_edit and "op" in candidate_edit and "budget" in candidate_edit:
@@ -5145,6 +7391,7 @@ class HookedTransformerWorkerRuntime:
         max_new_tokens: int,
         top_k: int,
         command: Mapping[str, Any] | None = None,
+        policy_override: HarnessPolicy | None = None,
     ) -> dict[str, Any] | None:
         if max_new_tokens <= 0:
             return None
@@ -5164,8 +7411,20 @@ class HookedTransformerWorkerRuntime:
                     primer_tokens = self._current_token_tensor()
                     self.runtime_state.run_with_cache(primer_tokens, return_type="logits")
                 packet = self.build_controller_packet()
+                if (
+                    policy_override is not None
+                    and isinstance(packet, Mapping)
+                    and isinstance(packet.get("budget"), Mapping)
+                ):
+                    packet = dict(packet)
+                    budget = dict(packet["budget"])
+                    budget["edits_left_this_step"] = max(
+                        int(budget.get("edits_left_this_step", 0) or 0),
+                        int(policy_override.global_budget.max_edits_per_step),
+                    )
+                    packet["budget"] = budget
                 ctx = StepContext(packet=packet, runtime_state=self.runtime_state, traces={}, stats={}, adapter=self.adapter, active_edits={})
-                compiled = compile_command(command, packet, ctx)
+                compiled = compile_command(command, packet, ctx, policy=policy_override)
                 for item in compiled:
                     item.apply(ctx)
                     temporary_edits.append((item, ctx))

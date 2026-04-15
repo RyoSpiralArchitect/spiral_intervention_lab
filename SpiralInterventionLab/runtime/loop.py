@@ -191,15 +191,80 @@ def _command_edit_count(command: Any) -> int:
     return 0
 
 
-def _guarded_noop_command(command: Any) -> dict[str, Any]:
+def _command_surface_family_key(command: Any) -> str | None:
+    edits = _command_field(command, "edits")
+    if not isinstance(edits, SequenceABC) or isinstance(edits, (str, bytes, bytearray)):
+        return None
+    for edit in edits:
+        if isinstance(edit, Mapping):
+            target = edit.get("target")
+            op = edit.get("op")
+        else:
+            target = getattr(edit, "target", None)
+            op = getattr(edit, "op", None)
+        surface_id = None
+        if isinstance(target, Mapping):
+            surface_id = target.get("surface_id")
+        elif target is not None:
+            surface_id = getattr(target, "surface_id", None)
+        op_kind = None
+        if isinstance(op, Mapping):
+            op_kind = op.get("kind")
+        elif op is not None:
+            op_kind = getattr(op, "kind", None)
+        if surface_id:
+            if op_kind:
+                return f"{str(op_kind)}_{str(surface_id)}"
+            return str(surface_id)
+    return None
+
+
+def _guarded_noop_command(
+    command: Any,
+    *,
+    noop_reason: str | None = None,
+    apply_block_reason: str | None = None,
+    finish_budget_reserved: int | bool | None = None,
+    evidence_bullets: Sequence[str] = (),
+) -> dict[str, Any]:
     guarded_command = {
         "version": str(_command_field(command, "version") or "0.1"),
         "decision": "noop",
         "edits": [],
         "rollback_ids": [],
     }
-    meta = _command_meta(command)
-    if meta is not None:
+    meta = _command_meta(command) or {}
+    controller_memory = meta.get("controller_memory")
+    normalized_memory = dict(controller_memory) if isinstance(controller_memory, Mapping) else {}
+    if noop_reason is not None:
+        meta.setdefault("noop_reason", noop_reason)
+        normalized_memory.setdefault("noop_reason", noop_reason)
+    if apply_block_reason is not None:
+        meta.setdefault("apply_block_reason", apply_block_reason)
+        normalized_memory.setdefault("apply_block_reason", apply_block_reason)
+    if finish_budget_reserved is not None:
+        meta.setdefault("finish_budget_reserved", finish_budget_reserved)
+        normalized_memory.setdefault("finish_budget_reserved", finish_budget_reserved)
+    surface_family_key = _command_surface_family_key(command)
+    if surface_family_key is not None:
+        meta.setdefault("surface_family_key", surface_family_key)
+        normalized_memory.setdefault("surface_family_key", surface_family_key)
+    bullets: list[str] = []
+    raw_existing_bullets = normalized_memory.get("evidence_bullets")
+    if isinstance(raw_existing_bullets, SequenceABC) and not isinstance(raw_existing_bullets, (str, bytes, bytearray)):
+        for item in raw_existing_bullets:
+            text = " ".join(str(item).split()).strip()
+            if text and text not in bullets:
+                bullets.append(text)
+    for item in evidence_bullets:
+        text = " ".join(str(item).split()).strip()
+        if text and text not in bullets:
+            bullets.append(text)
+    if bullets:
+        normalized_memory["evidence_bullets"] = bullets[:4]
+    if normalized_memory:
+        meta["controller_memory"] = normalized_memory
+    if meta:
         guarded_command["meta"] = meta
     return guarded_command
 
@@ -239,7 +304,15 @@ def _guard_exhausted_apply_command(
         and loop_rescue_edits_left_this_run > 0
     ):
         return command, None
-    guarded_command = _guarded_noop_command(command)
+    guarded_command = _guarded_noop_command(
+        command,
+        noop_reason="budget_exhausted",
+        apply_block_reason="edits_left_this_run_exhausted",
+        evidence_bullets=(
+            "main_edit_budget exhausted",
+            f"requested_edit_count={_command_edit_count(command)}",
+        ),
+    )
     return guarded_command, {
         "reason": "edits_left_this_run_exhausted",
         "original_decision": decision,
@@ -264,7 +337,15 @@ def _guard_budget_violating_apply_command(
         return command, None
     if reason is None:
         return command, None
-    guarded_command = _guarded_noop_command(command)
+    guarded_command = _guarded_noop_command(
+        command,
+        noop_reason="guardrail_blocked",
+        apply_block_reason=reason,
+        evidence_bullets=(
+            "runtime_guardrail converted apply to noop",
+            str(reason),
+        ),
+    )
     return guarded_command, {
         "reason": reason,
         "original_decision": decision,
@@ -298,6 +379,22 @@ def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, 
         normalized["next_trigger"] = meta.get("next_trigger")
     if meta.get("next_action") is not None and "next_action" not in normalized:
         normalized["next_action"] = meta.get("next_action")
+    for key in (
+        "noop_reason",
+        "apply_block_reason",
+        "surface_family_key",
+        "focus_term",
+        "transfer_confidence",
+        "same_family_escalation_risk",
+        "finish_budget_reserved",
+        "evidence_bullets",
+    ):
+        if meta.get(key) is not None and key not in normalized:
+            normalized[key] = meta.get(key)
+    if "surface_family_key" not in normalized:
+        derived_surface_family_key = _command_surface_family_key(command)
+        if derived_surface_family_key is not None:
+            normalized["surface_family_key"] = derived_surface_family_key
     if not normalized:
         return None, None if decision is None else str(decision)
     return normalized, None if decision is None else str(decision)
@@ -329,6 +426,150 @@ def _extract_tool_requests(command: Any) -> list[dict[str, Any]]:
         if isinstance(item, Mapping):
             normalized.append(dict(item))
     return normalized
+
+
+def _packet_strategy_hints(packet: Mapping[str, Any]) -> Mapping[str, Any]:
+    strategy_hints = packet.get("strategy_hints")
+    if isinstance(strategy_hints, Mapping):
+        return strategy_hints
+    return {}
+
+
+def _candidate_bundle_signature(item: Mapping[str, Any]) -> tuple[str, str] | None:
+    surface_id = item.get("surface_id")
+    if surface_id in (None, "") and isinstance(item.get("target"), Mapping):
+        surface_id = item["target"].get("surface_id")
+    op = item.get("op")
+    op_kind = None
+    if isinstance(op, Mapping):
+        op_kind = op.get("kind")
+    elif op is not None:
+        op_kind = getattr(op, "kind", None)
+    if surface_id in (None, "") or op_kind in (None, ""):
+        return None
+    return str(surface_id), str(op_kind)
+
+
+def _command_edit_signature(edit: Any) -> tuple[str, str] | None:
+    if isinstance(edit, Mapping):
+        target = edit.get("target")
+        op = edit.get("op")
+    else:
+        target = getattr(edit, "target", None)
+        op = getattr(edit, "op", None)
+    surface_id = None
+    if isinstance(target, Mapping):
+        surface_id = target.get("surface_id")
+    elif target is not None:
+        surface_id = getattr(target, "surface_id", None)
+    op_kind = None
+    if isinstance(op, Mapping):
+        op_kind = op.get("kind")
+    elif op is not None:
+        op_kind = getattr(op, "kind", None)
+    if surface_id in (None, "") or op_kind in (None, ""):
+        return None
+    return str(surface_id), str(op_kind)
+
+
+def _packet_bundle_candidates(packet: Mapping[str, Any]) -> dict[tuple[str, str], str]:
+    strategy_hints = _packet_strategy_hints(packet)
+    by_signature: dict[tuple[str, str], str] = {}
+    for key in ("kv_candidate_edits", "kv_retry_candidate_edits", "shot_candidate_edits"):
+        items = strategy_hints.get(key)
+        if not isinstance(items, SequenceABC) or isinstance(items, (str, bytes, bytearray)):
+            continue
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            signature = _candidate_bundle_signature(item)
+            bundle_key = item.get("bundle_key")
+            if signature is None or bundle_key in (None, ""):
+                continue
+            by_signature.setdefault(signature, str(bundle_key))
+    return by_signature
+
+
+def _extract_controller_selected_bundle_key(packet: Mapping[str, Any], command: Any) -> str | None:
+    if _command_decision(command) != "apply":
+        return None
+    bundle_map = _packet_bundle_candidates(packet)
+    edits = _command_field(command, "edits")
+    if not isinstance(edits, SequenceABC) or isinstance(edits, (str, bytes, bytearray)):
+        return None
+    matched_bundle_keys: list[str] = []
+    for edit in edits:
+        signature = _command_edit_signature(edit)
+        if signature is None:
+            continue
+        bundle_key = bundle_map.get(signature)
+        if bundle_key and bundle_key not in matched_bundle_keys:
+            matched_bundle_keys.append(bundle_key)
+    if len(matched_bundle_keys) == 1:
+        return matched_bundle_keys[0]
+    return None
+
+
+def _dedup_text_items(*groups: Any) -> list[str]:
+    items: list[str] = []
+    for group in groups:
+        if group is None:
+            continue
+        if isinstance(group, SequenceABC) and not isinstance(group, (str, bytes, bytearray)):
+            values = group
+        else:
+            values = [group]
+        for value in values:
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text and text not in items:
+                items.append(text)
+    return items
+
+
+def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) -> dict[str, Any]:
+    strategy_hints = _packet_strategy_hints(packet)
+    meta = _command_meta(command) or {}
+    helper_frontier_bundle_key = strategy_hints.get(
+        "gate_report_frontier_bundle_key",
+        strategy_hints.get("selected_bundle_key"),
+    )
+    sidecar_suggested_bundle_key = strategy_hints.get(
+        "readout_analyzer_suggested_bundle_key",
+        strategy_hints.get("readout_sidecar_suggested_bundle_key"),
+    )
+    controller_selected_bundle_key = _extract_controller_selected_bundle_key(packet, command)
+    controller_selection_source = "controller_apply"
+    if controller_selected_bundle_key is None:
+        controller_selection_source = "controller_noop" if _command_decision(command) == "noop" else "controller_unresolved"
+    elif controller_selected_bundle_key == helper_frontier_bundle_key:
+        controller_selection_source = str(
+            strategy_hints.get("gate_report_selection_source", strategy_hints.get("selection_source", "controller_apply"))
+            or "controller_apply"
+        )
+    rejected_signal_groups: list[Any] = [meta.get("noop_reason"), meta.get("apply_block_reason")]
+    if controller_selected_bundle_key is None or (
+        helper_frontier_bundle_key not in (None, "")
+        and controller_selected_bundle_key not in (None, "")
+        and str(controller_selected_bundle_key) != str(helper_frontier_bundle_key)
+    ):
+        rejected_signal_groups.extend(
+            [
+                strategy_hints.get("gate_report_rejected_signals"),
+                strategy_hints.get("gate_report_reasons"),
+                strategy_hints.get("bundle_rerank_gate_reasons"),
+                strategy_hints.get("rerank_vetoes"),
+            ]
+        )
+    controller_rejected_signals = _dedup_text_items(*rejected_signal_groups)
+    return {
+        "sidecar_suggested_bundle_key": None if sidecar_suggested_bundle_key in (None, "") else str(sidecar_suggested_bundle_key),
+        "gate_report_frontier_bundle_key": None if helper_frontier_bundle_key in (None, "") else str(helper_frontier_bundle_key),
+        "controller_selected_bundle_key": controller_selected_bundle_key,
+        "controller_rejected_signals": controller_rejected_signals,
+        "controller_selection_source": controller_selection_source,
+    }
 
 
 def _log_pending_observer_check_events(
@@ -414,11 +655,13 @@ def run_episode(
         _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
+            selection_report = _build_controller_selection_report(packet, command)
             if guard_event is not None:
                 logger.log({"event": "controller_guardrail", "step": step_count, **guard_event})
             if budget_guard_event is not None:
                 logger.log({"event": "controller_guardrail", "step": step_count, **budget_guard_event})
-            logger.log({"event": "controller_command", "step": step_count, "command": command})
+            logger.log({"event": "controller_command", "step": step_count, "command": command, **selection_report})
+            logger.log({"event": "controller_selection", "step": step_count, **selection_report})
         _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
         observer_check_request = _extract_observer_check_request(command)
         if observer_check_request is not None:

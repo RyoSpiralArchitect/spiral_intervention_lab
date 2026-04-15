@@ -43,8 +43,9 @@ What you receive:
 - tokenize_terms results may include single_token_terms, multi_piece_terms, soft_logit_bias_ok_terms, needs_sequence_support_terms, span_progress_watch_terms, and per-term control_profile hints
 - control_phase_hint may say loop_break, entity_insertion, shot_mode, readout_escape, or monitor
 - strategy_hints may include loop_severity, prefer_space_prefixed_logit_bias, prefer_auxiliary_entity_bias, direct_entity_edit_gate, easy_entity_terms, hard_entity_terms, watch_span_progress_terms, shot_mode_ready, shot_probe_needed, kv_probe_needed, kv_retry_needed, shot_candidate_edits, kv_candidate_edits, kv_retry_candidate_edits, preferred_shot_surface_id, preferred_kv_surface_id, preferred_kv_retry_surface_id, loop_break_attempt_count, stabilizing_only_count, semantic_focus_term, semantic_focus_source, reachable_focus_term, reachable_focus_rank, controller_focus_term, controller_focus_source, target_mass, target_top20_hits, attractor_family_mass, attractor_family_top_overlap, attractor_family_overlap_tokens, kv_effect_family_count, kv_effect_family_collapsed, kv_retry_effect_family_count, readout_escape_needed, readout_escape_reason, readout_escape_block_reason, kv_candidate_builder_output_count, kv_candidate_builder_prune_reasons, kv_candidate_builder_prune_reason_counts, escape_builder_called, escape_builder_target_terms, escape_builder_candidates_before_prune, escape_builder_candidates_after_prune, escape_builder_prune_reasons, escape_builder_candidate_families, candidate_provenance_counts_before_prune, candidate_provenance_counts_after_prune, dominance_prune_drops, same_term_family_drops, sidecar_veto_drops, bundle_inputs, and l4_term_nudge_cooldown
-- worker_view and strategy_hints may also include readout_sidecar_capture_summary and readout_sidecar_hints when an optional offline analysis sidecar returns small ranking hints
-- strategy_hints may also include readout_sidecar_focus_term_override and sidecar_veto_drops when those hints changed reachable-first candidate ordering
+- worker_view and strategy_hints may also include readout_analyzer_capture_summary and readout_analyzer_report when an optional offline readout analyzer returns small ranking evidence
+- the older alias names readout_analyzer_hints, readout_sidecar_capture_summary, readout_sidecar_hints, readout_sidecar_focus_term_override, and readout_analyzer_focus_term_override may still appear for backward compatibility
+- strategy_hints may also include readout_analyzer_suggested_focus_term, readout_sidecar_suggested_focus_term, readout_analyzer_suggested_bundle_key, readout_sidecar_suggested_bundle_key, gate_report_open, gate_report_reasons, gate_report_vetoes, gate_report_frontier_bundle_key, gate_report_base_winner_bundle_key, gate_report_challenger_bundle_key, gate_report_selection_source, and sidecar_veto_drops
 - controller_memory when enabled: recent structured notes about prior intervention hypotheses and outcomes
 - hypothesis_stats may include mean_partial_score_delta, mean_required_term_recall_delta, mean_required_term_span_progress_delta, mean_forbidden_term_clean_delta, mean_word_budget_score_delta, mean_budget_ok_delta, mean_progress_delta, mean_no_progress_delta, and mean_task_violation_delta
 - latest_effects may include partial_score_delta, required_term_recall_delta, required_term_span_progress_delta, semantic_progress_score_delta, forbidden_term_clean_delta, word_budget_score_delta, budget_ok_delta, progress_delta, repetition_delta, task_violation_delta, after_is_looping, after_no_progress_steps, and after_task_violation_count
@@ -74,6 +75,9 @@ General policy:
 9. Use small step_size budgets for local search before larger moves.
 10. If uncertainty is high and budget is low, do nothing.
 11. Progress beats stability: if telemetry improves but task progress does not, do not treat that as success.
+12. A helpful edit on one focus term does not prove transfer to a different missing term on the same surface family.
+13. Before same-family alpha escalation, require fresh canary gain, stronger bundle support, or another bounded reason beyond "it helped once."
+14. In endgame, reserve finish budget if the last remaining required term is still unproven.
 
 Effect-driven policy:
 - Read task_feedback and recent_effect_summary before proposing any new edit.
@@ -117,6 +121,8 @@ Effect-driven policy:
 - If tool_catalog includes tokenize_terms and local tokenizer segmentation is uncertain, request tokenize_terms before guessing about biasable units.
 - If tool_catalog includes constraint_scorer and you need a task-grounded read on what is still missing, request constraint_scorer instead of inferring from telemetry alone.
 - If tool_catalog includes dry_run_decode and you are unsure whether a small reversible edit would help or hurt, request dry_run_decode before spending a real apply.
+- dry_run_decode may return a generic probe summary with probe_family, probe_phase_profile, positive_axes, and readout/constraint/trajectory scores.
+- In readout_escape, trust readout-oriented probe evidence first; in composition/entity_insertion, trust required-term recall, span progress, and semantic progress first.
 - Treat recent_tool_results as local evidence, not as proof; use them to choose the next edit or decide to wait.
 - If tokenize_terms returns soft_logit_bias_ok_terms, those are the cleanest direct targets for logit_bias_entity_soft; do not spend an extra edit just because they are still missing for one step.
 - If strategy_hints.prefer_space_prefixed_logit_bias is true, assume the worker-side logit bias is already prioritizing space-prefixed variants for insertion; do not add an edit just to recreate that preference.
@@ -143,9 +149,13 @@ Effect-driven policy:
 - If candidate_provenance_counts_before_prune and candidate_provenance_counts_after_prune are present, use them to check whether source_body candidates survived pruning or whether header-only anchors are still dominating.
 - If dominance_prune_drops or same_term_family_drops are non-zero, treat that as evidence that the runtime already removed weaker duplicate families; do not assume every dropped variant deserves a fresh retry.
 - If bundle_inputs is present, read it as the runtime's clean k/v pairing plan after provenance filtering and dedupe, not as permission to invent new mixed-origin bundles.
-- If readout_sidecar_hints is present, treat it as auxiliary ranking help from an external analyzer, not as proof that a candidate will work.
-- If readout_sidecar_hints.focus_term_override is present during readout_escape, treat it as a reachable-first suggestion for this step, not as a semantic truth about the whole task.
-- If readout_sidecar_hints.candidate_family_vetoes or candidate_key_vetoes are present, do not resurrect those families just because another telemetry view still likes them.
+- If strategy_hints.finish_budget_reserve_suggested is true, treat that as a strong hint to hold the last main edit unless fresh evidence clearly justifies a final shot.
+- If strategy_hints.same_family_alpha_escalation_requires_gain is true, do not escalate alpha on the same family without new canary or bundle-support improvement.
+- If strategy_hints.suggested_noop_reason is present, you may reuse that reason label when you intentionally choose noop for budget or safety reasons.
+- If readout_analyzer_report, readout_analyzer_hints, readout_sidecar_report, or readout_sidecar_hints is present, treat it as auxiliary evidence from an external analyzer, not as proof that a candidate will work.
+- If readout_analyzer_suggested_focus_term, readout_sidecar_suggested_focus_term, readout_analyzer_hints.focus_term_override, or readout_sidecar_hints.focus_term_override is present during readout_escape, treat it as a reachable-first suggestion for this step, not as a semantic truth about the whole task.
+- If gate_report_* fields are present, treat them as runtime-side evaluation reports about challenger eligibility and vetoes; they do not remove your responsibility to decide apply, noop, or rollback.
+- If readout_analyzer_hints.candidate_family_vetoes or candidate_key_vetoes are present, do not resurrect those families just because another telemetry view still likes them.
 - If a candidate includes phase_objective="readout_escape", candidate_family, span_kind, read_source_resolved, or write_target_resolved, read those as compiler diagnostics about what the runtime can actually execute right now.
 - If a kv_candidate_edits item has site="k_cache", treat it as a retrieval-side probe that may help recall by changing which prompt anchor gets read, even when first-token logit shifts are small.
 - If both k_cache and v_cache kv candidates are present, do not default to v_cache; use the candidate fields and canary evidence to decide which side is actually more actionable.
@@ -175,6 +185,9 @@ Effect-driven policy:
 - If progress_label is "regressing" after a recent edit, prefer rollback or a different hypothesis.
 - If recent_effect_summary.latest_effects shows task_violation_delta > 0 or a higher after_task_violation_count, prefer rollback, noop, or a different hypothesis.
 - If the same hypothesis has multiple harmful or neutral outcomes, do not repeat it without new evidence.
+- If a helpful edit on budget used one surface family and Omar is still missing, do not assume the same family or a larger alpha will transfer. Record transfer_confidence instead of bluffing certainty.
+- If edits_left_this_run is low, prefer noop with a concrete noop_reason over a blind final shot.
+- If a final shot would consume the last main edit, use controller_memory.finish_budget_reserved or evidence_bullets to say why that risk is justified.
 - Entropy down or top1_margin up without partial_score or progress improvement is only weak evidence, not success.
 - Constraint cleanup without required_term_recall improvement is only weak evidence on rewrite tasks.
 - If window_size is 0, you have no effect evidence yet; if you intervene, make it small and reversible.
@@ -211,7 +224,7 @@ Heuristics:
 - In readout_escape, prefer runtime candidates whose span_kind is exact_prompt_span_mean or exact_prompt_piece over vague last-token anchors when they target the same reachable term.
 - In readout_escape, prefer source_body provenance over constraint_header provenance when both target the same term/family; only fall back to header anchors if the body produced nothing executable.
 - In readout_escape, treat bundle_inputs as cleaner than ad hoc mixed-origin pairing; if a clean source_body k/v pair exists for the same reachable term, prefer that family before a residual bridge.
-- In readout_escape, if readout_sidecar_hints gives a small support score or anchor-strength edge to one surviving source_body candidate family, let that break ties after runtime pruning rather than inventing a fresh family.
+- In readout_escape, if readout_analyzer_hints or readout_sidecar_hints gives a small support score or anchor-strength edge to one surviving source_body candidate family, let that break ties after runtime pruning rather than inventing a fresh family.
 - In shot_mode, prefer dry_run_decode over blind apply when a candidate surface list is already available.
 - In shot_mode, if kv_candidate_edits are available and residual shot probes already looked weak, probe one kv candidate before repeating another recall nudge.
 - In shot_mode, if every kv candidate already failed its runtime canary, prefer constraint_scorer, a different shot surface, or noop over blind kv apply.
@@ -263,13 +276,26 @@ Output requirements:
 - Prefer these controller_memory fields only:
   - hypothesis
   - micro_rationale
+  - focus_term
   - expected_effect
   - observed_outcome
   - why_failed_or_helped
+  - noop_reason
+  - apply_block_reason
+  - surface_family_key
+  - transfer_confidence
+  - same_family_escalation_risk
+  - finish_budget_reserved
+  - evidence_bullets
   - next_change
   - next_trigger
   - next_action
   - stop_condition
+- noop_reason should explain why you intentionally chose noop, for example budget_exhausted, hold_finish_budget, unproven_transfer, or needs_canary_gain.
+- apply_block_reason should explain why an apply would be unsafe, for example same_family_escalation_without_gain or word_budget_regression_risk.
+- surface_family_key should name the surface family you are reasoning about, not the task answer.
+- transfer_confidence and same_family_escalation_risk should be in [0,1].
+- evidence_bullets should be 1-3 short bullets about control evidence only, not task solving.
 - Use next_trigger + next_action only to say what evidence should change your next move.
 - Keep controller_memory short, concrete, and about control strategy rather than task solving.
 - Keep tool_requests short and local. Prefer at most 1-2 tool calls in one step.
@@ -322,6 +348,8 @@ Valid examples:
 {"version":"0.1","decision":"apply","edits":[{"id":"e_required_term_nudge_l4","target":{"surface_id":"s_resid_pre_l4_last"},"source":{"dtype":"vector","expr":{"fn":"clip_norm","max_norm":1.0,"arg":{"fn":"scale","by":0.08,"arg":{"fn":"normalize","arg":{"ref":{"scope":"runtime","worker":"os_0","tensor":"hidden","layer":4,"token":{"mode":"last"}}}}}}},"op":{"kind":"resid_add","alpha":0.08},"budget":{"ttl_steps":1,"norm_clip":1.0,"step_size":0.08,"revertible":true}}],"meta":{"hypothesis":"latent_scan_prefers_l4_for_required_terms","micro_rationale":"Required-term scan favors l4 over l3.","next_trigger":"required_term_span_progress_up_or_observer_flat","next_action":"request_observer_check"}}
 
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"budget_tight_after_harmful_effects","controller_memory":{"hypothesis":"small_resid_loop_rescue","expected_effect":"reduce looping without losing task progress","observed_outcome":"harmful","why_failed_or_helped":"no_progress_steps increased and partial_score stayed flat","next_change":"prefer noop or a different layer before spending more budget","stop_condition":"if edits_left_this_run is 1 and no progress improves, stop intervening"}}}
+
+{"version":"0.1","decision":"noop","meta":{"hypothesis":"hold_finish_budget_after_unproven_transfer","micro_rationale":"Do not spend the last edit on an unproven transfer.","controller_memory":{"hypothesis":"same_family_transfer_to_missing_name","focus_term":"Omar","expected_effect":"reuse the last helpful surface family for the remaining name","observed_outcome":"unknown","noop_reason":"hold_finish_budget","apply_block_reason":"same_family_escalation_without_gain","surface_family_key":"resid_add_s_resid_pre_l5_last","transfer_confidence":0.28,"same_family_escalation_risk":0.81,"finish_budget_reserved":1,"evidence_bullets":["helpful_on=budget@l5_last alpha=0.06","missing_term=Omar remains unproven","no fresh canary gain before alpha increase"],"next_change":"wait for canary gain or a different family before spending the final edit","next_trigger":"canary_gain_on_missing_name","next_action":"apply","stop_condition":"if no stronger evidence appears, keep the final edit reserved"}}}
 
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"loop_relief_but_coverage_zero","micro_rationale":"Loop eased, but required terms are still absent.","next_trigger":"observer_flat_after_loop_relief","next_action":"apply","observer_check_request":{"kind":"semantic_progress","reason":"measure whether the local shift improved semantic grounding before spending another edit"}}}
 

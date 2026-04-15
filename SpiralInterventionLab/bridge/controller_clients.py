@@ -84,6 +84,10 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
         "next_trigger",
         "next_action",
         "stop_condition",
+        "noop_reason",
+        "apply_block_reason",
+        "surface_family_key",
+        "focus_term",
         "decision",
         "recorded_step",
     ):
@@ -92,6 +96,20 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
     confidence = value.get("confidence")
     if isinstance(confidence, (int, float)) and not isinstance(confidence, bool):
         summary["confidence"] = float(confidence)
+    for key in ("transfer_confidence", "same_family_escalation_risk"):
+        numeric = value.get(key)
+        if isinstance(numeric, (int, float)) and not isinstance(numeric, bool):
+            summary[key] = float(numeric)
+    finish_budget_reserved = value.get("finish_budget_reserved")
+    if isinstance(finish_budget_reserved, (bool, int, float)) and not (
+        isinstance(finish_budget_reserved, float) and finish_budget_reserved != finish_budget_reserved
+    ):
+        summary["finish_budget_reserved"] = finish_budget_reserved
+    bullets = value.get("evidence_bullets")
+    if isinstance(bullets, Sequence) and not isinstance(bullets, (str, bytes, bytearray)):
+        compact_bullets = [str(item) for item in bullets[:4] if str(item).strip()]
+        if compact_bullets:
+            summary["evidence_bullets"] = compact_bullets
     return summary or None
 
 
@@ -487,6 +505,42 @@ def _compact_tool_result(value: Any) -> dict[str, Any] | None:
             for item in value.get("topk_token_diff", [])[:4]
             if isinstance(item, Mapping)
         ]
+    for key in (
+        "probe_family",
+        "probe_phase_profile",
+        "probe_label",
+        "probe_score",
+        "readout_probe_score",
+        "constraint_probe_score",
+        "trajectory_probe_score",
+    ):
+        if value.get(key) not in (None, ""):
+            summary[key] = value.get(key)
+    for key in ("positive_axes", "actionable_axes"):
+        raw_items = value.get(key)
+        if isinstance(raw_items, Sequence) and not isinstance(raw_items, (str, bytes, bytearray)):
+            compact_items = [str(item) for item in raw_items[:4] if str(item)]
+            if compact_items:
+                summary[key] = compact_items
+    if isinstance(value.get("probe_summary"), Mapping):
+        summary["probe_summary"] = {
+            key: value["probe_summary"].get(key)
+            for key in (
+                "probe_family",
+                "probe_phase_profile",
+                "label",
+                "score",
+                "readout_score",
+                "constraint_score",
+                "trajectory_score",
+                "semantic_focus_term",
+                "reachable_focus_term",
+                "reachable_focus_rank",
+                "positive_axes",
+                "actionable_axes",
+            )
+            if key in value["probe_summary"] and value["probe_summary"].get(key) not in (None, "", [])
+        }
     return summary
 
 
@@ -616,7 +670,24 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
             hypotheses.append(str(meta["hypothesis"]))
         if meta.get("confidence") is not None:
             confidences.append(float(meta["confidence"]))
-        controller_memory = meta.get("controller_memory")
+        if isinstance(meta.get("controller_memory"), Mapping):
+            controller_memory = dict(meta["controller_memory"])
+        else:
+            controller_memory = {}
+        for key in (
+            "noop_reason",
+            "apply_block_reason",
+            "surface_family_key",
+            "focus_term",
+            "transfer_confidence",
+            "same_family_escalation_risk",
+            "finish_budget_reserved",
+            "evidence_bullets",
+        ):
+            if meta.get(key) is not None and key not in controller_memory:
+                controller_memory[key] = meta.get(key)
+        if not controller_memory:
+            controller_memory = None
         if meta.get("micro_rationale") is not None:
             micro_rationale = str(meta["micro_rationale"])
         if meta.get("next_trigger") is not None:
@@ -741,6 +812,20 @@ def _normalize_controller_payload(value: Any) -> Any:
                 meta["tool_requests"] = meta.pop("request_tools")
             if isinstance(meta.get("tool_requests"), Mapping):
                 meta["tool_requests"] = [dict(meta["tool_requests"])]
+            controller_memory = meta.get("controller_memory")
+            if isinstance(controller_memory, Mapping):
+                for key in (
+                    "noop_reason",
+                    "apply_block_reason",
+                    "surface_family_key",
+                    "focus_term",
+                    "transfer_confidence",
+                    "same_family_escalation_risk",
+                    "finish_budget_reserved",
+                    "evidence_bullets",
+                ):
+                    if key not in meta and controller_memory.get(key) is not None:
+                        meta[key] = controller_memory.get(key)
             if "rationale" in normalized and "micro_rationale" not in meta:
                 meta["micro_rationale"] = normalized.pop("rationale")
             if "micro_rationale" in normalized and "micro_rationale" not in meta:
@@ -749,6 +834,18 @@ def _normalize_controller_payload(value: Any) -> Any:
                 meta["next_trigger"] = normalized.pop("next_trigger")
             if "next_action" in normalized and "next_action" not in meta:
                 meta["next_action"] = normalized.pop("next_action")
+            for key in (
+                "noop_reason",
+                "apply_block_reason",
+                "surface_family_key",
+                "focus_term",
+                "transfer_confidence",
+                "same_family_escalation_risk",
+                "finish_budget_reserved",
+                "evidence_bullets",
+            ):
+                if key in normalized and key not in meta:
+                    meta[key] = normalized.pop(key)
             if meta:
                 normalized["meta"] = meta
 

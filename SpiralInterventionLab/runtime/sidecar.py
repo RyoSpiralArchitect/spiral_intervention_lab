@@ -112,6 +112,9 @@ class ReadoutSidecarCapture:
 
 
 ReadoutSidecarAnalyzer = Callable[[ReadoutSidecarCapture], Mapping[str, Any] | None]
+ReadoutAnalyzerSiteCapture = ReadoutSidecarSiteCapture
+ReadoutAnalyzerCapture = ReadoutSidecarCapture
+ReadoutAnalyzer = ReadoutSidecarAnalyzer
 
 
 def _normalized(vec: torch.Tensor) -> torch.Tensor | None:
@@ -225,6 +228,8 @@ def build_heuristic_readout_sidecar_analyzer(
             for term, row in sorted(term_rows.items(), key=lambda item: (-float(item[1]["best_anchor"]), item[0]))
         }
         candidate_support_scores: dict[str, float] = {}
+        bundle_support_scores: dict[str, float] = {}
+        bundle_evidence_vectors: dict[str, dict[str, Any]] = {}
         for term, row in term_rows.items():
             site = row.get("best_site")
             if not isinstance(site, ReadoutSidecarSiteCapture):
@@ -235,8 +240,34 @@ def build_heuristic_readout_sidecar_analyzer(
             span_kind = "exact_prompt_span_mean" if site.span is not None and (site.span[1] - site.span[0]) > 1 else "exact_prompt_piece"
             candidate_support_scores[f"{term}|{provenance_class}|{span_id}|kv_v|{span_kind}"] = support
             candidate_support_scores[f"{term}|{provenance_class}|{span_id}|kv_k|{span_kind}"] = round(support - 0.03, 6)
-            candidate_support_scores[f"kv_pair:{term}:{provenance_class}:{span_id}"] = round(support + 0.08, 6)
+            bundle_support = round(support + 0.08, 6)
+            bundle_key = f"kv_pair:{term}:{provenance_class}:{span_id}"
+            candidate_support_scores[bundle_key] = bundle_support
+            bundle_support_scores[bundle_key] = bundle_support
             candidate_support_scores[f"{term}|{provenance_class}|{span_id}|shot_bridge|{span_kind}"] = round(support - 0.12, 6)
+            if provenance_class == "source_body":
+                provenance_tier_hint = 1.0
+            elif provenance_class == "answer_prefix":
+                provenance_tier_hint = 0.4
+            elif provenance_class == "constraint_header":
+                provenance_tier_hint = 0.2
+            else:
+                provenance_tier_hint = 0.0
+            if span_kind == "exact_prompt_span_mean":
+                span_precision = 1.0
+            elif span_kind == "exact_prompt_piece":
+                span_precision = 0.82
+            else:
+                span_precision = 0.45
+            bundle_evidence_vectors[bundle_key] = {
+                "semantic_residual_support": support,
+                "anchor_strength": round(float(row["best_anchor"]), 6),
+                "span_precision": round(float(span_precision), 6),
+                "source_body_exact": bool(provenance_class == "source_body" and span_kind.startswith("exact_prompt")),
+                "provenance_class": provenance_class,
+                "provenance_tier_hint": round(float(provenance_tier_hint), 6),
+                "span_kind": span_kind,
+            }
 
         best_term = max(candidate_support_terms, key=lambda item: (candidate_support_terms[item], term_anchor_strength_by_term.get(item, -10.0), item))
         reachable_support = 0.0 if reachable_term is None else float(candidate_support_terms.get(reachable_term, 0.0) or 0.0)
@@ -245,6 +276,16 @@ def build_heuristic_readout_sidecar_analyzer(
         if attractor_present and target_mass < target_mass_threshold and reachable_rank_value > reachable_rank_threshold:
             if reachable_term is None or (best_support - reachable_support) >= focus_override_margin:
                 focus_term_override = best_term
+        suggested_bundle_key = None
+        if bundle_support_scores:
+            suggested_bundle_key = max(
+                bundle_support_scores,
+                key=lambda item: (
+                    float(bundle_support_scores[item]),
+                    float(bundle_evidence_vectors.get(item, {}).get("span_precision", 0.0) or 0.0),
+                    str(item),
+                ),
+            )
 
         notes: list[str] = []
         if focus_term_override is not None:
@@ -255,13 +296,34 @@ def build_heuristic_readout_sidecar_analyzer(
             "analyzer_name": analyzer_name,
             "attractor_family_present": attractor_present,
             "focus_term_override": focus_term_override,
+            "suggested_focus_term": focus_term_override,
+            "suggested_bundle_key": suggested_bundle_key,
             "term_anchor_strength_by_term": term_anchor_strength_by_term,
             "candidate_support_terms": candidate_support_terms,
             "candidate_support_scores": candidate_support_scores,
+            "bundle_support_scores": bundle_support_scores,
+            "bundle_evidence_vectors": bundle_evidence_vectors,
             "notes": notes,
         }
 
     return analyze
+
+
+def build_heuristic_readout_analyzer(
+    *,
+    analyzer_name: str = "heuristic_readout_analyzer",
+    focus_override_margin: float = 0.05,
+    attractor_mass_threshold: float = 0.18,
+    reachable_rank_threshold: int = 512,
+    target_mass_threshold: float = 0.001,
+) -> ReadoutAnalyzer:
+    return build_heuristic_readout_sidecar_analyzer(
+        analyzer_name=analyzer_name,
+        focus_override_margin=focus_override_margin,
+        attractor_mass_threshold=attractor_mass_threshold,
+        reachable_rank_threshold=reachable_rank_threshold,
+        target_mass_threshold=target_mass_threshold,
+    )
 
 
 def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -274,9 +336,18 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
     analyzer_error = _clean_text(value.get("analyzer_error"), limit=160)
     if analyzer_error is not None:
         summary["analyzer_error"] = analyzer_error
+    suggested_focus_term = _clean_text(
+        value.get("suggested_focus_term", value.get("focus_term_override")),
+        limit=64,
+    )
+    if suggested_focus_term is not None:
+        summary["suggested_focus_term"] = suggested_focus_term
     focus_term_override = _clean_text(value.get("focus_term_override"), limit=64)
     if focus_term_override is not None:
         summary["focus_term_override"] = focus_term_override
+    suggested_bundle_key = _clean_text(value.get("suggested_bundle_key"), limit=160)
+    if suggested_bundle_key is not None:
+        summary["suggested_bundle_key"] = suggested_bundle_key
     if value.get("attractor_family_present") is not None:
         summary["attractor_family_present"] = bool(value.get("attractor_family_present"))
 
@@ -303,6 +374,47 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
             cleaned_support[key] = score
         if cleaned_support:
             summary["candidate_support_scores"] = cleaned_support
+
+    bundle_support_scores = value.get("bundle_support_scores")
+    if isinstance(bundle_support_scores, Mapping):
+        cleaned_bundle_support: dict[str, float] = {}
+        for raw_key, raw_score in list(bundle_support_scores.items())[:8]:
+            key = _clean_text(raw_key, limit=160)
+            score = _clip_score(raw_score)
+            if key is None or score is None:
+                continue
+            cleaned_bundle_support[key] = score
+        if cleaned_bundle_support:
+            summary["bundle_support_scores"] = cleaned_bundle_support
+
+    bundle_evidence_vectors = value.get("bundle_evidence_vectors")
+    if isinstance(bundle_evidence_vectors, Mapping):
+        cleaned_vectors: dict[str, dict[str, Any]] = {}
+        for raw_key, raw_vector in list(bundle_evidence_vectors.items())[:8]:
+            key = _clean_text(raw_key, limit=160)
+            if key is None or not isinstance(raw_vector, Mapping):
+                continue
+            cleaned_vector: dict[str, Any] = {}
+            for field in (
+                "semantic_residual_support",
+                "anchor_strength",
+                "span_precision",
+                "provenance_tier_hint",
+            ):
+                score = _clip_score(raw_vector.get(field))
+                if score is not None:
+                    cleaned_vector[field] = score
+            for field in ("source_body_exact",):
+                if raw_vector.get(field) is not None:
+                    cleaned_vector[field] = bool(raw_vector.get(field))
+            for field, limit in (("provenance_class", 32), ("span_kind", 64)):
+                text = _clean_text(raw_vector.get(field), limit=limit)
+                if text is not None:
+                    cleaned_vector[field] = text
+            if cleaned_vector:
+                cleaned_vectors[key] = cleaned_vector
+        if cleaned_vectors:
+            summary["bundle_evidence_vectors"] = cleaned_vectors
 
     candidate_support_terms = value.get("candidate_support_terms")
     if isinstance(candidate_support_terms, Mapping):
@@ -333,3 +445,7 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
             summary[target_key] = cleaned_items
 
     return summary
+
+
+def normalize_readout_analyzer_hints(value: Mapping[str, Any] | None) -> dict[str, Any]:
+    return normalize_readout_sidecar_hints(value)

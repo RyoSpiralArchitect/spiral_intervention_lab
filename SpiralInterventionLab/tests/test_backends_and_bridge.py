@@ -362,6 +362,23 @@ class TestBackendsAndBridge(unittest.TestCase):
                         "status": "ok",
                         "entropy_delta": -0.1,
                         "required_term_recall_delta": 0.25,
+                        "probe_family": "kv_v",
+                        "probe_phase_profile": "readout_escape",
+                        "probe_label": "weak_positive_subthreshold",
+                        "positive_axes": ["readout"],
+                        "probe_summary": {
+                            "probe_family": "kv_v",
+                            "probe_phase_profile": "readout_escape",
+                            "label": "weak_positive_subthreshold",
+                            "score": 0.7,
+                            "readout_score": 0.8,
+                            "constraint_score": 0.0,
+                            "trajectory_score": 0.1,
+                            "semantic_focus_term": "Mira",
+                            "reachable_focus_term": "budget",
+                            "reachable_focus_rank": 420,
+                            "positive_axes": ["readout"],
+                        },
                         "topk_token_diff": [{"piece": "M", "prob_delta": 0.2}],
                     },
                 ],
@@ -390,6 +407,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["needs_sequence_support_terms"], ["Mira"])
         self.assertEqual(trace["observation"]["latest_tool_results"][0]["term_profiles"][0]["control_profile"], "sequence_bias_plus_patience")
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["tool"], "dry_run_decode")
+        self.assertEqual(trace["observation"]["latest_tool_results"][1]["probe_family"], "kv_v")
+        self.assertEqual(trace["observation"]["latest_tool_results"][1]["probe_summary"]["label"], "weak_positive_subthreshold")
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["topk_token_diff"][0]["piece"], "M")
 
     def test_provider_controller_client_observation_includes_controller_memory(self):
@@ -411,7 +430,18 @@ class TestBackendsAndBridge(unittest.TestCase):
                     {
                         "hypothesis": "small_resid_loop_rescue",
                         "micro_rationale": "avoid another blind nudge",
+                        "focus_term": "Omar",
                         "observed_outcome": "harmful",
+                        "noop_reason": "hold_finish_budget",
+                        "apply_block_reason": "same_family_escalation_without_gain",
+                        "surface_family_key": "resid_add_s_resid_pre_l5_last",
+                        "transfer_confidence": 0.22,
+                        "same_family_escalation_risk": 0.81,
+                        "finish_budget_reserved": 1,
+                        "evidence_bullets": [
+                            "helpful_on=budget@l5_last alpha=0.06",
+                            "missing_term=Omar remains unproven",
+                        ],
                         "next_change": "prefer noop",
                         "next_trigger": "loop_relief_without_coverage",
                         "next_action": "request_observer_check",
@@ -427,7 +457,21 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIsNotNone(trace)
         self.assertEqual(trace["observation"]["controller_memory"][0]["hypothesis"], "small_resid_loop_rescue")
         self.assertEqual(trace["observation"]["controller_memory"][0]["micro_rationale"], "avoid another blind nudge")
+        self.assertEqual(trace["observation"]["controller_memory"][0]["focus_term"], "Omar")
         self.assertEqual(trace["observation"]["controller_memory"][0]["observed_outcome"], "harmful")
+        self.assertEqual(trace["observation"]["controller_memory"][0]["noop_reason"], "hold_finish_budget")
+        self.assertEqual(
+            trace["observation"]["controller_memory"][0]["apply_block_reason"],
+            "same_family_escalation_without_gain",
+        )
+        self.assertEqual(trace["observation"]["controller_memory"][0]["surface_family_key"], "resid_add_s_resid_pre_l5_last")
+        self.assertAlmostEqual(trace["observation"]["controller_memory"][0]["transfer_confidence"], 0.22)
+        self.assertAlmostEqual(trace["observation"]["controller_memory"][0]["same_family_escalation_risk"], 0.81)
+        self.assertEqual(trace["observation"]["controller_memory"][0]["finish_budget_reserved"], 1)
+        self.assertEqual(
+            trace["observation"]["controller_memory"][0]["evidence_bullets"][0],
+            "helpful_on=budget@l5_last alpha=0.06",
+        )
         self.assertEqual(trace["observation"]["controller_memory"][0]["next_trigger"], "loop_relief_without_coverage")
         self.assertEqual(trace["observation"]["controller_memory"][0]["next_action"], "request_observer_check")
 
@@ -455,6 +499,27 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(command.meta["controller_memory"]["hypothesis"], "rescue")
         self.assertEqual(trace["decision"]["controller_memory"]["observed_outcome"], "harmful")
+
+    def test_provider_controller_client_moves_endgame_memory_fields_into_meta(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"noop_reason\":\"hold_finish_budget\",\"apply_block_reason\":\"same_family_escalation_without_gain\",\"focus_term\":\"Omar\",\"surface_family_key\":\"resid_add_s_resid_pre_l5_last\",\"transfer_confidence\":0.2,\"same_family_escalation_risk\":0.8,\"finish_budget_reserved\":1,\"evidence_bullets\":[\"helpful_on=budget@l5_last alpha=0.06\",\"missing_term=Omar remains unproven\"]}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["noop_reason"], "hold_finish_budget")
+        self.assertEqual(command.meta["apply_block_reason"], "same_family_escalation_without_gain")
+        self.assertEqual(command.meta["focus_term"], "Omar")
+        self.assertEqual(command.meta["surface_family_key"], "resid_add_s_resid_pre_l5_last")
+        self.assertAlmostEqual(command.meta["transfer_confidence"], 0.2)
+        self.assertAlmostEqual(command.meta["same_family_escalation_risk"], 0.8)
+        self.assertEqual(command.meta["finish_budget_reserved"], 1)
+        self.assertEqual(command.meta["evidence_bullets"][0], "helpful_on=budget@l5_last alpha=0.06")
+        self.assertEqual(trace["decision"]["controller_memory"]["noop_reason"], "hold_finish_budget")
+        self.assertEqual(trace["decision"]["controller_memory"]["focus_term"], "Omar")
+        self.assertEqual(trace["decision"]["controller_memory"]["finish_budget_reserved"], 1)
 
     def test_provider_controller_client_normalizes_observer_request_and_micro_rationale_into_meta(self):
         provider = _FakeProvider(
@@ -711,12 +776,28 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("candidate_provenance_counts_after_prune", prompt)
         self.assertIn("dominance_prune_drops", prompt)
         self.assertIn("same_term_family_drops", prompt)
-        self.assertIn("readout_sidecar_capture_summary", prompt)
-        self.assertIn("readout_sidecar_hints", prompt)
-        self.assertIn("readout_sidecar_focus_term_override", prompt)
+        self.assertIn("readout_analyzer_capture_summary", prompt)
+        self.assertIn("readout_analyzer_report", prompt)
+        self.assertIn("readout_analyzer_hints", prompt)
+        self.assertIn("readout_analyzer_suggested_focus_term", prompt)
+        self.assertIn("readout_analyzer_suggested_bundle_key", prompt)
+        self.assertIn("gate_report_open", prompt)
+        self.assertIn("gate_report_reasons", prompt)
+        self.assertIn("gate_report_frontier_bundle_key", prompt)
         self.assertIn("candidate_family_vetoes", prompt)
         self.assertIn("bundle_inputs", prompt)
+        self.assertIn("finish_budget_reserve_suggested", prompt)
+        self.assertIn("same_family_alpha_escalation_requires_gain", prompt)
+        self.assertIn("suggested_noop_reason", prompt)
         self.assertIn("weak_positive_subthreshold", prompt)
+        self.assertIn("noop_reason", prompt)
+        self.assertIn("apply_block_reason", prompt)
+        self.assertIn("surface_family_key", prompt)
+        self.assertIn("focus_term", prompt)
+        self.assertIn("transfer_confidence", prompt)
+        self.assertIn("same_family_escalation_risk", prompt)
+        self.assertIn("finish_budget_reserved", prompt)
+        self.assertIn("evidence_bullets", prompt)
         self.assertIn("source_positions", prompt)
         self.assertIn("argmax_pos", prompt)
         self.assertIn("canary_pass", prompt)
@@ -738,6 +819,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("two-token canary evidence", prompt)
         self.assertIn("alignment and readout are out of sync", prompt)
         self.assertIn("same decode basin", prompt)
+        self.assertIn("same-family alpha escalation", prompt)
+        self.assertIn("hold_finish_budget", prompt)
         self.assertIn("stop repeating recall probes", prompt)
         self.assertIn("leave the junk answer-start basin", prompt)
         self.assertIn("canary alone", prompt)
