@@ -1,6 +1,7 @@
 from .digit_transform_e2e import (
     DigitTransformC1OnlyExperimentResult,
     DigitTransformExperimentResult,
+    ReadoutEscapeReplayHarnessResult,
     ShotModeProbeHarnessResult,
     DigitTransformSweepResult,
     build_default_activation_surface_catalog,
@@ -10,6 +11,7 @@ from .digit_transform_e2e import (
     create_readout_sidecar_analyzer,
     create_task_env,
     load_worker_model,
+    run_readout_escape_replay_harness,
     run_shot_mode_probe_harness,
     run_digit_transform_c1_only_experiment,
     run_digit_transform_experiment,
@@ -19,6 +21,7 @@ from .digit_transform_e2e import (
 __all__ = [
     "DigitTransformC1OnlyExperimentResult",
     "DigitTransformExperimentResult",
+    "ReadoutEscapeReplayHarnessResult",
     "ShotModeProbeHarnessResult",
     "DigitTransformSweepResult",
     "build_default_activation_surface_catalog",
@@ -28,6 +31,7 @@ __all__ = [
     "create_readout_sidecar_analyzer",
     "create_task_env",
     "load_worker_model",
+    "run_readout_escape_replay_harness",
     "run_shot_mode_probe_harness",
     "run_digit_transform_c1_only_experiment",
     "run_digit_transform_experiment",

@@ -6,6 +6,7 @@ import os
 from collections.abc import Iterable, Sequence as SequenceABC
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from types import MethodType
 from typing import Any, Callable, Mapping, Sequence
 
 import torch
@@ -18,13 +19,16 @@ from ..runtime import (
     HookedTransformerAdapter,
     HookedTransformerRuntimeState,
     HookedTransformerWorkerRuntime,
+    InMemoryStructuredLogger,
     JSONLStructuredLogger,
     ReadoutAnalyzer,
     ReadoutSidecarAnalyzer,
+    StepContext,
     build_heuristic_readout_analyzer,
     build_heuristic_readout_sidecar_analyzer,
     resolve_text_codec,
     run_c1,
+    run_episode,
     run_minimal_baseline_suite,
 )
 from ..tasks import (
@@ -230,8 +234,9 @@ def build_hooked_transformer_worker_runtime(
     except RuntimeError:
         task_env.reset(seed)
         task_kwargs = dict(task_env.worker_runtime_kwargs())
+    task_max_generated_tokens = task_kwargs.pop("max_generated_tokens", None)
     resolved_max_generated_tokens = int(
-        max_generated_tokens if max_generated_tokens is not None else task_kwargs.pop("max_generated_tokens", 32)
+        max_generated_tokens if max_generated_tokens is not None else (32 if task_max_generated_tokens is None else task_max_generated_tokens)
     )
     resolved_min_generated_tokens = int(task_kwargs.pop("min_generated_tokens", 0))
     allowed_token_ids = task_kwargs.pop("allowed_token_ids", None)
@@ -484,6 +489,15 @@ def _logger_factory(log_dir: str | Path | None):
     return factory
 
 
+@dataclass
+class _StructuredLoggerMux:
+    loggers: tuple[Any, ...]
+
+    def log(self, event: dict[str, Any]) -> None:
+        for logger in self.loggers:
+            logger.log(dict(event))
+
+
 def _write_summary_artifact(log_dir: str | Path | None, filename: str, payload: Mapping[str, Any]) -> None:
     if log_dir is None:
         return
@@ -517,6 +531,110 @@ def create_readout_analyzer(mode: str) -> ReadoutAnalyzer | None:
 
 def create_readout_sidecar_analyzer(mode: str) -> ReadoutSidecarAnalyzer | None:
     return create_readout_analyzer(mode)
+
+
+class _FrontierReplayControllerClient:
+    def __init__(self, *, replay_mode: str = "frontier_apply"):
+        self.replay_mode = str(replay_mode)
+        self.calls = 0
+        self._last_trace: dict[str, Any] | None = None
+
+    def latest_trace(self) -> Mapping[str, Any] | None:
+        return self._last_trace
+
+    @staticmethod
+    def _candidate_compile_rank(candidate: Mapping[str, Any]) -> tuple[int, int]:
+        has_source = int(isinstance(candidate.get("source"), Mapping))
+        has_op = int(isinstance(candidate.get("op"), Mapping))
+        has_target = int(
+            isinstance(candidate.get("target"), Mapping)
+            or candidate.get("surface_id") not in (None, "")
+        )
+        has_budget = int(isinstance(candidate.get("budget"), Mapping))
+        return (has_source + has_op + has_target + has_budget, has_source + has_op)
+
+    def invoke(self, packet: dict[str, Any]) -> dict[str, Any]:
+        self.calls += 1
+        strategy_hints = packet.get("strategy_hints") if isinstance(packet.get("strategy_hints"), Mapping) else {}
+        suggested_bundle_key = strategy_hints.get(
+            "readout_analyzer_suggested_bundle_key",
+            strategy_hints.get("readout_sidecar_suggested_bundle_key"),
+        )
+        frontier_bundle_key = strategy_hints.get(
+            "gate_report_frontier_bundle_key",
+            strategy_hints.get("selected_bundle_key"),
+        )
+        candidates: list[dict[str, Any]] = []
+        for key in ("kv_candidate_edits", "shot_candidate_edits", "kv_retry_candidate_edits"):
+            raw_items = strategy_hints.get(key)
+            if not isinstance(raw_items, SequenceABC) or isinstance(raw_items, (str, bytes, bytearray)):
+                continue
+            candidates.extend(dict(item) for item in raw_items if isinstance(item, Mapping))
+
+        command: dict[str, Any] = {"version": "0.1", "decision": "noop"}
+        selected_bundle_key: str | None = None
+        if self.calls == 1:
+            target_bundle_key = frontier_bundle_key or suggested_bundle_key
+            matching = [
+                dict(item)
+                for item in candidates
+                if isinstance(item, Mapping) and str(item.get("bundle_key", "") or "") == str(target_bundle_key or "")
+            ]
+            if matching:
+                matching.sort(key=self._candidate_compile_rank, reverse=True)
+                selected_bundle_key = str(target_bundle_key)
+                selected_edit = {
+                    key: matching[0][key]
+                    for key in ("id", "target", "source", "op", "budget")
+                    if key in matching[0]
+                }
+                if "id" not in selected_edit:
+                    selected_edit["id"] = f"replay_select_{self.calls}"
+                if "target" not in selected_edit and matching[0].get("surface_id") not in (None, ""):
+                    selected_edit["target"] = {"surface_id": matching[0].get("surface_id")}
+                command = {
+                    "version": "0.1",
+                    "decision": "apply",
+                    "edits": [selected_edit],
+                    "meta": {
+                        "hypothesis": "forced_readout_escape_frontier_replay",
+                        "micro_rationale": "inspect readout_escape logging contract on a forced frontier candidate",
+                        "focus_term": matching[0].get("focus_feature"),
+                        "surface_family_key": matching[0].get("candidate_family"),
+                        "evidence_bullets": [
+                            f"frontier_bundle={target_bundle_key}",
+                            f"suggested_bundle={suggested_bundle_key}",
+                        ],
+                    },
+                }
+
+        self._last_trace = {
+            "provider": "replay",
+            "model": "frontier-replay-controller",
+            "observation": {
+                "step": packet.get("step"),
+                "control_phase_hint": packet.get("control_phase_hint"),
+                "sidecar_suggested_bundle_key": suggested_bundle_key,
+                "gate_report_frontier_bundle_key": frontier_bundle_key,
+            },
+            "attempts": [
+                {
+                    "attempt": 1,
+                    "provider": "replay",
+                    "model": "frontier-replay-controller",
+                    "latency_ms": 0.0,
+                    "parse_ok": True,
+                    "response_text": json.dumps(command, ensure_ascii=False, sort_keys=True),
+                }
+            ],
+            "decision": {
+                "decision": command.get("decision"),
+                "selected_bundle_key": selected_bundle_key,
+                "replay_mode": self.replay_mode,
+            },
+            "success": True,
+        }
+        return command
 
 
 def create_task_env(task_name: str, *, semantic_critic: Any | None = None) -> ExperimentTaskEnv:
@@ -651,6 +769,55 @@ class ShotModeProbeHarnessResult:
             "observation_summary": dict(self.observation_summary),
             "probe_round_count": int(self.probe_round_count),
             "probe_results": [dict(item) for item in self.probe_results],
+            "surface_ids": list(self.surface_ids),
+        }
+
+
+@dataclass(frozen=True)
+class ReadoutEscapeReplayHarnessResult:
+    seed: int
+    task_id: str
+    worker_model_name: str
+    replay_mode: str
+    packet_mode: str
+    prompt: str
+    episode: EpisodeResult
+    readout_escape_seen: bool
+    controller_selection_event_count: int
+    nonnull_gate_frontier_count: int
+    nonnull_controller_selected_count: int
+    sidecar_suggested_bundle_key: str | None
+    gate_report_frontier_bundle_key: str | None
+    controller_selected_bundle_key: str | None
+    controller_selection_source: str | None
+    controller_rejected_signals: tuple[str, ...]
+    forced_base_bundle_key: str
+    forced_challenger_bundle_key: str
+    first_selection_event: dict[str, Any] | None
+    surface_ids: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "suite_mode": "readout_escape_replay_harness",
+            "seed": self.seed,
+            "task_id": self.task_id,
+            "worker_model_name": self.worker_model_name,
+            "replay_mode": self.replay_mode,
+            "packet_mode": self.packet_mode,
+            "prompt": self.prompt,
+            "episode": asdict(self.episode),
+            "readout_escape_seen": self.readout_escape_seen,
+            "controller_selection_event_count": self.controller_selection_event_count,
+            "nonnull_gate_frontier_count": self.nonnull_gate_frontier_count,
+            "nonnull_controller_selected_count": self.nonnull_controller_selected_count,
+            "sidecar_suggested_bundle_key": self.sidecar_suggested_bundle_key,
+            "gate_report_frontier_bundle_key": self.gate_report_frontier_bundle_key,
+            "controller_selected_bundle_key": self.controller_selected_bundle_key,
+            "controller_selection_source": self.controller_selection_source,
+            "controller_rejected_signals": list(self.controller_rejected_signals),
+            "forced_base_bundle_key": self.forced_base_bundle_key,
+            "forced_challenger_bundle_key": self.forced_challenger_bundle_key,
+            "first_selection_event": None if self.first_selection_event is None else dict(self.first_selection_event),
             "surface_ids": list(self.surface_ids),
         }
 
@@ -1209,6 +1376,482 @@ def run_shot_mode_probe_harness(
             }
         )
     _write_summary_artifact(log_dir, "shot_harness_summary.json", result.to_dict())
+    return result
+
+
+def run_readout_escape_replay_harness(
+    *,
+    worker_model_name: str,
+    seed: int,
+    packet_mode: str = "forced_frontier",
+    worker_model: Any | None = None,
+    task_env: ExperimentTaskEnv | None = None,
+    log_dir: str | Path | None = None,
+    codec: Any | None = None,
+    surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    worker_model_path: str | Path | None = None,
+    worker_tokenizer_path: str | Path | None = None,
+    worker_device: str | None = None,
+    worker_dtype: str = "float32",
+    worker_first_n_layers: int | None = None,
+    worker_hf_offline: bool = False,
+    worker_trust_remote_code: bool = False,
+    worker_mps_mode: str = "auto",
+    controller_reflection_mode: str = "off",
+    controller_memory_window: int = 3,
+    readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
+    readout_analyzer_rerank_mode: str = "apply",
+    worker_decoder_control_mode: str = "off",
+    worker_loop_rescue_edits_per_run: int = 0,
+    worker_loop_rescue_total_alpha: float = 0.0,
+    worker_loop_rescue_total_edit_cost: float | None = None,
+    max_generated_tokens: int = 4,
+) -> ReadoutEscapeReplayHarnessResult:
+    normalized_packet_mode = str(packet_mode).strip().lower().replace("-", "_")
+    if normalized_packet_mode not in {"forced_frontier", "directscan", "fixed_candidate"}:
+        raise ValueError("run_readout_escape_replay_harness packet_mode must be one of forced_frontier, directscan, fixed_candidate")
+    env = task_env or SpiralConstrainedRewriteEnv()
+    model = worker_model or load_worker_model(
+        worker_model_name,
+        model_path=worker_model_path,
+        tokenizer_path=worker_tokenizer_path,
+        device=worker_device,
+        dtype=worker_dtype,
+        first_n_layers=worker_first_n_layers,
+        hf_offline=worker_hf_offline,
+        trust_remote_code=worker_trust_remote_code,
+        mps_mode=worker_mps_mode,
+    )
+    worker = build_hooked_transformer_worker_runtime(
+        model,
+        env,
+        seed=seed,
+        task_view_mode="redacted",
+        surface_catalog=surface_catalog,
+        codec=codec,
+        max_generated_tokens=max_generated_tokens,
+        controller_reflection_mode=controller_reflection_mode,
+        controller_memory_window=controller_memory_window,
+        worker_decoder_control_mode=worker_decoder_control_mode,
+        worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
+        worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
+        worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
+        readout_sidecar_analyzer=readout_sidecar_analyzer,
+        readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
+    )
+    logger_factory = _logger_factory(log_dir)
+    memory_logger = InMemoryStructuredLogger()
+    file_logger = None if logger_factory is None else logger_factory("readout_escape_replay")
+    logger = _StructuredLoggerMux(tuple(item for item in (memory_logger, file_logger) if item is not None))
+
+    forced_state: dict[str, Any] = {
+        "base_bundle_key": "",
+        "challenger_bundle_key": "",
+        "surface_ids": (),
+        "directscan_hints": None,
+        "cached_strategy_hints": None,
+    }
+    original_reset = worker.reset
+    original_build_controller_packet = worker.build_controller_packet
+    original_answer_readout_canary = worker._current_answer_readout_canary
+
+    def _make_forced_candidate(*, surface_id: str, bundle_key: str, focus_term: str, candidate_family: str) -> dict[str, Any]:
+        command = worker._build_dry_run_command(
+            {
+                "surface_id": surface_id,
+                "kind": "resid_add",
+                "alpha": 0.04,
+                "ttl_steps": 1,
+                "step_size": 0.04,
+            }
+        )
+        if not isinstance(command, Mapping):
+            raise ValueError("failed to synthesize forced replay command")
+        edits = command.get("edits")
+        if not isinstance(edits, SequenceABC) or isinstance(edits, (str, bytes, bytearray)) or not edits:
+            raise ValueError("forced replay command did not include edits")
+        candidate = dict(edits[0])
+        candidate["surface_id"] = surface_id
+        candidate["bundle_key"] = bundle_key
+        candidate["phase_objective"] = "readout_escape"
+        candidate["provenance_class"] = "source_body"
+        candidate["bundle_provenance_tier"] = 3
+        candidate["bundle_ready"] = True
+        candidate["focus_feature"] = focus_term
+        candidate["focus_term"] = focus_term
+        candidate["span_kind"] = "forced_exact_prompt_span_mean"
+        candidate["source_span"] = {"start": 0, "end": 0}
+        candidate["read_source_resolved"] = True
+        candidate["write_target_resolved"] = True
+        candidate["candidate_family"] = candidate_family
+        candidate["is_actionable_candidate"] = focus_term == "budget"
+        candidate["first_piece_reachability"] = 0.24 if focus_term == "budget" else 0.0
+        candidate["reachability_ratio"] = 1.0 if focus_term == "budget" else 0.0
+        candidate["site"] = "resid_pre"
+        return candidate
+
+    def _model_layer_count() -> int:
+        return max(1, int(getattr(getattr(worker.model, "cfg", None), "n_layers", 1) or 1))
+
+    def _model_head_count() -> int:
+        return max(1, int(getattr(getattr(worker.model, "cfg", None), "n_heads", 1) or 1))
+
+    def _best_prompt_span(term: str) -> dict[str, Any] | None:
+        spans = [dict(item) for item in worker._prompt_term_spans(term, max_spans=4)]
+        if not spans:
+            return None
+        spans.sort(
+            key=lambda item: (
+                0 if str(item.get("provenance_class", "")) == "source_body" else 1,
+                -int(item.get("length", 0) or 0),
+                int(item.get("start", 0) or 0),
+            )
+        )
+        return spans[0]
+
+    def _directscan_support() -> dict[str, Any]:
+        top_layer = max(0, _model_layer_count() - 1)
+        head_count = _model_head_count()
+        lower_layer = max(0, top_layer - 1)
+        send_k_head = 0
+        send_v_head = 1 if head_count > 1 else 0
+        budget_k_head = 0 if top_layer != lower_layer else (2 if head_count > 2 else send_k_head)
+        budget_v_head = 1 if top_layer != lower_layer else (3 if head_count > 3 else send_v_head)
+        source_terms = ("send", "budget")
+        top_feature_hits: list[dict[str, Any]] = []
+        selected_spans: dict[str, dict[str, Any]] = {}
+        for feature, site, layer, head, alignment in (
+            ("send", "k_cache", lower_layer, send_k_head, 0.31),
+            ("send", "v_cache", lower_layer, send_v_head, 0.32),
+            ("budget", "k_cache", top_layer, budget_k_head, 0.37),
+            ("budget", "v_cache", top_layer, budget_v_head, 0.39),
+        ):
+            span = _best_prompt_span(feature)
+            if span is None:
+                continue
+            selected_spans.setdefault(feature, span)
+            start = int(span.get("start", 0) or 0)
+            top_feature_hits.append(
+                {
+                    "group": "required_terms",
+                    "feature": feature,
+                    "polarity": "promote",
+                    "site": site,
+                    "layer": layer,
+                    "head": head,
+                    "token_mode": "last",
+                    "alignment": alignment,
+                    "argmax_pos": start,
+                    "argmax_relative_index": -max(1, start + 1),
+                    "argmax_piece": str(span.get("text", feature)),
+                    "argmax_segment_kind": "prompt",
+                    "source_positions": [
+                        {
+                            "position": start,
+                            "relative_index": -max(1, start + 1),
+                            "segment_kind": "prompt",
+                            "piece": str(span.get("text", feature)),
+                            "alignment": alignment,
+                        }
+                    ],
+                    "coverage_progress": 0.0,
+                }
+            )
+        return {
+            "feedback": {
+                "done": False,
+                "progress_label": "stalled",
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "missing_required_terms": list(source_terms) + ["Mira", "Omar"],
+                "entity_recall_terms": list(source_terms) + ["Mira", "Omar"],
+                "partial_score": 0.45,
+            },
+            "observer_check": {
+                "check_type": "semantic_progress",
+                "trigger": "coverage_progress",
+                "score": 0.2,
+                "verdict": "flat",
+                "kv_feature_scan": {
+                    "projection_mode": "attn_weight_head_projection",
+                    "surface_count": len(top_feature_hits),
+                    "group_count": 1,
+                    "top_feature_hits": top_feature_hits,
+                },
+            },
+            "canary": {
+                "semantic_focus_term": "Mira",
+                "semantic_focus_source": "directscan_replay",
+                "reachable_focus_term": "budget",
+                "reachable_focus_piece": " budget",
+                "reachable_focus_rank": 768,
+                "target_mass": 0.000142,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.300192,
+                "attractor_family_top_overlap": 4,
+                "attractor_family_overlap_tokens": ["EW", " EW", "inou", " shards"],
+                "top_tokens": ["EW", " EW", "inou", " shards", "Lawson"],
+            },
+            "spans": selected_spans,
+        }
+
+    def _ensure_compileable_candidate(candidate: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = dict(candidate)
+        if (
+            isinstance(normalized.get("source"), Mapping)
+            and isinstance(normalized.get("op"), Mapping)
+            and isinstance(normalized.get("budget"), Mapping)
+            and (
+                isinstance(normalized.get("target"), Mapping)
+                or normalized.get("surface_id") not in (None, "")
+            )
+        ):
+            normalized.setdefault("id", f"replay_candidate_{normalized.get('surface_id', 'unknown')}")
+            if "target" not in normalized and normalized.get("surface_id") not in (None, ""):
+                normalized["target"] = {"surface_id": normalized.get("surface_id")}
+            return normalized
+        command = worker._build_dry_run_command(normalized)
+        if isinstance(command, Mapping):
+            edits = command.get("edits")
+            if isinstance(edits, SequenceABC) and not isinstance(edits, (str, bytes, bytearray)) and edits:
+                merged = dict(normalized)
+                merged.update(dict(edits[0]))
+                return merged
+        return normalized
+
+    def _forced_reset(self: HookedTransformerWorkerRuntime, prompt: str) -> None:
+        original_reset(prompt)
+        surface_ids = tuple(surface["surface_id"] for surface in self._surface_catalog_raw if surface.get("surface_id"))
+        if len(surface_ids) < 2:
+            raise ValueError("readout escape replay harness requires at least two activation surfaces")
+        forced_state["surface_ids"] = surface_ids
+        forced_state["cached_strategy_hints"] = None
+        if normalized_packet_mode == "forced_frontier":
+            base_surface_id, challenger_surface_id = surface_ids[:2]
+            forced_state["base_bundle_key"] = f"kv_anchor:send:source_body:{base_surface_id}"
+            forced_state["challenger_bundle_key"] = f"kv_anchor:budget:source_body:{challenger_surface_id}"
+            self._last_task_feedback = {
+                "done": False,
+                "progress_label": "stalled",
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "missing_required_terms": ["budget", "Mira", "Omar"],
+                "entity_recall_terms": ["budget", "Mira", "Omar"],
+                "partial_score": 0.45,
+            }
+            return
+
+        directscan = _directscan_support()
+        forced_state["directscan_hints"] = directscan
+        self._last_task_feedback = dict(directscan["feedback"])
+        self._latest_observer_check = dict(directscan["observer_check"])
+        self._observer_checks = [dict(directscan["observer_check"])]
+
+    def _forced_canary(self: HookedTransformerWorkerRuntime, **_kwargs: Any) -> Mapping[str, Any]:
+        if normalized_packet_mode == "forced_frontier":
+            return {
+                "semantic_focus_term": "Mira",
+                "semantic_focus_source": "forced_replay",
+                "reachable_focus_term": "budget",
+                "reachable_focus_piece": " budget",
+                "reachable_focus_rank": 768,
+                "target_mass": 0.000142,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.300192,
+                "attractor_family_top_overlap": 4,
+                "attractor_family_overlap_tokens": ["EW", " EW", "inou", " shards"],
+                "top_tokens": ["EW", " EW", "inou", " shards", "Lawson"],
+            }
+        directscan = forced_state.get("directscan_hints") if isinstance(forced_state.get("directscan_hints"), Mapping) else {}
+        return dict(directscan.get("canary", {}))
+
+    def _forced_build_controller_packet(self: HookedTransformerWorkerRuntime) -> dict[str, Any]:
+        packet = dict(original_build_controller_packet())
+        if normalized_packet_mode in {"directscan", "fixed_candidate"}:
+            strategy_hints = dict(packet.get("strategy_hints", {}))
+            candidate_fields = ("kv_candidate_edits", "shot_candidate_edits", "kv_retry_candidate_edits")
+            live_candidates: list[dict[str, Any]] = []
+            for key in candidate_fields:
+                raw_items = strategy_hints.get(key)
+                if not isinstance(raw_items, SequenceABC) or isinstance(raw_items, (str, bytes, bytearray)):
+                    continue
+                normalized_items = [_ensure_compileable_candidate(item) for item in raw_items if isinstance(item, Mapping)]
+                strategy_hints[key] = normalized_items
+                live_candidates.extend(normalized_items)
+            if not live_candidates:
+                raise ValueError("directscan replay did not produce bundle candidates")
+            if normalized_packet_mode == "fixed_candidate":
+                cached = forced_state.get("cached_strategy_hints")
+                if isinstance(cached, Mapping):
+                    strategy_hints.update(dict(cached))
+                    packet["strategy_hints"] = strategy_hints
+                    packet["control_phase_hint"] = "readout_escape"
+                    return packet
+            base_bundle_key = str(strategy_hints.get("base_winner_bundle_key", "") or "")
+            challenger_bundle_key = str(strategy_hints.get("challenger_bundle_key", "") or "")
+            if not challenger_bundle_key:
+                unique_bundle_keys = []
+                for item in live_candidates:
+                    if not isinstance(item, Mapping):
+                        continue
+                    bundle_key = str(item.get("bundle_key", "") or "")
+                    if bundle_key and bundle_key not in unique_bundle_keys:
+                        unique_bundle_keys.append(bundle_key)
+                if unique_bundle_keys:
+                    challenger_bundle_key = unique_bundle_keys[-1]
+                    strategy_hints.setdefault("challenger_bundle_key", challenger_bundle_key)
+                if len(unique_bundle_keys) > 1:
+                    base_bundle_key = unique_bundle_keys[0]
+                    strategy_hints.setdefault("base_winner_bundle_key", base_bundle_key)
+            forced_state["base_bundle_key"] = base_bundle_key
+            forced_state["challenger_bundle_key"] = challenger_bundle_key or base_bundle_key
+            if normalized_packet_mode == "fixed_candidate":
+                cached_keys = (
+                    "kv_candidate_edits",
+                    "shot_candidate_edits",
+                    "kv_retry_candidate_edits",
+                    "base_winner_bundle_key",
+                    "challenger_bundle_key",
+                    "selected_bundle_key",
+                    "selection_source",
+                    "gate_report_frontier_bundle_key",
+                    "gate_report_selection_source",
+                    "gate_report_pairwise_reason_text",
+                    "readout_analyzer_suggested_bundle_key",
+                    "readout_sidecar_suggested_bundle_key",
+                    "bundle_selector_phase",
+                )
+                forced_state["cached_strategy_hints"] = {
+                    key: (
+                        [dict(item) for item in strategy_hints.get(key, []) if isinstance(item, Mapping)]
+                        if key in {"kv_candidate_edits", "shot_candidate_edits", "kv_retry_candidate_edits"}
+                        else strategy_hints.get(key)
+                    )
+                    for key in cached_keys
+                    if strategy_hints.get(key) not in (None, "")
+                }
+            packet["strategy_hints"] = strategy_hints
+            packet["control_phase_hint"] = "readout_escape"
+            return packet
+
+        strategy_hints = dict(packet.get("strategy_hints", {}))
+        base_bundle_key = str(forced_state.get("base_bundle_key", "") or "")
+        challenger_bundle_key = str(forced_state.get("challenger_bundle_key", "") or "")
+        surface_ids = tuple(str(item) for item in forced_state.get("surface_ids", ()) if str(item))
+        if len(surface_ids) < 2:
+            raise ValueError("forced replay surfaces not initialized")
+        send_candidate = _make_forced_candidate(
+            surface_id=surface_ids[0],
+            bundle_key=base_bundle_key,
+            focus_term="send",
+            candidate_family="forced_readout_escape:send",
+        )
+        budget_candidate = _make_forced_candidate(
+            surface_id=surface_ids[1],
+            bundle_key=challenger_bundle_key,
+            focus_term="budget",
+            candidate_family="forced_readout_escape:budget",
+        )
+        strategy_hints.update(
+            {
+                "shot_mode_ready": True,
+                "readout_escape_needed": True,
+                "readout_escape_reason": "forced_contract_replay",
+                "controller_focus_term": "budget",
+                "controller_focus_source": "reachable_focus",
+                "kv_candidate_edits": [send_candidate, budget_candidate],
+                "base_winner_bundle_key": base_bundle_key,
+                "challenger_bundle_key": challenger_bundle_key,
+                "readout_analyzer_suggested_bundle_key": challenger_bundle_key,
+                "gate_report_frontier_bundle_key": challenger_bundle_key,
+                "gate_report_selection_source": "sidecar_tiebreak",
+                "gate_report_pairwise_reason_text": "forced replay prefers budget challenger at readout_escape",
+                "selection_source": "sidecar_tiebreak",
+                "bundle_selector_phase": "readout_escape",
+            }
+        )
+        task_feedback = dict(packet.get("task_feedback", {}))
+        task_feedback.setdefault("required_term_recall", 0.0)
+        task_feedback.setdefault("required_term_span_progress", 0.0)
+        task_feedback.setdefault("partial_score", 0.45)
+        packet["control_phase_hint"] = "readout_escape"
+        packet["strategy_hints"] = strategy_hints
+        packet["task_feedback"] = task_feedback
+        return packet
+
+    worker.reset = MethodType(_forced_reset, worker)
+    worker._current_answer_readout_canary = MethodType(_forced_canary, worker)
+    worker.build_controller_packet = MethodType(_forced_build_controller_packet, worker)
+
+    try:
+        controller_client = _FrontierReplayControllerClient()
+        ctx = StepContext(
+            packet={},
+            runtime_state=worker.runtime_state,
+            traces={},
+            stats={},
+            adapter=worker.adapter,
+        )
+        episode = run_episode(env, worker, controller_client, ctx, logger=logger)
+    finally:
+        worker.reset = original_reset
+        worker._current_answer_readout_canary = original_answer_readout_canary
+        worker.build_controller_packet = original_build_controller_packet
+
+    selection_events = [event for event in memory_logger.events if event.get("event") == "controller_selection"]
+    first_selection_event = dict(selection_events[0]) if selection_events else None
+    result = ReadoutEscapeReplayHarnessResult(
+        seed=seed,
+        task_id=env.task_id,
+        worker_model_name=worker_model_name,
+        replay_mode=f"{normalized_packet_mode}_apply",
+        packet_mode=normalized_packet_mode,
+        prompt=episode.prompt,
+        episode=episode,
+        readout_escape_seen=any(
+            event.get("event") == "controller_observation" and event.get("control_phase_hint") == "readout_escape"
+            for event in memory_logger.events
+        )
+        or any(
+            event.get("event") == "controller_command" and event.get("gate_report_frontier_bundle_key") not in (None, "")
+            for event in memory_logger.events
+        ),
+        controller_selection_event_count=len(selection_events),
+        nonnull_gate_frontier_count=sum(
+            1
+            for event in memory_logger.events
+            if event.get("event") == "controller_selection" and event.get("gate_report_frontier_bundle_key") not in (None, "")
+        ),
+        nonnull_controller_selected_count=sum(
+            1
+            for event in memory_logger.events
+            if event.get("event") == "controller_selection" and event.get("controller_selected_bundle_key") not in (None, "")
+        ),
+        sidecar_suggested_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("sidecar_suggested_bundle_key"),
+        gate_report_frontier_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("gate_report_frontier_bundle_key"),
+        controller_selected_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("controller_selected_bundle_key"),
+        controller_selection_source=None
+        if first_selection_event is None
+        else first_selection_event.get("controller_selection_source"),
+        controller_rejected_signals=tuple(
+            str(item)
+            for item in (
+                [] if first_selection_event is None else first_selection_event.get("controller_rejected_signals", [])
+            )
+        ),
+        forced_base_bundle_key=str(forced_state.get("base_bundle_key", "") or ""),
+        forced_challenger_bundle_key=str(forced_state.get("challenger_bundle_key", "") or ""),
+        first_selection_event=first_selection_event,
+        surface_ids=tuple(str(item) for item in forced_state.get("surface_ids", ()) if str(item)),
+    )
+
+    _write_summary_artifact(log_dir, "readout_escape_replay_summary.json", result.to_dict())
     return result
 
 

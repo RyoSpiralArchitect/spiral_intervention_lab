@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, replace
@@ -2172,6 +2173,20 @@ class HookedTransformerWorkerRuntime:
             return f"{int(source_position)}:{int(source_position) + 1}"
         return "unknown"
 
+    def _bundle_focus_term(
+        self,
+        bundle_key: str,
+        members: Sequence[Mapping[str, Any]],
+    ) -> str:
+        for item in members:
+            feature = str(item.get("focus_feature", "") or item.get("focus_term", "") or "")
+            if feature:
+                return feature
+        parts = str(bundle_key or "").split(":")
+        if len(parts) >= 2:
+            return str(parts[1] or "")
+        return ""
+
     def _operator_recipe_id(self, item: Mapping[str, Any]) -> str:
         phase_objective = str(
             item.get("phase_objective")
@@ -2190,6 +2205,12 @@ class HookedTransformerWorkerRuntime:
         )
         pooling = str(item.get("recipe_pooling", "") or "unknown")
         contrast_mode = str(item.get("contrast_mode", "") or "none")
+        contrast_scale = float(item.get("recipe_contrast_scale", 1.0) or 1.0)
+        contrast_tag = (
+            contrast_mode
+            if contrast_mode == "none" or abs(float(contrast_scale) - 1.0) <= 1e-8
+            else f"{contrast_mode}@{round(float(contrast_scale), 3):.3f}"
+        )
         if family == "kv_pair_source_anchor":
             k_alpha = float(item.get("recipe_k_alpha", item.get("k_alpha", 0.0)) or 0.0)
             v_alpha = float(item.get("recipe_v_alpha", item.get("v_alpha", 0.0)) or 0.0)
@@ -2197,7 +2218,16 @@ class HookedTransformerWorkerRuntime:
         else:
             alpha = float(item.get("recipe_alpha", item.get("alpha", item.get("op", {}).get("alpha", 0.0))) or 0.0)
             alpha_key = f"a{round(alpha, 4):.4f}"
-        return f"{phase_objective}|{family}|{provenance_class}|{localization}|{pooling}|{contrast_mode}|{alpha_key}"
+        return f"{phase_objective}|{family}|{provenance_class}|{localization}|{pooling}|{contrast_tag}|{alpha_key}"
+
+    def _operator_recipe_seed_key(
+        self,
+        *,
+        mode: str,
+        localization: str,
+        pooling: str,
+    ) -> str:
+        return f"{str(mode or 'unknown')}|{str(localization or 'unknown')}|{str(pooling or 'unknown')}"
 
     def _operator_family_key(self, item: Mapping[str, Any]) -> str:
         phase_objective = str(
@@ -2212,6 +2242,44 @@ class HookedTransformerWorkerRuntime:
         provenance_class = str(item.get("provenance_class", "") or "unknown")
         span_kind = str(item.get("span_kind", "") or "unknown")
         return f"{phase_objective}|{family}|{provenance_class}|{span_kind}"
+
+    def _term_readout_lift_score(self, metrics: Mapping[str, Any]) -> float:
+        target_mass_delta = float(metrics.get("target_mass_delta", 0.0) or 0.0)
+        target_top20_hit_delta = int(metrics.get("target_top20_hit_delta", 0) or 0)
+        focus_rank_delta = int(metrics.get("focus_rank_delta", 0) or 0)
+        rank_focus_delta = int(metrics.get("rank_focus_delta", 0) or 0)
+        return round(
+            max(0.0, 1000.0 * target_mass_delta)
+            + (0.35 * max(0, target_top20_hit_delta))
+            + (0.01 * max(0, focus_rank_delta, rank_focus_delta)),
+            6,
+        )
+
+    def _term_readout_deltas(
+        self,
+        baseline_logits: torch.Tensor,
+        edited_logits: torch.Tensor,
+        *,
+        focus_terms: Sequence[str],
+    ) -> dict[str, dict[str, Any]]:
+        term_metrics: dict[str, dict[str, Any]] = {}
+        seen_terms: set[str] = set()
+        for raw_term in focus_terms:
+            term = str(raw_term or "")
+            if not term or term in seen_terms:
+                continue
+            seen_terms.add(term)
+            metrics = self._first_token_target_readout_metrics(
+                baseline_logits,
+                edited_logits,
+                focus_terms=[term],
+            )
+            if not metrics:
+                continue
+            metrics = dict(metrics)
+            metrics["lift_score"] = self._term_readout_lift_score(metrics)
+            term_metrics[term] = metrics
+        return term_metrics
 
     def _classify_actual_delta_result(self, item: Mapping[str, Any]) -> str:
         continuation_baseline = str(item.get("continuation_baseline", "") or "")
@@ -2291,7 +2359,10 @@ class HookedTransformerWorkerRuntime:
             best_readout_probe_score = 0.0
             family_labels: set[str] = set()
             for item in items:
-                cls = str(item.get("actual_delta_class", "neutral") or "neutral")
+                cls = str(
+                    item.get("actual_delta_class")
+                    or ("error" if str(item.get("status", "") or "") == "error" else "neutral")
+                )
                 class_counts[cls] = int(class_counts.get(cls, 0) or 0) + 1
                 best_target_mass_delta = max(best_target_mass_delta, float(item.get("target_mass_delta", 0.0) or 0.0))
                 best_target_top20_hit_delta = max(
@@ -2310,6 +2381,7 @@ class HookedTransformerWorkerRuntime:
             collapse_count = int(class_counts.get("collapse_isomorphic", 0) or 0)
             dead_count = int(class_counts.get("dead_actuator", 0) or 0)
             neutral_count = int(class_counts.get("neutral", 0) or 0)
+            error_count = int(class_counts.get("error", 0) or 0)
             if harmful_count > 0:
                 status = "veto"
                 certified_for_apply = False
@@ -2318,6 +2390,10 @@ class HookedTransformerWorkerRuntime:
                 status = "apply_eligible"
                 certified_for_apply = True
                 reason = "target_lift_observed"
+            elif error_count > 0:
+                status = "shadow_only"
+                certified_for_apply = False
+                reason = "replay_error"
             else:
                 status = "shadow_only"
                 certified_for_apply = False
@@ -2325,6 +2401,7 @@ class HookedTransformerWorkerRuntime:
             family_prior_score = (
                 (1.0 * target_lift_count)
                 + (0.1 * neutral_count)
+                - (0.1 * error_count)
                 - (0.25 * dead_count)
                 - (0.5 * collapse_count)
                 - (1.0 * harmful_count)
@@ -2353,6 +2430,141 @@ class HookedTransformerWorkerRuntime:
             )
         )
         return summaries
+
+    def _summarize_operator_recipe_bundle_ownership(
+        self,
+        evaluations: Sequence[Mapping[str, Any]],
+        *,
+        bundle_term_by_key: Mapping[str, str],
+    ) -> list[dict[str, Any]]:
+        grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+        for item in evaluations:
+            if not isinstance(item, Mapping):
+                continue
+            recipe_id = str(item.get("operator_recipe_id", "") or "")
+            recipe_seed_key = str(item.get("operator_recipe_seed_key", "") or recipe_id)
+            intended_bundle_key = str(item.get("intended_bundle_key", "") or "")
+            if not recipe_id or not intended_bundle_key:
+                continue
+            grouped.setdefault((recipe_id, intended_bundle_key), []).append(item)
+
+        summaries: list[dict[str, Any]] = []
+        tau_self = 0.03
+        tau_positive = 0.005
+        tau_align = 0.01
+        tau_bridge = 0.03
+        tau_dead = 0.01
+        for (recipe_id, intended_bundle_key), items in grouped.items():
+            intended_term = str(bundle_term_by_key.get(intended_bundle_key, "") or "")
+            best_summary: dict[str, Any] | None = None
+            for item in items:
+                if not isinstance(item, Mapping):
+                    continue
+                term_deltas = item.get("term_readout_deltas") if isinstance(item.get("term_readout_deltas"), Mapping) else {}
+                bundle_scores: dict[str, float] = {}
+                for bundle_key, bundle_term in bundle_term_by_key.items():
+                    metrics = term_deltas.get(str(bundle_term)) if isinstance(term_deltas, Mapping) else None
+                    score = 0.0
+                    if isinstance(metrics, Mapping):
+                        score = float(metrics.get("lift_score", 0.0) or 0.0)
+                    bundle_scores[str(bundle_key)] = float(score)
+                realized_lift_bundle_key = max(
+                    bundle_scores.items(),
+                    key=lambda entry: (float(entry[1]), str(entry[0])),
+                )[0] if bundle_scores else intended_bundle_key
+                self_delta = float(bundle_scores.get(intended_bundle_key, 0.0) or 0.0)
+                cross_candidates = [
+                    float(score)
+                    for bundle_key, score in bundle_scores.items()
+                    if str(bundle_key) != intended_bundle_key
+                ]
+                cross_delta = max(cross_candidates, default=0.0)
+                alignment_margin = float(self_delta - cross_delta)
+                if self_delta > tau_self and alignment_margin > tau_align:
+                    actuator_class = "self_actuator"
+                elif self_delta > tau_positive and alignment_margin < -tau_align and str(realized_lift_bundle_key) != intended_bundle_key:
+                    actuator_class = "cross_bound"
+                elif cross_delta > tau_bridge and str(realized_lift_bundle_key) != intended_bundle_key:
+                    actuator_class = "bridge_actuator"
+                elif max(self_delta, cross_delta) <= tau_dead:
+                    actuator_class = "dead_actuator"
+                else:
+                    actuator_class = "noisy_or_harmful"
+                candidate_summary = {
+                    "operator_recipe_id": recipe_id,
+                    "operator_recipe_seed_key": recipe_seed_key,
+                    "contrast_mode": str(item.get("contrast_mode", "") or "none"),
+                    "intended_bundle_key": intended_bundle_key,
+                    "intended_term": intended_term or None,
+                    "realized_lift_bundle_key": None if not bundle_scores else str(realized_lift_bundle_key),
+                    "realized_lift_term": None
+                    if not bundle_scores
+                    else str(bundle_term_by_key.get(str(realized_lift_bundle_key), "") or ""),
+                    "self_delta": round(float(self_delta), 6),
+                    "cross_delta": round(float(cross_delta), 6),
+                    "alignment_margin": round(float(alignment_margin), 6),
+                    "actuator_class": actuator_class,
+                    "bridge_plan_bundle_key": str(realized_lift_bundle_key)
+                    if actuator_class in {"bridge_actuator", "cross_bound"} and str(realized_lift_bundle_key) != intended_bundle_key
+                    else None,
+                    "best_eval_label": item.get("label"),
+                    "best_eval_status": item.get("status"),
+                    "best_eval_actual_delta_class": item.get("actual_delta_class"),
+                    "bundle_lift_scores": {
+                        str(bundle_key): round(float(score), 6)
+                        for bundle_key, score in sorted(bundle_scores.items(), key=lambda entry: str(entry[0]))
+                    },
+                }
+                if best_summary is None or (
+                    float(candidate_summary["alignment_margin"]),
+                    float(candidate_summary["self_delta"]),
+                    -float(candidate_summary["cross_delta"]),
+                    str(candidate_summary["best_eval_label"] or ""),
+                ) > (
+                    float(best_summary["alignment_margin"]),
+                    float(best_summary["self_delta"]),
+                    -float(best_summary["cross_delta"]),
+                    str(best_summary["best_eval_label"] or ""),
+                ):
+                    best_summary = candidate_summary
+            if best_summary is not None:
+                summaries.append(best_summary)
+
+        summaries.sort(
+            key=lambda item: (
+                str(item.get("operator_recipe_id", "") or ""),
+                str(item.get("intended_bundle_key", "") or ""),
+            )
+        )
+        return summaries
+
+    def _infer_recipe_stealer_bundles(
+        self,
+        ownership: Sequence[Mapping[str, Any]],
+    ) -> dict[tuple[str, str], str]:
+        stealer_map: dict[tuple[str, str], str] = {}
+        fallback_by_bundle: dict[str, tuple[float, str]] = {}
+        for item in ownership:
+            if not isinstance(item, Mapping):
+                continue
+            recipe_id = str(item.get("operator_recipe_seed_key", "") or item.get("operator_recipe_id", "") or "")
+            intended_bundle_key = str(item.get("intended_bundle_key", "") or "")
+            realized_bundle_key = str(item.get("realized_lift_bundle_key", "") or "")
+            actuator_class = str(item.get("actuator_class", "") or "")
+            cross_delta = float(item.get("cross_delta", 0.0) or 0.0)
+            if not recipe_id or not intended_bundle_key or not realized_bundle_key:
+                continue
+            if actuator_class not in {"bridge_actuator", "self_actuator", "cross_bound", "noisy_or_harmful"}:
+                continue
+            if realized_bundle_key == intended_bundle_key:
+                continue
+            stealer_map[(recipe_id, intended_bundle_key)] = realized_bundle_key
+            previous = fallback_by_bundle.get(intended_bundle_key)
+            if previous is None or float(cross_delta) > float(previous[0]):
+                fallback_by_bundle[intended_bundle_key] = (float(cross_delta), realized_bundle_key)
+        for intended_bundle_key, (_cross_delta, realized_bundle_key) in fallback_by_bundle.items():
+            stealer_map[("*", intended_bundle_key)] = realized_bundle_key
+        return stealer_map
 
     def _attach_operator_certifications(
         self,
@@ -3703,10 +3915,35 @@ class HookedTransformerWorkerRuntime:
                 args.append(expr)
             else:
                 args.append({"fn": "scale", "by": float(weight), "arg": expr})
-        summed: dict[str, Any] = {"fn": "add", "args": args}
+        max_args = int(getattr(getattr(self, "policy", None), "max_expr_args", 4) or 4)
+        summed = self._expr_add_tree(args, max_args=max(2, max_args))
         if abs(total_weight - 1.0) <= 1e-8:
             return summed
         return {"fn": "scale", "by": float(1.0 / total_weight), "arg": summed}
+
+    def _expr_add_tree(
+        self,
+        args: Sequence[Mapping[str, Any]],
+        *,
+        max_args: int = 4,
+    ) -> dict[str, Any]:
+        normalized_args = [dict(arg) for arg in args if isinstance(arg, Mapping)]
+        if len(normalized_args) < 2:
+            raise ValueError("add tree requires at least two expressions")
+        if len(normalized_args) <= max_args:
+            return {"fn": "add", "args": normalized_args}
+        branch_count = min(max_args, len(normalized_args))
+        chunk_size = max(2, math.ceil(len(normalized_args) / branch_count))
+        next_level: list[dict[str, Any]] = []
+        for index in range(0, len(normalized_args), chunk_size):
+            chunk = normalized_args[index : index + chunk_size]
+            if len(chunk) == 1:
+                next_level.append(dict(chunk[0]))
+            elif len(chunk) == 2:
+                next_level.append({"fn": "add", "args": [dict(chunk[0]), dict(chunk[1])]})
+            else:
+                next_level.append(self._expr_add_tree(chunk, max_args=max_args))
+        return self._expr_add_tree(next_level, max_args=max_args)
 
     def _candidate_recipe_source_expr(
         self,
@@ -3716,6 +3953,7 @@ class HookedTransformerWorkerRuntime:
         pooling: str,
         contrast_mode: str = "none",
         competitor_candidate: Mapping[str, Any] | None = None,
+        contrast_scale: float = 1.0,
     ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         site = str(candidate.get("site", "") or "")
         layer = candidate.get("layer")
@@ -3777,6 +4015,38 @@ class HookedTransformerWorkerRuntime:
                 token_selector={"mode": "index", "value": token_position},
             )
             metadata_positions = [token_position]
+        elif recipe_localization == "exact_term_fused":
+            span_expr, span_meta = self._candidate_recipe_source_expr(
+                candidate,
+                localization="exact_prompt_span_mean",
+                pooling="mean",
+                contrast_mode="none",
+            )
+            token_expr, token_meta = self._candidate_recipe_source_expr(
+                candidate,
+                localization="exact_term_token",
+                pooling="single",
+                contrast_mode="none",
+            )
+            if span_expr is None or token_expr is None:
+                return None, {}
+            metadata_positions = list(
+                dict.fromkeys(
+                    list(span_meta.get("source_positions", []))
+                    + list(token_meta.get("source_positions", []))
+                )
+            )
+            expr = {
+                "fn": "normalize",
+                "arg": {
+                    "fn": "add",
+                    "args": [
+                        {"fn": "scale", "by": 0.7, "arg": span_expr},
+                        {"fn": "scale", "by": 0.3, "arg": token_expr},
+                    ],
+                },
+            }
+            recipe_pooling = "fused"
         elif recipe_localization in {"exact_term_window_pm1_weighted", "exact_term_window_pm2_weighted"}:
             padding = 1 if recipe_localization.endswith("pm1_weighted") else 2
             window_positions = self._prompt_window_positions(start, end, padding=padding)
@@ -3801,6 +4071,33 @@ class HookedTransformerWorkerRuntime:
                     )
                 )
             expr = self._expr_weighted_mean(refs_with_weights)
+        elif recipe_localization == "exact_term_centered_pm1":
+            window_positions = self._prompt_window_positions(start, end, padding=1)
+            if not window_positions:
+                return None, {}
+            metadata_positions = list(window_positions)
+            positive_terms: list[tuple[dict[str, Any], float]] = []
+            neighbor_terms: list[tuple[dict[str, Any], float]] = []
+            for position in window_positions:
+                base_expr = self._cache_ref_expr(
+                    site=site,
+                    layer=int(layer),
+                    head=int(head),
+                    token_selector={"mode": "index", "value": int(position)},
+                )
+                if start <= position < end:
+                    positive_terms.append((base_expr, 1.0))
+                else:
+                    neighbor_terms.append((base_expr, 1.0))
+            if not positive_terms:
+                return None, {}
+            positive_expr = self._expr_weighted_mean(positive_terms)
+            if neighbor_terms:
+                neighbor_expr = self._expr_weighted_mean(neighbor_terms)
+                expr = {"fn": "sub", "args": [positive_expr, neighbor_expr]}
+            else:
+                expr = positive_expr
+            recipe_pooling = "centered_mean"
         elif recipe_localization == "head_tail_mean":
             positions = [int(span_positions[0])]
             if int(span_positions[-1]) != int(span_positions[0]):
@@ -3842,7 +4139,7 @@ class HookedTransformerWorkerRuntime:
         else:
             return None, {}
 
-        if contrast_mode == "minus_base":
+        if contrast_mode in {"minus_base", "minus_stealer"}:
             if not isinstance(competitor_candidate, Mapping):
                 return None, {}
             competitor_expr, competitor_meta = self._candidate_recipe_source_expr(
@@ -3854,11 +4151,30 @@ class HookedTransformerWorkerRuntime:
             if competitor_expr is None:
                 return None, {}
             metadata_positions = list(dict.fromkeys(metadata_positions + list(competitor_meta.get("source_positions", []))))
-            expr = {"fn": "sub", "args": [expr, competitor_expr]}
+            competitor_term = (
+                competitor_expr
+                if abs(float(contrast_scale) - 1.0) <= 1e-8
+                else {"fn": "scale", "by": float(contrast_scale), "arg": competitor_expr}
+            )
+            expr = {"fn": "sub", "args": [expr, competitor_term]}
+        elif contrast_mode == "orthogonal_stealer":
+            if not isinstance(competitor_candidate, Mapping):
+                return None, {}
+            competitor_expr, competitor_meta = self._candidate_recipe_source_expr(
+                competitor_candidate,
+                localization=localization,
+                pooling=pooling,
+                contrast_mode="none",
+            )
+            if competitor_expr is None:
+                return None, {}
+            metadata_positions = list(dict.fromkeys(metadata_positions + list(competitor_meta.get("source_positions", []))))
+            expr = {"fn": "project_orthogonal", "arg": expr, "basis": competitor_expr}
         metadata = {
             "recipe_localization": recipe_localization,
             "recipe_pooling": recipe_pooling,
             "contrast_mode": str(contrast_mode or "none"),
+            "contrast_scale": float(contrast_scale),
             "source_positions": metadata_positions,
         }
         return expr, metadata
@@ -3871,6 +4187,7 @@ class HookedTransformerWorkerRuntime:
         pooling: str,
         contrast_mode: str = "none",
         competitor_candidate: Mapping[str, Any] | None = None,
+        contrast_scale: float = 1.0,
         alpha_override: float | None = None,
     ) -> dict[str, Any] | None:
         expr, metadata = self._candidate_recipe_source_expr(
@@ -3879,6 +4196,7 @@ class HookedTransformerWorkerRuntime:
             pooling=pooling,
             contrast_mode=contrast_mode,
             competitor_candidate=competitor_candidate,
+            contrast_scale=contrast_scale,
         )
         if expr is None:
             return None
@@ -3895,6 +4213,7 @@ class HookedTransformerWorkerRuntime:
         materialized["recipe_localization"] = str(metadata.get("recipe_localization", localization))
         materialized["recipe_pooling"] = str(metadata.get("recipe_pooling", pooling))
         materialized["contrast_mode"] = str(metadata.get("contrast_mode", contrast_mode))
+        materialized["recipe_contrast_scale"] = float(metadata.get("contrast_scale", contrast_scale))
         materialized["recipe_source_positions"] = list(metadata.get("source_positions", []))
         materialized["recipe_alpha"] = float(op.get("alpha", 0.0) or 0.0)
         materialized["operator_family_key"] = self._operator_family_key(materialized)
@@ -3957,18 +4276,23 @@ class HookedTransformerWorkerRuntime:
             selected.append(candidate)
 
         bundle_inputs = self._bundle_inputs_for_candidates(selected)
-        bundle_keys_by_surface_id: dict[str, str] = {}
+        bundle_keys_by_candidate_group: dict[tuple[str, str, str], str] = {}
         for bundle in bundle_inputs:
             bundle_key = str(bundle.get("bundle_key", "") or "")
-            v_surface_id = str(((bundle.get("v") or {}).get("surface_id", "")) or "")
-            k_surface_id = str(((bundle.get("k") or {}).get("surface_id", "")) or "")
-            if v_surface_id:
-                bundle_keys_by_surface_id[v_surface_id] = bundle_key
-            if k_surface_id:
-                bundle_keys_by_surface_id[k_surface_id] = bundle_key
+            term = str(bundle.get("term", "") or "")
+            provenance_class = str(bundle.get("provenance_class", "misc_prompt") or "misc_prompt")
+            source_span = bundle.get("source_span") if isinstance(bundle.get("source_span"), Mapping) else None
+            if source_span is not None:
+                span_id = f"{int(source_span.get('start', 0) or 0)}:{int(source_span.get('end', 0) or 0)}"
+            else:
+                span_id = str(bundle.get("span_id", "") or "")
+            if term and bundle_key:
+                bundle_keys_by_candidate_group[(term, provenance_class, span_id)] = bundle_key
         for candidate in selected:
-            surface_id = str(candidate.get("surface_id", "") or "")
-            bundle_key = bundle_keys_by_surface_id.get(surface_id)
+            focus_term = str(candidate.get("focus_feature", "") or "")
+            provenance_class = str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt")
+            span_id = self._candidate_span_id(candidate)
+            bundle_key = bundle_keys_by_candidate_group.get((focus_term, provenance_class, span_id))
             if bundle_key:
                 candidate["bundle_key"] = bundle_key
                 candidate["bundle_ready"] = True
@@ -4570,6 +4894,7 @@ class HookedTransformerWorkerRuntime:
                 kv_candidate_builder.get("candidate_count_before_select", 0) or 0
             )
             hints["escape_builder_candidates_after_prune"] = int(kv_candidate_builder.get("output_count", 0) or 0)
+            hints["escape_builder_hit_limit"] = int(kv_candidate_builder.get("hit_limit", 0) or 0)
             hints["escape_builder_prune_reasons"] = list(kv_candidate_builder.get("prune_reasons", [])[:8])
             if isinstance(kv_candidate_builder.get("candidate_provenance_counts_before_prune"), Mapping):
                 hints["candidate_provenance_counts_before_prune"] = dict(
@@ -5251,7 +5576,11 @@ class HookedTransformerWorkerRuntime:
         existing_lookup = self._cache_surface_lookup()
         promoted: list[dict[str, Any]] = []
         seen_keys = set(existing_lookup)
-        for hit in self._actionable_kv_hits(limit=3):
+        missing_terms = self._feedback_terms(
+            ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
+        )
+        promoted_limit = 4 if len(missing_terms) >= 2 else 3
+        for hit in self._actionable_kv_hits(limit=promoted_limit):
             if str(hit.get("polarity", "promote") or "promote") != "promote":
                 continue
             if str(hit.get("group", "") or "").startswith("forbidden"):
@@ -5298,7 +5627,7 @@ class HookedTransformerWorkerRuntime:
                 }
             )
             seen_keys.add(key)
-            if len(promoted) >= 3:
+            if len(promoted) >= promoted_limit:
                 break
         return promoted
 
@@ -5445,6 +5774,7 @@ class HookedTransformerWorkerRuntime:
             "source": "runtime",
             "stage": "kv_candidate_builder",
             "input_hit_count": 0,
+            "hit_limit": 0,
             "candidate_count_before_select": 0,
             "output_count": 0,
             "prune_reasons": [],
@@ -5487,7 +5817,12 @@ class HookedTransformerWorkerRuntime:
         term_priority = {str(term): index for index, term in enumerate(missing_term_list)}
         candidates: list[tuple[int, int, int, int, float, int, int, dict[str, Any]]] = []
         seen_keys: set[tuple[str, str, int, int, str]] = set()
-        actionable_hits = self._actionable_kv_hits(limit=3, promoted_cache_surfaces=promoted_cache_surfaces)
+        hit_limit = 3
+        if control_phase_hint == "readout_escape":
+            target_term_count = max(1, len(missing_term_list) or 1)
+            hit_limit = min(6, max(4, 2 * target_term_count))
+        debug["hit_limit"] = int(hit_limit)
+        actionable_hits = self._actionable_kv_hits(limit=hit_limit, promoted_cache_surfaces=promoted_cache_surfaces)
         recent_probe_by_candidate_key = self._recent_probe_outcomes_by_candidate_key(
             window=8,
             probe_families={"kv_v", "kv_k", "kv_mix"},
@@ -6943,6 +7278,11 @@ class HookedTransformerWorkerRuntime:
         top_k: int = 8,
         max_edits_per_step_override: int | None = None,
         label: str | None = None,
+        ownership_terms: Sequence[str] | None = None,
+        intended_bundle_key: str | None = None,
+        intended_term: str | None = None,
+        contrast_partner_bundle_key: str | None = None,
+        contrast_partner_term: str | None = None,
     ) -> dict[str, Any]:
         edits = [dict(item) for item in candidate_edits if isinstance(item, Mapping)]
         if not edits:
@@ -6972,6 +7312,11 @@ class HookedTransformerWorkerRuntime:
         for term in self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")):
             if term not in focus_terms:
                 focus_terms.append(term)
+        if isinstance(ownership_terms, SequenceABC) and not isinstance(ownership_terms, (str, bytes, bytearray)):
+            for term in ownership_terms:
+                normalized_term = str(term or "")
+                if normalized_term and normalized_term not in focus_terms:
+                    focus_terms.append(normalized_term)
         command = {"version": "0.1", "decision": "apply", "edits": prepared_edits}
         policy_override = self._replay_policy(max_edits_per_step_override=max_edits_per_step_override)
         edited = self._simulate_decode(
@@ -6997,6 +7342,10 @@ class HookedTransformerWorkerRuntime:
             "edit_count": len(prepared_edits),
             "candidate_edits": [dict(item) for item in edits],
             "bundle_keys": sorted({str(item.get("bundle_key", "") or "") for item in edits if str(item.get("bundle_key", "") or "")}),
+            "intended_bundle_key": str(intended_bundle_key or "") or None,
+            "intended_term": str(intended_term or "") or None,
+            "contrast_partner_bundle_key": str(contrast_partner_bundle_key or "") or None,
+            "contrast_partner_term": str(contrast_partner_term or "") or None,
             "operator_family_key": operator_family_keys[0] if operator_family_keys else "unknown",
             "operator_family_keys": sorted({str(key) for key in operator_family_keys if str(key)}),
             "operator_recipe_id": operator_recipe_ids[0] if operator_recipe_ids else "unknown",
@@ -7029,6 +7378,13 @@ class HookedTransformerWorkerRuntime:
         )
         if readout_metrics:
             result.update(readout_metrics)
+        term_readout_deltas = self._term_readout_deltas(
+            baseline["first_logits"],
+            edited["first_logits"],
+            focus_terms=list(focus_terms),
+        )
+        if term_readout_deltas:
+            result["term_readout_deltas"] = dict(term_readout_deltas)
         probe_summary = self._classify_probe_result(
             {
                 **result,
@@ -7047,28 +7403,147 @@ class HookedTransformerWorkerRuntime:
                 "localization": "exact_prompt_span_mean",
                 "pooling": "mean",
                 "contrast_mode": "none",
-                "modes": ("kv_v", "kv_k", "kv_pair"),
+                "modes": ("kv_pair",),
             },
             {
                 "recipe_name": "term_token",
                 "localization": "exact_term_token",
                 "pooling": "single",
                 "contrast_mode": "none",
-                "modes": ("kv_v", "kv_k", "kv_pair"),
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_fused",
+                "localization": "exact_term_fused",
+                "pooling": "fused",
+                "contrast_mode": "none",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_centered_pm1",
+                "localization": "exact_term_centered_pm1",
+                "pooling": "centered_mean",
+                "contrast_mode": "none",
+                "modes": ("kv_pair",),
             },
             {
                 "recipe_name": "term_window_pm1_weighted",
                 "localization": "exact_term_window_pm1_weighted",
                 "pooling": "weighted_mean",
                 "contrast_mode": "none",
-                "modes": ("kv_v", "kv_k", "kv_pair", "kv_pair_asymmetric"),
+                "modes": ("kv_pair",),
             },
             {
                 "recipe_name": "term_window_pm1_weighted_minus_base",
                 "localization": "exact_term_window_pm1_weighted",
                 "pooling": "weighted_mean",
                 "contrast_mode": "minus_base",
-                "modes": ("kv_v", "kv_k", "kv_pair", "kv_pair_asymmetric"),
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "span_mean_minus_stealer_l025",
+                "localization": "exact_prompt_span_mean",
+                "pooling": "mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.25,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "span_mean_minus_stealer_l050",
+                "localization": "exact_prompt_span_mean",
+                "pooling": "mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.5,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_token_minus_stealer_l025",
+                "localization": "exact_term_token",
+                "pooling": "single",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.25,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_token_minus_stealer_l050",
+                "localization": "exact_term_token",
+                "pooling": "single",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.5,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_fused_minus_stealer_l025",
+                "localization": "exact_term_fused",
+                "pooling": "fused",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.25,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_fused_orthogonal_stealer",
+                "localization": "exact_term_fused",
+                "pooling": "fused",
+                "contrast_mode": "orthogonal_stealer",
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_centered_pm1_minus_stealer_l025",
+                "localization": "exact_term_centered_pm1",
+                "pooling": "centered_mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.25,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_centered_pm1_orthogonal_stealer",
+                "localization": "exact_term_centered_pm1",
+                "pooling": "centered_mean",
+                "contrast_mode": "orthogonal_stealer",
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_window_pm1_weighted_minus_stealer_l025",
+                "localization": "exact_term_window_pm1_weighted",
+                "pooling": "weighted_mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.25,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_window_pm1_weighted_minus_stealer_l050",
+                "localization": "exact_term_window_pm1_weighted",
+                "pooling": "weighted_mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.5,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_window_pm1_weighted_minus_stealer_l075",
+                "localization": "exact_term_window_pm1_weighted",
+                "pooling": "weighted_mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.75,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_window_pm1_weighted_orthogonal_stealer",
+                "localization": "exact_term_window_pm1_weighted",
+                "pooling": "weighted_mean",
+                "contrast_mode": "orthogonal_stealer",
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
             },
         ]
 
@@ -7103,140 +7578,241 @@ class HookedTransformerWorkerRuntime:
                 if key not in (None, "") and str(key) not in chosen_bundle_keys:
                     chosen_bundle_keys.append(str(key))
         specs = [dict(item) for item in (recipe_specs or self._default_operator_recipe_specs()) if isinstance(item, Mapping)]
+        bundle_term_by_key = {
+            str(bundle_key): self._bundle_focus_term(str(bundle_key), grouped.get(str(bundle_key), []))
+            for bundle_key in chosen_bundle_keys
+            if grouped.get(str(bundle_key), [])
+        }
+        ownership_terms = [str(term) for term in bundle_term_by_key.values() if str(term)]
         base_bundle_key = str(strategy_hints.get("base_winner_bundle_key", "") or "")
         base_members = grouped.get(base_bundle_key, [])
-        evaluations: list[dict[str, Any]] = []
-        for bundle_key in chosen_bundle_keys:
-            members = grouped.get(bundle_key, [])
-            if not members:
-                continue
-            competitor_members = base_members if base_bundle_key and bundle_key != base_bundle_key else []
-            competitor_by_site = {
-                str(item.get("site", "") or ""): dict(item)
-                for item in competitor_members
-                if isinstance(item, Mapping)
-            }
-            members_by_site = {
-                str(item.get("site", "") or ""): dict(item)
-                for item in members
-                if isinstance(item, Mapping)
-            }
-            for spec in specs:
-                localization = str(spec.get("localization", "exact_prompt_span_mean") or "exact_prompt_span_mean")
-                pooling = str(spec.get("pooling", "mean") or "mean")
-                contrast_mode = str(spec.get("contrast_mode", "none") or "none")
-                recipe_name = str(spec.get("recipe_name", localization) or localization)
-                for mode in tuple(spec.get("modes", ("kv_pair",))):
-                    if mode == "kv_pair":
-                        pair_members: list[dict[str, Any]] = []
-                        for site in ("v_cache", "k_cache"):
+        primary_specs = [
+            dict(spec)
+            for spec in specs
+            if str(spec.get("competitor_strategy", "") or "") != "stealer"
+            and str(spec.get("contrast_mode", "none") or "none") not in {"minus_stealer", "orthogonal_stealer"}
+        ]
+        stealer_specs = [
+            dict(spec)
+            for spec in specs
+            if spec not in primary_specs
+        ]
+
+        def _evaluate_specs(
+            spec_list: Sequence[Mapping[str, Any]],
+            *,
+            stealer_bundle_map: Mapping[tuple[str, str], str] | None = None,
+        ) -> list[dict[str, Any]]:
+            local_evaluations: list[dict[str, Any]] = []
+            raw_self_min = 0.005
+            for bundle_key in chosen_bundle_keys:
+                members = grouped.get(bundle_key, [])
+                if not members:
+                    continue
+                members_by_site = {
+                    str(item.get("site", "") or ""): dict(item)
+                    for item in members
+                    if isinstance(item, Mapping)
+                }
+                intended_term = str(bundle_term_by_key.get(str(bundle_key), "") or "")
+                for spec in spec_list:
+                    localization = str(spec.get("localization", "exact_prompt_span_mean") or "exact_prompt_span_mean")
+                    pooling = str(spec.get("pooling", "mean") or "mean")
+                    contrast_mode = str(spec.get("contrast_mode", "none") or "none")
+                    contrast_scale = float(spec.get("contrast_scale", 1.0) or 1.0)
+                    competitor_strategy = str(spec.get("competitor_strategy", "") or "base")
+                    recipe_name = str(spec.get("recipe_name", localization) or localization)
+                    for mode in tuple(spec.get("modes", ("kv_pair",))):
+                        recipe_seed_key = self._operator_recipe_seed_key(
+                            mode=str(mode),
+                            localization=localization,
+                            pooling=pooling,
+                        )
+                        if competitor_strategy == "stealer":
+                            raw_seed = raw_seed_ownership.get((recipe_seed_key, str(bundle_key)))
+                            if raw_seed is None or float(raw_seed.get("self_delta", 0.0) or 0.0) <= raw_self_min:
+                                continue
+                        competitor_bundle_key = ""
+                        if competitor_strategy == "stealer":
+                            competitor_bundle_key = str((stealer_bundle_map or {}).get((recipe_seed_key, str(bundle_key)), "") or "")
+                            if not competitor_bundle_key:
+                                competitor_bundle_key = str((stealer_bundle_map or {}).get(("*", str(bundle_key)), "") or "")
+                        elif base_bundle_key and str(bundle_key) != base_bundle_key:
+                            competitor_bundle_key = base_bundle_key
+                        competitor_members = grouped.get(competitor_bundle_key, []) if competitor_bundle_key else []
+                        competitor_by_site = {
+                            str(item.get("site", "") or ""): dict(item)
+                            for item in competitor_members
+                            if isinstance(item, Mapping)
+                        }
+                        competitor_term = str(bundle_term_by_key.get(competitor_bundle_key, "") or "")
+                        if mode == "kv_pair":
+                            pair_members: list[dict[str, Any]] = []
+                            for site in ("v_cache", "k_cache"):
+                                member = members_by_site.get(site)
+                                if member is None:
+                                    pair_members = []
+                                    break
+                                pair_members.append(
+                                    self._materialize_recipe_candidate(
+                                        member,
+                                        localization=localization,
+                                        pooling=pooling,
+                                        contrast_mode=contrast_mode,
+                                        competitor_candidate=competitor_by_site.get(site),
+                                        contrast_scale=contrast_scale,
+                                    )
+                                )
+                            if pair_members and all(member is not None for member in pair_members):
+                                prepared_pair = [dict(member) for member in pair_members if isinstance(member, Mapping)]
+                                if len(prepared_pair) == 2:
+                                    pair_recipe_id = self._operator_recipe_id(
+                                        {
+                                            "phase_objective": prepared_pair[0].get("phase_objective"),
+                                            "bundle_family": "kv_pair_source_anchor",
+                                            "provenance_class": prepared_pair[0].get("provenance_class"),
+                                            "recipe_localization": localization,
+                                            "recipe_pooling": pooling,
+                                            "contrast_mode": contrast_mode,
+                                            "recipe_contrast_scale": contrast_scale,
+                                            "recipe_k_alpha": prepared_pair[1].get("recipe_alpha", prepared_pair[1].get("op", {}).get("alpha", 0.0)),
+                                            "recipe_v_alpha": prepared_pair[0].get("recipe_alpha", prepared_pair[0].get("op", {}).get("alpha", 0.0)),
+                                        }
+                                    )
+                                    result = self.replay_candidate_edits_actual_delta(
+                                        prepared_pair,
+                                        max_new_tokens=max_new_tokens,
+                                        top_k=top_k,
+                                        max_edits_per_step_override=max_edits_per_step_override,
+                                        label=f"{recipe_name}:pair:{bundle_key}",
+                                        ownership_terms=ownership_terms,
+                                        intended_bundle_key=bundle_key,
+                                        intended_term=intended_term,
+                                        contrast_partner_bundle_key=competitor_bundle_key or None,
+                                        contrast_partner_term=competitor_term or None,
+                                    )
+                                    result["operator_recipe_id"] = pair_recipe_id
+                                    result["operator_recipe_seed_key"] = recipe_seed_key
+                                    result["recipe_mode"] = "kv_pair"
+                                    result["recipe_name"] = recipe_name
+                                    result["competitor_strategy"] = competitor_strategy
+                                    local_evaluations.append(result)
+                        elif mode == "kv_pair_asymmetric":
+                            v_member = members_by_site.get("v_cache")
+                            k_member = members_by_site.get("k_cache")
+                            if v_member is None or k_member is None:
+                                continue
+                            prepared_v = self._materialize_recipe_candidate(
+                                v_member,
+                                localization=localization,
+                                pooling=pooling,
+                                contrast_mode=contrast_mode,
+                                competitor_candidate=competitor_by_site.get("v_cache"),
+                                contrast_scale=contrast_scale,
+                                alpha_override=0.045,
+                            )
+                            prepared_k = self._materialize_recipe_candidate(
+                                k_member,
+                                localization=localization,
+                                pooling=pooling,
+                                contrast_mode=contrast_mode,
+                                competitor_candidate=competitor_by_site.get("k_cache"),
+                                contrast_scale=contrast_scale,
+                                alpha_override=0.03,
+                            )
+                            if prepared_v is None or prepared_k is None:
+                                continue
+                            asym_pair = [prepared_v, prepared_k]
+                            pair_recipe_id = self._operator_recipe_id(
+                                {
+                                    "phase_objective": prepared_v.get("phase_objective"),
+                                    "bundle_family": "kv_pair_source_anchor",
+                                    "provenance_class": prepared_v.get("provenance_class"),
+                                    "recipe_localization": localization,
+                                    "recipe_pooling": pooling,
+                                    "contrast_mode": contrast_mode,
+                                    "recipe_contrast_scale": contrast_scale,
+                                    "recipe_k_alpha": 0.03,
+                                    "recipe_v_alpha": 0.045,
+                                }
+                            )
+                            result = self.replay_candidate_edits_actual_delta(
+                                asym_pair,
+                                max_new_tokens=max_new_tokens,
+                                top_k=top_k,
+                                max_edits_per_step_override=max_edits_per_step_override,
+                                label=f"{recipe_name}:pair_asym:{bundle_key}",
+                                ownership_terms=ownership_terms,
+                                intended_bundle_key=bundle_key,
+                                intended_term=intended_term,
+                                contrast_partner_bundle_key=competitor_bundle_key or None,
+                                contrast_partner_term=competitor_term or None,
+                            )
+                            result["operator_recipe_id"] = pair_recipe_id
+                            result["operator_recipe_seed_key"] = recipe_seed_key
+                            result["recipe_mode"] = "kv_pair_asymmetric"
+                            result["recipe_name"] = recipe_name
+                            result["competitor_strategy"] = competitor_strategy
+                            local_evaluations.append(result)
+                        else:
+                            site = "v_cache" if mode == "kv_v" else "k_cache"
                             member = members_by_site.get(site)
                             if member is None:
-                                pair_members = []
-                                break
-                            pair_members.append(
-                                self._materialize_recipe_candidate(
-                                    member,
-                                    localization=localization,
-                                    pooling=pooling,
-                                    contrast_mode=contrast_mode,
-                                    competitor_candidate=competitor_by_site.get(site),
-                                )
+                                continue
+                            prepared = self._materialize_recipe_candidate(
+                                member,
+                                localization=localization,
+                                pooling=pooling,
+                                contrast_mode=contrast_mode,
+                                competitor_candidate=competitor_by_site.get(site),
+                                contrast_scale=contrast_scale,
                             )
-                        if pair_members and all(member is not None for member in pair_members):
-                            prepared_pair = [dict(member) for member in pair_members if isinstance(member, Mapping)]
-                            if len(prepared_pair) == 2:
-                                pair_recipe_id = self._operator_recipe_id(
-                                    {
-                                        "phase_objective": prepared_pair[0].get("phase_objective"),
-                                        "bundle_family": "kv_pair_source_anchor",
-                                        "provenance_class": prepared_pair[0].get("provenance_class"),
-                                        "recipe_localization": localization,
-                                        "recipe_pooling": pooling,
-                                        "contrast_mode": contrast_mode,
-                                        "recipe_k_alpha": prepared_pair[1].get("recipe_alpha", prepared_pair[1].get("op", {}).get("alpha", 0.0)),
-                                        "recipe_v_alpha": prepared_pair[0].get("recipe_alpha", prepared_pair[0].get("op", {}).get("alpha", 0.0)),
-                                    }
-                                )
-                                result = self.replay_candidate_edits_actual_delta(
-                                    prepared_pair,
-                                    max_new_tokens=max_new_tokens,
-                                    top_k=top_k,
-                                    max_edits_per_step_override=max_edits_per_step_override,
-                                    label=f"{recipe_name}:pair:{bundle_key}",
-                                )
-                                result["operator_recipe_id"] = pair_recipe_id
-                                evaluations.append(result)
-                    elif mode == "kv_pair_asymmetric":
-                        v_member = members_by_site.get("v_cache")
-                        k_member = members_by_site.get("k_cache")
-                        if v_member is None or k_member is None:
-                            continue
-                        prepared_v = self._materialize_recipe_candidate(
-                            v_member,
-                            localization=localization,
-                            pooling=pooling,
-                            contrast_mode=contrast_mode,
-                            competitor_candidate=competitor_by_site.get("v_cache"),
-                            alpha_override=0.045,
-                        )
-                        prepared_k = self._materialize_recipe_candidate(
-                            k_member,
-                            localization=localization,
-                            pooling=pooling,
-                            contrast_mode=contrast_mode,
-                            competitor_candidate=competitor_by_site.get("k_cache"),
-                            alpha_override=0.03,
-                        )
-                        if prepared_v is None or prepared_k is None:
-                            continue
-                        asym_pair = [prepared_v, prepared_k]
-                        pair_recipe_id = self._operator_recipe_id(
-                            {
-                                "phase_objective": prepared_v.get("phase_objective"),
-                                "bundle_family": "kv_pair_source_anchor",
-                                "provenance_class": prepared_v.get("provenance_class"),
-                                "recipe_localization": localization,
-                                "recipe_pooling": pooling,
-                                "contrast_mode": contrast_mode,
-                                "recipe_k_alpha": 0.03,
-                                "recipe_v_alpha": 0.045,
-                            }
-                        )
-                        result = self.replay_candidate_edits_actual_delta(
-                            asym_pair,
-                            max_new_tokens=max_new_tokens,
-                            top_k=top_k,
-                            max_edits_per_step_override=max_edits_per_step_override,
-                            label=f"{recipe_name}:pair_asym:{bundle_key}",
-                        )
-                        result["operator_recipe_id"] = pair_recipe_id
-                        evaluations.append(result)
-                    else:
-                        site = "v_cache" if mode == "kv_v" else "k_cache"
-                        member = members_by_site.get(site)
-                        if member is None:
-                            continue
-                        prepared = self._materialize_recipe_candidate(
-                            member,
-                            localization=localization,
-                            pooling=pooling,
-                            contrast_mode=contrast_mode,
-                            competitor_candidate=competitor_by_site.get(site),
-                        )
-                        if prepared is None:
-                            continue
-                        result = self.replay_candidate_edits_actual_delta(
-                            [prepared],
-                            max_new_tokens=max_new_tokens,
-                            top_k=top_k,
-                            label=f"{recipe_name}:{mode}:{bundle_key}",
-                        )
-                        result["operator_recipe_id"] = str(prepared.get("operator_recipe_id", self._operator_recipe_id(prepared)))
-                        evaluations.append(result)
+                            if prepared is None:
+                                continue
+                            result = self.replay_candidate_edits_actual_delta(
+                                [prepared],
+                                max_new_tokens=max_new_tokens,
+                                top_k=top_k,
+                                label=f"{recipe_name}:{mode}:{bundle_key}",
+                                ownership_terms=ownership_terms,
+                                intended_bundle_key=bundle_key,
+                                intended_term=intended_term,
+                                contrast_partner_bundle_key=competitor_bundle_key or None,
+                                contrast_partner_term=competitor_term or None,
+                            )
+                            result["operator_recipe_id"] = str(prepared.get("operator_recipe_id", self._operator_recipe_id(prepared)))
+                            result["operator_recipe_seed_key"] = recipe_seed_key
+                            result["recipe_mode"] = str(mode)
+                            result["recipe_name"] = recipe_name
+                            result["competitor_strategy"] = competitor_strategy
+                            local_evaluations.append(result)
+            return local_evaluations
+
+        evaluations = _evaluate_specs(primary_specs)
+        ownership = self._summarize_operator_recipe_bundle_ownership(
+            evaluations,
+            bundle_term_by_key=bundle_term_by_key,
+        )
+        raw_seed_ownership = {
+            (str(item.get("operator_recipe_seed_key", "") or ""), str(item.get("intended_bundle_key", "") or "")): dict(item)
+            for item in ownership
+            if str(item.get("contrast_mode", "") or "none") == "none"
+        }
+        stealer_bundle_map = self._infer_recipe_stealer_bundles(ownership)
+        if stealer_specs:
+            evaluations.extend(
+                _evaluate_specs(
+                    stealer_specs,
+                    stealer_bundle_map=stealer_bundle_map,
+                )
+            )
         recipe_certifications = self._summarize_operator_certifications(
             evaluations,
             key_field="operator_recipe_id",
+        )
+        ownership = self._summarize_operator_recipe_bundle_ownership(
+            evaluations,
+            bundle_term_by_key=bundle_term_by_key,
         )
         return {
             "base_winner_bundle_key": strategy_hints.get("base_winner_bundle_key"),
@@ -7245,6 +7821,11 @@ class HookedTransformerWorkerRuntime:
             "selection_source": strategy_hints.get("selection_source"),
             "evaluations": evaluations,
             "operator_recipe_certifications": recipe_certifications,
+            "operator_recipe_bundle_ownership": ownership,
+            "recipe_stealer_bundle_keys": {
+                f"{str(seed_key)}::{str(bundle_key)}": str(stealer_key)
+                for (seed_key, bundle_key), stealer_key in sorted(stealer_bundle_map.items(), key=lambda item: (str(item[0][0]), str(item[0][1])))
+            },
         }
 
     def replay_operator_certification(

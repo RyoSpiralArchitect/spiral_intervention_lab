@@ -53,6 +53,18 @@ The current implementation includes:
 - same-term / same-family dominance pruning and clean `kv_pair` bundle metadata
 - shot-mode and readout-escape phases, separated from loop-break / stabilization phases
 - a minimal offline readout sidecar scaffold that can analyze captured sites and feed small hints back into candidate ranking
+- a stricter `controller / analyzer / gate / runtime guardrail` separation with explicit logging of:
+  - `sidecar_suggested_*`
+  - `gate_report_*`
+  - `controller_selected_bundle_key`
+  - `controller_rejected_signals`
+- operator-family and operator-recipe certification via actual-delta replay
+- ownership-aware replay summaries that distinguish:
+  - `self_actuator`
+  - `bridge_actuator`
+  - `cross_bound`
+  - `dead_actuator`
+  - `noisy_or_harmful`
 
 ## Current Bottleneck
 
@@ -74,10 +86,11 @@ than it is at:
 
 - making those candidates win at the answer boundary
 - escaping the attractor basin strongly enough to re-enter a healthy answer-start manifold
+- ensuring that the selected bundle is also the bundle that actually receives the lift
 
 The main research question has therefore sharpened from “can we intervene at all?” to:
 
-> Which bounded, auditable runtime controls actually improve readout competitiveness at the answer boundary?
+> Which bounded, auditable runtime controls actually improve readout competitiveness at the answer boundary, and can that lift stay owned by the intended bundle?
 
 ## What We Have Learned
 
@@ -89,6 +102,9 @@ Several concrete lessons have come out of the recent runs:
 - Candidate quality matters more than candidate count. Many nominally different candidates collapse into the same effect family.
 - Source provenance matters. `SOURCE:` body spans are usually more useful than header-only constraint spans for escape and recall.
 - Sidecars are promising when kept bounded. The best use so far is to improve candidate ranking and vetoes, not to become a hidden answer channel.
+- Selector quality and operator quality are not the same problem. The current stack can now nominate challengers more cleanly than it can certify that those challengers actually win when applied.
+- “Helpful” is not enough. We now explicitly distinguish between lift that belongs to the intended bundle and lift that gets stolen by another bundle.
+- Ownership matters. A recipe can move logits while still being the wrong actuator if `realized_lift_bundle != intended_bundle`.
 
 ## Readout Sidecar Status
 
@@ -134,13 +150,18 @@ That distinction matters for research hygiene. If a bundle changes and we cannot
 
 The next steps are now fairly concrete:
 
-1. Improve candidate quality after escape opens.
-   Focus on stronger post-bundle reranking, family quotas, and support-aware selection.
-2. Compare `off` vs `heuristic` sidecar in more realistic direct-scan and replay settings.
-   The current smoke already shows that sidecar hints can flip target-term priority.
-3. Strengthen readout-escape scoring.
-   Prefer metrics that measure “can this candidate win at the boundary?” over purely semantic similarity.
-4. Only after that, consider a heavier offline analyzer such as a SAELens-style sidecar.
+1. Keep selector and gate mostly frozen while operator quality is the active workstream.
+   The main measurement axis is now operator certification and ownership, not candidate churn.
+2. Search for a `budget` self-actuator recipe.
+   Current real-packet replay shows that several recipes move something, but the lift is often stolen by `send`.
+3. Continue ownership-first operator sweeps.
+   Current promising directions are:
+   - more local positive seeds such as `exact_term_token`, fused seeds, and centered local windows
+   - contrastive recipes such as `minus_stealer` and `orthogonal_stealer`
+   - recipe-level certification keyed by operator recipe rather than broad family alone
+4. If no `budget` self-actuator appears, promote an explicit bridge plan.
+   In that branch the controller would treat `budget` as the objective term and a certified `send` bridge as the readout-escape actuator, rather than pretending the lift already belongs to `budget`.
+5. Only after the ownership question settles, consider a heavier offline analyzer such as a SAELens-style sidecar.
    If used, it should remain a sidecar that returns small hints rather than becoming a runtime dependency.
 
 ## Design Guardrails
