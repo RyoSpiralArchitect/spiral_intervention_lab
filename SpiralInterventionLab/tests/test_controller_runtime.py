@@ -1,4 +1,5 @@
 import unittest
+from collections.abc import Mapping
 from importlib.util import find_spec
 from unittest.mock import patch
 
@@ -3314,6 +3315,215 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertTrue(all(candidate.get("bundle_ready", False) for candidate in kv_candidates))
         self.assertEqual({candidate["site"] for candidate in kv_candidates}, {"k_cache", "v_cache"})
 
+    def test_worker_runtime_prune_escape_candidates_preserves_term_specific_bundle_keys_when_surfaces_overlap(self):
+        worker_runtime = self._make_worker_runtime()
+        candidates = [
+            {
+                "focus_feature": "send",
+                "kind": "kv_mix",
+                "site": "k_cache",
+                "surface_id": "s_shared_k",
+                "provenance_class": "source_body",
+                "span_kind": "exact_prompt_span_mean",
+                "source_span": {"start": 38, "end": 43},
+                "candidate_family": "kv_anchor:send:exact_prompt_span",
+                "alignment": 0.31,
+            },
+            {
+                "focus_feature": "send",
+                "kind": "kv_mix",
+                "site": "v_cache",
+                "surface_id": "s_shared_v",
+                "provenance_class": "source_body",
+                "span_kind": "exact_prompt_span_mean",
+                "source_span": {"start": 38, "end": 43},
+                "candidate_family": "kv_anchor:send:exact_prompt_span",
+                "alignment": 0.32,
+            },
+            {
+                "focus_feature": "budget",
+                "kind": "kv_mix",
+                "site": "k_cache",
+                "surface_id": "s_shared_k",
+                "provenance_class": "source_body",
+                "span_kind": "exact_prompt_span_mean",
+                "source_span": {"start": 43, "end": 50},
+                "candidate_family": "kv_anchor:budget:exact_prompt_span",
+                "alignment": 0.37,
+            },
+            {
+                "focus_feature": "budget",
+                "kind": "kv_mix",
+                "site": "v_cache",
+                "surface_id": "s_shared_v",
+                "provenance_class": "source_body",
+                "span_kind": "exact_prompt_span_mean",
+                "source_span": {"start": 43, "end": 50},
+                "candidate_family": "kv_anchor:budget:exact_prompt_span",
+                "alignment": 0.39,
+            },
+        ]
+        debug: dict[str, Any] = {}
+
+        selected = worker_runtime._prune_escape_candidates(candidates, debug=debug)
+
+        self.assertEqual(len(debug["bundle_inputs"]), 2)
+        self.assertEqual({bundle["term"] for bundle in debug["bundle_inputs"]}, {"send", "budget"})
+        self.assertEqual(
+            {candidate["bundle_key"] for candidate in selected},
+            {"kv_pair:send:source_body:38:43", "kv_pair:budget:source_body:43:50"},
+        )
+        self.assertTrue(all(candidate.get("bundle_ready", False) for candidate in selected))
+
+    def test_worker_runtime_readout_escape_builder_expands_hit_budget_for_two_term_frontier(self):
+        prompt = (
+            "Keep these terms: send, budget\n"
+            "SOURCE: send budget now\n"
+            "ANSWER:"
+        )
+        codec = CharacterCodec("Keep these terms: send, budget\nSOURCE: now\nANSWER:")
+        worker_runtime = self._make_worker_runtime(codec=codec)
+        worker_runtime.reset(prompt)
+        worker_runtime._last_task_feedback = {
+            "done": False,
+            "progress_label": "stalled",
+            "required_term_recall": 0.0,
+            "required_term_span_progress": 0.0,
+            "missing_required_terms": ["send", "budget"],
+            "entity_recall_terms": ["send", "budget"],
+        }
+        worker_runtime._latest_observer_check = {
+            "check_type": "semantic_progress",
+            "trigger": "coverage_progress",
+            "score": 0.2,
+            "verdict": "flat",
+            "kv_feature_scan": {
+                "projection_mode": "attn_weight_head_projection",
+                "surface_count": 4,
+                "group_count": 1,
+                "top_feature_hits": [
+                    {
+                        "group": "required_terms",
+                        "feature": "send",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 2,
+                        "head": 0,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l2_h0_last_promoted",
+                        "alignment": 0.31,
+                        "argmax_pos": 38,
+                        "argmax_relative_index": -38,
+                        "argmax_piece": " send",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 38, "relative_index": -38, "segment_kind": "prompt", "piece": " send", "alignment": 0.31}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "send",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 2,
+                        "head": 1,
+                        "token_mode": "last",
+                        "surface_id": "s_v_cache_l2_h1_last_promoted",
+                        "alignment": 0.32,
+                        "argmax_pos": 38,
+                        "argmax_relative_index": -38,
+                        "argmax_piece": " send",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 38, "relative_index": -38, "segment_kind": "prompt", "piece": " send", "alignment": 0.32}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "budget",
+                        "polarity": "promote",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 2,
+                        "token_mode": "last",
+                        "surface_id": "s_k_cache_l3_h2_last_promoted",
+                        "alignment": 0.37,
+                        "argmax_pos": 43,
+                        "argmax_relative_index": -43,
+                        "argmax_piece": " budget",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 43, "relative_index": -43, "segment_kind": "prompt", "piece": " budget", "alignment": 0.37}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                    {
+                        "group": "required_terms",
+                        "feature": "budget",
+                        "polarity": "promote",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 3,
+                        "token_mode": "last",
+                        "surface_id": "s_v_cache_l3_h3_last_promoted",
+                        "alignment": 0.39,
+                        "argmax_pos": 43,
+                        "argmax_relative_index": -43,
+                        "argmax_piece": " budget",
+                        "argmax_segment_kind": "prompt",
+                        "source_positions": [
+                            {"position": 43, "relative_index": -43, "segment_kind": "prompt", "piece": " budget", "alignment": 0.39}
+                        ],
+                        "coverage_progress": 0.0,
+                    },
+                ],
+            },
+        }
+
+        fake_surface_lookup = {
+            ("k_cache", 2, 0, "last"): {"surface_id": "s_k_cache_l2_h0_last_promoted", "max_alpha": 0.06, "step_size": 0.03, "norm_clip": 1.0},
+            ("v_cache", 2, 1, "last"): {"surface_id": "s_v_cache_l2_h1_last_promoted", "max_alpha": 0.06, "step_size": 0.04, "norm_clip": 1.0},
+            ("k_cache", 3, 2, "last"): {"surface_id": "s_k_cache_l3_h2_last_promoted", "max_alpha": 0.06, "step_size": 0.03, "norm_clip": 1.0},
+            ("v_cache", 3, 3, "last"): {"surface_id": "s_v_cache_l3_h3_last_promoted", "max_alpha": 0.06, "step_size": 0.04, "norm_clip": 1.0},
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_current_answer_readout_canary",
+            return_value={
+                "semantic_focus_term": "Mira",
+                "semantic_focus_source": "kv_feature_scan",
+                "reachable_focus_term": "budget",
+                "reachable_focus_piece": " budget",
+                "reachable_focus_rank": 768,
+                "target_mass": 0.000142,
+                "target_top20_hits": 0,
+                "attractor_family_mass": 0.300192,
+                "attractor_family_top_overlap": 4,
+                "attractor_family_overlap_tokens": ["EW", " EW", "inou", " shards"],
+                "top_tokens": ["EW", " EW", "inou", " shards", "Lawson"],
+            },
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "_cache_surface_lookup",
+            return_value=fake_surface_lookup,
+        ):
+            packet = worker_runtime.build_controller_packet()
+
+        hints = packet["strategy_hints"]
+        self.assertEqual(packet["control_phase_hint"], "readout_escape")
+        self.assertEqual(hints["escape_builder_hit_limit"], 4)
+        self.assertEqual(len(hints["bundle_inputs"]), 2)
+        self.assertEqual({bundle["term"] for bundle in hints["bundle_inputs"]}, {"send", "budget"})
+        kv_candidates = hints["kv_candidate_edits"]
+        self.assertEqual(len(kv_candidates), 4)
+        self.assertEqual(
+            {candidate["bundle_key"] for candidate in kv_candidates},
+            {"kv_pair:send:source_body:38:43", "kv_pair:budget:source_body:43:50"},
+        )
+
     def test_heuristic_readout_sidecar_analyzer_prefers_more_reachable_term(self):
         analyzer = build_heuristic_readout_sidecar_analyzer()
         capture = ReadoutSidecarCapture(
@@ -4642,6 +4852,99 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertIn("exact_term_window_pm1_weighted|weighted_mean|minus_base", recipe["operator_recipe_id"])
         self.assertEqual(recipe["source"]["v"]["fn"], "sub")
 
+        def _max_arg_count(expr):
+            if not isinstance(expr, Mapping):
+                return 0
+            count = len(expr.get("args", [])) if isinstance(expr.get("args"), list) else 0
+            nested = [_max_arg_count(item) for item in expr.get("args", []) if isinstance(expr.get("args"), list)]
+            for key in ("arg", "left", "right", "basis"):
+                if isinstance(expr.get(key), Mapping):
+                    nested.append(_max_arg_count(expr[key]))
+            return max([count, *nested], default=count)
+
+        self.assertLessEqual(_max_arg_count(recipe["source"]["v"]), HarnessPolicy.default_v0().max_expr_args)
+
+    def test_worker_runtime_materialize_recipe_candidate_builds_minus_stealer_window_recipe(self):
+        worker_runtime = self._make_worker_runtime()
+        token_records = [
+            {"position": 0, "segment_kind": "prompt", "piece": " send", "provenance_class": "source_body"},
+            {"position": 1, "segment_kind": "prompt", "piece": " now", "provenance_class": "source_body"},
+            {"position": 2, "segment_kind": "prompt", "piece": " budget", "provenance_class": "source_body"},
+            {"position": 3, "segment_kind": "prompt", "piece": " draft", "provenance_class": "source_body"},
+        ]
+        candidate = {
+            "surface_id": "s_v_cache_l3_h1_last_promoted",
+            "bundle_key": "kv_pair:budget:source_body:2:4",
+            "focus_feature": "budget",
+            "site": "v_cache",
+            "layer": 3,
+            "head": 1,
+            "phase_objective": "readout_escape",
+            "bundle_family": "kv_pair_source_anchor",
+            "provenance_class": "source_body",
+            "span_kind": "exact_prompt_span_mean",
+            "source_span": {"start": 2, "end": 4},
+            "source_position": 2,
+            "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+            "source": {"dtype": "cache_pair", "v": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "v_cache", "layer": 3, "head": 1, "token": {"mode": "span", "start": 2, "end": 4, "pool": "mean"}}}},
+        }
+        competitor = {
+            **candidate,
+            "bundle_key": "kv_pair:send:source_body:0:2",
+            "focus_feature": "send",
+            "source_span": {"start": 0, "end": 2},
+            "source_position": 0,
+        }
+
+        with patch.object(HookedTransformerWorkerRuntime, "_token_position_records", return_value=token_records):
+            recipe = worker_runtime._materialize_recipe_candidate(
+                candidate,
+                localization="exact_term_window_pm1_weighted",
+                pooling="weighted_mean",
+                contrast_mode="minus_stealer",
+                competitor_candidate=competitor,
+                contrast_scale=0.5,
+            )
+
+        self.assertIsNotNone(recipe)
+        assert recipe is not None
+        self.assertEqual(recipe["contrast_mode"], "minus_stealer")
+        self.assertAlmostEqual(recipe["recipe_contrast_scale"], 0.5)
+        self.assertIn("minus_stealer@", recipe["operator_recipe_id"])
+        self.assertEqual(recipe["source"]["v"]["fn"], "sub")
+        self.assertEqual(recipe["source"]["v"]["args"][1]["fn"], "scale")
+        self.assertAlmostEqual(float(recipe["source"]["v"]["args"][1]["by"]), 0.5)
+
+    def test_worker_runtime_summarize_operator_recipe_bundle_ownership_classifies_cross_bound(self):
+        worker_runtime = self._make_worker_runtime()
+
+        ownership = worker_runtime._summarize_operator_recipe_bundle_ownership(
+            [
+                {
+                    "operator_recipe_id": "readout_escape|kv_pair_source_anchor|source_body|loc|pool|none|k0.0300|v0.0400",
+                    "operator_recipe_seed_key": "kv_pair|loc|pool",
+                    "intended_bundle_key": "kv_pair:budget:source_body:12:14",
+                    "term_readout_deltas": {
+                        "budget": {"lift_score": 0.01},
+                        "send": {"lift_score": 0.08},
+                    },
+                    "label": "budget_primary",
+                    "status": "ok",
+                    "actual_delta_class": "target_lift",
+                }
+            ],
+            bundle_term_by_key={
+                "kv_pair:budget:source_body:12:14": "budget",
+                "kv_pair:send:source_body:10:12": "send",
+            },
+        )
+
+        self.assertEqual(len(ownership), 1)
+        self.assertEqual(ownership[0]["realized_lift_bundle_key"], "kv_pair:send:source_body:10:12")
+        self.assertEqual(ownership[0]["actuator_class"], "cross_bound")
+        self.assertEqual(ownership[0]["bridge_plan_bundle_key"], "kv_pair:send:source_body:10:12")
+        self.assertEqual(ownership[0]["operator_recipe_seed_key"], "kv_pair|loc|pool")
+
     def test_worker_runtime_replay_operator_recipe_matrix_summarizes_recipe_certifications(self):
         worker_runtime = self._make_worker_runtime()
         token_records = [
@@ -4750,6 +5053,297 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         ]
         self.assertTrue(matching)
         self.assertEqual(matching[0]["certification_status"], "apply_eligible")
+
+    def test_worker_runtime_replay_operator_recipe_matrix_marks_replay_error_certification(self):
+        worker_runtime = self._make_worker_runtime()
+        token_records = [
+            {"position": 10, "segment_kind": "prompt", "piece": " send", "provenance_class": "source_body"},
+            {"position": 11, "segment_kind": "prompt", "piece": " now", "provenance_class": "source_body"},
+            {"position": 12, "segment_kind": "prompt", "piece": " budget", "provenance_class": "source_body"},
+        ]
+        packet = {
+            "strategy_hints": {
+                "kv_candidate_edits": [
+                    {
+                        "bundle_key": "kv_pair:send:source_body:10:12",
+                        "surface_id": "s_v_cache_l3_h1_last_promoted",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 10, "end": 12},
+                        "source_position": 10,
+                        "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+                        "source": {"dtype": "cache_pair", "v": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "v_cache", "layer": 3, "head": 1, "token": {"mode": "span", "start": 10, "end": 12, "pool": "mean"}}}},
+                    },
+                    {
+                        "bundle_key": "kv_pair:send:source_body:10:12",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 10, "end": 12},
+                        "source_position": 10,
+                        "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+                        "source": {"dtype": "cache_pair", "k": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "k_cache", "layer": 3, "head": 0, "token": {"mode": "span", "start": 10, "end": 12, "pool": "mean"}}}},
+                    },
+                    {
+                        "bundle_key": "kv_pair:budget:source_body:12:13",
+                        "surface_id": "s_v_cache_l3_h3_last_promoted",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 3,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 12, "end": 13},
+                        "source_position": 12,
+                        "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+                        "source": {"dtype": "cache_pair", "v": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "v_cache", "layer": 3, "head": 3, "token": {"mode": "span", "start": 12, "end": 13, "pool": "mean"}}}},
+                    },
+                    {
+                        "bundle_key": "kv_pair:budget:source_body:12:13",
+                        "surface_id": "s_k_cache_l3_h2_last_promoted",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 2,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 12, "end": 13},
+                        "source_position": 12,
+                        "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+                        "source": {"dtype": "cache_pair", "k": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "k_cache", "layer": 3, "head": 2, "token": {"mode": "span", "start": 12, "end": 13, "pool": "mean"}}}},
+                    },
+                ],
+                "base_winner_bundle_key": "kv_pair:send:source_body:10:12",
+                "challenger_bundle_key": "kv_pair:budget:source_body:12:13",
+                "selected_bundle_key": "kv_pair:send:source_body:10:12",
+                "selection_source": "base_shadow",
+            }
+        }
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "build_controller_packet",
+            return_value=packet,
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "_token_position_records",
+            return_value=token_records,
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "replay_candidate_edits_actual_delta",
+            side_effect=lambda *_args, label=None, **_kwargs: {
+                "status": "error",
+                "label": label,
+                "error": "simulate_decode_failed",
+            },
+        ):
+            summary = worker_runtime.replay_operator_recipe_matrix(
+                recipe_specs=[
+                    {
+                        "recipe_name": "term_window_pm1_weighted_minus_base",
+                        "localization": "exact_term_window_pm1_weighted",
+                        "pooling": "weighted_mean",
+                        "contrast_mode": "minus_base",
+                        "modes": ("kv_pair",),
+                    }
+                ]
+            )
+
+        self.assertEqual(len(summary["operator_recipe_certifications"]), 1)
+        certification = summary["operator_recipe_certifications"][0]
+        self.assertEqual(certification["certification_status"], "shadow_only")
+        self.assertEqual(certification["certification_reason"], "replay_error")
+        self.assertEqual(certification["actual_delta_class_counts"]["error"], 1)
+
+    def test_worker_runtime_replay_operator_recipe_matrix_uses_inferred_stealer_bundle(self):
+        worker_runtime = self._make_worker_runtime()
+        token_records = [
+            {"position": 10, "segment_kind": "prompt", "piece": " send", "provenance_class": "source_body"},
+            {"position": 11, "segment_kind": "prompt", "piece": " now", "provenance_class": "source_body"},
+            {"position": 12, "segment_kind": "prompt", "piece": " budget", "provenance_class": "source_body"},
+            {"position": 13, "segment_kind": "prompt", "piece": " draft", "provenance_class": "source_body"},
+        ]
+        packet = {
+            "strategy_hints": {
+                "kv_candidate_edits": [
+                    {
+                        "bundle_key": "kv_pair:send:source_body:10:12",
+                        "surface_id": "s_v_cache_l3_h1_last_promoted",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 1,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 10, "end": 12},
+                        "source_position": 10,
+                        "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+                        "source": {"dtype": "cache_pair", "v": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "v_cache", "layer": 3, "head": 1, "token": {"mode": "span", "start": 10, "end": 12, "pool": "mean"}}}},
+                    },
+                    {
+                        "bundle_key": "kv_pair:send:source_body:10:12",
+                        "surface_id": "s_k_cache_l3_h0_last_promoted",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 0,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 10, "end": 12},
+                        "source_position": 10,
+                        "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+                        "source": {"dtype": "cache_pair", "k": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "k_cache", "layer": 3, "head": 0, "token": {"mode": "span", "start": 10, "end": 12, "pool": "mean"}}}},
+                    },
+                    {
+                        "bundle_key": "kv_pair:budget:source_body:12:14",
+                        "surface_id": "s_v_cache_l3_h3_last_promoted",
+                        "site": "v_cache",
+                        "layer": 3,
+                        "head": 3,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 12, "end": 14},
+                        "source_position": 12,
+                        "op": {"kind": "kv_mix", "alpha": 0.04, "which": "v"},
+                        "source": {"dtype": "cache_pair", "v": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "v_cache", "layer": 3, "head": 3, "token": {"mode": "span", "start": 12, "end": 14, "pool": "mean"}}}},
+                    },
+                    {
+                        "bundle_key": "kv_pair:budget:source_body:12:14",
+                        "surface_id": "s_k_cache_l3_h2_last_promoted",
+                        "site": "k_cache",
+                        "layer": 3,
+                        "head": 2,
+                        "phase_objective": "readout_escape",
+                        "bundle_family": "kv_pair_source_anchor",
+                        "provenance_class": "source_body",
+                        "span_kind": "exact_prompt_span_mean",
+                        "source_span": {"start": 12, "end": 14},
+                        "source_position": 12,
+                        "op": {"kind": "kv_mix", "alpha": 0.03, "which": "k"},
+                        "source": {"dtype": "cache_pair", "k": {"ref": {"scope": "runtime", "worker": "os_0", "tensor": "k_cache", "layer": 3, "head": 2, "token": {"mode": "span", "start": 12, "end": 14, "pool": "mean"}}}},
+                    },
+                ],
+                "base_winner_bundle_key": "kv_pair:send:source_body:10:12",
+                "challenger_bundle_key": "kv_pair:budget:source_body:12:14",
+                "selected_bundle_key": "kv_pair:budget:source_body:12:14",
+                "selection_source": "controller_apply",
+            }
+        }
+        seen_stealer_partner = {"value": None}
+
+        def _fake_actual_delta(candidate_edits, *, label=None, **kwargs):
+            assert label is not None
+            base_result = {
+                "status": "ok",
+                "label": label,
+                "intended_bundle_key": kwargs.get("intended_bundle_key"),
+                "intended_term": kwargs.get("intended_term"),
+                "contrast_partner_bundle_key": kwargs.get("contrast_partner_bundle_key"),
+                "contrast_partner_term": kwargs.get("contrast_partner_term"),
+            }
+            if "baseline_span_mean:pair:kv_pair:budget:source_body:12:14" in label:
+                return {
+                    **base_result,
+                    "actual_delta_class": "target_lift",
+                    "term_readout_deltas": {
+                        "budget": {"lift_score": 0.01},
+                        "send": {"lift_score": 0.08},
+                    },
+                }
+            if "baseline_span_mean:pair:kv_pair:send:source_body:10:12" in label:
+                return {
+                    **base_result,
+                    "actual_delta_class": "target_lift",
+                    "term_readout_deltas": {
+                        "budget": {"lift_score": 0.0},
+                        "send": {"lift_score": 0.09},
+                    },
+                }
+            if "term_window_pm1_weighted:pair:kv_pair:budget:source_body:12:14" in label:
+                return {
+                    **base_result,
+                    "actual_delta_class": "target_lift",
+                    "term_readout_deltas": {
+                        "budget": {"lift_score": 0.01},
+                        "send": {"lift_score": 0.08},
+                    },
+                }
+            if "term_window_pm1_weighted:pair:kv_pair:send:source_body:10:12" in label:
+                return {
+                    **base_result,
+                    "actual_delta_class": "target_lift",
+                    "term_readout_deltas": {
+                        "budget": {"lift_score": 0.0},
+                        "send": {"lift_score": 0.09},
+                    },
+                }
+            if "term_window_pm1_weighted_minus_stealer_l050:pair:kv_pair:budget:source_body:12:14" in label:
+                seen_stealer_partner["value"] = kwargs.get("contrast_partner_bundle_key")
+                return {**base_result, "actual_delta_class": "neutral"}
+            return {**base_result, "actual_delta_class": "neutral"}
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "build_controller_packet",
+            return_value=packet,
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "_token_position_records",
+            return_value=token_records,
+        ), patch.object(
+            HookedTransformerWorkerRuntime,
+            "replay_candidate_edits_actual_delta",
+            side_effect=_fake_actual_delta,
+        ):
+            summary = worker_runtime.replay_operator_recipe_matrix(
+                recipe_specs=[
+                    {
+                        "recipe_name": "baseline_span_mean",
+                        "localization": "exact_prompt_span_mean",
+                        "pooling": "mean",
+                        "contrast_mode": "none",
+                        "modes": ("kv_pair",),
+                    },
+                    {
+                        "recipe_name": "term_window_pm1_weighted",
+                        "localization": "exact_term_window_pm1_weighted",
+                        "pooling": "weighted_mean",
+                        "contrast_mode": "none",
+                        "modes": ("kv_pair",),
+                    },
+                    {
+                        "recipe_name": "term_window_pm1_weighted_minus_stealer_l050",
+                        "localization": "exact_term_window_pm1_weighted",
+                        "pooling": "weighted_mean",
+                        "contrast_mode": "minus_stealer",
+                        "contrast_scale": 0.5,
+                        "competitor_strategy": "stealer",
+                        "modes": ("kv_pair",),
+                    },
+                ]
+            )
+
+        self.assertEqual(seen_stealer_partner["value"], "kv_pair:send:source_body:10:12")
+        self.assertIn(
+            "*::kv_pair:budget:source_body:12:14",
+            summary["recipe_stealer_bundle_keys"],
+        )
 
     def test_worker_runtime_current_tokens_use_model_device_when_available(self):
         worker_runtime = self._make_worker_runtime()

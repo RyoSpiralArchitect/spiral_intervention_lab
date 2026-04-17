@@ -13,6 +13,7 @@ from SpiralInterventionLab.examples import (
     build_allowed_token_ids_for_constraint,
     build_hooked_transformer_worker_runtime,
     load_worker_model,
+    run_readout_escape_replay_harness,
     run_shot_mode_probe_harness,
     run_digit_transform_c1_only_experiment,
     run_digit_transform_experiment,
@@ -624,6 +625,87 @@ class TestExamples(unittest.TestCase):
             self.assertFalse(Path(tmpdir, "b1.jsonl").exists())
             self.assertTrue(Path(tmpdir, "c1.jsonl").exists())
             self.assertTrue(Path(tmpdir, "experiment_summary.json").exists())
+
+    def test_run_readout_escape_replay_harness_logs_controller_selection(self):
+        model, codec = self._make_model_and_codec()
+        class _ShortReplayEnv:
+            task_id = "readout_escape_replay"
+
+            def reset(self, seed: int) -> str:
+                return "SOURCE: send budget\nANSWER:"
+
+            def score(self, output: str) -> float:
+                return 0.0
+
+            def done(self, output: str) -> bool:
+                return len(output) >= 2
+
+            def worker_runtime_kwargs(self) -> dict[str, int]:
+                return {"max_generated_tokens": 2}
+
+        env = _ShortReplayEnv()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_readout_escape_replay_harness(
+                worker_model_name="tiny-random",
+                seed=7,
+                worker_model=model,
+                task_env=env,
+                codec=codec,
+                log_dir=tmpdir,
+            )
+
+            payload = result.to_dict()
+            self.assertEqual(payload["suite_mode"], "readout_escape_replay_harness")
+            self.assertTrue(payload["readout_escape_seen"])
+            self.assertGreaterEqual(payload["controller_selection_event_count"], 1)
+            self.assertGreaterEqual(payload["nonnull_gate_frontier_count"], 1)
+            self.assertGreaterEqual(payload["nonnull_controller_selected_count"], 1)
+            self.assertEqual(payload["gate_report_frontier_bundle_key"], payload["forced_challenger_bundle_key"])
+            self.assertEqual(payload["controller_selected_bundle_key"], payload["forced_challenger_bundle_key"])
+            self.assertEqual(payload["controller_selection_source"], "sidecar_tiebreak")
+            self.assertTrue(Path(tmpdir, "readout_escape_replay.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "readout_escape_replay_summary.json").exists())
+
+    def test_run_readout_escape_replay_harness_directscan_logs_controller_selection(self):
+        model, codec = self._make_model_and_codec()
+
+        class _ShortReplayEnv:
+            task_id = "readout_escape_replay"
+
+            def reset(self, seed: int) -> str:
+                return "Keep these terms: send, budget\nSOURCE: send budget now\nANSWER:"
+
+            def score(self, output: str) -> float:
+                return 0.0
+
+            def done(self, output: str) -> bool:
+                return len(output) >= 2
+
+            def worker_runtime_kwargs(self) -> dict[str, int]:
+                return {"max_generated_tokens": 2}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_readout_escape_replay_harness(
+                worker_model_name="tiny-random",
+                seed=7,
+                packet_mode="directscan",
+                worker_model=model,
+                task_env=_ShortReplayEnv(),
+                codec=codec,
+                log_dir=tmpdir,
+                readout_sidecar_analyzer=create_readout_sidecar_analyzer("heuristic"),
+                readout_analyzer_rerank_mode="apply",
+            )
+
+            payload = result.to_dict()
+            self.assertEqual(payload["suite_mode"], "readout_escape_replay_harness")
+            self.assertEqual(payload["packet_mode"], "directscan")
+            self.assertTrue(payload["readout_escape_seen"])
+            self.assertGreaterEqual(payload["controller_selection_event_count"], 1)
+            if payload["nonnull_gate_frontier_count"] > 0:
+                self.assertGreaterEqual(payload["nonnull_controller_selected_count"], 1)
+                self.assertEqual(payload["controller_selected_bundle_key"], payload["gate_report_frontier_bundle_key"])
 
     def test_run_digit_transform_sweep_smoke(self):
         model, codec = self._make_model_and_codec()
