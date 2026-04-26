@@ -222,6 +222,7 @@ def _registration_metadata(
 ) -> dict[str, Any]:
     runtime_budget = _runtime_budget(edit, surface)
     budget_pool = classify_edit_budget_pool(edit=edit, packet=packet, surface=surface, command_meta=command_meta)
+    edit_meta = edit.meta if isinstance(getattr(edit, "meta", None), Mapping) else {}
     metadata = {
         "surface_id": surface.surface_id,
         "op": edit.op.kind,
@@ -241,6 +242,23 @@ def _registration_metadata(
             rank_cap=edit.budget.rank_cap,
         )
     )
+    passthrough_fields = (
+        "surface_family_key",
+        "operator_recipe_id",
+        "operator_recipe_seed_key",
+        "bundle_key",
+        "objective_bundle_key",
+        "step_actuator_bundle_key",
+        "apply_kind",
+        "production_apply_allowed",
+        "production_policy_would_apply",
+        "certified_for_apply",
+    )
+    for key in passthrough_fields:
+        if key in edit_meta and edit_meta.get(key) is not None:
+            metadata[key] = edit_meta.get(key)
+        elif command_meta is not None and command_meta.get(key) is not None:
+            metadata[key] = command_meta.get(key)
     return metadata
 
 

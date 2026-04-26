@@ -1097,6 +1097,44 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertEqual(summary["verdict_counts"]["harmful"], 1)
         self.assertTrue(summary["latest_effects"][0]["after_is_looping"])
 
+    def test_build_edit_effect_marks_collapse_sharpener_and_tracks_harmful_memory(self):
+        effect = build_edit_effect(
+            edit_id="e_sharp",
+            surface_id="s1",
+            observed_window_steps=1,
+            before={
+                "entropy": 2.5,
+                "top1_margin": 0.01,
+                "repetition_score": 0.0,
+                "repeat_flag": 0.0,
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "partial_score": 0.0,
+                "semantic_progress_score": 0.0,
+                "progress_score": 0.0,
+            },
+            after={
+                "entropy": 2.4,
+                "top1_margin": 0.02,
+                "repetition_score": 0.2,
+                "repeat_flag": 1.0,
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "partial_score": 0.0,
+                "semantic_progress_score": 0.0,
+                "progress_score": 0.0,
+            },
+            surface_family_key="kv_anchor:budget:exact_prompt_span",
+            operator_recipe_id="recipe:budget:span_mean",
+            bundle_key="kv_pair:budget:source_body:72:73",
+        )
+        self.assertEqual(effect["actuator_class"], "collapse_sharpener")
+        summary = summarize_effects([effect])
+        self.assertIn("kv_anchor:budget:exact_prompt_span", summary["recent_harmful_surface_family_keys"])
+        self.assertIn("kv_anchor:budget:exact_prompt_span", summary["recent_collapse_sharpener_surface_family_keys"])
+        self.assertIn("recipe:budget:span_mean", summary["recent_collapse_sharpener_operator_recipe_ids"])
+        self.assertEqual(summary["latest_effects"][0]["actuator_class"], "collapse_sharpener")
+
     def test_build_edit_effect_marks_loop_relief_without_coverage_as_stabilizing_only(self):
         effect = build_edit_effect(
             edit_id="e_stabilize",
@@ -1308,6 +1346,27 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertEqual(observations[-1]["controller_memory"][0]["hypothesis"], "small_rescue")
 
     def test_run_episode_logs_controller_selection_report(self):
+        class _DualPlanToyController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                if self.calls == 1:
+                    command = _resid_command()
+                    command["meta"] = dict(command.get("meta", {})) | {
+                        "objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                        "step_actuator_bundle_key": "kv_pair:send:source_body:8:10",
+                        "shadow_proposals": [
+                            {
+                                "kind": "bridge_shadow",
+                                "bundle_key": "kv_pair:send:source_body:8:10",
+                                "reason": "keep send as a shadow bridge until certified",
+                                "decision": "shadow",
+                            }
+                        ],
+                        "why_not_apply": "bridge remains shadow_only until certified_for_apply",
+                    }
+                    return command
+                return {"version": "0.1", "decision": "noop"}
+
         class _BundleAwareToyWorkerRuntime(_ToyWorkerRuntime):
             def build_controller_packet(self):
                 packet = super().build_controller_packet()
@@ -1315,6 +1374,9 @@ class TestLoopAndEffects(unittest.TestCase):
                     "readout_analyzer_suggested_bundle_key": "kv_pair:budget:source_body:10:12",
                     "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:10:12",
                     "gate_report_selection_source": "sidecar_tiebreak",
+                    "bridge_plan_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_actuator_bundle_key": "kv_pair:send:source_body:8:10",
+                    "bridge_plan_reason": "no_certified_self_actuator_target_lift_owned_by_other_bundle",
                     "shot_candidate_edits": [
                         {
                             "bundle_key": "kv_pair:budget:source_body:10:12",
@@ -1334,7 +1396,7 @@ class TestLoopAndEffects(unittest.TestCase):
         run_episode(
             _ToyTaskEnv(),
             _BundleAwareToyWorkerRuntime(runtime_state),
-            _ToyController(),
+            _DualPlanToyController(),
             ctx,
             logger=logger,
         )
@@ -1342,10 +1404,260 @@ class TestLoopAndEffects(unittest.TestCase):
         first_command = next(event for event in logger.events if event["event"] == "controller_command")
         self.assertEqual(first_command["sidecar_suggested_bundle_key"], "kv_pair:budget:source_body:10:12")
         self.assertEqual(first_command["gate_report_frontier_bundle_key"], "kv_pair:budget:source_body:10:12")
+        self.assertEqual(first_command["bridge_plan_objective_bundle_key"], "kv_pair:budget:source_body:10:12")
+        self.assertEqual(first_command["bridge_plan_actuator_bundle_key"], "kv_pair:send:source_body:8:10")
+        self.assertEqual(
+            first_command["bridge_plan_reason"],
+            "no_certified_self_actuator_target_lift_owned_by_other_bundle",
+        )
+        self.assertFalse(first_command["bridge_plan_used"])
+        self.assertEqual(first_command["controller_objective_bundle_key"], "kv_pair:budget:source_body:10:12")
+        self.assertEqual(first_command["controller_step_actuator_bundle_key"], "kv_pair:send:source_body:8:10")
+        self.assertEqual(first_command["controller_plan_mode"], "dual_layer")
+        self.assertTrue(first_command["controller_bridge_plan_visible"])
+        self.assertFalse(first_command["controller_bridge_dual_layer_missing"])
+        self.assertIsNone(first_command["controller_bridge_dual_layer_reason"])
+        self.assertEqual(first_command["controller_shadow_proposal_count"], 1)
+        self.assertEqual(
+            first_command["controller_why_not_apply"],
+            "bridge remains shadow_only until certified_for_apply",
+        )
         self.assertEqual(first_command["controller_selected_bundle_key"], "kv_pair:budget:source_body:10:12")
         self.assertEqual(first_command["controller_rejected_signals"], [])
         selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
         self.assertEqual(selection_event["controller_selection_source"], "sidecar_tiebreak")
+        self.assertEqual(selection_event["controller_plan_mode"], "dual_layer")
+
+    def test_run_episode_logs_bridge_visible_but_single_layer(self):
+        class _BridgeVisibleNoopController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                return {"version": "0.1", "decision": "noop"}
+
+        class _BridgeVisibleToyWorkerRuntime(_ToyWorkerRuntime):
+            def build_controller_packet(self):
+                packet = super().build_controller_packet()
+                packet["strategy_hints"] = {
+                    "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_actuator_bundle_key": "kv_pair:send:source_body:8:10",
+                    "bridge_plan_reason": "no_certified_self_actuator_target_lift_owned_by_other_bundle",
+                }
+                return packet
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            _BridgeVisibleToyWorkerRuntime(runtime_state),
+            _BridgeVisibleNoopController(),
+            ctx,
+            logger=logger,
+        )
+
+        selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
+        self.assertTrue(selection_event["controller_bridge_plan_visible"])
+        self.assertTrue(selection_event["controller_bridge_dual_layer_missing"])
+        self.assertEqual(selection_event["controller_bridge_dual_layer_reason"], "bridge_available_but_single_layer")
+        self.assertEqual(selection_event["controller_plan_mode"], "single_layer")
+
+    def test_run_episode_logs_bridge_unavailable_reason(self):
+        class _BridgeUnavailableNoopController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                return {"version": "0.1", "decision": "noop"}
+
+        class _BridgeUnavailableToyWorkerRuntime(_ToyWorkerRuntime):
+            def build_controller_packet(self):
+                packet = super().build_controller_packet()
+                packet["strategy_hints"] = {
+                    "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_unavailable_reason": "all_dead_actuator",
+                    "bridge_plan_unavailable_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_unavailable_objective_reasons": {
+                        "kv_pair:budget:source_body:10:12": "all_dead_actuator",
+                    },
+                    "bridge_eval_context_drift": False,
+                }
+                return packet
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            _BridgeUnavailableToyWorkerRuntime(runtime_state),
+            _BridgeUnavailableNoopController(),
+            ctx,
+            logger=logger,
+        )
+
+        selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
+        self.assertFalse(selection_event["controller_bridge_plan_visible"])
+        self.assertEqual(selection_event["controller_bridge_plan_unavailable_reason"], "all_dead_actuator")
+        self.assertEqual(selection_event["bridge_plan_unavailable_objective_bundle_key"], "kv_pair:budget:source_body:10:12")
+        self.assertEqual(
+            selection_event["bridge_plan_unavailable_objective_reasons"]["kv_pair:budget:source_body:10:12"],
+            "all_dead_actuator",
+        )
+        self.assertFalse(selection_event["bridge_eval_context_drift"])
+
+    def test_run_episode_marks_forced_diagnostic_apply_in_selection_report(self):
+        class _DiagnosticToyController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                if self.calls == 1:
+                    command = _resid_command()
+                    command["meta"] = dict(command.get("meta", {})) | {
+                        "apply_kind": "diagnostic_probe",
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                        "objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                        "step_actuator_bundle_key": "kv_pair:budget:source_body:10:12",
+                    }
+                    return command
+                return {"version": "0.1", "decision": "noop"}
+
+        class _BundleAwareToyWorkerRuntime(_ToyWorkerRuntime):
+            def build_controller_packet(self):
+                packet = super().build_controller_packet()
+                packet["strategy_hints"] = {
+                    "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "shot_candidate_edits": [
+                        {
+                            "bundle_key": "kv_pair:budget:source_body:10:12",
+                            "surface_id": "s_resid_l11_last",
+                            "op": {"kind": "resid_add"},
+                        }
+                    ],
+                }
+                return packet
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            _BundleAwareToyWorkerRuntime(runtime_state),
+            _DiagnosticToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
+        self.assertEqual(selection_event["controller_selection_source"], "forced_diagnostic_apply")
+        self.assertEqual(selection_event["controller_apply_kind"], "diagnostic_probe")
+        self.assertFalse(selection_event["production_apply_allowed"])
+        self.assertFalse(selection_event["certified_for_apply"])
+
+    def test_run_episode_noop_reports_collapse_sharpener_veto_reason(self):
+        class _NoopController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                return {
+                    "version": "0.1",
+                    "decision": "noop",
+                    "meta": {
+                        "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+                        "step_actuator_bundle_key": "kv_pair:budget:source_body:72:73",
+                        "surface_family_key": "kv_anchor:budget:exact_prompt_span",
+                    },
+                }
+
+        class _RecentHarmToyWorkerRuntime(_ToyWorkerRuntime):
+            def build_controller_packet(self):
+                packet = super().build_controller_packet()
+                packet["strategy_hints"] = {
+                    "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:72:73",
+                    "gate_report_rejected_signals": ["single_bundle"],
+                    "diagnostic_evidence_ledger_count": 1,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": "kv_pair:budget:source_body:72:73",
+                            "evidence_kind": "readout_probe",
+                            "diagnostic_family": "logit_adjacent",
+                            "status": "supportive",
+                        }
+                    ],
+                    "bundle_diagnostic_status": {
+                        "kv_pair:budget:source_body:72:73": {
+                            "bundle_key": "kv_pair:budget:source_body:72:73",
+                            "readout_reachable": True,
+                            "head_sensitive": False,
+                            "feature_supported": False,
+                            "operator_certified": False,
+                            "blocked_by": ["collapse_sharpener"],
+                            "next_evidence_needed": "non_dead_attention_ablation_signal",
+                            "diagnostic_request": "attention_head_ablation_on_frontier",
+                            "reason_text": "budget needs attention ablation after collapse sharpener",
+                        }
+                    },
+                    "diagnostic_frontier_bundle_key": "kv_pair:budget:source_body:72:73",
+                    "diagnostic_frontier_next_evidence": "non_dead_attention_ablation_signal",
+                    "diagnostic_frontier_request": "attention_head_ablation_on_frontier",
+                    "diagnostic_frontier_reason_text": "budget needs attention ablation after collapse sharpener",
+                }
+                packet["recent_effect_summary"] = {
+                    "window_size": 1,
+                    "verdict_counts": {"harmful": 1},
+                    "hypothesis_stats": [],
+                    "latest_effects": [
+                        {
+                            "bundle_key": "kv_pair:budget:source_body:72:73",
+                            "surface_family_key": "kv_anchor:budget:exact_prompt_span",
+                            "operator_recipe_id": "recipe:budget:span_mean",
+                            "actuator_class": "collapse_sharpener",
+                        }
+                    ],
+                    "recent_harmful_surface_family_keys": ["kv_anchor:budget:exact_prompt_span"],
+                    "recent_collapse_sharpener_surface_family_keys": ["kv_anchor:budget:exact_prompt_span"],
+                    "recent_harmful_operator_recipe_ids": ["recipe:budget:span_mean"],
+                    "recent_collapse_sharpener_operator_recipe_ids": ["recipe:budget:span_mean"],
+                    "recent_harmful_bundle_keys": ["kv_pair:budget:source_body:72:73"],
+                    "recent_collapse_sharpener_bundle_keys": ["kv_pair:budget:source_body:72:73"],
+                }
+                return packet
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            _RecentHarmToyWorkerRuntime(runtime_state),
+            _NoopController(),
+            ctx,
+            logger=logger,
+        )
+
+        selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
+        self.assertIn("single_bundle", selection_event["controller_rejected_signals"])
+        self.assertIn("recent_harmful_family", selection_event["controller_rejected_signals"])
+        self.assertIn("collapse_sharpener_veto", selection_event["controller_rejected_signals"])
+        self.assertIn("no_certified_actuator_for_frontier", selection_event["controller_rejected_signals"])
+        self.assertIn("collapse_sharpener", selection_event["controller_why_not_apply"])
+        self.assertEqual(selection_event["visible_frontier_status"], "visible_but_no_safe_actuator")
+        self.assertEqual(selection_event["controller_loop_pressure_mode"], "investigate_visible_no_safe_actuator")
+        self.assertEqual(selection_event["diagnostic_evidence_ledger_count"], 1)
+        self.assertEqual(selection_event["diagnostic_frontier_next_evidence"], "non_dead_attention_ablation_signal")
+        self.assertEqual(selection_event["diagnostic_frontier_request"], "attention_head_ablation_on_frontier")
+        self.assertEqual(selection_event["controller_recommended_diagnostic_request"], "attention_head_ablation_on_frontier")
+        self.assertIn("attention_head_ablation_on_frontier", selection_event["controller_diagnostic_request_options"])
+        self.assertEqual(selection_event["controller_next_evidence_options"][0], "non_dead_attention_ablation_signal")
+        self.assertIn("certified_self_or_bridge_actuator", selection_event["controller_next_evidence_options"])
+        self.assertEqual(selection_event["controller_suggested_shadow_proposals"][0]["decision"], "shadow")
 
     def test_run_episode_records_guarded_noop_reason_in_controller_memory(self):
         adapter = FakeAdapter()
@@ -3899,6 +4211,18 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
 
         worker_runtime_off = _prepare_runtime(None)
         worker_runtime_on = _prepare_runtime(fake_sidecar)
+        worker_runtime_on._operator_bridge_plan_table = {
+            "kv_pair:budget:source_body:24:25": {
+                "objective_bundle_key": "kv_pair:budget:source_body:24:25",
+                "objective_term": "budget",
+                "actuator_bundle_key": "kv_pair:send:source_body:19:20",
+                "actuator_term": "send",
+                "operator_recipe_id": "readout_escape|kv_pair_source_anchor|source_body|exact_term_token|none",
+                "actuator_class": "cross_bound",
+                "bridge_required": True,
+                "bridge_plan_reason": "no_certified_self_actuator_target_lift_owned_by_other_bundle",
+            }
+        }
 
         with patch.object(
             HookedTransformerWorkerRuntime,
@@ -3933,6 +4257,11 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(hints_on["gate_report_reasons"], [])
         self.assertEqual(hints_on["gate_report_frontier_bundle_key"].split(":")[1], "budget")
         self.assertEqual(hints_on["gate_report_selection_source"], "sidecar_tiebreak")
+        self.assertTrue(hints_on["bridge_plan_available"])
+        self.assertTrue(hints_on["bridge_plan_required"])
+        self.assertEqual(hints_on["bridge_plan_objective_term"], "budget")
+        self.assertEqual(hints_on["bridge_plan_actuator_term"], "send")
+        self.assertEqual(hints_on["bridge_plan_actuator_class"], "cross_bound")
         self.assertGreater(hints_on["bundle_base_gap"], 0.0)
         self.assertGreater(hints_on["bundle_rerank_gap"], 0.0)
         self.assertEqual(hints_on["bundle_score_debug"][0]["focus_term"], "budget")
@@ -4707,6 +5036,9 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         policy_override = simulate_mock.call_args_list[1].kwargs["policy_override"]
         self.assertEqual(policy_override.global_budget.max_edits_per_step, 2)
         self.assertEqual(result["operator_family_key"], "composition|resid_add|source_body|exact_prompt_span_mean")
+        self.assertEqual(result["candidate_fingerprint"]["recipe_name"], "pair")
+        self.assertEqual(result["eval_context_fingerprint"]["decode_step"], 0)
+        self.assertEqual(result["eval_context_fingerprint"]["max_edits_per_step"], 2)
 
     def test_worker_runtime_classify_actual_delta_result_marks_collapse_isomorphic(self):
         worker_runtime = self._make_worker_runtime()
@@ -4727,6 +5059,29 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         )
 
         self.assertEqual(outcome, "collapse_isomorphic")
+
+    def test_worker_runtime_classify_actual_delta_result_marks_collapse_sharpener(self):
+        worker_runtime = self._make_worker_runtime()
+
+        outcome = worker_runtime._classify_actual_delta_result(
+            {
+                "continuation_baseline": "bb",
+                "continuation_candidate": "the the",
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "repeat_flag_delta": 1,
+                "entropy_delta": -0.07489,
+                "top1_margin_delta": 0.0089,
+                "repetition_score_delta": 1.0,
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 0,
+                "rank_focus_delta": 0,
+            }
+        )
+
+        self.assertEqual(outcome, "collapse_sharpener")
 
     def test_worker_runtime_replay_operator_certification_populates_packet_hints(self):
         worker_runtime = self._make_worker_runtime()
@@ -4944,6 +5299,75 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(ownership[0]["actuator_class"], "cross_bound")
         self.assertEqual(ownership[0]["bridge_plan_bundle_key"], "kv_pair:send:source_body:10:12")
         self.assertEqual(ownership[0]["operator_recipe_seed_key"], "kv_pair|loc|pool")
+
+    def test_worker_runtime_summarize_bridge_plan_recommendations_prefers_cross_bound_without_self(self):
+        worker_runtime = self._make_worker_runtime()
+
+        recommendations = worker_runtime._summarize_bridge_plan_recommendations(
+            [
+                {
+                    "intended_bundle_key": "kv_pair:send:source_body:10:12",
+                    "intended_term": "send",
+                    "realized_lift_bundle_key": "kv_pair:budget:source_body:12:14",
+                    "realized_lift_term": "budget",
+                    "bridge_plan_bundle_key": "kv_pair:budget:source_body:12:14",
+                    "operator_recipe_id": "recipe_a",
+                    "operator_recipe_seed_key": "seed_a",
+                    "actuator_class": "cross_bound",
+                    "self_delta": 0.01,
+                    "cross_delta": 0.022,
+                    "alignment_margin": -0.012,
+                    "bundle_lift_scores": {
+                        "kv_pair:send:source_body:10:12": 0.01,
+                        "kv_pair:budget:source_body:12:14": 0.022,
+                    },
+                },
+                {
+                    "intended_bundle_key": "kv_pair:send:source_body:10:12",
+                    "intended_term": "send",
+                    "realized_lift_bundle_key": "kv_pair:budget:source_body:12:14",
+                    "realized_lift_term": "budget",
+                    "bridge_plan_bundle_key": "kv_pair:budget:source_body:12:14",
+                    "operator_recipe_id": "recipe_b",
+                    "operator_recipe_seed_key": "seed_b",
+                    "actuator_class": "bridge_actuator",
+                    "self_delta": 0.0,
+                    "cross_delta": 0.03,
+                    "alignment_margin": -0.03,
+                    "bundle_lift_scores": {
+                        "kv_pair:send:source_body:10:12": 0.0,
+                        "kv_pair:budget:source_body:12:14": 0.03,
+                    },
+                },
+                {
+                    "intended_bundle_key": "kv_pair:send:source_body:10:12",
+                    "intended_term": "send",
+                    "realized_lift_bundle_key": "kv_pair:send:source_body:10:12",
+                    "realized_lift_term": "send",
+                    "operator_recipe_id": "recipe_send",
+                    "operator_recipe_seed_key": "seed_send",
+                    "actuator_class": "self_actuator",
+                    "self_delta": 0.08,
+                    "cross_delta": 0.0,
+                    "alignment_margin": 0.08,
+                    "bundle_lift_scores": {
+                        "kv_pair:budget:source_body:12:14": 0.0,
+                        "kv_pair:send:source_body:10:12": 0.08,
+                    },
+                },
+            ]
+        )
+
+        self.assertEqual(len(recommendations), 1)
+        self.assertEqual(recommendations[0]["objective_bundle_key"], "kv_pair:budget:source_body:12:14")
+        self.assertEqual(recommendations[0]["actuator_bundle_key"], "kv_pair:send:source_body:10:12")
+        self.assertEqual(recommendations[0]["actuator_class"], "cross_bound")
+        self.assertTrue(recommendations[0]["bridge_required"])
+        self.assertEqual(recommendations[0]["objective_lift_delta"], 0.022)
+        self.assertEqual(
+            recommendations[0]["bridge_plan_reason"],
+            "no_certified_self_actuator_target_lift_owned_by_other_bundle",
+        )
 
     def test_worker_runtime_replay_operator_recipe_matrix_summarizes_recipe_certifications(self):
         worker_runtime = self._make_worker_runtime()
@@ -5271,8 +5695,8 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                     **base_result,
                     "actual_delta_class": "target_lift",
                     "term_readout_deltas": {
-                        "budget": {"lift_score": 0.0},
-                        "send": {"lift_score": 0.09},
+                        "budget": {"lift_score": 0.08},
+                        "send": {"lift_score": 0.01},
                     },
                 }
             if "term_window_pm1_weighted:pair:kv_pair:budget:source_body:12:14" in label:
@@ -5289,8 +5713,8 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                     **base_result,
                     "actual_delta_class": "target_lift",
                     "term_readout_deltas": {
-                        "budget": {"lift_score": 0.0},
-                        "send": {"lift_score": 0.09},
+                        "budget": {"lift_score": 0.08},
+                        "send": {"lift_score": 0.01},
                     },
                 }
             if "term_window_pm1_weighted_minus_stealer_l050:pair:kv_pair:budget:source_body:12:14" in label:
@@ -5344,6 +5768,14 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             "*::kv_pair:budget:source_body:12:14",
             summary["recipe_stealer_bundle_keys"],
         )
+        budget_recommendations = [
+            item
+            for item in summary["bridge_plan_recommendations"]
+            if str(item.get("objective_bundle_key", "") or "") == "kv_pair:budget:source_body:12:14"
+        ]
+        self.assertTrue(budget_recommendations)
+        self.assertEqual(budget_recommendations[0]["actuator_bundle_key"], "kv_pair:send:source_body:10:12")
+        self.assertEqual(budget_recommendations[0]["actuator_class"], "cross_bound")
 
     def test_worker_runtime_current_tokens_use_model_device_when_available(self):
         worker_runtime = self._make_worker_runtime()

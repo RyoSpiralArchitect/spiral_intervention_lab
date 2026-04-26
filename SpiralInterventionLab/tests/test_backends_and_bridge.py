@@ -167,6 +167,24 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.version, "0.1")
         self.assertEqual(command.decision, "noop")
 
+    def test_provider_controller_client_expands_output_budget_in_readout_escape(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, max_output_tokens=200)
+
+        client.invoke(
+            {
+                "step": 1,
+                "control_phase_hint": "readout_escape",
+                "strategy_hints": {
+                    "gate_report_challenger_bundle_key": "kv_pair:send:source_body:8:10",
+                    "bridge_plan_available": True,
+                },
+            }
+        )
+
+        self.assertGreater(provider.requests[0].max_output_tokens, 200)
+        self.assertEqual(client.latest_trace()["effective_max_output_tokens"], provider.requests[0].max_output_tokens)
+
     def test_provider_controller_client_observation_includes_task_feedback(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
@@ -500,6 +518,48 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.meta["controller_memory"]["hypothesis"], "rescue")
         self.assertEqual(trace["decision"]["controller_memory"]["observed_outcome"], "harmful")
 
+    def test_provider_controller_client_lifts_dual_plan_fields_from_controller_memory(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"controller_memory\":{\"objective_bundle_key\":\"budget_bundle\",\"step_actuator_bundle_key\":\"send_bridge\",\"why_not_apply\":\"bridge remains shadow_only until certified_for_apply\",\"shadow_proposals\":[{\"kind\":\"bridge_shadow\",\"bundle_key\":\"send_bridge\",\"objective_bundle_key\":\"budget_bundle\",\"actuator_bundle_key\":\"send_bridge\",\"reason\":\"bridge remains shadow_only until certified_for_apply\",\"decision\":\"shadow\"}]}}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["objective_bundle_key"], "budget_bundle")
+        self.assertEqual(command.meta["step_actuator_bundle_key"], "send_bridge")
+        self.assertEqual(command.meta["why_not_apply"], "bridge remains shadow_only until certified_for_apply")
+        self.assertEqual(command.meta["shadow_proposals"][0]["bundle_key"], "send_bridge")
+        self.assertEqual(trace["decision"]["objective_bundle_key"], "budget_bundle")
+        self.assertEqual(trace["decision"]["step_actuator_bundle_key"], "send_bridge")
+        self.assertEqual(trace["decision"]["plan_mode"], "dual_layer")
+        self.assertEqual(trace["decision"]["shadow_proposals"][0]["bundle_key"], "send_bridge")
+
+    def test_provider_controller_client_attempt_trace_includes_normalized_payload_diff(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"controller_memory\":{\"objective_bundle_key\":\"budget_bundle\",\"step_actuator_bundle_key\":\"send_bridge\"},\"shadow_plan\":[{\"bundle_key\":\"send_bridge\",\"decision\":\"shadow\"}]}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        attempt = trace["attempts"][0]
+        self.assertIn("raw_json_object", attempt)
+        self.assertIn("normalized_payload", attempt)
+        self.assertIn("normalization_delta", attempt)
+        self.assertIn("moved_into_meta", attempt["normalization_delta"])
+        self.assertIn("controller_memory", attempt["normalization_delta"]["moved_into_meta"])
+        self.assertEqual(
+            attempt["normalized_payload"]["meta"]["objective_bundle_key"],
+            "budget_bundle",
+        )
+        self.assertEqual(
+            attempt["normalized_payload"]["meta"]["shadow_proposals"][0]["bundle_key"],
+            "send_bridge",
+        )
+
     def test_provider_controller_client_moves_endgame_memory_fields_into_meta(self):
         provider = _FakeProvider(
             "{\"version\":\"0.1\",\"decision\":\"noop\",\"noop_reason\":\"hold_finish_budget\",\"apply_block_reason\":\"same_family_escalation_without_gain\",\"focus_term\":\"Omar\",\"surface_family_key\":\"resid_add_s_resid_pre_l5_last\",\"transfer_confidence\":0.2,\"same_family_escalation_risk\":0.8,\"finish_budget_reserved\":1,\"evidence_bullets\":[\"helpful_on=budget@l5_last alpha=0.06\",\"missing_term=Omar remains unproven\"]}"
@@ -781,9 +841,15 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("readout_analyzer_hints", prompt)
         self.assertIn("readout_analyzer_suggested_focus_term", prompt)
         self.assertIn("readout_analyzer_suggested_bundle_key", prompt)
+        self.assertIn("feature_backend=\"sae_sidecar\"", prompt)
+        self.assertIn("request_attention_head_ablation", prompt)
         self.assertIn("gate_report_open", prompt)
         self.assertIn("gate_report_reasons", prompt)
         self.assertIn("gate_report_frontier_bundle_key", prompt)
+        self.assertIn("meta.objective_bundle_key", prompt)
+        self.assertIn("meta.step_actuator_bundle_key", prompt)
+        self.assertIn("meta.shadow_proposals", prompt)
+        self.assertIn("meta.why_not_apply", prompt)
         self.assertIn("candidate_family_vetoes", prompt)
         self.assertIn("bundle_inputs", prompt)
         self.assertIn("finish_budget_reserve_suggested", prompt)
@@ -823,6 +889,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("hold_finish_budget", prompt)
         self.assertIn("stop repeating recall probes", prompt)
         self.assertIn("leave the junk answer-start basin", prompt)
+        self.assertIn("top-2 frontier comparison", prompt)
+        self.assertIn("shadow proposals are notes, not extra apply rights", prompt)
         self.assertIn("canary alone", prompt)
         self.assertIn("reachable-first candidate compiler output", prompt)
         self.assertIn("phase_objective=\"readout_escape\"", prompt)

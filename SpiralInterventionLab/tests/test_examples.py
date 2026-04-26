@@ -4,6 +4,8 @@ from importlib.util import find_spec
 from pathlib import Path
 from unittest.mock import patch
 
+import torch
+
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
 from SpiralInterventionLab.examples import (
     create_task_env,
@@ -22,10 +24,16 @@ from SpiralInterventionLab.examples import (
 from SpiralInterventionLab.examples.digit_transform_e2e import (
     _build_parser,
     _configure_torch_default_device_for_worker,
+    _focused_bridge_eval_recipe_specs,
     _infer_tlens_model_ref,
     _resolve_worker_device,
 )
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
+from SpiralInterventionLab.runtime.sidecar import (
+    ReadoutSidecarCapture,
+    ReadoutSidecarSiteCapture,
+    normalize_readout_sidecar_hints,
+)
 from SpiralInterventionLab.tasks import (
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
@@ -314,6 +322,48 @@ class TestExamples(unittest.TestCase):
         analyzer = create_readout_analyzer("heuristic")
 
         self.assertTrue(callable(analyzer))
+
+    def test_create_readout_analyzer_supports_sae_scaffold_mode(self):
+        analyzer = create_readout_analyzer("sae_scaffold")
+
+        self.assertTrue(callable(analyzer))
+        capture = ReadoutSidecarCapture(
+            run_id="run",
+            episode_id="episode",
+            worker_id="os_0",
+            step=0,
+            control_phase_hint="readout_escape",
+            answer_readout_canary={
+                "reachable_focus_term": "budget",
+                "reachable_focus_rank": 900,
+                "target_mass": 0.0,
+                "attractor_family_mass": 0.2,
+            },
+            answer_sites=(
+                ReadoutSidecarSiteCapture(
+                    role="answer_readout",
+                    layer=0,
+                    token_selector={"mode": "last"},
+                    vector=torch.tensor([1.0, 0.0]),
+                ),
+            ),
+            source_sites=(
+                ReadoutSidecarSiteCapture(
+                    role="source_span",
+                    layer=0,
+                    token_selector={"mode": "span", "start": 3, "end": 4},
+                    vector=torch.tensor([1.0, 0.0]),
+                    span=(3, 4),
+                    term="budget",
+                    provenance_class="source_body",
+                ),
+            ),
+        )
+        hints = normalize_readout_sidecar_hints(analyzer(capture))
+
+        self.assertEqual(hints["feature_backend"], "sae_sidecar")
+        self.assertEqual(hints["sae_status"], "scaffold_feature_emitter_no_saelens_runtime")
+        self.assertGreaterEqual(len(hints["sae_feature_hints"]), 1)
 
     def test_create_readout_sidecar_analyzer_supports_off_mode(self):
         self.assertIsNone(create_readout_sidecar_analyzer("off"))
@@ -663,7 +713,22 @@ class TestExamples(unittest.TestCase):
             self.assertGreaterEqual(payload["nonnull_controller_selected_count"], 1)
             self.assertEqual(payload["gate_report_frontier_bundle_key"], payload["forced_challenger_bundle_key"])
             self.assertEqual(payload["controller_selected_bundle_key"], payload["forced_challenger_bundle_key"])
-            self.assertEqual(payload["controller_selection_source"], "sidecar_tiebreak")
+            self.assertEqual(payload["controller_selection_source"], "forced_diagnostic_apply")
+            self.assertEqual(payload["controller_objective_bundle_key"], payload["forced_challenger_bundle_key"])
+            self.assertEqual(payload["controller_step_actuator_bundle_key"], payload["forced_challenger_bundle_key"])
+            self.assertEqual(payload["controller_plan_mode"], "single_layer")
+            self.assertGreaterEqual(payload["controller_shadow_proposal_count"], 1)
+            self.assertIn("controller_step_views", payload)
+            self.assertTrue(payload["controller_step_views"])
+            first_step_view = payload["controller_step_views"][0]
+            self.assertIn("provider_attempts", first_step_view)
+            self.assertIn("controller_command", first_step_view)
+            self.assertIn("controller_selection", first_step_view)
+            self.assertGreaterEqual(first_step_view["provider_attempt_count"], 1)
+            first_attempt = first_step_view["provider_attempts"][0]
+            self.assertIsNotNone(first_attempt["raw_json_object"])
+            self.assertIsNotNone(first_attempt["normalized_payload"])
+            self.assertEqual(first_attempt["normalization_delta"]["normalization_kind"], "replay_passthrough")
             self.assertTrue(Path(tmpdir, "readout_escape_replay.jsonl").exists())
             self.assertTrue(Path(tmpdir, "readout_escape_replay_summary.json").exists())
 
@@ -702,10 +767,72 @@ class TestExamples(unittest.TestCase):
             self.assertEqual(payload["suite_mode"], "readout_escape_replay_harness")
             self.assertEqual(payload["packet_mode"], "directscan")
             self.assertTrue(payload["readout_escape_seen"])
+            self.assertIn("baseline_span_mean", payload["bridge_eval_recipe_names"])
+            self.assertIn("term_centered_pm1_minus_stealer_l025", payload["bridge_eval_recipe_names"])
+            self.assertIn("bridge_eval_matrix", payload)
+            if payload["bridge_eval_matrix"]:
+                first_row = payload["bridge_eval_matrix"][0]
+                self.assertIn("candidate_fingerprint", first_row)
+                self.assertIn("eval_context_fingerprint", first_row)
+                self.assertEqual(payload["bridge_eval_locked_step"], 0)
+                self.assertFalse(payload["bridge_eval_context_drift"])
+                self.assertEqual(first_row["eval_context_fingerprint"].get("decode_step"), 0)
+                self.assertEqual(first_row["eval_context_fingerprint"].get("answer_prefix"), "")
+            self.assertIn("bridge_plan_unavailable_reason", payload)
+            self.assertIn("bridge_plan_unavailable_objective_reasons", payload)
+            self.assertIn("bridge_eval_context_drift", payload)
+            self.assertIn("bridge_eval_locked_step", payload)
+            self.assertIn("bridge_eval_extra_operator_diagnostics", payload)
+            self.assertIn("bridge_eval_poststep_comparison", payload)
+            self.assertIn("bridge_eval_candidate_swap_comparison", payload)
+            self.assertIn("diagnostic_evidence_ledger", payload)
+            self.assertIn("bundle_diagnostic_status", payload)
+            self.assertGreaterEqual(payload["diagnostic_evidence_ledger_count"], 0)
+            if payload["diagnostic_frontier_bundle_key"]:
+                self.assertIn(payload["diagnostic_frontier_bundle_key"], payload["bundle_diagnostic_status"])
+                self.assertTrue(payload["diagnostic_frontier_next_evidence"])
+                self.assertTrue(payload["diagnostic_frontier_request"])
+            if payload["bridge_eval_extra_operator_diagnostics"]:
+                extra_row = payload["bridge_eval_extra_operator_diagnostics"][0]
+                self.assertTrue(extra_row["diagnostic_only"])
+                self.assertIn(
+                    extra_row["diagnostic_family"],
+                    {"resid_source_span", "readout_local_boundary", "attention_head_ablation", "logit_adjacent"},
+                )
+            self.assertIsInstance(payload["bridge_eval_locked_step"], (int, type(None)))
+            if payload["bridge_plan_recommendation_count"] == 0:
+                self.assertTrue(payload["bridge_plan_unavailable_reason"])
             self.assertGreaterEqual(payload["controller_selection_event_count"], 1)
+            self.assertIn("controller_step_views", payload)
+            self.assertTrue(payload["controller_step_views"])
+            if payload["bridge_visible_step_views"]:
+                first_bridge_view = payload["bridge_visible_step_views"][0]
+                self.assertTrue(first_bridge_view["bridge_visible"])
+                self.assertIn("bridge_dual_layer_missing", first_bridge_view)
             if payload["nonnull_gate_frontier_count"] > 0:
                 self.assertGreaterEqual(payload["nonnull_controller_selected_count"], 1)
                 self.assertEqual(payload["controller_selected_bundle_key"], payload["gate_report_frontier_bundle_key"])
+
+    def test_focused_bridge_eval_recipe_specs_stay_small_and_ownership_oriented(self):
+        recipe_names = [item["recipe_name"] for item in _focused_bridge_eval_recipe_specs()]
+
+        self.assertEqual(
+            recipe_names,
+            [
+                "baseline_span_mean",
+                "term_token",
+                "term_fused",
+                "term_centered_pm1",
+                "term_centered_pm1_v060_k020",
+                "term_centered_pm1_v025_k045",
+                "term_centered_pm1_minus_stealer_l025",
+                "term_centered_pm1_orthogonal_stealer",
+            ],
+        )
+        centered = next(item for item in _focused_bridge_eval_recipe_specs() if item["recipe_name"] == "term_centered_pm1")
+        self.assertIn("kv_v", centered["modes"])
+        self.assertIn("kv_k", centered["modes"])
+        self.assertIn("kv_pair_asymmetric", centered["modes"])
 
     def test_run_digit_transform_sweep_smoke(self):
         model, codec = self._make_model_and_codec()

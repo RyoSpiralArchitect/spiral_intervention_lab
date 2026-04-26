@@ -26,6 +26,7 @@ from ..runtime import (
     StepContext,
     build_heuristic_readout_analyzer,
     build_heuristic_readout_sidecar_analyzer,
+    build_sae_feature_emitter_readout_analyzer,
     resolve_text_codec,
     run_c1,
     run_episode,
@@ -57,7 +58,7 @@ _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
 _WORKER_MPS_MODES = ("auto", "conservative")
 _CONTROLLER_REFLECTION_MODES = ("off", "structured")
 _SEMANTIC_CRITIC_MODES = ("off", "minilm")
-_READOUT_ANALYZER_MODES = ("off", "heuristic")
+_READOUT_ANALYZER_MODES = ("off", "heuristic", "sae_scaffold")
 _READOUT_ANALYZER_RERANK_MODES = ("off", "shadow", "apply")
 _WORKER_DECODER_CONTROL_MODES = (
     "off",
@@ -478,6 +479,440 @@ def load_worker_model(
     )
 
 
+def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:
+    grouped: dict[int, dict[str, Any]] = {}
+    for event in events:
+        try:
+            step = int(event.get("step", 0))
+        except Exception:
+            continue
+        bucket = grouped.setdefault(
+            step,
+            {
+                "step": step,
+                "provider_attempts": [],
+                "controller_decision": None,
+                "controller_command": None,
+                "controller_selection": None,
+            },
+        )
+        event_name = str(event.get("event", "") or "")
+        if event_name == "controller_provider_attempt":
+            bucket["provider_attempts"].append(
+                {
+                    "attempt": event.get("attempt"),
+                    "parse_ok": event.get("parse_ok"),
+                    "response_text": event.get("response_text"),
+                    "raw_json_object": event.get("raw_json_object"),
+                    "normalized_payload": event.get("normalized_payload"),
+                    "normalization_delta": event.get("normalization_delta"),
+                }
+            )
+        elif event_name == "controller_decision":
+            bucket["controller_decision"] = dict(event)
+        elif event_name == "controller_command":
+            bucket["controller_command"] = dict(event)
+        elif event_name == "controller_selection":
+            bucket["controller_selection"] = dict(event)
+    views: list[dict[str, Any]] = []
+    for step in sorted(grouped):
+        bucket = grouped[step]
+        selection = bucket.get("controller_selection")
+        bridge_visible = bool(selection.get("controller_bridge_plan_visible", False)) if isinstance(selection, Mapping) else False
+        views.append(
+            {
+                "step": step,
+                "provider_attempt_count": len(bucket["provider_attempts"]),
+                "provider_attempts": list(bucket["provider_attempts"]),
+                "controller_decision": bucket.get("controller_decision"),
+                "controller_command": bucket.get("controller_command"),
+                "controller_selection": selection,
+                "bridge_visible": bridge_visible,
+                "bridge_dual_layer_missing": (
+                    bool(selection.get("controller_bridge_dual_layer_missing", False))
+                    if isinstance(selection, Mapping)
+                    else False
+                ),
+            }
+        )
+    return tuple(views)
+
+
+def _bridge_eval_rows_have_context_drift(rows: Sequence[Mapping[str, Any]]) -> bool:
+    usable_rows = [row for row in rows if isinstance(row, Mapping)]
+    if not usable_rows:
+        return False
+    for row in usable_rows:
+        fingerprint = row.get("eval_context_fingerprint")
+        if not isinstance(fingerprint, Mapping):
+            return False
+        decode_step = int(fingerprint.get("decode_step", 0) or 0)
+        answer_prefix = str(fingerprint.get("answer_prefix", "") or "")
+        active_patch_count = int(fingerprint.get("active_patch_count", 0) or 0)
+        if decode_step <= 0 and not answer_prefix and active_patch_count <= 0:
+            return False
+    return True
+
+
+def _bridge_plan_unavailable_summary(
+    bridge_eval_summary: Mapping[str, Any],
+    *,
+    preferred_objective_keys: Sequence[str] = (),
+) -> dict[str, Any]:
+    rows = [
+        dict(item)
+        for item in bridge_eval_summary.get("matrix", ())
+        if isinstance(item, Mapping)
+    ] if isinstance(bridge_eval_summary.get("matrix"), SequenceABC) and not isinstance(
+        bridge_eval_summary.get("matrix"), (str, bytes, bytearray)
+    ) else []
+    shadow_bundle_keys = [
+        str(item)
+        for item in bridge_eval_summary.get("shadow_bundle_keys", ())
+        if str(item)
+    ] if isinstance(bridge_eval_summary.get("shadow_bundle_keys"), SequenceABC) and not isinstance(
+        bridge_eval_summary.get("shadow_bundle_keys"), (str, bytes, bytearray)
+    ) else []
+    bundle_keys = [
+        str(item)
+        for item in bridge_eval_summary.get("bundle_keys", ())
+        if str(item)
+    ] if isinstance(bridge_eval_summary.get("bundle_keys"), SequenceABC) and not isinstance(
+        bridge_eval_summary.get("bundle_keys"), (str, bytes, bytearray)
+    ) else []
+    exception_text = str(bridge_eval_summary.get("exception", "") or "")
+    rows_by_objective: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        objective_key = str(row.get("objective_bundle_key", "") or "")
+        if objective_key:
+            rows_by_objective.setdefault(objective_key, []).append(row)
+
+    def _reason_for_rows(objective_key: str, objective_rows: Sequence[Mapping[str, Any]]) -> str:
+        usable_rows = [row for row in objective_rows if isinstance(row, Mapping)]
+        if not usable_rows:
+            return "no_bridge_eval_rows"
+        classes = [str(row.get("actuator_class", "") or "") for row in usable_rows if str(row.get("actuator_class", "") or "")]
+        if classes and all(cls == "collapse_sharpener" for cls in classes):
+            return "all_collapse_sharpener"
+        if classes and all(cls == "dead_actuator" for cls in classes):
+            return "all_dead_actuator"
+        if classes and all(cls in {"dead_actuator", "collapse_sharpener"} for cls in classes):
+            return "no_safe_actuator"
+        realized_to_objective = any(
+            str(row.get("realized_lift_bundle_key", "") or "") == objective_key
+            for row in usable_rows
+        )
+        if not realized_to_objective:
+            return "no_objective_lift_to_frontier"
+        if _bridge_eval_rows_have_context_drift(usable_rows):
+            return "bridge_eval_context_drift"
+        return "bridge_plan_not_certified"
+
+    objective_reasons = {
+        objective_key: _reason_for_rows(objective_key, objective_rows)
+        for objective_key, objective_rows in rows_by_objective.items()
+    }
+    preferred_objective = next((str(item) for item in preferred_objective_keys if str(item)), "")
+    selected_objective_key = ""
+    if preferred_objective and preferred_objective in objective_reasons:
+        selected_objective_key = preferred_objective
+    elif preferred_objective and preferred_objective in bundle_keys:
+        selected_objective_key = preferred_objective
+    elif objective_reasons:
+        selected_objective_key = next(iter(objective_reasons))
+    elif bundle_keys:
+        selected_objective_key = bundle_keys[0]
+    if exception_text:
+        reason = "bridge_eval_failed"
+    elif not bundle_keys:
+        reason = "no_bridge_eval_bundle"
+    elif not shadow_bundle_keys:
+        reason = "no_shadow_competitor"
+    elif selected_objective_key and selected_objective_key in objective_reasons:
+        reason = objective_reasons[selected_objective_key]
+    elif rows:
+        reason = "bridge_plan_not_certified"
+    else:
+        reason = "no_bridge_eval_rows"
+    return {
+        "reason": reason,
+        "objective_bundle_key": selected_objective_key or None,
+        "objective_reasons": objective_reasons,
+        "context_drift": bool(_bridge_eval_rows_have_context_drift(rows)),
+    }
+
+
+def _diagnostic_evidence_ledger(
+    bridge_eval_summary: Mapping[str, Any],
+    strategy_hints: Mapping[str, Any],
+) -> dict[str, Any]:
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def _as_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    def _append_unique(items: list[str], value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in items:
+            items.append(text)
+
+    def _status_for(bundle_key: str) -> dict[str, Any]:
+        return status.setdefault(
+            bundle_key,
+            {
+                "bundle_key": bundle_key,
+                "readout_reachable": False,
+                "head_sensitive": False,
+                "feature_supported": False,
+                "operator_certified": False,
+                "blocked_by": [],
+                "evidence_count": 0,
+                "evidence_kinds": [],
+                "diagnostic_request": None,
+                "next_evidence_needed": None,
+                "reason_text": None,
+            },
+        )
+
+    def _record(
+        *,
+        bundle_key: str,
+        evidence_kind: str,
+        diagnostic_family: str,
+        actuator_class: str | None = None,
+        evidence_status: str = "observed",
+        recipe_name: str | None = None,
+        operator_recipe_id: str | None = None,
+        target_mass_delta: Any = None,
+        target_top20_hit_delta: Any = None,
+        focus_rank_delta: Any = None,
+        blocked_by: str | None = None,
+    ) -> None:
+        if not bundle_key:
+            return
+        row = {
+            "bundle_key": bundle_key,
+            "evidence_kind": evidence_kind,
+            "diagnostic_family": diagnostic_family,
+            "status": evidence_status,
+        }
+        if actuator_class not in (None, ""):
+            row["actuator_class"] = str(actuator_class)
+        if recipe_name not in (None, ""):
+            row["recipe_name"] = str(recipe_name)
+        if operator_recipe_id not in (None, ""):
+            row["operator_recipe_id"] = str(operator_recipe_id)
+        if target_mass_delta is not None:
+            row["target_mass_delta"] = round(_as_float(target_mass_delta), 6)
+        if target_top20_hit_delta is not None:
+            row["target_top20_hit_delta"] = _as_int(target_top20_hit_delta)
+        if focus_rank_delta is not None:
+            row["focus_rank_delta"] = _as_int(focus_rank_delta)
+        if blocked_by not in (None, ""):
+            row["blocked_by"] = str(blocked_by)
+        ledger.append(row)
+        bundle_status = _status_for(bundle_key)
+        bundle_status["evidence_count"] = int(bundle_status["evidence_count"]) + 1
+        _append_unique(bundle_status["evidence_kinds"], evidence_kind)
+        if blocked_by not in (None, ""):
+            _append_unique(bundle_status["blocked_by"], blocked_by)
+
+    status: dict[str, dict[str, Any]] = {}
+    ledger: list[dict[str, Any]] = []
+
+    for raw_key in bridge_eval_summary.get("bundle_keys", ()):
+        bundle_key = str(raw_key or "")
+        if bundle_key:
+            _status_for(bundle_key)
+    for raw_key in (
+        strategy_hints.get("selected_bundle_key"),
+        strategy_hints.get("challenger_bundle_key"),
+        strategy_hints.get("base_winner_bundle_key"),
+        strategy_hints.get("gate_report_frontier_bundle_key"),
+    ):
+        bundle_key = str(raw_key or "")
+        if bundle_key:
+            _status_for(bundle_key)
+
+    matrix = bridge_eval_summary.get("matrix", ())
+    if isinstance(matrix, SequenceABC) and not isinstance(matrix, (str, bytes, bytearray)):
+        for item in matrix:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("objective_bundle_key", "") or "")
+            if not bundle_key:
+                continue
+            actuator_class = str(item.get("actuator_class", "") or "")
+            bundle_status = _status_for(bundle_key)
+            if actuator_class in {"self_actuator", "bridge_actuator"}:
+                bundle_status["operator_certified"] = True
+                evidence_status = "certified"
+            elif actuator_class in {"dead_actuator", "collapse_sharpener"}:
+                evidence_status = "blocked"
+                _append_unique(bundle_status["blocked_by"], actuator_class)
+            else:
+                evidence_status = "observed"
+            _record(
+                bundle_key=bundle_key,
+                evidence_kind="operator_replay",
+                diagnostic_family="focused_ownership_replay",
+                actuator_class=actuator_class or None,
+                evidence_status=evidence_status,
+                recipe_name=item.get("recipe_name"),
+                operator_recipe_id=item.get("operator_recipe_id"),
+                target_mass_delta=item.get("target_mass_delta"),
+                target_top20_hit_delta=item.get("target_top20_hit_delta"),
+                blocked_by=actuator_class if evidence_status == "blocked" else None,
+            )
+
+    extras = bridge_eval_summary.get("extra_operator_diagnostics", ())
+    if isinstance(extras, SequenceABC) and not isinstance(extras, (str, bytes, bytearray)):
+        for item in extras:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("objective_bundle_key", "") or "")
+            if not bundle_key:
+                continue
+            diagnostic_family = str(item.get("diagnostic_family", "") or "")
+            actuator_class = str(item.get("actuator_class", "") or "")
+            target_mass_delta = _as_float(item.get("target_mass_delta", 0.0))
+            target_top20_hit_delta = _as_int(item.get("target_top20_hit_delta", 0))
+            focus_rank_delta = _as_int(item.get("focus_rank_delta", 0))
+            bundle_status = _status_for(bundle_key)
+            evidence_kind = "operator_probe"
+            evidence_status = "observed"
+            if diagnostic_family == "logit_adjacent":
+                evidence_kind = "readout_probe"
+                if actuator_class == "target_lift" or target_mass_delta > 0.0 or target_top20_hit_delta > 0 or focus_rank_delta > 0:
+                    bundle_status["readout_reachable"] = True
+                    evidence_status = "supportive"
+            elif diagnostic_family == "attention_head_ablation":
+                evidence_kind = "attention_ablation"
+                if actuator_class not in {"dead_actuator", "collapse_sharpener", ""} or focus_rank_delta > 0:
+                    bundle_status["head_sensitive"] = True
+                    evidence_status = "supportive"
+            elif actuator_class in {"dead_actuator", "collapse_sharpener"}:
+                evidence_status = "blocked"
+                _append_unique(bundle_status["blocked_by"], actuator_class)
+            _record(
+                bundle_key=bundle_key,
+                evidence_kind=evidence_kind,
+                diagnostic_family=diagnostic_family,
+                actuator_class=actuator_class or None,
+                evidence_status=evidence_status,
+                recipe_name=item.get("recipe_name"),
+                operator_recipe_id=item.get("operator_recipe_id"),
+                target_mass_delta=item.get("target_mass_delta"),
+                target_top20_hit_delta=item.get("target_top20_hit_delta"),
+                focus_rank_delta=item.get("focus_rank_delta"),
+                blocked_by=actuator_class if evidence_status == "blocked" else None,
+            )
+
+    analyzer_hints = strategy_hints.get("readout_analyzer_hints")
+    if not isinstance(analyzer_hints, Mapping):
+        analyzer_hints = strategy_hints.get("readout_sidecar_hints")
+    if not isinstance(analyzer_hints, Mapping):
+        analyzer_hints = {}
+    bundle_support_scores = analyzer_hints.get("bundle_support_scores")
+    if isinstance(bundle_support_scores, Mapping):
+        for raw_key, raw_score in list(bundle_support_scores.items())[:8]:
+            bundle_key = str(raw_key or "")
+            score = _as_float(raw_score, default=-10.0)
+            if not bundle_key:
+                continue
+            if score > 0.0:
+                _status_for(bundle_key)["feature_supported"] = True
+            _record(
+                bundle_key=bundle_key,
+                evidence_kind="feature_emitter",
+                diagnostic_family="readout_analyzer_support",
+                evidence_status="supportive" if score > 0.0 else "observed",
+                target_mass_delta=None,
+                recipe_name="bundle_support_score",
+            )
+            ledger[-1]["support_score"] = round(float(score), 6)
+    sae_feature_hints = analyzer_hints.get("sae_feature_hints")
+    if isinstance(sae_feature_hints, SequenceABC) and not isinstance(sae_feature_hints, (str, bytes, bytearray)):
+        for item in sae_feature_hints[:6]:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("bundle_key", "") or "")
+            support = _as_float(item.get("support", 0.0))
+            if not bundle_key:
+                continue
+            if support > 0.0:
+                _status_for(bundle_key)["feature_supported"] = True
+            _record(
+                bundle_key=bundle_key,
+                evidence_kind="feature_emitter",
+                diagnostic_family="sae_feature_emitter",
+                evidence_status="supportive" if support > 0.0 else "observed",
+                recipe_name=item.get("feature_family"),
+            )
+            ledger[-1]["support_score"] = round(float(support), 6)
+
+    unavailable_reasons = bridge_eval_summary.get("unavailable_objective_reasons")
+    if isinstance(unavailable_reasons, Mapping):
+        for raw_key, raw_reason in unavailable_reasons.items():
+            bundle_key = str(raw_key or "")
+            reason = str(raw_reason or "")
+            if bundle_key and reason:
+                _append_unique(_status_for(bundle_key)["blocked_by"], reason)
+
+    def _finalize(bundle_key: str, bundle_status: dict[str, Any]) -> None:
+        if not bundle_status["readout_reachable"]:
+            bundle_status["next_evidence_needed"] = "readout_reachable_signal"
+            bundle_status["diagnostic_request"] = "readout_logit_adjacent_probe"
+        elif not bundle_status["head_sensitive"]:
+            bundle_status["next_evidence_needed"] = "non_dead_attention_ablation_signal"
+            bundle_status["diagnostic_request"] = "attention_head_ablation_on_frontier"
+        elif not bundle_status["feature_supported"]:
+            bundle_status["next_evidence_needed"] = "readout_feature_emitter_support"
+            bundle_status["diagnostic_request"] = "sae_feature_emitter_scan"
+        elif not bundle_status["operator_certified"]:
+            bundle_status["next_evidence_needed"] = "certified_self_or_bridge_actuator"
+            bundle_status["diagnostic_request"] = "operator_diagnostic_replay"
+        else:
+            bundle_status["next_evidence_needed"] = "production_policy_review"
+            bundle_status["diagnostic_request"] = "none"
+        blocked = ", ".join(str(item) for item in bundle_status["blocked_by"][:3])
+        bundle_status["reason_text"] = (
+            f"{bundle_key} needs {bundle_status['next_evidence_needed']}"
+            + (f"; blocked_by={blocked}" if blocked else "")
+        )
+
+    for key, bundle_status in status.items():
+        _finalize(key, bundle_status)
+
+    frontier_bundle_key = str(
+        strategy_hints.get(
+            "gate_report_frontier_bundle_key",
+            strategy_hints.get("selected_bundle_key", ""),
+        )
+        or ""
+    )
+    if not frontier_bundle_key or frontier_bundle_key not in status:
+        frontier_bundle_key = next(iter(status), "")
+    frontier_status = dict(status.get(frontier_bundle_key, {})) if frontier_bundle_key else {}
+    return {
+        "diagnostic_evidence_ledger": ledger[:24],
+        "diagnostic_evidence_ledger_count": len(ledger),
+        "bundle_diagnostic_status": status,
+        "diagnostic_frontier_bundle_key": frontier_bundle_key or None,
+        "diagnostic_frontier_status": frontier_status,
+        "diagnostic_frontier_next_evidence": frontier_status.get("next_evidence_needed"),
+        "diagnostic_frontier_request": frontier_status.get("diagnostic_request"),
+        "diagnostic_frontier_reason_text": frontier_status.get("reason_text"),
+    }
+
+
 def _logger_factory(log_dir: str | Path | None):
     if log_dir is None:
         return None
@@ -526,6 +961,8 @@ def create_readout_analyzer(mode: str) -> ReadoutAnalyzer | None:
         return None
     if normalized == "heuristic":
         return build_heuristic_readout_analyzer()
+    if normalized == "sae_scaffold":
+        return build_sae_feature_emitter_readout_analyzer()
     raise ValueError(f"unknown readout analyzer mode '{mode}'")
 
 
@@ -597,10 +1034,28 @@ class _FrontierReplayControllerClient:
                     "decision": "apply",
                     "edits": [selected_edit],
                     "meta": {
+                        "apply_kind": "diagnostic_probe",
+                        "production_apply_allowed": False,
+                        "production_policy_would_apply": False,
+                        "certified_for_apply": False,
                         "hypothesis": "forced_readout_escape_frontier_replay",
                         "micro_rationale": "inspect readout_escape logging contract on a forced frontier candidate",
+                        "objective_bundle_key": str(target_bundle_key or ""),
+                        "step_actuator_bundle_key": str(target_bundle_key or ""),
                         "focus_term": matching[0].get("focus_feature"),
                         "surface_family_key": matching[0].get("candidate_family"),
+                        "operator_recipe_id": matching[0].get("operator_recipe_id"),
+                        "shadow_proposals": [
+                            {
+                                "kind": "frontier_runner_up",
+                                "bundle_key": str(candidate.get("bundle_key", "") or ""),
+                                "reason": "retain runner-up frontier candidate as shadow-only context",
+                                "decision": "shadow",
+                            }
+                            for candidate in candidates
+                            if str(candidate.get("bundle_key", "") or "") not in ("", str(target_bundle_key or ""))
+                        ][:1],
+                        "why_not_apply": "other plausible bundles remain shadow_only until certified_for_apply",
                         "evidence_bullets": [
                             f"frontier_bundle={target_bundle_key}",
                             f"suggested_bundle={suggested_bundle_key}",
@@ -625,6 +1080,14 @@ class _FrontierReplayControllerClient:
                     "latency_ms": 0.0,
                     "parse_ok": True,
                     "response_text": json.dumps(command, ensure_ascii=False, sort_keys=True),
+                    "raw_json_object": dict(command),
+                    "normalized_payload": dict(command),
+                    "normalization_delta": {
+                        "raw_top_level_keys": sorted(str(key) for key in command.keys()),
+                        "normalized_top_level_keys": sorted(str(key) for key in command.keys()),
+                        "moved_into_meta": [],
+                        "normalization_kind": "replay_passthrough",
+                    },
                 }
             ],
             "decision": {
@@ -787,10 +1250,51 @@ class ReadoutEscapeReplayHarnessResult:
     nonnull_gate_frontier_count: int
     nonnull_controller_selected_count: int
     sidecar_suggested_bundle_key: str | None
+    readout_analyzer_name: str | None
+    readout_analyzer_feature_backend: str | None
+    readout_analyzer_sae_status: str | None
+    readout_analyzer_sae_feature_hint_count: int
     gate_report_frontier_bundle_key: str | None
     controller_selected_bundle_key: str | None
     controller_selection_source: str | None
     controller_rejected_signals: tuple[str, ...]
+    controller_objective_bundle_key: str | None
+    controller_step_actuator_bundle_key: str | None
+    controller_plan_mode: str | None
+    controller_why_not_apply: str | None
+    controller_shadow_proposal_count: int
+    bridge_plan_objective_bundle_key: str | None
+    bridge_plan_actuator_bundle_key: str | None
+    bridge_plan_reason: str | None
+    bridge_plan_unavailable_reason: str | None
+    bridge_plan_unavailable_objective_bundle_key: str | None
+    bridge_plan_unavailable_objective_reasons: dict[str, str]
+    bridge_eval_context_drift: bool
+    bridge_eval_locked_step: int | None
+    bridge_plan_used: bool
+    bridge_plan_packet_invariant_ok: bool | None
+    bridge_plan_packet_invariant_diff: tuple[str, ...]
+    bridge_plan_recommendation_count: int
+    bridge_plan_recommendation_objectives: tuple[str, ...]
+    bridge_eval_shadow_bundle_keys: tuple[str, ...]
+    bridge_eval_recipe_names: tuple[str, ...]
+    bridge_eval_matrix: tuple[dict[str, Any], ...]
+    bridge_eval_objective_class_counts: dict[str, dict[str, int]]
+    bridge_eval_evaluations_count: int
+    bridge_eval_ownership_count: int
+    bridge_eval_exception: str | None
+    diagnostic_evidence_ledger: tuple[dict[str, Any], ...]
+    diagnostic_evidence_ledger_count: int
+    bundle_diagnostic_status: dict[str, dict[str, Any]]
+    diagnostic_frontier_bundle_key: str | None
+    diagnostic_frontier_next_evidence: str | None
+    diagnostic_frontier_request: str | None
+    diagnostic_frontier_reason_text: str | None
+    bridge_eval_extra_operator_diagnostics: tuple[dict[str, Any], ...]
+    bridge_eval_poststep_comparison: dict[str, Any] | None
+    bridge_eval_candidate_swap_comparison: dict[str, Any] | None
+    controller_step_views: tuple[dict[str, Any], ...]
+    bridge_visible_step_views: tuple[dict[str, Any], ...]
     forced_base_bundle_key: str
     forced_challenger_bundle_key: str
     first_selection_event: dict[str, Any] | None
@@ -811,10 +1315,64 @@ class ReadoutEscapeReplayHarnessResult:
             "nonnull_gate_frontier_count": self.nonnull_gate_frontier_count,
             "nonnull_controller_selected_count": self.nonnull_controller_selected_count,
             "sidecar_suggested_bundle_key": self.sidecar_suggested_bundle_key,
+            "readout_analyzer_name": self.readout_analyzer_name,
+            "readout_analyzer_feature_backend": self.readout_analyzer_feature_backend,
+            "readout_analyzer_sae_status": self.readout_analyzer_sae_status,
+            "readout_analyzer_sae_feature_hint_count": int(self.readout_analyzer_sae_feature_hint_count),
             "gate_report_frontier_bundle_key": self.gate_report_frontier_bundle_key,
             "controller_selected_bundle_key": self.controller_selected_bundle_key,
             "controller_selection_source": self.controller_selection_source,
             "controller_rejected_signals": list(self.controller_rejected_signals),
+            "controller_objective_bundle_key": self.controller_objective_bundle_key,
+            "controller_step_actuator_bundle_key": self.controller_step_actuator_bundle_key,
+            "controller_plan_mode": self.controller_plan_mode,
+            "controller_why_not_apply": self.controller_why_not_apply,
+            "controller_shadow_proposal_count": int(self.controller_shadow_proposal_count),
+            "bridge_plan_objective_bundle_key": self.bridge_plan_objective_bundle_key,
+            "bridge_plan_actuator_bundle_key": self.bridge_plan_actuator_bundle_key,
+            "bridge_plan_reason": self.bridge_plan_reason,
+            "bridge_plan_unavailable_reason": self.bridge_plan_unavailable_reason,
+            "bridge_plan_unavailable_objective_bundle_key": self.bridge_plan_unavailable_objective_bundle_key,
+            "bridge_plan_unavailable_objective_reasons": {
+                str(key): str(value) for key, value in sorted(self.bridge_plan_unavailable_objective_reasons.items())
+            },
+            "bridge_eval_context_drift": bool(self.bridge_eval_context_drift),
+            "bridge_eval_locked_step": self.bridge_eval_locked_step,
+            "bridge_plan_used": bool(self.bridge_plan_used),
+            "bridge_plan_packet_invariant_ok": self.bridge_plan_packet_invariant_ok,
+            "bridge_plan_packet_invariant_diff": list(self.bridge_plan_packet_invariant_diff),
+            "bridge_plan_recommendation_count": int(self.bridge_plan_recommendation_count),
+            "bridge_plan_recommendation_objectives": list(self.bridge_plan_recommendation_objectives),
+            "bridge_eval_shadow_bundle_keys": list(self.bridge_eval_shadow_bundle_keys),
+            "bridge_eval_recipe_names": list(self.bridge_eval_recipe_names),
+            "bridge_eval_matrix": [dict(item) for item in self.bridge_eval_matrix],
+            "bridge_eval_objective_class_counts": {
+                str(key): {str(inner_key): int(inner_value) for inner_key, inner_value in sorted(value.items())}
+                for key, value in sorted(self.bridge_eval_objective_class_counts.items())
+            },
+            "bridge_eval_evaluations_count": int(self.bridge_eval_evaluations_count),
+            "bridge_eval_ownership_count": int(self.bridge_eval_ownership_count),
+            "bridge_eval_exception": self.bridge_eval_exception,
+            "diagnostic_evidence_ledger": [dict(item) for item in self.diagnostic_evidence_ledger],
+            "diagnostic_evidence_ledger_count": int(self.diagnostic_evidence_ledger_count),
+            "bundle_diagnostic_status": {
+                str(key): dict(value) for key, value in sorted(self.bundle_diagnostic_status.items())
+            },
+            "diagnostic_frontier_bundle_key": self.diagnostic_frontier_bundle_key,
+            "diagnostic_frontier_next_evidence": self.diagnostic_frontier_next_evidence,
+            "diagnostic_frontier_request": self.diagnostic_frontier_request,
+            "diagnostic_frontier_reason_text": self.diagnostic_frontier_reason_text,
+            "bridge_eval_extra_operator_diagnostics": [
+                dict(item) for item in self.bridge_eval_extra_operator_diagnostics
+            ],
+            "bridge_eval_poststep_comparison": (
+                None if self.bridge_eval_poststep_comparison is None else dict(self.bridge_eval_poststep_comparison)
+            ),
+            "bridge_eval_candidate_swap_comparison": (
+                None if self.bridge_eval_candidate_swap_comparison is None else dict(self.bridge_eval_candidate_swap_comparison)
+            ),
+            "controller_step_views": [dict(item) for item in self.controller_step_views],
+            "bridge_visible_step_views": [dict(item) for item in self.bridge_visible_step_views],
             "forced_base_bundle_key": self.forced_base_bundle_key,
             "forced_challenger_bundle_key": self.forced_challenger_bundle_key,
             "first_selection_event": None if self.first_selection_event is None else dict(self.first_selection_event),
@@ -868,6 +1426,74 @@ class DigitTransformSweepResult:
             "summary": self.summary(),
             "runs": [run.to_dict() for run in self.runs],
         }
+
+
+def _focused_bridge_eval_recipe_specs() -> list[dict[str, Any]]:
+    return [
+        {
+            "recipe_name": "baseline_span_mean",
+            "localization": "exact_prompt_span_mean",
+            "pooling": "mean",
+            "contrast_mode": "none",
+            "modes": ("kv_pair", "kv_v", "kv_k", "kv_pair_asymmetric"),
+        },
+        {
+            "recipe_name": "term_token",
+            "localization": "exact_term_token",
+            "pooling": "single",
+            "contrast_mode": "none",
+            "modes": ("kv_pair", "kv_v", "kv_k"),
+        },
+        {
+            "recipe_name": "term_fused",
+            "localization": "exact_term_fused",
+            "pooling": "fused",
+            "contrast_mode": "none",
+            "modes": ("kv_pair", "kv_v", "kv_k"),
+        },
+        {
+            "recipe_name": "term_centered_pm1",
+            "localization": "exact_term_centered_pm1",
+            "pooling": "centered_mean",
+            "contrast_mode": "none",
+            "modes": ("kv_pair", "kv_v", "kv_k", "kv_pair_asymmetric"),
+        },
+        {
+            "recipe_name": "term_centered_pm1_v060_k020",
+            "localization": "exact_term_centered_pm1",
+            "pooling": "centered_mean",
+            "contrast_mode": "none",
+            "v_alpha": 0.06,
+            "k_alpha": 0.02,
+            "modes": ("kv_pair_asymmetric",),
+        },
+        {
+            "recipe_name": "term_centered_pm1_v025_k045",
+            "localization": "exact_term_centered_pm1",
+            "pooling": "centered_mean",
+            "contrast_mode": "none",
+            "v_alpha": 0.025,
+            "k_alpha": 0.045,
+            "modes": ("kv_pair_asymmetric",),
+        },
+        {
+            "recipe_name": "term_centered_pm1_minus_stealer_l025",
+            "localization": "exact_term_centered_pm1",
+            "pooling": "centered_mean",
+            "contrast_mode": "minus_stealer",
+            "contrast_scale": 0.25,
+            "competitor_strategy": "stealer",
+            "modes": ("kv_pair",),
+        },
+        {
+            "recipe_name": "term_centered_pm1_orthogonal_stealer",
+            "localization": "exact_term_centered_pm1",
+            "pooling": "centered_mean",
+            "contrast_mode": "orthogonal_stealer",
+            "competitor_strategy": "stealer",
+            "modes": ("kv_pair",),
+        },
+    ]
 
 
 def run_digit_transform_experiment(
@@ -1450,6 +2076,22 @@ def run_readout_escape_replay_harness(
         "surface_ids": (),
         "directscan_hints": None,
         "cached_strategy_hints": None,
+        "bridge_plan_report": None,
+        "bridge_plan_packet_invariant_ok": None,
+        "bridge_plan_packet_invariant_diff": (),
+        "bridge_eval_summary": None,
+        "bridge_eval_shadow_candidates": (),
+        "bridge_eval_shadow_bundle_keys": (),
+        "bridge_eval_active": False,
+        "bridge_eval_packet_snapshot": None,
+        "bridge_eval_locked_step": None,
+        "bridge_eval_poststep_comparison": None,
+        "bridge_eval_candidate_swap_comparison": None,
+        "bridge_eval_pre_replay_summary": None,
+        "bridge_eval_last_replay_summary": None,
+        "bridge_eval_extra_operator_diagnostics": (),
+        "pre_step_segments": (),
+        "pre_step_steps": 0,
     }
     original_reset = worker.reset
     original_build_controller_packet = worker.build_controller_packet
@@ -1626,6 +2268,23 @@ def run_readout_escape_replay_harness(
             raise ValueError("readout escape replay harness requires at least two activation surfaces")
         forced_state["surface_ids"] = surface_ids
         forced_state["cached_strategy_hints"] = None
+        forced_state["bridge_plan_report"] = None
+        forced_state["bridge_plan_packet_invariant_ok"] = None
+        forced_state["bridge_plan_packet_invariant_diff"] = ()
+        forced_state["bridge_eval_summary"] = None
+        forced_state["bridge_eval_shadow_candidates"] = ()
+        forced_state["bridge_eval_shadow_bundle_keys"] = ()
+        forced_state["bridge_eval_active"] = False
+        forced_state["bridge_eval_packet_snapshot"] = None
+        forced_state["bridge_eval_locked_step"] = None
+        forced_state["bridge_eval_poststep_comparison"] = None
+        forced_state["bridge_eval_candidate_swap_comparison"] = None
+        forced_state["bridge_eval_pre_replay_summary"] = None
+        forced_state["bridge_eval_last_replay_summary"] = None
+        forced_state["bridge_eval_extra_operator_diagnostics"] = ()
+        forced_state["pre_step_segments"] = tuple((segment.kind, tuple(segment.token_ids)) for segment in self._segments)
+        forced_state["pre_step_steps"] = int(self._steps)
+        self._operator_bridge_plan_table = {}
         if normalized_packet_mode == "forced_frontier":
             base_surface_id, challenger_surface_id = surface_ids[:2]
             forced_state["base_bundle_key"] = f"kv_anchor:send:source_body:{base_surface_id}"
@@ -1646,6 +2305,19 @@ def run_readout_escape_replay_harness(
         self._last_task_feedback = dict(directscan["feedback"])
         self._latest_observer_check = dict(directscan["observer_check"])
         self._observer_checks = [dict(directscan["observer_check"])]
+        if normalized_packet_mode in {"directscan", "fixed_candidate"}:
+            try:
+                self.build_controller_packet()
+            except Exception:
+                forced_state["bridge_plan_report"] = None
+                forced_state["bridge_plan_packet_invariant_ok"] = None
+                forced_state["bridge_plan_packet_invariant_diff"] = ()
+                forced_state["bridge_eval_summary"] = None
+                forced_state["bridge_eval_shadow_candidates"] = ()
+                forced_state["bridge_eval_shadow_bundle_keys"] = ()
+                forced_state["bridge_eval_active"] = False
+                forced_state["bridge_eval_packet_snapshot"] = None
+                forced_state["bridge_eval_locked_step"] = None
 
     def _forced_canary(self: HookedTransformerWorkerRuntime, **_kwargs: Any) -> Mapping[str, Any]:
         if normalized_packet_mode == "forced_frontier":
@@ -1665,6 +2337,1050 @@ def run_readout_escape_replay_harness(
         directscan = forced_state.get("directscan_hints") if isinstance(forced_state.get("directscan_hints"), Mapping) else {}
         return dict(directscan.get("canary", {}))
 
+    def _bridge_frontier_snapshot(strategy_hints: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            "base_winner_bundle_key": str(strategy_hints.get("base_winner_bundle_key", "") or ""),
+            "challenger_bundle_key": str(strategy_hints.get("challenger_bundle_key", "") or ""),
+            "selected_bundle_key": str(strategy_hints.get("selected_bundle_key", "") or ""),
+            "gate_report_frontier_bundle_key": str(strategy_hints.get("gate_report_frontier_bundle_key", "") or ""),
+            "selection_source": str(strategy_hints.get("selection_source", "") or ""),
+        }
+
+    def _candidate_bundle_keys(raw_items: Any) -> list[str]:
+        if not isinstance(raw_items, SequenceABC) or isinstance(raw_items, (str, bytes, bytearray)):
+            return []
+        seen: list[str] = []
+        for item in raw_items:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("bundle_key", "") or "")
+            if bundle_key and bundle_key not in seen:
+                seen.append(bundle_key)
+        return seen
+
+    def _bundle_term(bundle_key: str) -> str:
+        parts = str(bundle_key or "").split(":")
+        if len(parts) >= 2 and parts[0] == "kv_pair":
+            return str(parts[1])
+        return ""
+
+    def _build_bridge_eval_shadow_candidates(
+        self: HookedTransformerWorkerRuntime,
+        strategy_hints: Mapping[str, Any],
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        objective_term = ""
+        for raw_key in (
+            strategy_hints.get("selected_bundle_key"),
+            strategy_hints.get("gate_report_frontier_bundle_key"),
+            strategy_hints.get("challenger_bundle_key"),
+            strategy_hints.get("base_winner_bundle_key"),
+        ):
+            objective_term = _bundle_term(str(raw_key or ""))
+            if objective_term:
+                break
+        if not objective_term:
+            objective_term = str(strategy_hints.get("controller_focus_term", "") or "")
+        if not objective_term:
+            return [], []
+
+        promoted_cache_surfaces = self._promoted_cache_surfaces()
+        surface_lookup = self._cache_surface_lookup(promoted_cache_surfaces=promoted_cache_surfaces)
+        shadow_candidates: list[dict[str, Any]] = []
+        seen_keys: set[tuple[str, str, int, int, str]] = set()
+        for hit in self._actionable_kv_hits(limit=6, promoted_cache_surfaces=promoted_cache_surfaces):
+            feature = str(hit.get("feature", "") or "")
+            if not feature or feature == objective_term:
+                continue
+            site = str(hit.get("site", "") or "")
+            token_mode = str(hit.get("token_mode", "last") or "last")
+            layer = hit.get("layer")
+            head = hit.get("head")
+            if site not in {"k_cache", "v_cache"} or token_mode != "last":
+                continue
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                continue
+            if isinstance(head, bool) or not isinstance(head, int):
+                continue
+            record = surface_lookup.get((site, int(layer), int(head), token_mode))
+            if record is None:
+                continue
+            source_variants = self._kv_source_variants_for_hit(hit, control_phase_hint="readout_escape")
+            if not source_variants:
+                continue
+            preferred_variant = None
+            for variant in source_variants:
+                if str(variant.get("provenance_class", "") or "") == "source_body" and str(variant.get("span_kind", "")).startswith("exact_prompt_span"):
+                    preferred_variant = variant
+                    break
+            if preferred_variant is None:
+                preferred_variant = source_variants[0]
+            source_span = preferred_variant.get("source_span") if isinstance(preferred_variant.get("source_span"), Mapping) else None
+            source_position = int(preferred_variant.get("source_position", 0) or 0)
+            source_end = source_position + 1 if source_span is None else int(source_span.get("end", source_position + 1))
+            surface_id = str(record.get("surface_id", "") or "")
+            if not surface_id:
+                continue
+            dedupe_key = (
+                surface_id,
+                feature,
+                source_position,
+                source_end,
+                str(preferred_variant.get("span_kind", "")),
+            )
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            max_alpha = float(record.get("max_alpha", 0.06) or 0.06)
+            step_cap = record.get("step_size")
+            norm_clip = record.get("norm_clip")
+            if norm_clip is None:
+                norm_clip = 1.0
+            base_alpha = 0.03 if site == "k_cache" else 0.04
+            if str(preferred_variant.get("span_kind", "")).startswith("exact_prompt_span"):
+                base_alpha = 0.035 if site == "k_cache" else 0.045
+            alpha = min(max_alpha, base_alpha)
+            step_size = float(alpha if step_cap is None else min(float(step_cap), alpha))
+            which = "v" if site == "v_cache" else "k"
+            candidate = {
+                "surface_id": surface_id,
+                "kind": "kv_mix",
+                "role": f"kv_shadow_{which}_source_anchor",
+                "site": site,
+                "layer": int(layer),
+                "head": int(head),
+                "token_mode": token_mode,
+                "focus_feature": feature,
+                "alignment": round(float(hit.get("alignment", 0.0) or 0.0), 6),
+                "candidate_family": str(preferred_variant.get("candidate_family", "")),
+                "phase_objective": "readout_escape",
+                "span_kind": str(preferred_variant.get("span_kind", "source_position_single")),
+                "recipe_localization": str(preferred_variant.get("span_kind", "source_position_single")),
+                "recipe_pooling": "mean"
+                if str(preferred_variant.get("span_kind", "")).startswith("exact_prompt_span")
+                else "single",
+                "contrast_mode": "none",
+                "provenance_class": str(preferred_variant.get("provenance_class", "misc_prompt") or "misc_prompt"),
+                "read_source_resolved": True,
+                "write_target_resolved": True,
+                "source_position": int(source_position),
+                "source_piece": preferred_variant.get("source_piece"),
+                "source_segment_kind": preferred_variant.get("source_segment_kind"),
+                "source": {
+                    "dtype": "cache_pair",
+                    which: {
+                        "ref": {
+                            "scope": "runtime",
+                            "worker": self.worker_id,
+                            "tensor": site,
+                            "layer": int(layer),
+                            "head": int(head),
+                            "token": dict(preferred_variant["token_selector"]),
+                        }
+                    },
+                },
+                "op": {"kind": "kv_mix", "alpha": float(alpha), "which": which},
+                "budget": {
+                    "ttl_steps": 1,
+                    "norm_clip": float(norm_clip),
+                    "step_size": float(step_size),
+                    "revertible": True,
+                },
+                "meta": {
+                    "hypothesis": f"bridge_eval_shadow_{which}",
+                    "expected_effect": "shadow_competitor_bridge_eval",
+                },
+            }
+            if source_span is not None:
+                candidate["source_span"] = {"start": int(source_span["start"]), "end": int(source_span["end"])}
+            candidate["operator_family_key"] = self._operator_family_key(candidate)
+            candidate["operator_recipe_id"] = self._operator_recipe_id(candidate)
+            shadow_candidates.append(candidate)
+
+        bundle_inputs = self._bundle_inputs_for_candidates(shadow_candidates)
+        if not bundle_inputs:
+            return [], []
+        selected_bundle = bundle_inputs[0]
+        bundle_key = str(selected_bundle.get("bundle_key", "") or "")
+        if not bundle_key:
+            return [], []
+        focus_term = str(selected_bundle.get("term", "") or "")
+        provenance_class = str(selected_bundle.get("provenance_class", "misc_prompt") or "misc_prompt")
+        source_span = selected_bundle.get("source_span") if isinstance(selected_bundle.get("source_span"), Mapping) else None
+        span_id = (
+            f"{int(source_span.get('start', 0) or 0)}:{int(source_span.get('end', 0) or 0)}"
+            if source_span is not None
+            else "unknown"
+        )
+        selected: list[dict[str, Any]] = []
+        for candidate in shadow_candidates:
+            if (
+                str(candidate.get("focus_feature", "") or "") == focus_term
+                and str(candidate.get("provenance_class", "misc_prompt") or "misc_prompt") == provenance_class
+                and self._candidate_span_id(candidate) == span_id
+            ):
+                candidate["bundle_key"] = bundle_key
+                candidate["bundle_ready"] = True
+                candidate["bundle_family"] = "kv_pair_source_anchor"
+                selected.append(candidate)
+        return selected, [bundle_key] if selected else []
+
+    def _bridge_eval_extra_operator_diagnostics(
+        self: HookedTransformerWorkerRuntime,
+        *,
+        replay_bundle_keys: Sequence[str],
+        strategy_hints: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
+        bundle_terms: dict[str, str] = {}
+        for raw_key in replay_bundle_keys:
+            key = str(raw_key or "")
+            term = _bundle_term(key)
+            if key and term and key not in bundle_terms:
+                bundle_terms[key] = term
+        if not bundle_terms:
+            return []
+        ownership_terms = list(dict.fromkeys(str(term) for term in bundle_terms.values() if str(term)))
+
+        activation_surfaces: list[Any] = []
+        for surface in self.surface_catalog:
+            target = getattr(surface, "target", None)
+            if getattr(target, "kind", None) != "activation" or getattr(target, "site", None) != "resid_pre":
+                continue
+            token = getattr(target, "token", None)
+            token_mode = str(getattr(token, "mode", "") or "")
+            token_value = getattr(token, "value", None)
+            if token_mode == "last" or (token_mode == "index" and token_value == -2):
+                activation_surfaces.append(surface)
+        activation_surfaces.sort(
+            key=lambda surface: (
+                int(getattr(getattr(surface, "target", None), "layer", 0) or 0),
+                0 if str(getattr(getattr(getattr(surface, "target", None), "token", None), "mode", "") or "") == "last" else -1,
+                str(getattr(surface, "surface_id", "") or ""),
+            ),
+            reverse=True,
+        )
+        readout_surface = activation_surfaces[0] if activation_surfaces else None
+        if readout_surface is None:
+            return []
+
+        def _best_source_span(term: str) -> dict[str, Any] | None:
+            spans = [dict(item) for item in self._prompt_term_spans(term, max_spans=4)]
+            if not spans:
+                return None
+            spans.sort(
+                key=lambda item: (
+                    0 if str(item.get("provenance_class", "") or "") == "source_body" else 1,
+                    int(item.get("start", 0) or 0),
+                    -int(item.get("length", 0) or 0),
+                )
+            )
+            return spans[0]
+
+        def _surface_caps(surface: Any) -> tuple[float, float, float]:
+            caps = getattr(surface, "caps", None)
+            norm_clip = 1.0 if getattr(caps, "norm_clip", None) is None else float(caps.norm_clip)
+            max_alpha = 0.05 if getattr(caps, "max_alpha", None) is None else float(caps.max_alpha)
+            step_cap = getattr(caps, "step_size", None)
+            step_size = max_alpha if step_cap is None else min(float(step_cap), max_alpha)
+            return norm_clip, max_alpha, step_size
+
+        def _source_selector_for_span(span: Mapping[str, Any] | None) -> dict[str, Any]:
+            if not isinstance(span, Mapping):
+                return {"mode": "last"}
+            start = int(span.get("start", 0) or 0)
+            end = int(span.get("end", start + 1) or (start + 1))
+            if end - start <= 1:
+                return {"mode": "index", "value": start}
+            return {"mode": "span", "start": start, "end": end, "pool": "mean"}
+
+        def _make_resid_edit(
+            *,
+            surface: Any,
+            bundle_key: str,
+            term: str,
+            diagnostic_family: str,
+            recipe_name: str,
+            source_selector: Mapping[str, Any],
+            source_span: Mapping[str, Any] | None,
+            alpha: float,
+        ) -> dict[str, Any]:
+            target = getattr(surface, "target", None)
+            layer = int(getattr(target, "layer", 0) or 0)
+            surface_id = str(getattr(surface, "surface_id", "") or "")
+            norm_clip, max_alpha, step_cap = _surface_caps(surface)
+            alpha_value = min(float(alpha), float(max_alpha))
+            step_size = min(float(step_cap), alpha_value)
+            provenance_class = (
+                str(source_span.get("provenance_class", "misc_prompt") or "misc_prompt")
+                if isinstance(source_span, Mapping)
+                else "answer_prefix"
+            )
+            span_kind = (
+                "exact_prompt_span_mean"
+                if isinstance(source_span, Mapping) and int(source_span.get("end", 0) or 0) - int(source_span.get("start", 0) or 0) > 1
+                else ("exact_prompt_piece" if isinstance(source_span, Mapping) else "answer_boundary_last")
+            )
+            source_position = int(source_span.get("start", 0) or 0) if isinstance(source_span, Mapping) else 0
+            candidate = {
+                "id": f"bridge_diag_{diagnostic_family}_{term}_{surface_id}",
+                "surface_id": surface_id,
+                "target": {"surface_id": surface_id},
+                "kind": "resid_add",
+                "role": diagnostic_family,
+                "site": "resid_pre",
+                "layer": layer,
+                "bundle_key": bundle_key,
+                "bundle_family": diagnostic_family,
+                "focus_feature": term,
+                "focus_term": term,
+                "candidate_family": f"{diagnostic_family}:{term}:{span_kind}",
+                "phase_objective": "readout_escape",
+                "span_kind": span_kind,
+                "recipe_localization": span_kind,
+                "recipe_pooling": "mean" if span_kind.endswith("_mean") else "single",
+                "contrast_mode": "none",
+                "recipe_alpha": float(alpha_value),
+                "provenance_class": provenance_class,
+                "read_source_resolved": True,
+                "write_target_resolved": True,
+                "source_position": source_position,
+                "source_piece": source_span.get("text") if isinstance(source_span, Mapping) else None,
+                "source_segment_kind": source_span.get("segment_kind") if isinstance(source_span, Mapping) else "answer",
+                "source": {
+                    "dtype": "vector",
+                    "expr": {
+                        "fn": "clip_norm",
+                        "max_norm": float(norm_clip),
+                        "arg": {
+                            "fn": "scale",
+                            "by": float(step_size),
+                            "arg": {
+                                "fn": "normalize",
+                                "arg": {
+                                    "ref": {
+                                        "scope": "runtime",
+                                        "worker": self.worker_id,
+                                        "tensor": "hidden",
+                                        "layer": layer,
+                                        "token": dict(source_selector),
+                                    }
+                                },
+                            },
+                        },
+                    },
+                },
+                "op": {"kind": "resid_add", "alpha": float(alpha_value)},
+                "budget": {
+                    "ttl_steps": 1,
+                    "norm_clip": float(norm_clip),
+                    "step_size": float(step_size),
+                    "revertible": True,
+                },
+                "meta": {
+                    "hypothesis": "bridge_eval_extra_operator_diagnostic",
+                    "expected_effect": diagnostic_family,
+                },
+            }
+            if isinstance(source_span, Mapping):
+                candidate["source_span"] = {
+                    "start": int(source_span.get("start", 0) or 0),
+                    "end": int(source_span.get("end", 0) or 0),
+                }
+            candidate["operator_recipe_seed_key"] = f"{diagnostic_family}|{span_kind}|{candidate['recipe_pooling']}"
+            candidate["operator_recipe_id"] = self._operator_recipe_id(candidate)
+            candidate["diagnostic_family"] = diagnostic_family
+            candidate["diagnostic_recipe_name"] = recipe_name
+            return candidate
+
+        def _compact_actual_delta(
+            result: Mapping[str, Any],
+            *,
+            diagnostic_family: str,
+            recipe_name: str,
+            objective_bundle_key: str,
+            objective_term: str,
+        ) -> dict[str, Any]:
+            return {
+                "diagnostic_only": True,
+                "diagnostic_family": diagnostic_family,
+                "recipe_name": recipe_name,
+                "objective_bundle_key": objective_bundle_key,
+                "objective_term": objective_term,
+                "actuator_bundle_key": objective_bundle_key,
+                "status": str(result.get("status", "") or ""),
+                "actuator_class": str(result.get("actual_delta_class", "") or "") or None,
+                "operator_recipe_id": result.get("operator_recipe_id"),
+                "target_mass_delta": result.get("target_mass_delta"),
+                "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+                "focus_rank_delta": result.get("focus_rank_delta"),
+                "rank_focus_delta": result.get("rank_focus_delta"),
+                "required_term_recall_delta": result.get("required_term_recall_delta"),
+                "required_term_span_progress_delta": result.get("required_term_span_progress_delta"),
+                "entropy_delta": result.get("entropy_delta"),
+                "top1_margin_delta": result.get("top1_margin_delta"),
+                "repeat_delta": result.get("repeat_flag_delta"),
+                "candidate_fingerprint": dict(result.get("candidate_fingerprint", {}))
+                if isinstance(result.get("candidate_fingerprint"), Mapping)
+                else {},
+                "eval_context_fingerprint": dict(result.get("eval_context_fingerprint", {}))
+                if isinstance(result.get("eval_context_fingerprint"), Mapping)
+                else {},
+            }
+
+        def _kv_candidates_by_bundle() -> dict[str, list[dict[str, Any]]]:
+            grouped: dict[str, list[dict[str, Any]]] = {}
+            raw_candidates: list[Any] = []
+            for key in ("kv_candidate_edits", "kv_retry_candidate_edits"):
+                items = strategy_hints.get(key)
+                if isinstance(items, SequenceABC) and not isinstance(items, (str, bytes, bytearray)):
+                    raw_candidates.extend(items)
+            raw_candidates.extend(
+                item
+                for item in forced_state.get("bridge_eval_shadow_candidates", ())
+                if isinstance(item, Mapping)
+            )
+            for item in raw_candidates:
+                if not isinstance(item, Mapping):
+                    continue
+                bundle_key = str(item.get("bundle_key", "") or "")
+                if not bundle_key:
+                    continue
+                grouped.setdefault(bundle_key, []).append(dict(item))
+            return grouped
+
+        def _run_attention_head_ablation(
+            candidate: Mapping[str, Any],
+            *,
+            objective_bundle_key: str,
+            objective_term: str,
+        ) -> dict[str, Any] | None:
+            site = str(candidate.get("site", "") or "")
+            if site not in {"k_cache", "v_cache"}:
+                return None
+            layer = candidate.get("layer")
+            head = candidate.get("head")
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                return None
+            if isinstance(head, bool) or not isinstance(head, int):
+                return None
+            hook_name = f"blocks.{int(layer)}.attn.hook_{'v' if site == 'v_cache' else 'k'}"
+            hook_dict = getattr(self.model, "hook_dict", None)
+            if hook_dict is None or hook_name not in hook_dict:
+                return None
+            baseline = self._simulate_decode(max_new_tokens=3, top_k=8)
+            if baseline is None:
+                return None
+
+            hook_point = hook_dict[hook_name]
+            handle = None
+
+            def _ablate_head(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
+                if not isinstance(act, torch.Tensor) or act.ndim < 4 or int(head) < 0 or act.shape[-2] <= int(head):
+                    return act
+                out = act.clone()
+                out[..., :, int(head), :] = 0.0
+                return out
+
+            try:
+                before_len = len(getattr(hook_point, "fwd_hooks", []))
+                hook_point.add_hook(_ablate_head, dir="fwd")
+                fwd_hooks = getattr(hook_point, "fwd_hooks", [])
+                if len(fwd_hooks) <= before_len:
+                    return None
+                handle = fwd_hooks[-1]
+                edited = self._simulate_decode(max_new_tokens=3, top_k=8)
+            finally:
+                if handle is not None and hasattr(hook_point, "fwd_hooks"):
+                    hook_point.fwd_hooks = [item for item in hook_point.fwd_hooks if item is not handle]
+            if edited is None:
+                return None
+
+            baseline_score = baseline.get("scoring", {}) if isinstance(baseline.get("scoring"), Mapping) else {}
+            edited_score = edited.get("scoring", {}) if isinstance(edited.get("scoring"), Mapping) else {}
+            result: dict[str, Any] = {
+                "status": "ok",
+                "label": f"attention_head_ablation:{site}:L{int(layer)}H{int(head)}:{objective_bundle_key}",
+                "intended_bundle_key": objective_bundle_key,
+                "intended_term": objective_term,
+                "operator_recipe_id": f"diagnostic|attention_head_ablation|{site}|L{int(layer)}H{int(head)}",
+                "continuation_baseline": baseline["continuation"],
+                "continuation_candidate": edited["continuation"],
+                "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
+                "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"])),
+                "top1_margin_delta": round(float(edited.get("top1_margin", 0.0) or 0.0) - float(baseline.get("top1_margin", 0.0) or 0.0), 6),
+                "repetition_score_delta": round(
+                    float(edited.get("repetition_score", 0.0) or 0.0)
+                    - float(baseline.get("repetition_score", 0.0) or 0.0),
+                    6,
+                ),
+                "required_term_recall_delta": round(
+                    float(edited_score.get("required_term_recall") or 0.0)
+                    - float(baseline_score.get("required_term_recall") or 0.0),
+                    6,
+                ),
+                "required_term_span_progress_delta": round(
+                    float(edited_score.get("required_term_span_progress") or 0.0)
+                    - float(baseline_score.get("required_term_span_progress") or 0.0),
+                    6,
+                ),
+                "semantic_progress_delta": round(
+                    float(edited_score.get("semantic_progress_score") or 0.0)
+                    - float(baseline_score.get("semantic_progress_score") or 0.0),
+                    6,
+                ),
+            }
+            readout_metrics = self._first_token_target_readout_metrics(
+                baseline["first_logits"],
+                edited["first_logits"],
+                focus_terms=ownership_terms,
+            )
+            if readout_metrics:
+                result.update(readout_metrics)
+            result["actual_delta_class"] = self._classify_actual_delta_result(result)
+            return {
+                "diagnostic_only": True,
+                "diagnostic_family": "attention_head_ablation",
+                "recipe_name": "zero_candidate_cache_head",
+                "objective_bundle_key": objective_bundle_key,
+                "objective_term": objective_term,
+                "actuator_bundle_key": objective_bundle_key,
+                "status": "ok",
+                "actuator_class": result.get("actual_delta_class"),
+                "operator_recipe_id": result.get("operator_recipe_id"),
+                "target_mass_delta": result.get("target_mass_delta"),
+                "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+                "focus_rank_delta": result.get("focus_rank_delta"),
+                "rank_focus_delta": result.get("rank_focus_delta"),
+                "required_term_recall_delta": result.get("required_term_recall_delta"),
+                "required_term_span_progress_delta": result.get("required_term_span_progress_delta"),
+                "entropy_delta": result.get("entropy_delta"),
+                "top1_margin_delta": result.get("top1_margin_delta"),
+                "repeat_delta": result.get("repeat_flag_delta"),
+                "candidate_fingerprint": {
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "actuator_bundle_key": objective_bundle_key,
+                    "term": objective_term,
+                    "recipe_name": "zero_candidate_cache_head",
+                    "site": site,
+                    "layer": int(layer),
+                    "head": int(head),
+                    "op_kind": "attention_head_ablation",
+                    "edit_count": 0,
+                },
+                "eval_context_fingerprint": self._eval_context_fingerprint(
+                    max_new_tokens=3,
+                    top_k=8,
+                    max_edits_per_step=0,
+                    focus_terms=ownership_terms,
+                ),
+            }
+
+        rows: list[dict[str, Any]] = []
+        grouped_candidates = _kv_candidates_by_bundle()
+        for bundle_key, term in list(bundle_terms.items())[:2]:
+            source_span = _best_source_span(term)
+            source_selector = _source_selector_for_span(source_span)
+            for diagnostic_family, recipe_name, selector, span, alpha in (
+                (
+                    "resid_source_span",
+                    "resid_source_span_exact",
+                    source_selector,
+                    source_span,
+                    0.035,
+                ),
+                (
+                    "readout_local_boundary",
+                    "readout_boundary_self",
+                    {"mode": "last"},
+                    None,
+                    0.02,
+                ),
+            ):
+                edit = _make_resid_edit(
+                    surface=readout_surface,
+                    bundle_key=bundle_key,
+                    term=term,
+                    diagnostic_family=diagnostic_family,
+                    recipe_name=recipe_name,
+                    source_selector=selector,
+                    source_span=span,
+                    alpha=alpha,
+                )
+                result = self.replay_candidate_edits_actual_delta(
+                    [edit],
+                    max_new_tokens=3,
+                    top_k=8,
+                    label=f"{recipe_name}:{bundle_key}",
+                    ownership_terms=ownership_terms,
+                    intended_bundle_key=bundle_key,
+                    intended_term=term,
+                )
+                result["operator_recipe_id"] = str(edit.get("operator_recipe_id", "") or result.get("operator_recipe_id", ""))
+                result["operator_recipe_seed_key"] = str(edit.get("operator_recipe_seed_key", "") or "")
+                rows.append(
+                    _compact_actual_delta(
+                        result,
+                        diagnostic_family=diagnostic_family,
+                        recipe_name=recipe_name,
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                    )
+                )
+            head_candidate = next(
+                (
+                    item
+                    for item in grouped_candidates.get(bundle_key, [])
+                    if str(item.get("site", "") or "") == "v_cache"
+                ),
+                None,
+            ) or next(iter(grouped_candidates.get(bundle_key, [])), None)
+            if isinstance(head_candidate, Mapping):
+                ablation_row = _run_attention_head_ablation(
+                    head_candidate,
+                    objective_bundle_key=bundle_key,
+                    objective_term=term,
+                )
+                if ablation_row is not None:
+                    rows.append(ablation_row)
+
+        baseline = self._simulate_decode(max_new_tokens=1, top_k=8)
+        if isinstance(baseline, Mapping) and isinstance(baseline.get("first_logits"), torch.Tensor):
+            baseline_logits = baseline["first_logits"].detach().cpu().float()
+            vocab_size = int(baseline_logits.shape[-1])
+            for bundle_key, term in list(bundle_terms.items())[:2]:
+                edited_logits = baseline_logits.clone()
+                token_sequences = self._target_token_sequences([term], vocab_size=vocab_size)
+                token_ids = sorted({int(sequence.token_ids[0]) for sequence in token_sequences if sequence.token_ids})
+                for token_id in token_ids:
+                    if 0 <= token_id < vocab_size:
+                        edited_logits[token_id] += 0.25
+                readout_metrics = self._first_token_target_readout_metrics(
+                    baseline_logits,
+                    edited_logits,
+                    focus_terms=[term],
+                )
+                target_mass_delta = float(readout_metrics.get("target_mass_delta", 0.0) or 0.0) if readout_metrics else 0.0
+                target_top20_hit_delta = int(readout_metrics.get("target_top20_hit_delta", 0) or 0) if readout_metrics else 0
+                focus_rank_delta = int(readout_metrics.get("focus_rank_delta", 0) or 0) if readout_metrics else 0
+                rows.append(
+                    {
+                        "diagnostic_only": True,
+                        "diagnostic_family": "logit_adjacent",
+                        "recipe_name": "first_piece_soft_bias_probe",
+                        "objective_bundle_key": bundle_key,
+                        "objective_term": term,
+                        "actuator_bundle_key": None,
+                        "status": "ok",
+                        "actuator_class": "target_lift"
+                        if target_mass_delta > 0.00002 or target_top20_hit_delta > 0 or focus_rank_delta >= 6
+                        else "neutral",
+                        "operator_recipe_id": "diagnostic|logit_adjacent|first_piece_soft_bias_probe|bias0.2500",
+                        "target_mass_delta": round(float(target_mass_delta), 6),
+                        "target_top20_hit_delta": int(target_top20_hit_delta),
+                        "focus_rank_delta": int(focus_rank_delta),
+                        "rank_focus_delta": int(readout_metrics.get("rank_focus_delta", 0) or 0) if readout_metrics else 0,
+                        "required_term_recall_delta": 0.0,
+                        "required_term_span_progress_delta": 0.0,
+                        "entropy_delta": None,
+                        "top1_margin_delta": None,
+                        "repeat_delta": 0,
+                        "candidate_fingerprint": {
+                            "bundle_key": bundle_key,
+                            "objective_bundle_key": bundle_key,
+                            "actuator_bundle_key": None,
+                            "term": term,
+                            "recipe_name": "first_piece_soft_bias_probe",
+                            "site": "logits",
+                            "op_kind": "diagnostic_logit_bias",
+                            "alpha": 0.25,
+                            "edit_count": 0,
+                        },
+                        "eval_context_fingerprint": self._eval_context_fingerprint(
+                            max_new_tokens=1,
+                            top_k=8,
+                            max_edits_per_step=0,
+                            focus_terms=[term],
+                        ),
+                    }
+                )
+        return rows
+
+    def _run_bridge_eval_from_packet(
+        self: HookedTransformerWorkerRuntime,
+        *,
+        packet: Mapping[str, Any],
+        strategy_hints: Mapping[str, Any],
+    ) -> None:
+        forced_state["bridge_eval_packet_snapshot"] = None
+        shadow_candidates, shadow_bundle_keys = _build_bridge_eval_shadow_candidates(self, strategy_hints)
+        forced_state["bridge_eval_shadow_candidates"] = tuple(dict(item) for item in shadow_candidates)
+        forced_state["bridge_eval_shadow_bundle_keys"] = tuple(str(item) for item in shadow_bundle_keys if str(item))
+        forced_state["bridge_eval_active"] = True
+        forced_state["bridge_eval_locked_step"] = int(packet.get("step", 0) or 0)
+        frontier_snapshot = _bridge_frontier_snapshot(strategy_hints)
+        try:
+            bridge_eval_recipe_specs = _focused_bridge_eval_recipe_specs()
+            replay_bundle_keys = [
+                str(item)
+                for item in _candidate_bundle_keys(strategy_hints.get("kv_candidate_edits"))
+                if str(item)
+            ]
+            replay_bundle_keys.extend(
+                [
+                    str(item)
+                    for item in forced_state.get("bridge_eval_shadow_bundle_keys", ())
+                    if str(item) and str(item) not in replay_bundle_keys
+                ]
+            )
+            if not replay_bundle_keys:
+                replay_bundle_keys = [
+                    str(item)
+                    for item in (
+                        strategy_hints.get("selected_bundle_key"),
+                        strategy_hints.get("challenger_bundle_key"),
+                        strategy_hints.get("base_winner_bundle_key"),
+                    )
+                    if item not in (None, "") and str(item)
+                ]
+            replay_summary = self.replay_operator_recipe_matrix(
+                bundle_keys=replay_bundle_keys,
+                recipe_specs=bridge_eval_recipe_specs,
+            )
+            forced_state["bridge_eval_last_replay_summary"] = replay_summary
+            recommendations = replay_summary.get("bridge_plan_recommendations") if isinstance(replay_summary, Mapping) else None
+            ownership_items = (
+                replay_summary.get("operator_recipe_bundle_ownership")
+                if isinstance(replay_summary, Mapping)
+                else None
+            )
+            objective_class_counts: dict[str, dict[str, int]] = {}
+            bridge_eval_matrix: list[dict[str, Any]] = []
+            if isinstance(ownership_items, SequenceABC) and not isinstance(ownership_items, (str, bytes, bytearray)):
+                for item in ownership_items:
+                    if not isinstance(item, Mapping):
+                        continue
+                    objective_key = str(item.get("intended_bundle_key", "") or "")
+                    actuator_class = str(item.get("actuator_class", "") or "")
+                    if not objective_key or not actuator_class:
+                        continue
+                    bucket = objective_class_counts.setdefault(objective_key, {})
+                    bucket[actuator_class] = int(bucket.get(actuator_class, 0)) + 1
+                    candidate_fingerprint = (
+                        dict(item.get("best_eval_candidate_fingerprint"))
+                        if isinstance(item.get("best_eval_candidate_fingerprint"), Mapping)
+                        else {}
+                    )
+                    eval_context_fingerprint = (
+                        dict(item.get("best_eval_context_fingerprint"))
+                    if isinstance(item.get("best_eval_context_fingerprint"), Mapping)
+                        else {}
+                    )
+                    bridge_eval_matrix.append(
+                        {
+                            "objective_bundle_key": objective_key,
+                            "objective_term": str(item.get("intended_term", "") or "") or None,
+                            "actuator_bundle_key": str(
+                                candidate_fingerprint.get("actuator_bundle_key", "") or item.get("intended_bundle_key", "") or ""
+                            )
+                            or None,
+                            "recipe_name": str(candidate_fingerprint.get("recipe_name", "") or "") or None,
+                            "operator_recipe_id": str(item.get("operator_recipe_id", "") or "") or None,
+                            "actuator_class": actuator_class,
+                            "realized_lift_bundle_key": str(item.get("realized_lift_bundle_key", "") or "") or None,
+                            "self_delta": round(float(item.get("self_delta", 0.0) or 0.0), 6),
+                            "cross_delta": round(float(item.get("cross_delta", 0.0) or 0.0), 6),
+                            "alignment_margin": round(float(item.get("alignment_margin", 0.0) or 0.0), 6),
+                            "entropy_delta": round(float(item.get("best_eval_entropy_delta", 0.0) or 0.0), 6),
+                            "top1_margin_delta": round(float(item.get("best_eval_top1_margin_delta", 0.0) or 0.0), 6),
+                            "repeat_delta": int(item.get("best_eval_repeat_flag_delta", 0) or 0),
+                            "repetition_score_delta": round(float(item.get("best_eval_repetition_score_delta", 0.0) or 0.0), 6),
+                            "required_term_recall_delta": round(float(item.get("best_eval_required_term_recall_delta", 0.0) or 0.0), 6),
+                            "required_term_span_progress_delta": round(float(item.get("best_eval_required_term_span_progress_delta", 0.0) or 0.0), 6),
+                            "target_mass_delta": round(float(item.get("best_eval_target_mass_delta", 0.0) or 0.0), 6),
+                            "target_top20_hit_delta": int(item.get("best_eval_target_top20_hit_delta", 0) or 0),
+                            "candidate_fingerprint": candidate_fingerprint,
+                            "eval_context_fingerprint": eval_context_fingerprint,
+                        }
+                    )
+            extra_operator_diagnostics = _bridge_eval_extra_operator_diagnostics(
+                self,
+                replay_bundle_keys=replay_bundle_keys,
+                strategy_hints=strategy_hints,
+            )
+            forced_state["bridge_eval_extra_operator_diagnostics"] = tuple(
+                dict(item) for item in extra_operator_diagnostics
+            )
+            preferred_objective_keys = [
+                str(item)
+                for item in (
+                    strategy_hints.get("selected_bundle_key"),
+                    strategy_hints.get("challenger_bundle_key"),
+                    strategy_hints.get("base_winner_bundle_key"),
+                )
+                if item not in (None, "") and str(item)
+            ]
+            unavailable_summary = _bridge_plan_unavailable_summary(
+                {
+                    "bundle_keys": replay_bundle_keys,
+                    "shadow_bundle_keys": [
+                        str(item)
+                        for item in forced_state.get("bridge_eval_shadow_bundle_keys", ())
+                        if str(item)
+                    ],
+                    "matrix": bridge_eval_matrix,
+                    "exception": None,
+                },
+                preferred_objective_keys=preferred_objective_keys,
+            )
+            forced_state["bridge_eval_summary"] = {
+                "bundle_keys": replay_bundle_keys,
+                "shadow_bundle_keys": [
+                    str(item)
+                    for item in forced_state.get("bridge_eval_shadow_bundle_keys", ())
+                    if str(item)
+                ],
+                "recipe_names": [
+                    str(item.get("recipe_name", "") or "")
+                    for item in bridge_eval_recipe_specs
+                    if isinstance(item, Mapping) and str(item.get("recipe_name", "") or "")
+                ],
+                "evaluations_count": (
+                    len(replay_summary.get("evaluations", ()))
+                    if isinstance(replay_summary, Mapping)
+                    and isinstance(replay_summary.get("evaluations"), SequenceABC)
+                    and not isinstance(replay_summary.get("evaluations"), (str, bytes, bytearray))
+                    else 0
+                ),
+                "ownership_count": (
+                    len(ownership_items)
+                    if isinstance(ownership_items, SequenceABC) and not isinstance(ownership_items, (str, bytes, bytearray))
+                    else 0
+                ),
+                "recommendation_count": (
+                    len(recommendations)
+                    if isinstance(recommendations, SequenceABC) and not isinstance(recommendations, (str, bytes, bytearray))
+                    else 0
+                ),
+                "recommendation_objectives": [
+                    str(item.get("objective_bundle_key", "") or "")
+                    for item in (recommendations or [])
+                    if isinstance(item, Mapping) and str(item.get("objective_bundle_key", "") or "")
+                ]
+                if isinstance(recommendations, SequenceABC) and not isinstance(recommendations, (str, bytes, bytearray))
+                else [],
+                "matrix": bridge_eval_matrix,
+                "objective_class_counts": objective_class_counts,
+                "extra_operator_diagnostics": [dict(item) for item in extra_operator_diagnostics],
+                "extra_operator_diagnostic_count": len(extra_operator_diagnostics),
+                "unavailable_reason": unavailable_summary.get("reason"),
+                "unavailable_objective_bundle_key": unavailable_summary.get("objective_bundle_key"),
+                "unavailable_objective_reasons": dict(unavailable_summary.get("objective_reasons", {})),
+                "context_drift": bool(unavailable_summary.get("context_drift", False)),
+                "exception": None,
+            }
+            forced_state["bridge_eval_summary"].update(
+                _diagnostic_evidence_ledger(forced_state["bridge_eval_summary"], strategy_hints)
+            )
+            if isinstance(recommendations, SequenceABC) and not isinstance(recommendations, (str, bytes, bytearray)):
+                objective_keys = [
+                    str(strategy_hints.get("selected_bundle_key", "") or ""),
+                    str(strategy_hints.get("challenger_bundle_key", "") or ""),
+                    str(strategy_hints.get("base_winner_bundle_key", "") or ""),
+                ]
+                chosen_report = None
+                for objective_key in objective_keys:
+                    if not objective_key:
+                        continue
+                    for item in recommendations:
+                        if not isinstance(item, Mapping):
+                            continue
+                        if str(item.get("objective_bundle_key", "") or "") == objective_key:
+                            chosen_report = dict(item)
+                            break
+                    if chosen_report is not None:
+                        break
+                if chosen_report is None and len(recommendations) == 1 and isinstance(recommendations[0], Mapping):
+                    chosen_report = dict(recommendations[0])
+                forced_state["bridge_plan_report"] = chosen_report
+        except Exception:
+            unavailable_summary = _bridge_plan_unavailable_summary(
+                {
+                    "bundle_keys": [],
+                    "shadow_bundle_keys": [],
+                    "matrix": [],
+                    "exception": "replay_operator_recipe_matrix_failed",
+                }
+            )
+            forced_state["bridge_plan_report"] = None
+            forced_state["bridge_eval_summary"] = {
+                "bundle_keys": [],
+                "shadow_bundle_keys": [],
+                "recipe_names": [
+                    str(item.get("recipe_name", "") or "")
+                    for item in _focused_bridge_eval_recipe_specs()
+                    if isinstance(item, Mapping) and str(item.get("recipe_name", "") or "")
+                ],
+                "matrix": [],
+                "evaluations_count": 0,
+                "ownership_count": 0,
+                "recommendation_count": 0,
+                "recommendation_objectives": [],
+                "objective_class_counts": {},
+                "extra_operator_diagnostics": [],
+                "extra_operator_diagnostic_count": 0,
+                "unavailable_reason": unavailable_summary.get("reason"),
+                "unavailable_objective_bundle_key": unavailable_summary.get("objective_bundle_key"),
+                "unavailable_objective_reasons": dict(unavailable_summary.get("objective_reasons", {})),
+                "context_drift": bool(unavailable_summary.get("context_drift", False)),
+                "exception": "replay_operator_recipe_matrix_failed",
+            }
+            forced_state["bridge_eval_summary"].update(
+                _diagnostic_evidence_ledger(forced_state["bridge_eval_summary"], strategy_hints)
+            )
+            forced_state["bridge_eval_extra_operator_diagnostics"] = ()
+            self._operator_bridge_plan_table = {}
+            forced_state["bridge_eval_last_replay_summary"] = None
+        finally:
+            forced_state["bridge_eval_active"] = False
+        replay_snapshot = forced_state.get("bridge_eval_packet_snapshot")
+        if isinstance(replay_snapshot, Mapping):
+            diff_keys = [
+                key
+                for key in sorted(set(frontier_snapshot) | set(replay_snapshot))
+                if frontier_snapshot.get(key) != replay_snapshot.get(key)
+            ]
+            forced_state["bridge_plan_packet_invariant_ok"] = not diff_keys
+            forced_state["bridge_plan_packet_invariant_diff"] = tuple(diff_keys)
+        else:
+            forced_state["bridge_plan_packet_invariant_ok"] = None
+            forced_state["bridge_plan_packet_invariant_diff"] = ("replay_snapshot_missing",)
+
+    def _compact_swap_result(result: Mapping[str, Any], *, source_label: str) -> dict[str, Any]:
+        return {
+            "source_label": source_label,
+            "status": str(result.get("status", "") or ""),
+            "label": str(result.get("label", "") or ""),
+            "intended_bundle_key": result.get("intended_bundle_key"),
+            "intended_term": result.get("intended_term"),
+            "actual_delta_class": result.get("actual_delta_class"),
+            "realized_lift_bundle_key": result.get("realized_lift_bundle_key"),
+            "target_mass_delta": result.get("target_mass_delta"),
+            "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+            "required_term_recall_delta": result.get("required_term_recall_delta"),
+            "required_term_span_progress_delta": result.get("required_term_span_progress_delta"),
+            "candidate_fingerprint": dict(result.get("candidate_fingerprint", {}))
+            if isinstance(result.get("candidate_fingerprint"), Mapping)
+            else {},
+            "eval_context_fingerprint": dict(result.get("eval_context_fingerprint", {}))
+            if isinstance(result.get("eval_context_fingerprint"), Mapping)
+            else {},
+        }
+
+    def _candidate_swap_comparison(
+        self: HookedTransformerWorkerRuntime,
+        *,
+        pre_summary: Mapping[str, Any],
+        post_summary: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        def _evaluations_by_label(summary: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+            raw_evaluations = summary.get("evaluations")
+            if not isinstance(raw_evaluations, SequenceABC) or isinstance(raw_evaluations, (str, bytes, bytearray)):
+                return {}
+            items: dict[str, dict[str, Any]] = {}
+            for item in raw_evaluations:
+                if not isinstance(item, Mapping):
+                    continue
+                label = str(item.get("label", "") or "")
+                edits = item.get("candidate_edits")
+                if not label or not isinstance(edits, SequenceABC) or isinstance(edits, (str, bytes, bytearray)) or not edits:
+                    continue
+                if str(item.get("status", "") or "") != "ok":
+                    continue
+                items.setdefault(label, dict(item))
+            return items
+
+        pre_items = _evaluations_by_label(pre_summary)
+        post_items = _evaluations_by_label(post_summary)
+        preferred_labels = [
+            label
+            for label in sorted(set(pre_items) & set(post_items))
+            if any(
+                marker in label
+                for marker in (
+                    "baseline_span_mean:pair:",
+                    "term_token:pair:",
+                    "term_fused:pair:",
+                    "term_centered_pm1:pair:",
+                    "term_centered_pm1_minus_stealer_l025:pair:",
+                    "term_centered_pm1_orthogonal_stealer:pair:",
+                )
+            )
+        ][:6]
+        if not preferred_labels:
+            preferred_labels = sorted(set(pre_items) & set(post_items))[:6]
+
+        saved_segments = [(segment.kind, tuple(segment.token_ids)) for segment in self._segments]
+        saved_steps = int(self._steps)
+        saved_last_packet = self._last_packet
+        segment_cls = type(self._segments[0]) if self._segments else None
+
+        def _restore(snapshot: Sequence[tuple[str, Sequence[int]]], steps: int) -> None:
+            if segment_cls is None:
+                return
+            self._segments = [segment_cls(kind=str(kind), token_ids=[int(token) for token in token_ids]) for kind, token_ids in snapshot]
+            self._steps = int(steps)
+            self._last_packet = None
+
+        def _run_item(item: Mapping[str, Any], *, target_context: str, source_label: str) -> dict[str, Any]:
+            edits = [dict(edit) for edit in item.get("candidate_edits", ()) if isinstance(edit, Mapping)]
+            result = self.replay_candidate_edits_actual_delta(
+                edits,
+                max_new_tokens=3,
+                top_k=8,
+                max_edits_per_step_override=2,
+                label=f"candidate_swap:{source_label}:to_{target_context}:{item.get('label')}",
+                ownership_terms=item.get("focus_terms") if isinstance(item.get("focus_terms"), SequenceABC) else None,
+                intended_bundle_key=str(item.get("intended_bundle_key", "") or "") or None,
+                intended_term=str(item.get("intended_term", "") or "") or None,
+                contrast_partner_bundle_key=str(item.get("contrast_partner_bundle_key", "") or "") or None,
+                contrast_partner_term=str(item.get("contrast_partner_term", "") or "") or None,
+            )
+            return _compact_swap_result(result, source_label=source_label)
+
+        rows: list[dict[str, Any]] = []
+        try:
+            pre_snapshot = [
+                (str(kind), tuple(int(token) for token in token_ids))
+                for kind, token_ids in forced_state.get("pre_step_segments", ())
+                if str(kind)
+            ]
+            pre_steps = int(forced_state.get("pre_step_steps", 0) or 0)
+            for label in preferred_labels:
+                pre_item = pre_items[label]
+                post_item = post_items[label]
+                _restore(pre_snapshot, pre_steps)
+                post_in_pre = _run_item(post_item, target_context="pre", source_label="post")
+                _restore(saved_segments, saved_steps)
+                pre_in_post = _run_item(pre_item, target_context="post", source_label="pre")
+                rows.append(
+                    {
+                        "label": label,
+                        "pre_original_class": pre_item.get("actual_delta_class"),
+                        "post_original_class": post_item.get("actual_delta_class"),
+                        "post_candidate_in_pre_context": post_in_pre,
+                        "pre_candidate_in_post_context": pre_in_post,
+                    }
+                )
+        finally:
+            _restore(saved_segments, saved_steps)
+            self._last_packet = saved_last_packet
+
+        return {
+            "matched_label_count": len(preferred_labels),
+            "labels": preferred_labels,
+            "rows": rows,
+        }
+
     def _forced_build_controller_packet(self: HookedTransformerWorkerRuntime) -> dict[str, Any]:
         packet = dict(original_build_controller_packet())
         if normalized_packet_mode in {"directscan", "fixed_candidate"}:
@@ -1680,13 +3396,6 @@ def run_readout_escape_replay_harness(
                 live_candidates.extend(normalized_items)
             if not live_candidates:
                 raise ValueError("directscan replay did not produce bundle candidates")
-            if normalized_packet_mode == "fixed_candidate":
-                cached = forced_state.get("cached_strategy_hints")
-                if isinstance(cached, Mapping):
-                    strategy_hints.update(dict(cached))
-                    packet["strategy_hints"] = strategy_hints
-                    packet["control_phase_hint"] = "readout_escape"
-                    return packet
             base_bundle_key = str(strategy_hints.get("base_winner_bundle_key", "") or "")
             challenger_bundle_key = str(strategy_hints.get("challenger_bundle_key", "") or "")
             if not challenger_bundle_key:
@@ -1705,6 +3414,36 @@ def run_readout_escape_replay_harness(
                     strategy_hints.setdefault("base_winner_bundle_key", base_bundle_key)
             forced_state["base_bundle_key"] = base_bundle_key
             forced_state["challenger_bundle_key"] = challenger_bundle_key or base_bundle_key
+            frontier_snapshot = _bridge_frontier_snapshot(strategy_hints)
+            if bool(forced_state.get("bridge_eval_active", False)):
+                shadow_candidates = [
+                    dict(item)
+                    for item in forced_state.get("bridge_eval_shadow_candidates", ())
+                    if isinstance(item, Mapping)
+                ]
+                if shadow_candidates:
+                    merged_candidates = list(strategy_hints.get("kv_candidate_edits", []))
+                    seen_bundle_keys = set(_candidate_bundle_keys(merged_candidates))
+                    for candidate in shadow_candidates:
+                        merged_candidates.append(dict(candidate))
+                        bundle_key = str(candidate.get("bundle_key", "") or "")
+                        if bundle_key:
+                            seen_bundle_keys.add(bundle_key)
+                    strategy_hints["kv_candidate_edits"] = merged_candidates
+                    strategy_hints["bridge_eval_shadow_bundle_keys"] = [
+                        str(item) for item in forced_state.get("bridge_eval_shadow_bundle_keys", ()) if str(item)
+                    ]
+                forced_state["bridge_eval_packet_snapshot"] = dict(frontier_snapshot)
+                packet["strategy_hints"] = strategy_hints
+                packet["control_phase_hint"] = "readout_escape"
+                return packet
+            if normalized_packet_mode == "fixed_candidate":
+                cached = forced_state.get("cached_strategy_hints")
+                if isinstance(cached, Mapping):
+                    strategy_hints.update(dict(cached))
+                    packet["strategy_hints"] = strategy_hints
+                    packet["control_phase_hint"] = "readout_escape"
+                    return packet
             if normalized_packet_mode == "fixed_candidate":
                 cached_keys = (
                     "kv_candidate_edits",
@@ -1730,6 +3469,152 @@ def run_readout_escape_replay_harness(
                     for key in cached_keys
                     if strategy_hints.get(key) not in (None, "")
                 }
+            if forced_state.get("bridge_eval_summary") is None:
+                _run_bridge_eval_from_packet(self, packet=packet, strategy_hints=strategy_hints)
+                if isinstance(forced_state.get("bridge_eval_last_replay_summary"), Mapping):
+                    forced_state["bridge_eval_pre_replay_summary"] = dict(forced_state["bridge_eval_last_replay_summary"])
+            elif (
+                forced_state.get("bridge_eval_poststep_comparison") is None
+                and int(packet.get("step", 0) or 0) > int(forced_state.get("bridge_eval_locked_step", 0) or 0)
+            ):
+                saved_bridge_state = {
+                    "bridge_plan_report": forced_state.get("bridge_plan_report"),
+                    "bridge_plan_packet_invariant_ok": forced_state.get("bridge_plan_packet_invariant_ok"),
+                    "bridge_plan_packet_invariant_diff": forced_state.get("bridge_plan_packet_invariant_diff"),
+                    "bridge_eval_summary": forced_state.get("bridge_eval_summary"),
+                    "bridge_eval_shadow_candidates": forced_state.get("bridge_eval_shadow_candidates"),
+                    "bridge_eval_shadow_bundle_keys": forced_state.get("bridge_eval_shadow_bundle_keys"),
+                    "bridge_eval_active": forced_state.get("bridge_eval_active"),
+                    "bridge_eval_packet_snapshot": forced_state.get("bridge_eval_packet_snapshot"),
+                    "bridge_eval_locked_step": forced_state.get("bridge_eval_locked_step"),
+                }
+                _run_bridge_eval_from_packet(self, packet=packet, strategy_hints=strategy_hints)
+                comparison_summary = forced_state.get("bridge_eval_summary")
+                if isinstance(comparison_summary, Mapping):
+                    forced_state["bridge_eval_poststep_comparison"] = {
+                        "locked_step": int(forced_state.get("bridge_eval_locked_step", 0) or 0),
+                        "context_drift": bool(comparison_summary.get("context_drift", False)),
+                        "objective_class_counts": dict(comparison_summary.get("objective_class_counts", {}))
+                        if isinstance(comparison_summary.get("objective_class_counts"), Mapping)
+                        else {},
+                        "matrix": [
+                            dict(item)
+                            for item in comparison_summary.get("matrix", ())
+                            if isinstance(item, Mapping)
+                        ][:8]
+                        if isinstance(comparison_summary.get("matrix"), SequenceABC)
+                        and not isinstance(comparison_summary.get("matrix"), (str, bytes, bytearray))
+                        else [],
+                    }
+                    pre_replay_summary = forced_state.get("bridge_eval_pre_replay_summary")
+                    post_replay_summary = forced_state.get("bridge_eval_last_replay_summary")
+                    if isinstance(pre_replay_summary, Mapping) and isinstance(post_replay_summary, Mapping):
+                        forced_state["bridge_eval_candidate_swap_comparison"] = _candidate_swap_comparison(
+                            self,
+                            pre_summary=pre_replay_summary,
+                            post_summary=post_replay_summary,
+                        )
+                forced_state.update(saved_bridge_state)
+            bridge_plan_report = forced_state.get("bridge_plan_report")
+            if isinstance(bridge_plan_report, Mapping):
+                strategy_hints["bridge_plan_available"] = True
+                strategy_hints["bridge_plan_required"] = bool(bridge_plan_report.get("bridge_required", True))
+                strategy_hints["bridge_plan_report"] = dict(bridge_plan_report)
+                for source_key, target_key in (
+                    ("objective_bundle_key", "bridge_plan_objective_bundle_key"),
+                    ("objective_term", "bridge_plan_objective_term"),
+                    ("actuator_bundle_key", "bridge_plan_actuator_bundle_key"),
+                    ("actuator_term", "bridge_plan_actuator_term"),
+                    ("operator_recipe_id", "bridge_plan_recipe_id"),
+                    ("actuator_class", "bridge_plan_actuator_class"),
+                    ("bridge_plan_reason", "bridge_plan_reason"),
+                ):
+                    if bridge_plan_report.get(source_key) not in (None, ""):
+                        strategy_hints[target_key] = bridge_plan_report.get(source_key)
+            if forced_state.get("bridge_plan_packet_invariant_ok") is not None:
+                strategy_hints["bridge_plan_packet_invariant_ok"] = bool(forced_state.get("bridge_plan_packet_invariant_ok"))
+            diff_keys = forced_state.get("bridge_plan_packet_invariant_diff")
+            if isinstance(diff_keys, SequenceABC) and not isinstance(diff_keys, (str, bytes, bytearray)) and diff_keys:
+                strategy_hints["bridge_plan_packet_invariant_diff"] = [str(item) for item in diff_keys if str(item)]
+            bridge_eval_summary = forced_state.get("bridge_eval_summary")
+            if isinstance(bridge_eval_summary, Mapping):
+                strategy_hints["bridge_plan_recommendation_count"] = int(bridge_eval_summary.get("recommendation_count", 0) or 0)
+                strategy_hints["bridge_eval_evaluations_count"] = int(bridge_eval_summary.get("evaluations_count", 0) or 0)
+                strategy_hints["bridge_eval_ownership_count"] = int(bridge_eval_summary.get("ownership_count", 0) or 0)
+                replay_bundle_keys = bridge_eval_summary.get("bundle_keys")
+                if isinstance(replay_bundle_keys, SequenceABC) and not isinstance(replay_bundle_keys, (str, bytes, bytearray)):
+                    strategy_hints["bridge_eval_bundle_keys"] = [str(item) for item in replay_bundle_keys if str(item)]
+                recommendation_objectives = bridge_eval_summary.get("recommendation_objectives")
+                shadow_bundle_keys = bridge_eval_summary.get("shadow_bundle_keys")
+                if isinstance(shadow_bundle_keys, SequenceABC) and not isinstance(shadow_bundle_keys, (str, bytes, bytearray)):
+                    strategy_hints["bridge_eval_shadow_bundle_keys"] = [str(item) for item in shadow_bundle_keys if str(item)]
+                recipe_names = bridge_eval_summary.get("recipe_names")
+                if isinstance(recipe_names, SequenceABC) and not isinstance(recipe_names, (str, bytes, bytearray)):
+                    strategy_hints["bridge_eval_recipe_names"] = [str(item) for item in recipe_names if str(item)]
+                if isinstance(recommendation_objectives, SequenceABC) and not isinstance(recommendation_objectives, (str, bytes, bytearray)):
+                    strategy_hints["bridge_plan_recommendation_objectives"] = [
+                        str(item) for item in recommendation_objectives if str(item)
+                    ]
+                objective_class_counts = bridge_eval_summary.get("objective_class_counts")
+                if isinstance(objective_class_counts, Mapping):
+                    strategy_hints["bridge_eval_objective_class_counts"] = {
+                        str(key): {
+                            str(inner_key): int(inner_value)
+                            for inner_key, inner_value in dict(value).items()
+                            if str(inner_key)
+                        }
+                        for key, value in objective_class_counts.items()
+                        if isinstance(value, Mapping) and str(key)
+                    }
+                strategy_hints["bridge_eval_extra_operator_diagnostic_count"] = int(
+                    bridge_eval_summary.get("extra_operator_diagnostic_count", 0) or 0
+                )
+                strategy_hints["diagnostic_evidence_ledger_count"] = int(
+                    bridge_eval_summary.get("diagnostic_evidence_ledger_count", 0) or 0
+                )
+                diagnostic_ledger = bridge_eval_summary.get("diagnostic_evidence_ledger")
+                if isinstance(diagnostic_ledger, SequenceABC) and not isinstance(diagnostic_ledger, (str, bytes, bytearray)):
+                    strategy_hints["diagnostic_evidence_ledger"] = [
+                        dict(item) for item in diagnostic_ledger[:24] if isinstance(item, Mapping)
+                    ]
+                bundle_diagnostic_status = bridge_eval_summary.get("bundle_diagnostic_status")
+                if isinstance(bundle_diagnostic_status, Mapping):
+                    strategy_hints["bundle_diagnostic_status"] = {
+                        str(key): dict(value)
+                        for key, value in bundle_diagnostic_status.items()
+                        if str(key) and isinstance(value, Mapping)
+                    }
+                for source_key in (
+                    "diagnostic_frontier_bundle_key",
+                    "diagnostic_frontier_next_evidence",
+                    "diagnostic_frontier_request",
+                    "diagnostic_frontier_reason_text",
+                ):
+                    if bridge_eval_summary.get(source_key) not in (None, ""):
+                        strategy_hints[source_key] = bridge_eval_summary.get(source_key)
+                diagnostic_frontier_status = bridge_eval_summary.get("diagnostic_frontier_status")
+                if isinstance(diagnostic_frontier_status, Mapping):
+                    strategy_hints["diagnostic_frontier_status"] = dict(diagnostic_frontier_status)
+                unavailable_reason = bridge_eval_summary.get("unavailable_reason")
+                if unavailable_reason not in (None, ""):
+                    strategy_hints["bridge_plan_unavailable_reason"] = str(unavailable_reason)
+                unavailable_objective_bundle_key = bridge_eval_summary.get("unavailable_objective_bundle_key")
+                if unavailable_objective_bundle_key not in (None, ""):
+                    strategy_hints["bridge_plan_unavailable_objective_bundle_key"] = str(unavailable_objective_bundle_key)
+                unavailable_objective_reasons = bridge_eval_summary.get("unavailable_objective_reasons")
+                if isinstance(unavailable_objective_reasons, Mapping):
+                    strategy_hints["bridge_plan_unavailable_objective_reasons"] = {
+                        str(key): str(value)
+                        for key, value in unavailable_objective_reasons.items()
+                        if str(key) and str(value)
+                    }
+                if bridge_eval_summary.get("context_drift") is not None:
+                    strategy_hints["bridge_eval_context_drift"] = bool(bridge_eval_summary.get("context_drift"))
+                if forced_state.get("bridge_eval_locked_step") is not None:
+                    strategy_hints["bridge_eval_locked_step"] = int(forced_state.get("bridge_eval_locked_step", 0) or 0)
+                exception_text = str(bridge_eval_summary.get("exception", "") or "")
+                if exception_text:
+                    strategy_hints["bridge_eval_exception"] = exception_text
             packet["strategy_hints"] = strategy_hints
             packet["control_phase_hint"] = "readout_escape"
             return packet
@@ -1800,6 +3685,12 @@ def run_readout_escape_replay_harness(
 
     selection_events = [event for event in memory_logger.events if event.get("event") == "controller_selection"]
     first_selection_event = dict(selection_events[0]) if selection_events else None
+    controller_step_views = _controller_step_views(memory_logger.events)
+    bridge_visible_step_views = tuple(
+        dict(item)
+        for item in controller_step_views
+        if bool(item.get("bridge_visible"))
+    )
     result = ReadoutEscapeReplayHarnessResult(
         seed=seed,
         task_id=env.task_id,
@@ -1830,6 +3721,20 @@ def run_readout_escape_replay_harness(
         sidecar_suggested_bundle_key=None
         if first_selection_event is None
         else first_selection_event.get("sidecar_suggested_bundle_key"),
+        readout_analyzer_name=None
+        if first_selection_event is None
+        else first_selection_event.get("readout_analyzer_name"),
+        readout_analyzer_feature_backend=None
+        if first_selection_event is None
+        else first_selection_event.get("readout_analyzer_feature_backend"),
+        readout_analyzer_sae_status=None
+        if first_selection_event is None
+        else first_selection_event.get("readout_analyzer_sae_status"),
+        readout_analyzer_sae_feature_hint_count=int(
+            0
+            if first_selection_event is None
+            else first_selection_event.get("readout_analyzer_sae_feature_hint_count", 0)
+        ),
         gate_report_frontier_bundle_key=None
         if first_selection_event is None
         else first_selection_event.get("gate_report_frontier_bundle_key"),
@@ -1845,6 +3750,232 @@ def run_readout_escape_replay_harness(
                 [] if first_selection_event is None else first_selection_event.get("controller_rejected_signals", [])
             )
         ),
+        controller_objective_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("controller_objective_bundle_key"),
+        controller_step_actuator_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("controller_step_actuator_bundle_key"),
+        controller_plan_mode=None
+        if first_selection_event is None
+        else first_selection_event.get("controller_plan_mode"),
+        controller_why_not_apply=None
+        if first_selection_event is None
+        else first_selection_event.get("controller_why_not_apply"),
+        controller_shadow_proposal_count=int(
+            0 if first_selection_event is None else first_selection_event.get("controller_shadow_proposal_count", 0)
+        ),
+        bridge_plan_objective_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("bridge_plan_objective_bundle_key"),
+        bridge_plan_actuator_bundle_key=None
+        if first_selection_event is None
+        else first_selection_event.get("bridge_plan_actuator_bundle_key"),
+        bridge_plan_reason=None
+        if first_selection_event is None
+        else first_selection_event.get("bridge_plan_reason"),
+        bridge_plan_unavailable_reason=(
+            None
+            if first_selection_event is None
+            else first_selection_event.get("bridge_plan_unavailable_reason")
+        ),
+        bridge_plan_unavailable_objective_bundle_key=(
+            None
+            if first_selection_event is None
+            else first_selection_event.get("bridge_plan_unavailable_objective_bundle_key")
+        ),
+        bridge_plan_unavailable_objective_reasons={
+            str(key): str(value)
+            for key, value in (
+                (
+                    first_selection_event.get("bridge_plan_unavailable_objective_reasons", {}).items()
+                    if first_selection_event is not None
+                    and isinstance(first_selection_event.get("bridge_plan_unavailable_objective_reasons"), Mapping)
+                    else ()
+                )
+            )
+            if str(key) and str(value)
+        },
+        bridge_eval_context_drift=bool(
+            (
+                forced_state.get("bridge_eval_summary", {}).get("context_drift", False)
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else False
+            )
+        ),
+        bridge_eval_locked_step=(
+            None
+            if forced_state.get("bridge_eval_locked_step") is None
+            else int(forced_state.get("bridge_eval_locked_step", 0) or 0)
+        ),
+        bridge_plan_used=bool(
+            False if first_selection_event is None else first_selection_event.get("bridge_plan_used", False)
+        ),
+        bridge_plan_packet_invariant_ok=(
+            None
+            if forced_state.get("bridge_plan_packet_invariant_ok") is None
+            else bool(forced_state.get("bridge_plan_packet_invariant_ok"))
+        ),
+        bridge_plan_packet_invariant_diff=tuple(
+            str(item)
+            for item in forced_state.get("bridge_plan_packet_invariant_diff", ())
+            if str(item)
+        ),
+        bridge_plan_recommendation_count=int(
+            (
+                forced_state.get("bridge_eval_summary", {}).get("recommendation_count", 0)
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else 0
+            )
+            or 0
+        ),
+        bridge_plan_recommendation_objectives=tuple(
+            str(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("recommendation_objectives", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if str(item)
+        ),
+        bridge_eval_shadow_bundle_keys=tuple(
+            str(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("shadow_bundle_keys", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if str(item)
+        ),
+        bridge_eval_recipe_names=tuple(
+            str(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("recipe_names", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if str(item)
+        ),
+        bridge_eval_matrix=tuple(
+            dict(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("matrix", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if isinstance(item, Mapping)
+        ),
+        bridge_eval_objective_class_counts={
+            str(key): {
+                str(inner_key): int(inner_value)
+                for inner_key, inner_value in dict(value).items()
+                if str(inner_key)
+            }
+            for key, value in (
+                forced_state.get("bridge_eval_summary", {}).get("objective_class_counts", {}).items()
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                and isinstance(forced_state.get("bridge_eval_summary", {}).get("objective_class_counts"), Mapping)
+                else ()
+            )
+            if isinstance(value, Mapping) and str(key)
+        },
+        bridge_eval_evaluations_count=int(
+            (
+                forced_state.get("bridge_eval_summary", {}).get("evaluations_count", 0)
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else 0
+            )
+            or 0
+        ),
+        bridge_eval_ownership_count=int(
+            (
+                forced_state.get("bridge_eval_summary", {}).get("ownership_count", 0)
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else 0
+            )
+            or 0
+        ),
+        bridge_eval_exception=(
+            None
+            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+            else (
+                None
+                if not str(forced_state.get("bridge_eval_summary", {}).get("exception", "") or "")
+                else str(forced_state.get("bridge_eval_summary", {}).get("exception", "") or "")
+            )
+        ),
+        diagnostic_evidence_ledger=tuple(
+            dict(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("diagnostic_evidence_ledger", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if isinstance(item, Mapping)
+        ),
+        diagnostic_evidence_ledger_count=int(
+            (
+                forced_state.get("bridge_eval_summary", {}).get("diagnostic_evidence_ledger_count", 0)
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else 0
+            )
+            or 0
+        ),
+        bundle_diagnostic_status={
+            str(key): dict(value)
+            for key, value in (
+                forced_state.get("bridge_eval_summary", {}).get("bundle_diagnostic_status", {}).items()
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                and isinstance(forced_state.get("bridge_eval_summary", {}).get("bundle_diagnostic_status"), Mapping)
+                else ()
+            )
+            if str(key) and isinstance(value, Mapping)
+        },
+        diagnostic_frontier_bundle_key=(
+            None
+            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_bundle_key") in (None, "")
+            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_bundle_key"))
+        ),
+        diagnostic_frontier_next_evidence=(
+            None
+            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_next_evidence") in (None, "")
+            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_next_evidence"))
+        ),
+        diagnostic_frontier_request=(
+            None
+            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_request") in (None, "")
+            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_request"))
+        ),
+        diagnostic_frontier_reason_text=(
+            None
+            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_reason_text") in (None, "")
+            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_reason_text"))
+        ),
+        bridge_eval_extra_operator_diagnostics=tuple(
+            dict(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("extra_operator_diagnostics", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if isinstance(item, Mapping)
+        ),
+        bridge_eval_poststep_comparison=(
+            dict(forced_state.get("bridge_eval_poststep_comparison"))
+            if isinstance(forced_state.get("bridge_eval_poststep_comparison"), Mapping)
+            else None
+        ),
+        bridge_eval_candidate_swap_comparison=(
+            dict(forced_state.get("bridge_eval_candidate_swap_comparison"))
+            if isinstance(forced_state.get("bridge_eval_candidate_swap_comparison"), Mapping)
+            else None
+        ),
+        controller_step_views=controller_step_views,
+        bridge_visible_step_views=bridge_visible_step_views,
         forced_base_bundle_key=str(forced_state.get("base_bundle_key", "") or ""),
         forced_challenger_bundle_key=str(forced_state.get("challenger_bundle_key", "") or ""),
         first_selection_event=first_selection_event,

@@ -46,6 +46,7 @@ from .sidecar import (
     ReadoutSidecarSiteCapture,
     build_heuristic_readout_analyzer,
     build_heuristic_readout_sidecar_analyzer,
+    build_sae_feature_emitter_readout_analyzer,
     normalize_readout_analyzer_hints,
     normalize_readout_sidecar_hints,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "ReadoutSidecarSiteCapture",
     "build_heuristic_readout_analyzer",
     "build_heuristic_readout_sidecar_analyzer",
+    "build_sae_feature_emitter_readout_analyzer",
     "Op",
     "PolicyViolation",
     "PromptControllerClient",

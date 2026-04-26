@@ -382,15 +382,26 @@ def _extract_controller_memory(command: Any) -> tuple[Mapping[str, Any] | None, 
     for key in (
         "noop_reason",
         "apply_block_reason",
+        "apply_kind",
         "surface_family_key",
         "focus_term",
+        "objective_bundle_key",
+        "step_actuator_bundle_key",
+        "blocked_by",
+        "next_evidence_needed",
+        "why_not_apply",
         "transfer_confidence",
         "same_family_escalation_risk",
         "finish_budget_reserved",
+        "production_apply_allowed",
+        "certified_for_apply",
         "evidence_bullets",
     ):
         if meta.get(key) is not None and key not in normalized:
             normalized[key] = meta.get(key)
+    shadow_proposals = meta.get("shadow_proposals")
+    if shadow_proposals is not None and "shadow_proposals" not in normalized:
+        normalized["shadow_proposals"] = shadow_proposals
     if "surface_family_key" not in normalized:
         derived_surface_family_key = _command_surface_family_key(command)
         if derived_surface_family_key is not None:
@@ -528,6 +539,307 @@ def _dedup_text_items(*groups: Any) -> list[str]:
     return items
 
 
+def _optional_meta_text(meta: Mapping[str, Any], key: str) -> str | None:
+    value = meta.get(key)
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalized_shadow_proposals(meta: Mapping[str, Any]) -> list[dict[str, Any]]:
+    raw = meta.get("shadow_proposals")
+    if not isinstance(raw, SequenceABC) or isinstance(raw, (str, bytes, bytearray)):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for item in raw[:3]:
+        if not isinstance(item, Mapping):
+            continue
+        proposal: dict[str, Any] = {}
+        for key in (
+            "kind",
+            "bundle_key",
+            "objective_bundle_key",
+            "actuator_bundle_key",
+            "term",
+            "reason",
+            "decision",
+            "status",
+        ):
+            if item.get(key) not in (None, ""):
+                proposal[key] = item.get(key)
+        if proposal:
+            normalized.append(proposal)
+    return normalized
+
+
+def _recent_effect_summary(packet: Mapping[str, Any]) -> Mapping[str, Any]:
+    summary = packet.get("recent_effect_summary")
+    if isinstance(summary, Mapping):
+        return summary
+    return {}
+
+
+def _recent_effect_veto_context(
+    packet: Mapping[str, Any],
+    *,
+    frontier_bundle_key: str | None,
+    surface_family_key: str | None,
+    operator_recipe_id: str | None,
+    objective_bundle_key: str | None,
+    step_actuator_bundle_key: str | None,
+) -> tuple[list[str], str | None]:
+    summary = _recent_effect_summary(packet)
+    harmful_families = {
+        str(item)
+        for item in summary.get("recent_harmful_surface_family_keys", ())
+        if str(item)
+    }
+    collapse_families = {
+        str(item)
+        for item in summary.get("recent_collapse_sharpener_surface_family_keys", ())
+        if str(item)
+    }
+    harmful_recipe_ids = {
+        str(item)
+        for item in summary.get("recent_harmful_operator_recipe_ids", ())
+        if str(item)
+    }
+    collapse_recipe_ids = {
+        str(item)
+        for item in summary.get("recent_collapse_sharpener_operator_recipe_ids", ())
+        if str(item)
+    }
+    harmful_bundle_keys = {
+        str(item)
+        for item in summary.get("recent_harmful_bundle_keys", ())
+        if str(item)
+    }
+    collapse_bundle_keys = {
+        str(item)
+        for item in summary.get("recent_collapse_sharpener_bundle_keys", ())
+        if str(item)
+    }
+    candidate_bundle_keys = {
+        str(item)
+        for item in (frontier_bundle_key, objective_bundle_key, step_actuator_bundle_key)
+        if item not in (None, "") and str(item)
+    }
+    latest_effects = summary.get("latest_effects")
+    matched_effects: list[Mapping[str, Any]] = []
+    if isinstance(latest_effects, SequenceABC) and not isinstance(latest_effects, (str, bytes, bytearray)):
+        for effect in latest_effects:
+            if not isinstance(effect, Mapping):
+                continue
+            effect_family = str(effect.get("surface_family_key", "") or "")
+            effect_recipe = str(effect.get("operator_recipe_id", "") or "")
+            effect_bundle = str(effect.get("bundle_key", "") or "")
+            effect_objective = str(effect.get("objective_bundle_key", "") or "")
+            effect_step_actuator = str(effect.get("step_actuator_bundle_key", "") or "")
+            if (
+                (surface_family_key not in (None, "") and effect_family == str(surface_family_key))
+                or (operator_recipe_id not in (None, "") and effect_recipe == str(operator_recipe_id))
+                or (effect_bundle and effect_bundle in candidate_bundle_keys)
+                or (effect_objective and effect_objective in candidate_bundle_keys)
+                or (effect_step_actuator and effect_step_actuator in candidate_bundle_keys)
+            ):
+                matched_effects.append(effect)
+    matched_harmful = bool(
+        (surface_family_key not in (None, "") and str(surface_family_key) in harmful_families)
+        or (operator_recipe_id not in (None, "") and str(operator_recipe_id) in harmful_recipe_ids)
+        or any(bundle_key in harmful_bundle_keys for bundle_key in candidate_bundle_keys)
+        or any(str(effect.get("verdict", "") or "") == "harmful" for effect in matched_effects)
+    )
+    matched_collapse = bool(
+        (surface_family_key not in (None, "") and str(surface_family_key) in collapse_families)
+        or (operator_recipe_id not in (None, "") and str(operator_recipe_id) in collapse_recipe_ids)
+        or any(bundle_key in collapse_bundle_keys for bundle_key in candidate_bundle_keys)
+        or any(str(effect.get("actuator_class", "") or "") == "collapse_sharpener" for effect in matched_effects)
+    )
+    if not matched_harmful and not matched_collapse:
+        return [], None
+
+    signals: list[str] = []
+    if matched_harmful:
+        signals.append("recent_harmful_family")
+    if matched_collapse:
+        signals.append("collapse_sharpener_veto")
+    signals.append("no_certified_actuator_for_frontier")
+
+    reason = None
+    for effect in reversed(matched_effects):
+        effect_family = str(effect.get("surface_family_key", "") or "")
+        actuator_class = str(effect.get("actuator_class", "unknown") or "unknown")
+        frontier_label = next((bundle for bundle in candidate_bundle_keys if bundle), "frontier candidate")
+        if effect_family:
+            reason = f"{frontier_label} was vetoed after observed {actuator_class} on {effect_family}"
+        else:
+            reason = f"{frontier_label} was vetoed after observed {actuator_class}"
+        break
+    return _dedup_text_items(signals), reason
+
+
+def _diagnostic_evidence_context(strategy_hints: Mapping[str, Any]) -> dict[str, Any]:
+    ledger_raw = strategy_hints.get("diagnostic_evidence_ledger")
+    ledger = [
+        dict(item)
+        for item in ledger_raw[:12]
+        if isinstance(item, Mapping)
+    ] if isinstance(ledger_raw, Sequence) and not isinstance(ledger_raw, (str, bytes, bytearray)) else []
+    status_raw = strategy_hints.get("bundle_diagnostic_status")
+    bundle_status = {
+        str(key): dict(value)
+        for key, value in status_raw.items()
+        if str(key) and isinstance(value, Mapping)
+    } if isinstance(status_raw, Mapping) else {}
+    frontier_bundle_key = str(
+        strategy_hints.get(
+            "diagnostic_frontier_bundle_key",
+            strategy_hints.get(
+                "gate_report_frontier_bundle_key",
+                strategy_hints.get("selected_bundle_key", ""),
+            ),
+        )
+        or ""
+    )
+    frontier_status = dict(bundle_status.get(frontier_bundle_key, {})) if frontier_bundle_key else {}
+    raw_frontier_status = strategy_hints.get("diagnostic_frontier_status")
+    if not frontier_status and isinstance(raw_frontier_status, Mapping):
+        frontier_status = dict(raw_frontier_status)
+    try:
+        ledger_count = int(strategy_hints.get("diagnostic_evidence_ledger_count", len(ledger)) or len(ledger))
+    except Exception:
+        ledger_count = len(ledger)
+    next_evidence = str(
+        strategy_hints.get(
+            "diagnostic_frontier_next_evidence",
+            frontier_status.get("next_evidence_needed", ""),
+        )
+        or ""
+    )
+    request = str(
+        strategy_hints.get(
+            "diagnostic_frontier_request",
+            frontier_status.get("diagnostic_request", ""),
+        )
+        or ""
+    )
+    reason_text = str(
+        strategy_hints.get(
+            "diagnostic_frontier_reason_text",
+            frontier_status.get("reason_text", ""),
+        )
+        or ""
+    )
+    return {
+        "diagnostic_evidence_ledger": ledger,
+        "diagnostic_evidence_ledger_count": ledger_count,
+        "bundle_diagnostic_status": bundle_status,
+        "diagnostic_frontier_bundle_key": frontier_bundle_key or None,
+        "diagnostic_frontier_status": frontier_status,
+        "diagnostic_frontier_next_evidence": next_evidence or None,
+        "diagnostic_frontier_request": request or None,
+        "diagnostic_frontier_reason_text": reason_text or None,
+    }
+
+
+def _visible_no_safe_actuator_guidance(
+    *,
+    strategy_hints: Mapping[str, Any],
+    controller_rejected_signals: Sequence[str],
+    controller_objective_bundle_key: str | None,
+    controller_step_actuator_bundle_key: str | None,
+    controller_shadow_proposals: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    frontier_bundle_key = str(
+        strategy_hints.get(
+            "gate_report_frontier_bundle_key",
+            strategy_hints.get("selected_bundle_key", ""),
+        )
+        or ""
+    )
+    unavailable_reason = str(strategy_hints.get("bridge_plan_unavailable_reason", "") or "")
+    no_safe_reasons = {
+        "all_dead_actuator",
+        "all_collapse_sharpener",
+        "no_safe_actuator",
+        "no_objective_lift_to_frontier",
+        "bridge_plan_not_certified",
+    }
+    rejected_set = {str(item) for item in controller_rejected_signals if str(item)}
+    visible_no_safe = bool(
+        frontier_bundle_key
+        and (
+            "no_certified_actuator_for_frontier" in rejected_set
+            or "collapse_sharpener_veto" in rejected_set
+            or unavailable_reason in no_safe_reasons
+        )
+    )
+    if not visible_no_safe:
+        return {}
+
+    objective_key = controller_objective_bundle_key or frontier_bundle_key
+    actuator_key = controller_step_actuator_bundle_key or frontier_bundle_key
+    suggested_shadow = [
+        {
+            "kind": "frontier_shadow",
+            "bundle_key": frontier_bundle_key,
+            "objective_bundle_key": objective_key,
+            "actuator_bundle_key": actuator_key,
+            "reason": "frontier_visible_but_no_certified_actuator",
+            "decision": "shadow",
+        }
+    ]
+    if controller_shadow_proposals:
+        suggested_shadow = []
+
+    diagnostic_options = [
+        "attention_head_ablation_on_frontier",
+        "readout_logit_adjacent_probe",
+        "sae_feature_emitter_scan",
+    ]
+    extra_count = strategy_hints.get("bridge_eval_extra_operator_diagnostic_count")
+    try:
+        extra_count_int = int(extra_count)
+    except Exception:
+        extra_count_int = 0
+    if extra_count_int > 0:
+        diagnostic_options.append("compare_extra_operator_diagnostics")
+    diagnostic_context = _diagnostic_evidence_context(strategy_hints)
+    frontier_next_evidence = diagnostic_context.get("diagnostic_frontier_next_evidence")
+    frontier_request = diagnostic_context.get("diagnostic_frontier_request")
+    frontier_reason = diagnostic_context.get("diagnostic_frontier_reason_text")
+    next_evidence_options = [
+        "certified_self_or_bridge_actuator",
+        "non_dead_attention_ablation_signal",
+        "readout_feature_emitter_support",
+    ]
+    if frontier_next_evidence not in (None, ""):
+        next_evidence_options = [
+            str(frontier_next_evidence),
+            *[item for item in next_evidence_options if item != str(frontier_next_evidence)],
+        ]
+    if frontier_request not in (None, "", "none") and str(frontier_request) not in diagnostic_options:
+        diagnostic_options.insert(0, str(frontier_request))
+
+    return {
+        "controller_loop_pressure_mode": "investigate_visible_no_safe_actuator",
+        "visible_frontier_status": "visible_but_no_safe_actuator",
+        "controller_next_evidence_options": next_evidence_options,
+        "controller_diagnostic_request_options": diagnostic_options,
+        "controller_recommended_next_evidence": frontier_next_evidence,
+        "controller_recommended_diagnostic_request": frontier_request,
+        "controller_diagnostic_reason_text": frontier_reason,
+        "controller_suggested_shadow_proposals": suggested_shadow,
+        "controller_next_action_options": [
+            "request_operator_diagnostic",
+            "request_attention_head_ablation",
+            "request_sae_feature_scan",
+            "noop_until_certified",
+        ],
+    }
+
+
 def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) -> dict[str, Any]:
     strategy_hints = _packet_strategy_hints(packet)
     meta = _command_meta(command) or {}
@@ -539,9 +851,44 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         "readout_analyzer_suggested_bundle_key",
         strategy_hints.get("readout_sidecar_suggested_bundle_key"),
     )
+    analyzer_hints = strategy_hints.get("readout_analyzer_hints")
+    if not isinstance(analyzer_hints, Mapping):
+        analyzer_hints = strategy_hints.get("readout_sidecar_hints")
+    if not isinstance(analyzer_hints, Mapping):
+        analyzer_hints = {}
+    analyzer_name = analyzer_hints.get("analyzer_name")
+    analyzer_feature_backend = analyzer_hints.get("feature_backend")
+    analyzer_sae_status = analyzer_hints.get("sae_status")
+    analyzer_sae_feature_hints = analyzer_hints.get("sae_feature_hints")
+    analyzer_sae_feature_hint_count = (
+        len(analyzer_sae_feature_hints)
+        if isinstance(analyzer_sae_feature_hints, Sequence) and not isinstance(analyzer_sae_feature_hints, (str, bytes, bytearray))
+        else 0
+    )
+    bridge_plan_objective_bundle_key = strategy_hints.get("bridge_plan_objective_bundle_key")
+    bridge_plan_actuator_bundle_key = strategy_hints.get("bridge_plan_actuator_bundle_key")
+    bridge_plan_reason = strategy_hints.get("bridge_plan_reason")
+    bridge_plan_unavailable_reason = strategy_hints.get("bridge_plan_unavailable_reason")
+    bridge_plan_unavailable_objective_bundle_key = strategy_hints.get("bridge_plan_unavailable_objective_bundle_key")
+    bridge_plan_unavailable_objective_reasons = strategy_hints.get("bridge_plan_unavailable_objective_reasons")
+    bridge_eval_context_drift = strategy_hints.get("bridge_eval_context_drift")
     controller_selected_bundle_key = _extract_controller_selected_bundle_key(packet, command)
+    controller_objective_bundle_key = _optional_meta_text(meta, "objective_bundle_key")
+    if controller_objective_bundle_key is None and controller_selected_bundle_key not in (None, ""):
+        controller_objective_bundle_key = str(controller_selected_bundle_key)
+    controller_step_actuator_bundle_key = _optional_meta_text(meta, "step_actuator_bundle_key")
+    if controller_step_actuator_bundle_key is None and controller_selected_bundle_key not in (None, ""):
+        controller_step_actuator_bundle_key = str(controller_selected_bundle_key)
+    controller_shadow_proposals = _normalized_shadow_proposals(meta)
+    controller_why_not_apply = _optional_meta_text(meta, "why_not_apply")
+    controller_apply_kind = _optional_meta_text(meta, "apply_kind")
+    production_apply_allowed = meta.get("production_apply_allowed")
+    certified_for_apply = meta.get("certified_for_apply")
+    operator_recipe_id = _optional_meta_text(meta, "operator_recipe_id")
     controller_selection_source = "controller_apply"
-    if controller_selected_bundle_key is None:
+    if _command_decision(command) == "apply" and controller_apply_kind == "diagnostic_probe":
+        controller_selection_source = "forced_diagnostic_apply"
+    elif controller_selected_bundle_key is None:
         controller_selection_source = "controller_noop" if _command_decision(command) == "noop" else "controller_unresolved"
     elif controller_selected_bundle_key == helper_frontier_bundle_key:
         controller_selection_source = str(
@@ -562,13 +909,118 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
                 strategy_hints.get("rerank_vetoes"),
             ]
         )
+    recent_effect_signals: list[str] = []
+    recent_effect_reason: str | None = None
+    if controller_selected_bundle_key is None or _command_decision(command) == "noop":
+        recent_effect_signals, recent_effect_reason = _recent_effect_veto_context(
+            packet,
+            frontier_bundle_key=None if helper_frontier_bundle_key in (None, "") else str(helper_frontier_bundle_key),
+            surface_family_key=_optional_meta_text(meta, "surface_family_key") or _command_surface_family_key(command),
+            operator_recipe_id=operator_recipe_id,
+            objective_bundle_key=controller_objective_bundle_key,
+            step_actuator_bundle_key=controller_step_actuator_bundle_key,
+        )
+        rejected_signal_groups.append(recent_effect_signals)
     controller_rejected_signals = _dedup_text_items(*rejected_signal_groups)
+    if controller_why_not_apply is None and recent_effect_reason is not None and _command_decision(command) == "noop":
+        controller_why_not_apply = recent_effect_reason
+    no_safe_guidance = _visible_no_safe_actuator_guidance(
+        strategy_hints=strategy_hints,
+        controller_rejected_signals=controller_rejected_signals,
+        controller_objective_bundle_key=controller_objective_bundle_key,
+        controller_step_actuator_bundle_key=controller_step_actuator_bundle_key,
+        controller_shadow_proposals=controller_shadow_proposals,
+    )
+    diagnostic_context = _diagnostic_evidence_context(strategy_hints)
+    if (
+        controller_why_not_apply is None
+        and no_safe_guidance
+        and _command_decision(command) == "noop"
+    ):
+        controller_why_not_apply = "frontier visible but no certified self or bridge actuator is available"
+    bridge_plan_visible = (
+        bridge_plan_objective_bundle_key not in (None, "")
+        and bridge_plan_actuator_bundle_key not in (None, "")
+    )
+    controller_plan_mode = (
+        "dual_layer"
+        if controller_objective_bundle_key not in (None, "")
+        and controller_step_actuator_bundle_key not in (None, "")
+        and str(controller_objective_bundle_key) != str(controller_step_actuator_bundle_key)
+        else "single_layer"
+    )
+    controller_bridge_dual_layer_missing = bool(
+        bridge_plan_visible
+        and controller_plan_mode != "dual_layer"
+    )
+    controller_bridge_dual_layer_reason = (
+        "bridge_available_but_single_layer"
+        if controller_bridge_dual_layer_missing
+        else None
+    )
     return {
         "sidecar_suggested_bundle_key": None if sidecar_suggested_bundle_key in (None, "") else str(sidecar_suggested_bundle_key),
+        "readout_analyzer_name": None if analyzer_name in (None, "") else str(analyzer_name),
+        "readout_analyzer_feature_backend": None
+        if analyzer_feature_backend in (None, "")
+        else str(analyzer_feature_backend),
+        "readout_analyzer_sae_status": None
+        if analyzer_sae_status in (None, "")
+        else str(analyzer_sae_status),
+        "readout_analyzer_sae_feature_hint_count": int(analyzer_sae_feature_hint_count),
         "gate_report_frontier_bundle_key": None if helper_frontier_bundle_key in (None, "") else str(helper_frontier_bundle_key),
+        "bridge_plan_objective_bundle_key": (
+            None if bridge_plan_objective_bundle_key in (None, "") else str(bridge_plan_objective_bundle_key)
+        ),
+        "bridge_plan_actuator_bundle_key": (
+            None if bridge_plan_actuator_bundle_key in (None, "") else str(bridge_plan_actuator_bundle_key)
+        ),
+        "bridge_plan_reason": None if bridge_plan_reason in (None, "") else str(bridge_plan_reason),
+        "bridge_plan_unavailable_reason": (
+            None if bridge_plan_unavailable_reason in (None, "") else str(bridge_plan_unavailable_reason)
+        ),
+        "bridge_plan_unavailable_objective_bundle_key": (
+            None
+            if bridge_plan_unavailable_objective_bundle_key in (None, "")
+            else str(bridge_plan_unavailable_objective_bundle_key)
+        ),
+        "bridge_plan_unavailable_objective_reasons": (
+            {
+                str(key): str(value)
+                for key, value in bridge_plan_unavailable_objective_reasons.items()
+                if str(key) and str(value)
+            }
+            if isinstance(bridge_plan_unavailable_objective_reasons, Mapping)
+            else {}
+        ),
+        "bridge_eval_context_drift": None if bridge_eval_context_drift is None else bool(bridge_eval_context_drift),
+        "bridge_plan_used": bool(
+            bridge_plan_actuator_bundle_key not in (None, "")
+            and controller_selected_bundle_key not in (None, "")
+            and str(bridge_plan_actuator_bundle_key) == str(controller_selected_bundle_key)
+        ),
+        "controller_objective_bundle_key": controller_objective_bundle_key,
+        "controller_step_actuator_bundle_key": controller_step_actuator_bundle_key,
+        "controller_plan_mode": controller_plan_mode,
+        "controller_bridge_plan_visible": bool(bridge_plan_visible),
+        "controller_bridge_plan_unavailable_reason": (
+            None
+            if bridge_plan_visible or bridge_plan_unavailable_reason in (None, "")
+            else str(bridge_plan_unavailable_reason)
+        ),
+        "controller_bridge_dual_layer_missing": controller_bridge_dual_layer_missing,
+        "controller_bridge_dual_layer_reason": controller_bridge_dual_layer_reason,
+        "controller_shadow_proposals": controller_shadow_proposals,
+        "controller_shadow_proposal_count": len(controller_shadow_proposals),
+        "controller_apply_kind": controller_apply_kind,
+        "production_apply_allowed": None if production_apply_allowed is None else bool(production_apply_allowed),
+        "certified_for_apply": None if certified_for_apply is None else bool(certified_for_apply),
+        "controller_why_not_apply": controller_why_not_apply,
         "controller_selected_bundle_key": controller_selected_bundle_key,
         "controller_rejected_signals": controller_rejected_signals,
         "controller_selection_source": controller_selection_source,
+        **diagnostic_context,
+        **no_safe_guidance,
     }
 
 

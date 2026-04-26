@@ -14,7 +14,7 @@ The current project framing is closer to an inference-time intervention system o
 - task feedback and effect summaries are used to search over interventions
 - auxiliary controls and sidecars are allowed only when they stay bounded, auditable, and clearly secondary to the worker
 
-The repo has now moved beyond the initial v0 scaffold. It includes the intervention loop, structured reflection, multiple task environments, readout-collapse diagnostics, provenance-aware candidate compilation, and an offline readout sidecar path.
+The repo has now moved beyond the initial v0 scaffold. It includes the intervention loop, structured reflection, multiple task environments, readout-collapse diagnostics, provenance-aware candidate compilation, ownership-aware operator replay, diagnostic evidence ledgers, and an offline readout analyzer path.
 
 ## Layout
 
@@ -53,6 +53,8 @@ The current implementation includes:
 - same-term / same-family dominance pruning and clean `kv_pair` bundle metadata
 - shot-mode and readout-escape phases, separated from loop-break / stabilization phases
 - a minimal offline readout sidecar scaffold that can analyze captured sites and feed small hints back into candidate ranking
+- a scaffolded SAE-style readout analyzer backend that emits feature hints without becoming a runtime dependency
+- diagnostic-only readout tools, including first-piece logit probes and attention head ablation
 - a stricter `controller / analyzer / gate / runtime guardrail` separation with explicit logging of:
   - `sidecar_suggested_*`
   - `gate_report_*`
@@ -65,6 +67,13 @@ The current implementation includes:
   - `cross_bound`
   - `dead_actuator`
   - `noisy_or_harmful`
+- diagnostic evidence ledgers that summarize, per bundle:
+  - `readout_reachable`
+  - `head_sensitive`
+  - `feature_supported`
+  - `operator_certified`
+  - `blocked_by`
+  - the next diagnostic request the controller should ask for
 
 ## Current Bottleneck
 
@@ -92,6 +101,16 @@ The main research question has therefore sharpened from “can we intervene at a
 
 > Which bounded, auditable runtime controls actually improve readout competitiveness at the answer boundary, and can that lift stay owned by the intended bundle?
 
+The latest runs narrow this further. For the `budget` frontier in the constrained rewrite direct-scan replay, the diagnostic ledger reports:
+
+- `readout_reachable = true`
+- `head_sensitive = true`
+- `feature_supported = true`
+- `operator_certified = false`
+- `blocked_by = dead_actuator / all_dead_actuator`
+
+That means the current bottleneck is not visibility. The stack can now see a plausible frontier and collect non-dead diagnostic signals, but it still lacks a certified self or bridge actuator that can safely move the worker at the answer boundary.
+
 ## What We Have Learned
 
 Several concrete lessons have come out of the recent runs:
@@ -105,10 +124,12 @@ Several concrete lessons have come out of the recent runs:
 - Selector quality and operator quality are not the same problem. The current stack can now nominate challengers more cleanly than it can certify that those challengers actually win when applied.
 - “Helpful” is not enough. We now explicitly distinguish between lift that belongs to the intended bundle and lift that gets stolen by another bundle.
 - Ownership matters. A recipe can move logits while still being the wrong actuator if `realized_lift_bundle != intended_bundle`.
+- Diagnostic signals are not apply permission. `logit_adjacent`, attention ablation, and SAE-style feature hints improve the controller's map, but they do not certify a runtime edit.
+- Operator certification is starting to look slightly over-powered if treated as a decision layer. It should be kept as evidence for the controller, not as a second policy owner.
 
-## Readout Sidecar Status
+## Readout Analyzer Status
 
-The new sidecar path is intentionally minimal and offline-oriented.
+The readout analyzer path is intentionally minimal and offline-oriented.
 
 It currently:
 
@@ -119,6 +140,9 @@ It currently:
   - `term_anchor_strength_by_term`
   - `candidate_support_terms`
   - `candidate_support_scores`
+  - `bundle_support_scores`
+  - `bundle_evidence_vectors`
+  - `sae_feature_hints`
   - optional family/key vetoes
 
 It currently does **not**:
@@ -127,7 +151,37 @@ It currently does **not**:
 - force task answers
 - replace runtime actuation with a heavyweight analysis stack
 
-This is deliberate. The sidecar is meant to improve the candidate compiler’s eyes, not to smuggle in a second generator.
+This is deliberate. The analyzer is meant to improve the candidate compiler’s eyes, not to smuggle in a second generator.
+
+The current `sae_scaffold` mode is not a full SAELens integration. It is a feature-emitter scaffold that marks evidence as `feature_backend="sae_sidecar"` and keeps policy ownership in the controller.
+
+## Diagnostic Ledger
+
+The latest control-plane addition is a diagnostic evidence ledger.
+
+It collects bridge eval, operator replay, readout-local probes, attention head ablation, and analyzer feature hints into a bundle-indexed status table. A typical frontier status looks like:
+
+```json
+{
+  "bundle_key": "kv_pair:budget:source_body:72:73",
+  "readout_reachable": true,
+  "head_sensitive": true,
+  "feature_supported": true,
+  "operator_certified": false,
+  "blocked_by": ["dead_actuator", "all_dead_actuator"],
+  "next_evidence_needed": "certified_self_or_bridge_actuator",
+  "diagnostic_request": "operator_diagnostic_replay"
+}
+```
+
+This ledger gives the controller more room to reason about what evidence to request next while preserving the hard boundary:
+
+- diagnostics may improve visibility
+- diagnostics may suggest the next measurement
+- diagnostics may block unsafe application
+- diagnostics do not grant production apply permission
+
+That last point is important. The current design intentionally lets the controller become more curious without letting helper modules become covert selectors.
 
 ## Decision Ownership
 
@@ -142,9 +196,13 @@ This split now also shows up in logs:
 
 - `sidecar_suggested_*` records what the analyzer suggested
 - `gate_report_*` records what the bounded runtime evaluation reported
+- `diagnostic_evidence_ledger` records what has been measured about each frontier bundle
+- `bundle_diagnostic_status` records what is still missing before a bundle can be treated as safe
 - `controller_selected_bundle_key` and `controller_rejected_signals` record what the controller actually adopted or rejected
 
 That distinction matters for research hygiene. If a bundle changes and we cannot explain the change from controller-visible evidence, the helper stack is too strong.
+
+The operator layer is especially sensitive here. Operator replay and certification are allowed to say “this recipe is dead,” “this recipe sharpens collapse,” or “this recipe looks like a self/bridge actuator.” They should not silently decide the episode. The controller remains responsible for turning that evidence into `apply`, `noop`, `rollback`, or a diagnostic request.
 
 ## Near-Term Roadmap
 
@@ -152,17 +210,19 @@ The next steps are now fairly concrete:
 
 1. Keep selector and gate mostly frozen while operator quality is the active workstream.
    The main measurement axis is now operator certification and ownership, not candidate churn.
-2. Search for a `budget` self-actuator recipe.
+2. Keep operator certification under controller ownership.
+   Operator replay is now powerful enough to shape the agenda, so the next cleanup is to ensure it remains an auditable evidence source rather than an implicit policy layer.
+3. Search for a `budget` self-actuator recipe.
    Current real-packet replay shows that several recipes move something, but the lift is often stolen by `send`.
-3. Continue ownership-first operator sweeps.
+4. Continue ownership-first operator sweeps.
    Current promising directions are:
    - more local positive seeds such as `exact_term_token`, fused seeds, and centered local windows
    - contrastive recipes such as `minus_stealer` and `orthogonal_stealer`
    - recipe-level certification keyed by operator recipe rather than broad family alone
-4. If no `budget` self-actuator appears, promote an explicit bridge plan.
+5. If no `budget` self-actuator appears, promote an explicit bridge plan.
    In that branch the controller would treat `budget` as the objective term and a certified `send` bridge as the readout-escape actuator, rather than pretending the lift already belongs to `budget`.
-5. Only after the ownership question settles, consider a heavier offline analyzer such as a SAELens-style sidecar.
-   If used, it should remain a sidecar that returns small hints rather than becoming a runtime dependency.
+6. Expand the readout analyzer backend carefully.
+   SAELens can move from scaffold to real backend only if it stays a feature emitter that returns small, auditable hints rather than becoming a runtime dependency or hidden generator.
 
 ## Design Guardrails
 
@@ -205,6 +265,20 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
 
 `--readout-sidecar-analyzer` remains available as a backward-compatible alias, but
 `--readout-analyzer` is now the preferred public name.
+
+To enable the current SAE-style scaffold without adding SAELens as a dependency:
+
+```bash
+python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
+  --provider openai \
+  --controller-model gpt-4.1-mini \
+  --worker-model gpt2-small \
+  --task constrained_rewrite \
+  --readout-analyzer sae_scaffold \
+  --seed 7
+```
+
+This mode emits feature-like evidence only. It does not perform production SAE steering.
 
 To force a fully local Hugging Face worker load:
 

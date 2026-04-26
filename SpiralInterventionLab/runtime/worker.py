@@ -60,7 +60,10 @@ _CONTROLLER_MEMORY_STRING_FIELDS = (
     "expected_effect",
     "observed_outcome",
     "why_failed_or_helped",
+    "blocked_by",
     "next_change",
+    "next_evidence_needed",
+    "diagnostic_request",
     "stop_condition",
     "focus_term",
 )
@@ -76,6 +79,9 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "apply",
     "rollback",
     "request_observer_check",
+    "request_operator_diagnostic",
+    "request_attention_head_ablation",
+    "request_sae_feature_scan",
     "stop",
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
@@ -459,6 +465,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_readout_sidecar_capture_summary: dict[str, Any] | None = None
         self._latest_readout_sidecar_hints: dict[str, Any] = {}
         self._operator_certification_table: dict[str, dict[str, Any]] = {}
+        self._operator_bridge_plan_table: dict[str, dict[str, Any]] = {}
 
     def reset(self, prompt: str) -> None:
         self._clear_episode_state()
@@ -1101,6 +1108,16 @@ class HookedTransformerWorkerRuntime:
                 op=pending.get("op"),
                 step_size=pending.get("step_size"),
                 edit_cost=pending.get("edit_cost"),
+                surface_family_key=pending.get("surface_family_key"),
+                operator_recipe_id=pending.get("operator_recipe_id"),
+                operator_recipe_seed_key=pending.get("operator_recipe_seed_key"),
+                bundle_key=pending.get("bundle_key"),
+                objective_bundle_key=pending.get("objective_bundle_key"),
+                step_actuator_bundle_key=pending.get("step_actuator_bundle_key"),
+                apply_kind=pending.get("apply_kind"),
+                production_apply_allowed=pending.get("production_apply_allowed"),
+                production_policy_would_apply=pending.get("production_policy_would_apply"),
+                certified_for_apply=pending.get("certified_for_apply"),
             )
             for pending in self._pending_effects
         ]
@@ -1135,6 +1152,16 @@ class HookedTransformerWorkerRuntime:
                     "op": active.get("op"),
                     "step_size": active.get("step_size"),
                     "edit_cost": active.get("edit_cost"),
+                    "surface_family_key": active.get("surface_family_key"),
+                    "operator_recipe_id": active.get("operator_recipe_id"),
+                    "operator_recipe_seed_key": active.get("operator_recipe_seed_key"),
+                    "bundle_key": active.get("bundle_key"),
+                    "objective_bundle_key": active.get("objective_bundle_key"),
+                    "step_actuator_bundle_key": active.get("step_actuator_bundle_key"),
+                    "apply_kind": active.get("apply_kind"),
+                    "production_apply_allowed": active.get("production_apply_allowed"),
+                    "production_policy_would_apply": active.get("production_policy_would_apply"),
+                    "certified_for_apply": active.get("certified_for_apply"),
                 }
             )
 
@@ -1226,6 +1253,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_readout_sidecar_capture = None
         self._latest_readout_sidecar_capture_summary = None
         self._latest_readout_sidecar_hints = {}
+        self._operator_bridge_plan_table = {}
         if self.trace_recorder is not None:
             self.trace_recorder.reset()
 
@@ -2289,11 +2317,24 @@ class HookedTransformerWorkerRuntime:
         span_delta = float(item.get("required_term_span_progress_delta", 0.0) or 0.0)
         semantic_delta = float(item.get("semantic_progress_delta", 0.0) or 0.0)
         repeat_delta = int(item.get("repeat_flag_delta", 0) or 0)
+        entropy_delta = float(item.get("entropy_delta", 0.0) or 0.0)
+        top1_margin_delta = float(item.get("top1_margin_delta", 0.0) or 0.0)
+        repetition_score_delta = float(item.get("repetition_score_delta", 0.0) or 0.0)
         target_mass_delta = float(item.get("target_mass_delta", 0.0) or 0.0)
         target_top20_hit_delta = int(item.get("target_top20_hit_delta", 0) or 0)
         focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
         rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
         prefix_depth_delta = int(item.get("prefix_depth_delta", item.get("canary_prefix_depth_delta", 0)) or 0)
+        if (
+            recall_delta <= 0.0
+            and span_delta <= 0.0
+            and semantic_delta <= 0.01
+            and repeat_delta > 0
+            and entropy_delta < -0.02
+            and top1_margin_delta > 0.005
+            and repetition_score_delta > 0.05
+        ):
+            return "collapse_sharpener"
         if repeat_delta > 0 or semantic_delta < -0.03 or recall_delta < 0.0 or span_delta < 0.0:
             return "harmful"
         if (
@@ -2326,6 +2367,66 @@ class HookedTransformerWorkerRuntime:
         ):
             return "dead_actuator"
         return "neutral"
+
+    def _candidate_fingerprint(
+        self,
+        candidate_edits: Sequence[Mapping[str, Any]],
+        *,
+        intended_bundle_key: str | None = None,
+        label: str | None = None,
+    ) -> dict[str, Any]:
+        if not candidate_edits:
+            return {}
+        primary = dict(candidate_edits[0])
+        op = primary.get("op") if isinstance(primary.get("op"), Mapping) else {}
+        budget = primary.get("budget") if isinstance(primary.get("budget"), Mapping) else {}
+        source_span = primary.get("source_span") if isinstance(primary.get("source_span"), Mapping) else None
+        source_start = int(primary.get("source_position", 0) or 0)
+        if source_span is not None:
+            source_start = int(source_span.get("start", source_start) or source_start)
+        recipe_name = None
+        if label:
+            recipe_name = str(label).split(":", 1)[0] or None
+        return {
+            "bundle_key": str(primary.get("bundle_key", "") or "") or None,
+            "objective_bundle_key": str(intended_bundle_key or "") or None,
+            "actuator_bundle_key": str(primary.get("bundle_key", "") or "") or None,
+            "term": str(primary.get("focus_term", "") or primary.get("focus_feature", "") or "") or None,
+            "recipe_name": recipe_name,
+            "site": str(primary.get("site", "") or "") or None,
+            "layer": None if primary.get("layer") is None else int(primary.get("layer", 0) or 0),
+            "head": None if primary.get("head") is None else int(primary.get("head", 0) or 0),
+            "source_token_index": int(source_start),
+            "source_piece": primary.get("source_piece"),
+            "source_segment_kind": primary.get("source_segment_kind"),
+            "op_kind": str(primary.get("kind", "") or op.get("kind", "") or "") or None,
+            "which": str(op.get("which", "") or "") or None,
+            "alpha": None if op.get("alpha") is None else float(op.get("alpha", 0.0) or 0.0),
+            "ttl_steps": None if budget.get("ttl_steps") is None else int(budget.get("ttl_steps", 0) or 0),
+            "norm_clip": None if budget.get("norm_clip") is None else float(budget.get("norm_clip", 0.0) or 0.0),
+            "edit_count": len(candidate_edits),
+        }
+
+    def _eval_context_fingerprint(
+        self,
+        *,
+        max_new_tokens: int,
+        top_k: int,
+        max_edits_per_step: int,
+        focus_terms: Sequence[str],
+    ) -> dict[str, Any]:
+        prompt_hash = hashlib.sha256(self.prompt.encode("utf-8")).hexdigest()
+        return {
+            "prompt_hash": f"sha256:{prompt_hash}",
+            "tokenizer": type(self.codec).__name__,
+            "decode_step": int(self._steps),
+            "answer_prefix": self.final_text(),
+            "max_new_tokens": int(max_new_tokens),
+            "top_k": int(top_k),
+            "active_patch_count": len(self._collect_active_edits()),
+            "max_edits_per_step": int(max_edits_per_step),
+            "score_terms": [str(term) for term in focus_terms if str(term)],
+        }
 
     def _replay_policy(self, *, max_edits_per_step_override: int | None = None) -> HarnessPolicy | None:
         if max_edits_per_step_override is None:
@@ -2378,14 +2479,15 @@ class HookedTransformerWorkerRuntime:
                     family_labels.add(str(item.get("label")))
             target_lift_count = int(class_counts.get("target_lift", 0) or 0)
             harmful_count = int(class_counts.get("harmful", 0) or 0)
+            collapse_sharpener_count = int(class_counts.get("collapse_sharpener", 0) or 0)
             collapse_count = int(class_counts.get("collapse_isomorphic", 0) or 0)
             dead_count = int(class_counts.get("dead_actuator", 0) or 0)
             neutral_count = int(class_counts.get("neutral", 0) or 0)
             error_count = int(class_counts.get("error", 0) or 0)
-            if harmful_count > 0:
+            if harmful_count > 0 or collapse_sharpener_count > 0:
                 status = "veto"
                 certified_for_apply = False
-                reason = "harmful_actual_delta_seen"
+                reason = "collapse_sharpener_seen" if collapse_sharpener_count > 0 else "harmful_actual_delta_seen"
             elif target_lift_count > 0:
                 status = "apply_eligible"
                 certified_for_apply = True
@@ -2404,6 +2506,7 @@ class HookedTransformerWorkerRuntime:
                 - (0.1 * error_count)
                 - (0.25 * dead_count)
                 - (0.5 * collapse_count)
+                - (0.75 * collapse_sharpener_count)
                 - (1.0 * harmful_count)
             ) / max(len(items), 1)
             summaries.append(
@@ -2480,7 +2583,10 @@ class HookedTransformerWorkerRuntime:
                 ]
                 cross_delta = max(cross_candidates, default=0.0)
                 alignment_margin = float(self_delta - cross_delta)
-                if self_delta > tau_self and alignment_margin > tau_align:
+                best_eval_actual_delta_class = str(item.get("actual_delta_class", "") or "")
+                if best_eval_actual_delta_class == "collapse_sharpener":
+                    actuator_class = "collapse_sharpener"
+                elif self_delta > tau_self and alignment_margin > tau_align:
                     actuator_class = "self_actuator"
                 elif self_delta > tau_positive and alignment_margin < -tau_align and str(realized_lift_bundle_key) != intended_bundle_key:
                     actuator_class = "cross_bound"
@@ -2509,7 +2615,21 @@ class HookedTransformerWorkerRuntime:
                     else None,
                     "best_eval_label": item.get("label"),
                     "best_eval_status": item.get("status"),
-                    "best_eval_actual_delta_class": item.get("actual_delta_class"),
+                    "best_eval_actual_delta_class": best_eval_actual_delta_class,
+                    "best_eval_entropy_delta": round(float(item.get("entropy_delta", 0.0) or 0.0), 6),
+                    "best_eval_top1_margin_delta": round(float(item.get("top1_margin_delta", 0.0) or 0.0), 6),
+                    "best_eval_repeat_flag_delta": int(item.get("repeat_flag_delta", 0) or 0),
+                    "best_eval_repetition_score_delta": round(float(item.get("repetition_score_delta", 0.0) or 0.0), 6),
+                    "best_eval_required_term_recall_delta": round(float(item.get("required_term_recall_delta", 0.0) or 0.0), 6),
+                    "best_eval_required_term_span_progress_delta": round(float(item.get("required_term_span_progress_delta", 0.0) or 0.0), 6),
+                    "best_eval_target_mass_delta": round(float(item.get("target_mass_delta", 0.0) or 0.0), 6),
+                    "best_eval_target_top20_hit_delta": int(item.get("target_top20_hit_delta", 0) or 0),
+                    "best_eval_candidate_fingerprint": dict(item.get("candidate_fingerprint", {}))
+                    if isinstance(item.get("candidate_fingerprint"), Mapping)
+                    else {},
+                    "best_eval_context_fingerprint": dict(item.get("eval_context_fingerprint", {}))
+                    if isinstance(item.get("eval_context_fingerprint"), Mapping)
+                    else {},
                     "bundle_lift_scores": {
                         str(bundle_key): round(float(score), 6)
                         for bundle_key, score in sorted(bundle_scores.items(), key=lambda entry: str(entry[0]))
@@ -2566,6 +2686,113 @@ class HookedTransformerWorkerRuntime:
             stealer_map[("*", intended_bundle_key)] = realized_bundle_key
         return stealer_map
 
+    def _summarize_bridge_plan_recommendations(
+        self,
+        ownership: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        bundle_terms: dict[str, str] = {}
+        for item in ownership:
+            if not isinstance(item, Mapping):
+                continue
+            intended_bundle_key = str(item.get("intended_bundle_key", "") or "")
+            if intended_bundle_key:
+                intended_term = str(item.get("intended_term", "") or "")
+                if intended_term:
+                    bundle_terms.setdefault(intended_bundle_key, intended_term)
+            realized_bundle_key = str(item.get("realized_lift_bundle_key", "") or "")
+            if realized_bundle_key:
+                realized_term = str(item.get("realized_lift_term", "") or "")
+                if realized_term:
+                    bundle_terms.setdefault(realized_bundle_key, realized_term)
+
+        grouped: dict[str, dict[str, Any]] = {}
+        for item in ownership:
+            if not isinstance(item, Mapping):
+                continue
+            intended_bundle_key = str(item.get("intended_bundle_key", "") or "")
+            actuator_class = str(item.get("actuator_class", "") or "")
+            if intended_bundle_key:
+                bucket = grouped.setdefault(intended_bundle_key, {"has_self": False, "candidates": []})
+                if actuator_class == "self_actuator":
+                    bucket["has_self"] = True
+            realized_bundle_key = str(item.get("realized_lift_bundle_key", "") or "")
+            if (
+                actuator_class not in {"bridge_actuator", "cross_bound"}
+                or not intended_bundle_key
+                or not realized_bundle_key
+                or realized_bundle_key == intended_bundle_key
+            ):
+                continue
+            objective_bucket = grouped.setdefault(realized_bundle_key, {"has_self": False, "candidates": []})
+            objective_lift_delta = float(
+                (
+                    item.get("bundle_lift_scores", {}).get(realized_bundle_key, 0.0)
+                    if isinstance(item.get("bundle_lift_scores"), Mapping)
+                    else 0.0
+                )
+                or 0.0
+            )
+            candidate = dict(item)
+            candidate["bridge_objective_bundle_key"] = realized_bundle_key
+            candidate["bridge_objective_term"] = bundle_terms.get(realized_bundle_key, str(item.get("realized_lift_term", "") or ""))
+            candidate["bridge_objective_delta"] = objective_lift_delta
+            candidate["bridge_alignment_margin"] = round(
+                float(objective_lift_delta - float(item.get("self_delta", 0.0) or 0.0)),
+                6,
+            )
+            objective_bucket["candidates"].append(candidate)
+
+        recommendations: list[dict[str, Any]] = []
+        for objective_bundle_key, bucket in grouped.items():
+            if bool(bucket.get("has_self", False)):
+                continue
+            candidates = [item for item in bucket.get("candidates", []) if isinstance(item, Mapping)]
+            if not candidates:
+                continue
+            best = max(
+                candidates,
+                key=lambda item: (
+                    1 if str(item.get("actuator_class", "") or "") == "cross_bound" else 0,
+                    float(item.get("bridge_objective_delta", 0.0) or 0.0),
+                    float(item.get("bridge_alignment_margin", -10.0) or -10.0),
+                    float(item.get("self_delta", 0.0) or 0.0),
+                    -float(item.get("cross_delta", 0.0) or 0.0),
+                    str(item.get("operator_recipe_id", "") or ""),
+                ),
+            )
+            actuator_bundle_key = str(best.get("intended_bundle_key", "") or "")
+            recommendation = {
+                "objective_bundle_key": objective_bundle_key,
+                "objective_term": str(best.get("bridge_objective_term", "") or bundle_terms.get(objective_bundle_key, "")),
+                "actuator_bundle_key": actuator_bundle_key,
+                "actuator_term": str(best.get("intended_term", "") or bundle_terms.get(actuator_bundle_key, "")),
+                "operator_recipe_id": str(best.get("operator_recipe_id", "") or ""),
+                "operator_recipe_seed_key": str(best.get("operator_recipe_seed_key", "") or ""),
+                "actuator_class": str(best.get("actuator_class", "") or ""),
+                "objective_lift_delta": round(float(best.get("bridge_objective_delta", 0.0) or 0.0), 6),
+                "self_delta": round(float(best.get("self_delta", 0.0) or 0.0), 6),
+                "cross_delta": round(float(best.get("cross_delta", 0.0) or 0.0), 6),
+                "alignment_margin": round(float(best.get("alignment_margin", 0.0) or 0.0), 6),
+                "bridge_alignment_margin": round(float(best.get("bridge_alignment_margin", 0.0) or 0.0), 6),
+                "bridge_required": True,
+                "bridge_plan_reason": (
+                    "no_certified_self_actuator_target_lift_owned_by_other_bundle"
+                    if str(best.get("actuator_class", "") or "") == "cross_bound"
+                    else "no_certified_self_actuator_bridge_bundle_available"
+                ),
+            }
+            recommendations.append(recommendation)
+
+        recommendations.sort(
+            key=lambda item: (
+                str(item.get("objective_bundle_key", "") or ""),
+                -float(item.get("objective_lift_delta", 0.0) or 0.0),
+                -float(item.get("bridge_alignment_margin", 0.0) or 0.0),
+                -float(item.get("self_delta", 0.0) or 0.0),
+            )
+        )
+        return recommendations
+
     def _attach_operator_certifications(
         self,
         candidates: Sequence[Mapping[str, Any]],
@@ -2589,6 +2816,29 @@ class HookedTransformerWorkerRuntime:
 
     def latest_readout_sidecar_capture(self) -> ReadoutSidecarCapture | None:
         return self._latest_readout_sidecar_capture
+
+    def _bridge_plan_report_for_bundle(
+        self,
+        bundle_key: str,
+        *,
+        objective_term: str | None = None,
+    ) -> dict[str, Any] | None:
+        normalized = str(bundle_key or "")
+        if normalized:
+            report = self._operator_bridge_plan_table.get(normalized)
+            if isinstance(report, Mapping):
+                return dict(report)
+        normalized_term = str(objective_term or "").strip().lower()
+        if not normalized_term:
+            return None
+        matching = [
+            dict(value)
+            for value in self._operator_bridge_plan_table.values()
+            if isinstance(value, Mapping) and str(value.get("objective_term", "") or "").strip().lower() == normalized_term
+        ]
+        if len(matching) == 1:
+            return matching[0]
+        return None
 
     def _candidate_sidecar_key(self, candidate: Mapping[str, Any]) -> str:
         bundle_key = str(candidate.get("bundle_key", "") or "")
@@ -3006,6 +3256,8 @@ class HookedTransformerWorkerRuntime:
         if not isinstance(members, SequenceABC) or isinstance(members, (str, bytes, bytearray)):
             return 0.0
         penalty = 0.0
+        recent_vetoes = self._recent_effect_veto_index()
+        bundle_key = str(bundle.get("bundle_key", "") or "")
         for member in members:
             if not isinstance(member, Mapping):
                 continue
@@ -3017,7 +3269,57 @@ class HookedTransformerWorkerRuntime:
                 penalty = max(penalty, 0.7)
             if bool(member.get("effect_family_collapsed_member", False)):
                 penalty = max(penalty, 0.35)
+            family_key = str(member.get("candidate_family", "") or "")
+            recipe_id = str(member.get("operator_recipe_id", "") or "")
+            member_bundle_key = str(member.get("bundle_key", "") or bundle_key)
+            if (
+                family_key in recent_vetoes["collapse_families"]
+                or recipe_id in recent_vetoes["collapse_recipe_ids"]
+                or member_bundle_key in recent_vetoes["collapse_bundle_keys"]
+            ):
+                penalty = max(penalty, 1.2)
+            elif (
+                family_key in recent_vetoes["harmful_families"]
+                or recipe_id in recent_vetoes["harmful_recipe_ids"]
+                or member_bundle_key in recent_vetoes["harmful_bundle_keys"]
+            ):
+                penalty = max(penalty, 1.0)
         return penalty
+
+    def _recent_effect_veto_index(self) -> dict[str, set[str]]:
+        summary = self._recent_effect_summary if isinstance(self._recent_effect_summary, Mapping) else {}
+        return {
+            "harmful_families": {
+                str(item)
+                for item in summary.get("recent_harmful_surface_family_keys", ())
+                if str(item)
+            },
+            "collapse_families": {
+                str(item)
+                for item in summary.get("recent_collapse_sharpener_surface_family_keys", ())
+                if str(item)
+            },
+            "harmful_recipe_ids": {
+                str(item)
+                for item in summary.get("recent_harmful_operator_recipe_ids", ())
+                if str(item)
+            },
+            "collapse_recipe_ids": {
+                str(item)
+                for item in summary.get("recent_collapse_sharpener_operator_recipe_ids", ())
+                if str(item)
+            },
+            "harmful_bundle_keys": {
+                str(item)
+                for item in summary.get("recent_harmful_bundle_keys", ())
+                if str(item)
+            },
+            "collapse_bundle_keys": {
+                str(item)
+                for item in summary.get("recent_collapse_sharpener_bundle_keys", ())
+                if str(item)
+            },
+        }
 
     def _bundle_duplicate_family_penalty(
         self,
@@ -3119,6 +3421,8 @@ class HookedTransformerWorkerRuntime:
         duplicate_penalty: float,
     ) -> list[str]:
         vetoes: list[str] = []
+        recent_vetoes = self._recent_effect_veto_index()
+        bundle_key = str(bundle.get("bundle_key", "") or "")
         members = bundle.get("members")
         if isinstance(members, SequenceABC) and not isinstance(members, (str, bytes, bytearray)):
             labels = {
@@ -3132,10 +3436,30 @@ class HookedTransformerWorkerRuntime:
                 vetoes.append("dead_actuator_family")
             if any(bool(member.get("effect_family_collapsed_member", False)) for member in members if isinstance(member, Mapping)):
                 vetoes.append("family_collapse")
+            for member in members:
+                if not isinstance(member, Mapping):
+                    continue
+                family_key = str(member.get("candidate_family", "") or "")
+                recipe_id = str(member.get("operator_recipe_id", "") or "")
+                member_bundle_key = str(member.get("bundle_key", "") or bundle_key)
+                if (
+                    family_key in recent_vetoes["harmful_families"]
+                    or recipe_id in recent_vetoes["harmful_recipe_ids"]
+                    or member_bundle_key in recent_vetoes["harmful_bundle_keys"]
+                ):
+                    vetoes.append("recent_harmful_family")
+                if (
+                    family_key in recent_vetoes["collapse_families"]
+                    or recipe_id in recent_vetoes["collapse_recipe_ids"]
+                    or member_bundle_key in recent_vetoes["collapse_bundle_keys"]
+                ):
+                    vetoes.append("collapse_sharpener_veto")
         if duplicate_penalty >= 0.4:
             vetoes.append("duplicate_overflow")
         if harmful_penalty >= 0.7 and "recent_harmful_family" not in vetoes and "dead_actuator_family" not in vetoes:
             vetoes.append("harmful_family_block")
+        if harmful_penalty >= 1.0 and "collapse_sharpener_veto" not in vetoes:
+            vetoes.append("collapse_sharpener_veto")
         return vetoes
 
     def _bundle_member_sort_key(self, candidate: Mapping[str, Any]) -> tuple[float, float, int, str]:
@@ -4867,6 +5191,17 @@ class HookedTransformerWorkerRuntime:
                 }
                 for key, value in list(self._operator_certification_table.items())[:6]
             ]
+        if self._operator_bridge_plan_table:
+            hints["operator_bridge_plan_count"] = len(self._operator_bridge_plan_table)
+            hints["operator_bridge_plan_objectives"] = [
+                {
+                    "objective_bundle_key": str(key),
+                    "actuator_bundle_key": str(value.get("actuator_bundle_key", "") or ""),
+                    "actuator_class": str(value.get("actuator_class", "") or ""),
+                }
+                for key, value in list(self._operator_bridge_plan_table.items())[:6]
+                if isinstance(value, Mapping)
+            ]
         hints["kv_effect_family_count"] = len([key for key in kv_effect_families if str(key)])
         hints["kv_effect_family_collapsed"] = bool(kv_candidate_edits) and len([key for key in kv_effect_families if str(key)]) < len(kv_candidate_edits)
         if kv_retry_candidate_edits:
@@ -4998,6 +5333,51 @@ class HookedTransformerWorkerRuntime:
                 hints["controller_pairwise_reason_text"] = str(kv_candidate_builder.get("controller_pairwise_reason_text"))
             if kv_candidate_builder.get("gate_report_pairwise_reason_text") not in (None, ""):
                 hints["gate_report_pairwise_reason_text"] = str(kv_candidate_builder.get("gate_report_pairwise_reason_text"))
+            bridge_plan_key = ""
+            for candidate_key in (
+                kv_candidate_builder.get("selected_bundle_key"),
+                kv_candidate_builder.get("gate_report_frontier_bundle_key"),
+                kv_candidate_builder.get("base_winner_bundle_key"),
+                kv_candidate_builder.get("challenger_bundle_key"),
+            ):
+                if candidate_key in (None, ""):
+                    continue
+                candidate_key_text = str(candidate_key)
+                if candidate_key_text in self._operator_bridge_plan_table:
+                    bridge_plan_key = candidate_key_text
+                    break
+            selected_bundle_focus_term = ""
+            bundle_score_debug = kv_candidate_builder.get("bundle_score_debug")
+            if isinstance(bundle_score_debug, SequenceABC) and not isinstance(bundle_score_debug, (str, bytes, bytearray)):
+                for item in bundle_score_debug:
+                    if not isinstance(item, Mapping):
+                        continue
+                    bundle_key_text = str(item.get("bundle_key", "") or "")
+                    if bridge_plan_key and bundle_key_text == bridge_plan_key:
+                        selected_bundle_focus_term = str(item.get("focus_term", "") or "")
+                        break
+            bridge_plan_report = self._bridge_plan_report_for_bundle(
+                bridge_plan_key,
+                objective_term=selected_bundle_focus_term or controller_focus_term,
+            )
+            if bridge_plan_report is not None:
+                hints["bridge_plan_available"] = True
+                hints["bridge_plan_required"] = bool(bridge_plan_report.get("bridge_required", True))
+                hints["bridge_plan_report"] = dict(bridge_plan_report)
+                if bridge_plan_report.get("objective_bundle_key") not in (None, ""):
+                    hints["bridge_plan_objective_bundle_key"] = str(bridge_plan_report.get("objective_bundle_key"))
+                if bridge_plan_report.get("objective_term") not in (None, ""):
+                    hints["bridge_plan_objective_term"] = str(bridge_plan_report.get("objective_term"))
+                if bridge_plan_report.get("actuator_bundle_key") not in (None, ""):
+                    hints["bridge_plan_actuator_bundle_key"] = str(bridge_plan_report.get("actuator_bundle_key"))
+                if bridge_plan_report.get("actuator_term") not in (None, ""):
+                    hints["bridge_plan_actuator_term"] = str(bridge_plan_report.get("actuator_term"))
+                if bridge_plan_report.get("operator_recipe_id") not in (None, ""):
+                    hints["bridge_plan_recipe_id"] = str(bridge_plan_report.get("operator_recipe_id"))
+                if bridge_plan_report.get("actuator_class") not in (None, ""):
+                    hints["bridge_plan_actuator_class"] = str(bridge_plan_report.get("actuator_class"))
+                if bridge_plan_report.get("bridge_plan_reason") not in (None, ""):
+                    hints["bridge_plan_reason"] = str(bridge_plan_report.get("bridge_plan_reason"))
             if isinstance(kv_candidate_builder.get("bundle_score_debug"), SequenceABC) and not isinstance(
                 kv_candidate_builder.get("bundle_score_debug"), (str, bytes, bytearray)
             ):
@@ -7319,6 +7699,11 @@ class HookedTransformerWorkerRuntime:
                     focus_terms.append(normalized_term)
         command = {"version": "0.1", "decision": "apply", "edits": prepared_edits}
         policy_override = self._replay_policy(max_edits_per_step_override=max_edits_per_step_override)
+        effective_max_edits_per_step = (
+            int(policy_override.global_budget.max_edits_per_step)
+            if policy_override is not None
+            else int(self.max_edits_per_step)
+        )
         edited = self._simulate_decode(
             max_new_tokens=max_new_tokens,
             top_k=top_k,
@@ -7356,6 +7741,11 @@ class HookedTransformerWorkerRuntime:
             "topk_token_diff": self._topk_token_diff(baseline["first_logits"], edited["first_logits"], top_k=top_k),
             "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
             "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"])),
+            "top1_margin_delta": round(float(edited.get("top1_margin", 0.0) or 0.0) - float(baseline.get("top1_margin", 0.0) or 0.0), 6),
+            "repetition_score_delta": round(
+                float(edited.get("repetition_score", 0.0) or 0.0) - float(baseline.get("repetition_score", 0.0) or 0.0),
+                6,
+            ),
             "required_term_recall_delta": round(
                 float(edited_score.get("required_term_recall") or 0.0) - float(baseline_score.get("required_term_recall") or 0.0),
                 6,
@@ -7385,6 +7775,17 @@ class HookedTransformerWorkerRuntime:
         )
         if term_readout_deltas:
             result["term_readout_deltas"] = dict(term_readout_deltas)
+        result["candidate_fingerprint"] = self._candidate_fingerprint(
+            edits,
+            intended_bundle_key=intended_bundle_key,
+            label=label,
+        )
+        result["eval_context_fingerprint"] = self._eval_context_fingerprint(
+            max_new_tokens=max_new_tokens,
+            top_k=top_k,
+            max_edits_per_step=effective_max_edits_per_step,
+            focus_terms=focus_terms,
+        )
         probe_summary = self._classify_probe_result(
             {
                 **result,
@@ -7622,6 +8023,16 @@ class HookedTransformerWorkerRuntime:
                     contrast_scale = float(spec.get("contrast_scale", 1.0) or 1.0)
                     competitor_strategy = str(spec.get("competitor_strategy", "") or "base")
                     recipe_name = str(spec.get("recipe_name", localization) or localization)
+                    v_alpha_override = (
+                        float(spec["v_alpha"])
+                        if isinstance(spec.get("v_alpha"), (int, float)) and not isinstance(spec.get("v_alpha"), bool)
+                        else None
+                    )
+                    k_alpha_override = (
+                        float(spec["k_alpha"])
+                        if isinstance(spec.get("k_alpha"), (int, float)) and not isinstance(spec.get("k_alpha"), bool)
+                        else None
+                    )
                     for mode in tuple(spec.get("modes", ("kv_pair",))):
                         recipe_seed_key = self._operator_recipe_seed_key(
                             mode=str(mode),
@@ -7661,6 +8072,7 @@ class HookedTransformerWorkerRuntime:
                                         contrast_mode=contrast_mode,
                                         competitor_candidate=competitor_by_site.get(site),
                                         contrast_scale=contrast_scale,
+                                        alpha_override=v_alpha_override if site == "v_cache" else k_alpha_override,
                                     )
                                 )
                             if pair_members and all(member is not None for member in pair_members):
@@ -7709,7 +8121,7 @@ class HookedTransformerWorkerRuntime:
                                 contrast_mode=contrast_mode,
                                 competitor_candidate=competitor_by_site.get("v_cache"),
                                 contrast_scale=contrast_scale,
-                                alpha_override=0.045,
+                                alpha_override=0.045 if v_alpha_override is None else v_alpha_override,
                             )
                             prepared_k = self._materialize_recipe_candidate(
                                 k_member,
@@ -7718,7 +8130,7 @@ class HookedTransformerWorkerRuntime:
                                 contrast_mode=contrast_mode,
                                 competitor_candidate=competitor_by_site.get("k_cache"),
                                 contrast_scale=contrast_scale,
-                                alpha_override=0.03,
+                                alpha_override=0.03 if k_alpha_override is None else k_alpha_override,
                             )
                             if prepared_v is None or prepared_k is None:
                                 continue
@@ -7732,8 +8144,8 @@ class HookedTransformerWorkerRuntime:
                                     "recipe_pooling": pooling,
                                     "contrast_mode": contrast_mode,
                                     "recipe_contrast_scale": contrast_scale,
-                                    "recipe_k_alpha": 0.03,
-                                    "recipe_v_alpha": 0.045,
+                                    "recipe_k_alpha": prepared_k.get("recipe_alpha", prepared_k.get("op", {}).get("alpha", 0.0)),
+                                    "recipe_v_alpha": prepared_v.get("recipe_alpha", prepared_v.get("op", {}).get("alpha", 0.0)),
                                 }
                             )
                             result = self.replay_candidate_edits_actual_delta(
@@ -7766,6 +8178,7 @@ class HookedTransformerWorkerRuntime:
                                 contrast_mode=contrast_mode,
                                 competitor_candidate=competitor_by_site.get(site),
                                 contrast_scale=contrast_scale,
+                                alpha_override=v_alpha_override if site == "v_cache" else k_alpha_override,
                             )
                             if prepared is None:
                                 continue
@@ -7814,6 +8227,12 @@ class HookedTransformerWorkerRuntime:
             evaluations,
             bundle_term_by_key=bundle_term_by_key,
         )
+        bridge_plan_recommendations = self._summarize_bridge_plan_recommendations(ownership)
+        self._operator_bridge_plan_table = {
+            str(item.get("objective_bundle_key", "") or ""): dict(item)
+            for item in bridge_plan_recommendations
+            if str(item.get("objective_bundle_key", "") or "")
+        }
         return {
             "base_winner_bundle_key": strategy_hints.get("base_winner_bundle_key"),
             "challenger_bundle_key": strategy_hints.get("challenger_bundle_key"),
@@ -7822,6 +8241,7 @@ class HookedTransformerWorkerRuntime:
             "evaluations": evaluations,
             "operator_recipe_certifications": recipe_certifications,
             "operator_recipe_bundle_ownership": ownership,
+            "bridge_plan_recommendations": bridge_plan_recommendations,
             "recipe_stealer_bundle_keys": {
                 f"{str(seed_key)}::{str(bundle_key)}": str(stealer_key)
                 for (seed_key, bundle_key), stealer_key in sorted(stealer_bundle_map.items(), key=lambda item: (str(item[0][0]), str(item[0][1])))
@@ -7887,6 +8307,7 @@ class HookedTransformerWorkerRuntime:
             for item in certifications
             if str(item.get("operator_family_key", "") or "")
         }
+        self._operator_bridge_plan_table = {}
         return {
             "base_winner_bundle_key": strategy_hints.get("base_winner_bundle_key"),
             "challenger_bundle_key": strategy_hints.get("challenger_bundle_key"),
@@ -8738,6 +9159,28 @@ class HookedTransformerWorkerRuntime:
             "controller_confidence": None
             if metadata.get("controller_confidence") is None
             else float(metadata["controller_confidence"]),
+            "surface_family_key": None if metadata.get("surface_family_key") is None else str(metadata.get("surface_family_key")),
+            "operator_recipe_id": None if metadata.get("operator_recipe_id") is None else str(metadata.get("operator_recipe_id")),
+            "operator_recipe_seed_key": None
+            if metadata.get("operator_recipe_seed_key") is None
+            else str(metadata.get("operator_recipe_seed_key")),
+            "bundle_key": None if metadata.get("bundle_key") is None else str(metadata.get("bundle_key")),
+            "objective_bundle_key": None
+            if metadata.get("objective_bundle_key") is None
+            else str(metadata.get("objective_bundle_key")),
+            "step_actuator_bundle_key": None
+            if metadata.get("step_actuator_bundle_key") is None
+            else str(metadata.get("step_actuator_bundle_key")),
+            "apply_kind": None if metadata.get("apply_kind") is None else str(metadata.get("apply_kind")),
+            "production_apply_allowed": None
+            if metadata.get("production_apply_allowed") is None
+            else bool(metadata.get("production_apply_allowed")),
+            "production_policy_would_apply": None
+            if metadata.get("production_policy_would_apply") is None
+            else bool(metadata.get("production_policy_would_apply")),
+            "certified_for_apply": None
+            if metadata.get("certified_for_apply") is None
+            else bool(metadata.get("certified_for_apply")),
             "budget_key": str(metadata.get("budget_key", str(edit_id).split(":", 1)[0])),
             "budget_pool": str(metadata.get("budget_pool", MAIN_EDIT_BUDGET_POOL) or MAIN_EDIT_BUDGET_POOL),
         }

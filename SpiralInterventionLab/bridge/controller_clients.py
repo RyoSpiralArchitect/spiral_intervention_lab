@@ -80,7 +80,10 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
         "expected_effect",
         "observed_outcome",
         "why_failed_or_helped",
+        "blocked_by",
         "next_change",
+        "next_evidence_needed",
+        "diagnostic_request",
         "next_trigger",
         "next_action",
         "stop_condition",
@@ -88,6 +91,9 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
         "apply_block_reason",
         "surface_family_key",
         "focus_term",
+        "objective_bundle_key",
+        "step_actuator_bundle_key",
+        "why_not_apply",
         "decision",
         "recorded_step",
     ):
@@ -110,6 +116,21 @@ def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
         compact_bullets = [str(item) for item in bullets[:4] if str(item).strip()]
         if compact_bullets:
             summary["evidence_bullets"] = compact_bullets
+    shadow_proposals = value.get("shadow_proposals")
+    if isinstance(shadow_proposals, Sequence) and not isinstance(shadow_proposals, (str, bytes, bytearray)):
+        compact_shadow: list[dict[str, Any]] = []
+        for item in shadow_proposals[:2]:
+            if not isinstance(item, Mapping):
+                continue
+            proposal = {
+                key: item.get(key)
+                for key in ("kind", "bundle_key", "objective_bundle_key", "actuator_bundle_key", "reason", "decision")
+                if key in item and item.get(key) not in (None, "")
+            }
+            if proposal:
+                compact_shadow.append(proposal)
+        if compact_shadow:
+            summary["shadow_proposals"] = compact_shadow
     return summary or None
 
 
@@ -665,6 +686,10 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
     next_action = None
     observer_check_request = None
     tool_requests = None
+    objective_bundle_key = None
+    step_actuator_bundle_key = None
+    why_not_apply = None
+    shadow_proposals = None
     if isinstance(meta, Mapping):
         if meta.get("hypothesis"):
             hypotheses.append(str(meta["hypothesis"]))
@@ -679,6 +704,12 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
             "apply_block_reason",
             "surface_family_key",
             "focus_term",
+            "objective_bundle_key",
+            "step_actuator_bundle_key",
+            "blocked_by",
+            "next_evidence_needed",
+            "diagnostic_request",
+            "why_not_apply",
             "transfer_confidence",
             "same_family_escalation_risk",
             "finish_budget_reserved",
@@ -696,6 +727,14 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
             next_action = str(meta["next_action"])
         observer_check_request = meta.get("observer_check_request")
         tool_requests = meta.get("tool_requests")
+        if meta.get("objective_bundle_key") not in (None, ""):
+            objective_bundle_key = str(meta["objective_bundle_key"])
+        if meta.get("step_actuator_bundle_key") not in (None, ""):
+            step_actuator_bundle_key = str(meta["step_actuator_bundle_key"])
+        if meta.get("why_not_apply") not in (None, ""):
+            why_not_apply = str(meta["why_not_apply"])
+        if isinstance(meta.get("shadow_proposals"), Sequence) and not isinstance(meta.get("shadow_proposals"), (str, bytes, bytearray)):
+            shadow_proposals = _compact_controller_memory({"shadow_proposals": meta.get("shadow_proposals")})
     elif meta is not None:
         if getattr(meta, "hypothesis", None):
             hypotheses.append(str(meta.hypothesis))
@@ -753,6 +792,22 @@ def _decision_summary(command: ControllerCommand) -> dict[str, Any]:
         summary["next_trigger"] = next_trigger
     if next_action:
         summary["next_action"] = next_action
+    if objective_bundle_key is not None:
+        summary["objective_bundle_key"] = objective_bundle_key
+    if step_actuator_bundle_key is not None:
+        summary["step_actuator_bundle_key"] = step_actuator_bundle_key
+    if objective_bundle_key is not None or step_actuator_bundle_key is not None:
+        summary["plan_mode"] = (
+            "dual_layer"
+            if objective_bundle_key not in (None, "")
+            and step_actuator_bundle_key not in (None, "")
+            and objective_bundle_key != step_actuator_bundle_key
+            else "single_layer"
+        )
+    if why_not_apply is not None:
+        summary["why_not_apply"] = why_not_apply
+    if isinstance(shadow_proposals, Mapping) and shadow_proposals.get("shadow_proposals"):
+        summary["shadow_proposals"] = shadow_proposals["shadow_proposals"]
     return summary
 
 
@@ -812,6 +867,19 @@ def _normalize_controller_payload(value: Any) -> Any:
                 meta["tool_requests"] = meta.pop("request_tools")
             if isinstance(meta.get("tool_requests"), Mapping):
                 meta["tool_requests"] = [dict(meta["tool_requests"])]
+            for source_key, target_key in (
+                ("objective_bundle_key", "objective_bundle_key"),
+                ("objective_bundle", "objective_bundle_key"),
+                ("step_actuator_bundle_key", "step_actuator_bundle_key"),
+                ("actuator_bundle_key", "step_actuator_bundle_key"),
+                ("actuator_bundle", "step_actuator_bundle_key"),
+                ("why_not_apply", "why_not_apply"),
+                ("not_apply_reason", "why_not_apply"),
+                ("shadow_proposals", "shadow_proposals"),
+                ("shadow_plan", "shadow_proposals"),
+            ):
+                if source_key in normalized and target_key not in meta:
+                    meta[target_key] = normalized.pop(source_key)
             controller_memory = meta.get("controller_memory")
             if isinstance(controller_memory, Mapping):
                 for key in (
@@ -819,6 +887,12 @@ def _normalize_controller_payload(value: Any) -> Any:
                     "apply_block_reason",
                     "surface_family_key",
                     "focus_term",
+                    "objective_bundle_key",
+                    "step_actuator_bundle_key",
+                    "blocked_by",
+                    "next_evidence_needed",
+                    "diagnostic_request",
+                    "why_not_apply",
                     "transfer_confidence",
                     "same_family_escalation_risk",
                     "finish_budget_reserved",
@@ -826,6 +900,11 @@ def _normalize_controller_payload(value: Any) -> Any:
                 ):
                     if key not in meta and controller_memory.get(key) is not None:
                         meta[key] = controller_memory.get(key)
+                if "shadow_proposals" not in meta and isinstance(controller_memory.get("shadow_proposals"), Sequence) and not isinstance(
+                    controller_memory.get("shadow_proposals"),
+                    (str, bytes, bytearray),
+                ):
+                    meta["shadow_proposals"] = controller_memory.get("shadow_proposals")
             if "rationale" in normalized and "micro_rationale" not in meta:
                 meta["micro_rationale"] = normalized.pop("rationale")
             if "micro_rationale" in normalized and "micro_rationale" not in meta:
@@ -839,6 +918,11 @@ def _normalize_controller_payload(value: Any) -> Any:
                 "apply_block_reason",
                 "surface_family_key",
                 "focus_term",
+                "objective_bundle_key",
+                "step_actuator_bundle_key",
+                "blocked_by",
+                "next_evidence_needed",
+                "why_not_apply",
                 "transfer_confidence",
                 "same_family_escalation_risk",
                 "finish_budget_reserved",
@@ -846,6 +930,8 @@ def _normalize_controller_payload(value: Any) -> Any:
             ):
                 if key in normalized and key not in meta:
                     meta[key] = normalized.pop(key)
+            if "shadow_proposals" in normalized and "shadow_proposals" not in meta:
+                meta["shadow_proposals"] = normalized.pop("shadow_proposals")
             if meta:
                 normalized["meta"] = meta
 
@@ -915,6 +1001,53 @@ def _normalize_controller_payload(value: Any) -> Any:
     return normalized
 
 
+def _normalization_delta(raw_value: Any, normalized_value: Any) -> dict[str, Any] | None:
+    if not isinstance(raw_value, Mapping) or not isinstance(normalized_value, Mapping):
+        return None
+    raw_keys = [str(key) for key in raw_value.keys()]
+    normalized_keys = [str(key) for key in normalized_value.keys()]
+    raw_meta = raw_value.get("meta")
+    normalized_meta = normalized_value.get("meta")
+    delta: dict[str, Any] = {
+        "raw_top_level_keys": raw_keys,
+        "normalized_top_level_keys": normalized_keys,
+    }
+    if isinstance(normalized_meta, Mapping):
+        normalized_meta_keys = [str(key) for key in normalized_meta.keys()]
+        delta["normalized_meta_keys"] = normalized_meta_keys
+        if isinstance(raw_meta, Mapping):
+            raw_meta_keys = [str(key) for key in raw_meta.keys()]
+            delta["raw_meta_keys"] = raw_meta_keys
+            moved = [key for key in normalized_meta_keys if key not in raw_meta_keys and key in raw_keys]
+            if moved:
+                delta["moved_into_meta"] = moved
+        else:
+            moved = [key for key in normalized_meta_keys if key in raw_keys]
+            if moved:
+                delta["moved_into_meta"] = moved
+    controller_memory = normalized_value.get("meta", {}).get("controller_memory") if isinstance(normalized_value.get("meta"), Mapping) else None
+    if isinstance(controller_memory, Mapping):
+        delta["normalized_controller_memory_keys"] = [str(key) for key in controller_memory.keys()]
+    return delta
+
+
+def _controller_output_token_budget(payload: Any, base_tokens: int) -> int:
+    limit = int(base_tokens)
+    if not isinstance(payload, Mapping):
+        return limit
+    control_phase_hint = str(payload.get("control_phase_hint", "") or "").strip().lower()
+    if control_phase_hint != "readout_escape":
+        return limit
+    strategy_hints = payload.get("strategy_hints")
+    compare_bonus = 0
+    if isinstance(strategy_hints, Mapping):
+        if strategy_hints.get("gate_report_challenger_bundle_key") not in (None, ""):
+            compare_bonus += 64
+        if strategy_hints.get("bridge_plan_available") is True:
+            compare_bonus += 64
+    return max(limit, min(limit + compare_bonus + 64, limit + 192))
+
+
 class ProviderControllerClient:
     def __init__(
         self,
@@ -938,10 +1071,12 @@ class ProviderControllerClient:
 
     def invoke(self, packet: Any) -> ControllerCommand:
         payload = _payload_for_provider(packet)
+        effective_max_output_tokens = _controller_output_token_budget(payload, self.max_output_tokens)
         trace: dict[str, Any] = {
             "provider": self.provider.provider_name,
             "model": self.provider.model_name,
             "max_attempts": self.max_attempts,
+            "effective_max_output_tokens": effective_max_output_tokens,
             "system_prompt_sha256": _stable_hash(self.system_prompt),
             "observation": _observation_summary(payload),
             "attempts": [],
@@ -955,7 +1090,7 @@ class ProviderControllerClient:
             request = ControllerProviderRequest(
                 system_prompt=self.system_prompt,
                 payload=payload,
-                max_output_tokens=self.max_output_tokens,
+                max_output_tokens=effective_max_output_tokens,
                 temperature=self.temperature,
                 expect_json=True,
                 retry_note=retry_note,
@@ -968,7 +1103,7 @@ class ProviderControllerClient:
                 "latency_ms": round(latency_ms, 3),
                 "request": {
                     "expect_json": True,
-                    "max_output_tokens": self.max_output_tokens,
+                    "max_output_tokens": effective_max_output_tokens,
                     "temperature": self.temperature,
                     "retry_note": retry_note,
                 },
@@ -980,7 +1115,11 @@ class ProviderControllerClient:
                 "response_text": str(response.text),
             }
             try:
-                parsed = _normalize_controller_payload(json.loads(_extract_json_object(response.text)))
+                raw_json_object = json.loads(_extract_json_object(response.text))
+                parsed = _normalize_controller_payload(raw_json_object)
+                attempt_trace["raw_json_object"] = _json_ready(raw_json_object)
+                attempt_trace["normalized_payload"] = _json_ready(parsed)
+                attempt_trace["normalization_delta"] = _json_ready(_normalization_delta(raw_json_object, parsed))
                 command = parse_controller_command(parsed)
                 attempt_trace["parse_ok"] = True
                 trace["attempts"].append(attempt_trace)

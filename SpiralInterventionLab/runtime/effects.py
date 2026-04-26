@@ -168,6 +168,61 @@ def classify_effect(
     return "neutral"
 
 
+def classify_actuator_effect(
+    delta: Mapping[str, float],
+    *,
+    before: Mapping[str, Any] | None = None,
+    after: Mapping[str, Any] | None = None,
+) -> str:
+    del before
+    partial_delta = float(delta.get("partial_score", 0.0) or 0.0)
+    semantic_delta = float(delta.get("semantic_progress_score", 0.0) or 0.0)
+    recall_delta = float(delta.get("required_term_recall", 0.0) or 0.0)
+    span_delta = float(delta.get("required_term_span_progress", 0.0) or 0.0)
+    progress_delta = float(delta.get("progress_score", 0.0) or 0.0)
+    forbidden_delta = float(delta.get("forbidden_term_clean", 0.0) or 0.0)
+    budget_score_delta = float(delta.get("word_budget_score", 0.0) or 0.0)
+    budget_ok_delta = float(delta.get("budget_ok", 0.0) or 0.0)
+    repetition_delta = float(delta.get("repetition_score", 0.0) or 0.0)
+    repeat_flag_delta = float(delta.get("repeat_flag", 0.0) or 0.0)
+    entropy_delta = float(delta.get("entropy", 0.0) or 0.0)
+    top1_margin_delta = float(delta.get("top1_margin", 0.0) or 0.0)
+
+    made_term_progress = _coverage_progress(delta, after) or _constraint_cleanup_progress(delta)
+    if made_term_progress:
+        return "self_or_progress_actuator"
+
+    no_term_progress = (
+        recall_delta <= 1e-6
+        and span_delta <= 0.01
+        and partial_delta <= 1e-6
+        and semantic_delta <= 0.03
+        and progress_delta <= 0.0
+        and forbidden_delta <= 1e-6
+        and budget_score_delta <= 1e-6
+        and budget_ok_delta <= 0.0
+    )
+    collapse_like = (
+        repeat_flag_delta > 0.0
+        or repetition_delta > 0.05
+        or _after_is_looping(after)
+    )
+    sharpens_wrong_basin = entropy_delta < -0.02 and top1_margin_delta > 0.002
+    if no_term_progress and collapse_like and sharpens_wrong_basin:
+        return "collapse_sharpener"
+
+    if (
+        no_term_progress
+        and abs(repetition_delta) <= 0.05
+        and abs(repeat_flag_delta) <= 0.5
+        and abs(entropy_delta) <= 0.02
+        and abs(top1_margin_delta) <= 0.002
+    ):
+        return "dead_actuator"
+
+    return "unknown"
+
+
 def build_edit_effect(
     *,
     edit_id: str,
@@ -181,6 +236,16 @@ def build_edit_effect(
     op: str | None = None,
     step_size: float | None = None,
     edit_cost: float | None = None,
+    surface_family_key: str | None = None,
+    operator_recipe_id: str | None = None,
+    operator_recipe_seed_key: str | None = None,
+    bundle_key: str | None = None,
+    objective_bundle_key: str | None = None,
+    step_actuator_bundle_key: str | None = None,
+    apply_kind: str | None = None,
+    production_apply_allowed: bool | None = None,
+    production_policy_would_apply: bool | None = None,
+    certified_for_apply: bool | None = None,
 ) -> dict[str, Any]:
     delta = compute_metric_delta(before, after)
     effect = {
@@ -192,6 +257,7 @@ def build_edit_effect(
         "delta": delta,
         "signal_profile": classify_signal_profile(delta, before=before, after=after) if delta else "flat",
         "verdict": classify_effect(delta, before=before, after=after) if delta else "unknown",
+        "actuator_class": classify_actuator_effect(delta, before=before, after=after) if delta else "unknown",
     }
     if hypothesis is not None:
         effect["hypothesis"] = str(hypothesis)
@@ -205,6 +271,26 @@ def build_edit_effect(
         effect["step_size"] = float(step_size)
     if edit_cost is not None:
         effect["edit_cost"] = float(edit_cost)
+    if surface_family_key is not None:
+        effect["surface_family_key"] = str(surface_family_key)
+    if operator_recipe_id is not None:
+        effect["operator_recipe_id"] = str(operator_recipe_id)
+    if operator_recipe_seed_key is not None:
+        effect["operator_recipe_seed_key"] = str(operator_recipe_seed_key)
+    if bundle_key is not None:
+        effect["bundle_key"] = str(bundle_key)
+    if objective_bundle_key is not None:
+        effect["objective_bundle_key"] = str(objective_bundle_key)
+    if step_actuator_bundle_key is not None:
+        effect["step_actuator_bundle_key"] = str(step_actuator_bundle_key)
+    if apply_kind is not None:
+        effect["apply_kind"] = str(apply_kind)
+    if production_apply_allowed is not None:
+        effect["production_apply_allowed"] = bool(production_apply_allowed)
+    if production_policy_would_apply is not None:
+        effect["production_policy_would_apply"] = bool(production_policy_would_apply)
+    if certified_for_apply is not None:
+        effect["certified_for_apply"] = bool(certified_for_apply)
     return effect
 
 
@@ -212,9 +298,21 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     verdict_counts = {"helpful": 0, "neutral": 0, "harmful": 0, "unknown": 0}
     grouped: dict[str, dict[str, Any]] = {}
     latest: list[dict[str, Any]] = []
+    recent_harmful_surface_family_keys: list[str] = []
+    recent_collapse_sharpener_surface_family_keys: list[str] = []
+    recent_harmful_operator_recipe_ids: list[str] = []
+    recent_collapse_sharpener_operator_recipe_ids: list[str] = []
+    recent_harmful_bundle_keys: list[str] = []
+    recent_collapse_sharpener_bundle_keys: list[str] = []
+
+    def _append_unique(items: list[str], value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in items:
+            items.append(text)
 
     for effect in effects:
         verdict = str(effect.get("verdict", "unknown"))
+        actuator_class = str(effect.get("actuator_class", "unknown") or "unknown")
         verdict_counts.setdefault(verdict, 0)
         verdict_counts[verdict] += 1
 
@@ -274,9 +372,19 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             {
                 "edit_id": effect.get("edit_id"),
                 "surface_id": effect.get("surface_id"),
+                "surface_family_key": effect.get("surface_family_key"),
+                "operator_recipe_id": effect.get("operator_recipe_id"),
+                "operator_recipe_seed_key": effect.get("operator_recipe_seed_key"),
+                "bundle_key": effect.get("bundle_key"),
+                "objective_bundle_key": effect.get("objective_bundle_key"),
+                "step_actuator_bundle_key": effect.get("step_actuator_bundle_key"),
+                "apply_kind": effect.get("apply_kind"),
+                "production_apply_allowed": effect.get("production_apply_allowed"),
+                "certified_for_apply": effect.get("certified_for_apply"),
                 "hypothesis": effect.get("hypothesis"),
                 "expected_effect": effect.get("expected_effect"),
                 "verdict": verdict,
+                "actuator_class": actuator_class,
                 "signal_profile": str(effect.get("signal_profile", "flat")),
                 "partial_score_delta": float(effect_delta.get("partial_score", 0.0) or 0.0)
                 if isinstance(effect_delta, Mapping)
@@ -315,6 +423,14 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 ),
             }
         )
+        if verdict == "harmful" or actuator_class == "collapse_sharpener":
+            _append_unique(recent_harmful_surface_family_keys, effect.get("surface_family_key"))
+            _append_unique(recent_harmful_operator_recipe_ids, effect.get("operator_recipe_id"))
+            _append_unique(recent_harmful_bundle_keys, effect.get("bundle_key"))
+        if actuator_class == "collapse_sharpener":
+            _append_unique(recent_collapse_sharpener_surface_family_keys, effect.get("surface_family_key"))
+            _append_unique(recent_collapse_sharpener_operator_recipe_ids, effect.get("operator_recipe_id"))
+            _append_unique(recent_collapse_sharpener_bundle_keys, effect.get("bundle_key"))
 
     hypothesis_stats: list[dict[str, Any]] = []
     for hypothesis, stats in grouped.items():
@@ -351,4 +467,10 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "verdict_counts": verdict_counts,
         "hypothesis_stats": hypothesis_stats,
         "latest_effects": latest[-4:],
+        "recent_harmful_surface_family_keys": recent_harmful_surface_family_keys[-8:],
+        "recent_collapse_sharpener_surface_family_keys": recent_collapse_sharpener_surface_family_keys[-8:],
+        "recent_harmful_operator_recipe_ids": recent_harmful_operator_recipe_ids[-8:],
+        "recent_collapse_sharpener_operator_recipe_ids": recent_collapse_sharpener_operator_recipe_ids[-8:],
+        "recent_harmful_bundle_keys": recent_harmful_bundle_keys[-8:],
+        "recent_collapse_sharpener_bundle_keys": recent_collapse_sharpener_bundle_keys[-8:],
     }

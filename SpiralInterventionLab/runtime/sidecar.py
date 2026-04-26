@@ -326,6 +326,47 @@ def build_heuristic_readout_analyzer(
     )
 
 
+def build_sae_feature_emitter_readout_analyzer(
+    *,
+    analyzer_name: str = "sae_feature_emitter_scaffold",
+) -> ReadoutAnalyzer:
+    heuristic = build_heuristic_readout_sidecar_analyzer(analyzer_name=f"{analyzer_name}:heuristic_fallback")
+
+    def analyze(capture: ReadoutSidecarCapture) -> Mapping[str, Any] | None:
+        base = dict(heuristic(capture) or {})
+        feature_hints: list[dict[str, Any]] = []
+        bundle_vectors = base.get("bundle_evidence_vectors")
+        if isinstance(bundle_vectors, Mapping):
+            for bundle_key, vector in list(bundle_vectors.items())[:6]:
+                if not isinstance(vector, Mapping):
+                    continue
+                feature_hints.append(
+                    {
+                        "bundle_key": str(bundle_key),
+                        "feature_family": "source_body_anchor"
+                        if bool(vector.get("source_body_exact", False))
+                        else "prompt_anchor",
+                        "support": _clip_score(vector.get("semantic_residual_support"), minimum=-2.0, maximum=2.0),
+                        "anchor_strength": _clip_score(vector.get("anchor_strength"), minimum=-2.0, maximum=2.0),
+                        "provenance_class": _clean_text(vector.get("provenance_class"), limit=32),
+                        "span_kind": _clean_text(vector.get("span_kind"), limit=64),
+                    }
+                )
+        base.update(
+            {
+                "analyzer_name": analyzer_name,
+                "feature_backend": "sae_sidecar",
+                "sae_status": "scaffold_feature_emitter_no_saelens_runtime",
+                "sae_feature_hints": feature_hints,
+                "notes": list(base.get("notes", []))[:5]
+                + ["sae_feature_emitter_scaffold", "policy_owner_remains_controller"],
+            }
+        )
+        return base
+
+    return analyze
+
+
 def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         return {}
@@ -350,6 +391,12 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
         summary["suggested_bundle_key"] = suggested_bundle_key
     if value.get("attractor_family_present") is not None:
         summary["attractor_family_present"] = bool(value.get("attractor_family_present"))
+    feature_backend = _clean_text(value.get("feature_backend"), limit=64)
+    if feature_backend is not None:
+        summary["feature_backend"] = feature_backend
+    sae_status = _clean_text(value.get("sae_status"), limit=96)
+    if sae_status is not None:
+        summary["sae_status"] = sae_status
 
     term_strengths = value.get("term_anchor_strength_by_term")
     if isinstance(term_strengths, Mapping):
@@ -427,6 +474,31 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
             cleaned_terms[term] = score
         if cleaned_terms:
             summary["candidate_support_terms"] = cleaned_terms
+
+    sae_feature_hints = value.get("sae_feature_hints")
+    if isinstance(sae_feature_hints, Sequence) and not isinstance(sae_feature_hints, (str, bytes, bytearray)):
+        cleaned_feature_hints: list[dict[str, Any]] = []
+        for item in sae_feature_hints[:6]:
+            if not isinstance(item, Mapping):
+                continue
+            row: dict[str, Any] = {}
+            for key, limit in (
+                ("bundle_key", 160),
+                ("feature_family", 64),
+                ("provenance_class", 32),
+                ("span_kind", 64),
+            ):
+                text = _clean_text(item.get(key), limit=limit)
+                if text is not None:
+                    row[key] = text
+            for key in ("support", "anchor_strength"):
+                score = _clip_score(item.get(key))
+                if score is not None:
+                    row[key] = score
+            if row:
+                cleaned_feature_hints.append(row)
+        if cleaned_feature_hints:
+            summary["sae_feature_hints"] = cleaned_feature_hints
 
     for source_key, target_key, limit in (
         ("candidate_family_vetoes", "candidate_family_vetoes", 8),
