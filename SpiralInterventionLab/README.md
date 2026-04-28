@@ -69,6 +69,7 @@ This is a scaffold, not a full benchmark suite yet.
 - Operator replay can classify recipes as `self_actuator`, `bridge_actuator`, `cross_bound`, `dead_actuator`, `collapse_sharpener`, or `noisy_or_harmful`.
 - Bridge eval and extra diagnostics now feed a `diagnostic_evidence_ledger` and `bundle_diagnostic_status` table for each frontier bundle.
 - Diagnostic-only tools include readout-local first-piece probes, attention head ablation, and a scaffolded `sae_scaffold` readout analyzer backend.
+- The controller can now request bounded diagnostics through `meta.diagnostic_request`; the runtime returns `latest_diagnostic_results` / `recent_diagnostic_results` on later packets.
 - These diagnostics are evidence for the controller, not production apply permission. The controller remains the policy owner.
 
 ## Current bottleneck
@@ -86,6 +87,18 @@ That means the main bottleneck is no longer candidate visibility alone. It is
 finding a certified self or bridge actuator that can move the answer boundary
 without handing policy ownership to the operator/certification layer.
 
+The latest direct-scan diagnostic-request replay confirms that this loop is now
+wired end to end:
+
+- controller requests `operator_diagnostic_replay`
+- runtime returns one diagnostic result
+- the result is visible on later controller observations
+- `production_apply_allowed` remains false
+- the frontier is still blocked by `dead_actuator / all_dead_actuator`
+
+So the current win is not task-score improvement yet. It is cleaner agency:
+the controller can ask for better evidence without gaining extra apply power.
+
 ## Ownership rule
 
 The package follows a strict control split:
@@ -98,6 +111,17 @@ The package follows a strict control split:
 
 If an operator diagnostic can explain that a recipe is dead or collapse-sharpening,
 that is useful evidence. It still should not silently decide the episode.
+
+## Near-term direction
+
+The next phase keeps the control contract stable while improving the evidence:
+
+- keep operator certification under controller ownership
+- freeze selector/gate behavior unless a log contract is broken
+- search for a `budget` self-actuator recipe
+- continue ownership-first recipe sweeps
+- promote bridge plans only once a safe bridge actuator is certified
+- expand SAE-style analysis only as a feature emitter, not as a second policy owner
 
 ## Smoke path
 

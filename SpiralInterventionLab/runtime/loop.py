@@ -439,6 +439,72 @@ def _extract_tool_requests(command: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _diagnostic_request_from_next_action(value: Any) -> str | None:
+    text = str(value or "").strip().lower().replace("-", "_")
+    return {
+        "request_operator_diagnostic": "operator_diagnostic_replay",
+        "request_attention_head_ablation": "attention_head_ablation_on_frontier",
+        "request_sae_feature_scan": "sae_feature_emitter_scan",
+    }.get(text)
+
+
+def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> list[dict[str, Any]]:
+    meta = _command_meta(command)
+    if not isinstance(meta, Mapping):
+        meta = {}
+    strategy_hints = _packet_strategy_hints(packet)
+    raw_requests: list[Any] = []
+    diagnostic_request = meta.get("diagnostic_request")
+    if diagnostic_request not in (None, ""):
+        raw_requests.append(diagnostic_request)
+    mapped_next_action = _diagnostic_request_from_next_action(meta.get("next_action"))
+    if mapped_next_action is not None:
+        raw_requests.append(mapped_next_action)
+    controller_memory = meta.get("controller_memory")
+    if isinstance(controller_memory, Mapping):
+        memory_request = controller_memory.get("diagnostic_request")
+        if memory_request not in (None, ""):
+            raw_requests.append(memory_request)
+        memory_next_action = _diagnostic_request_from_next_action(controller_memory.get("next_action"))
+        if memory_next_action is not None:
+            raw_requests.append(memory_next_action)
+
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in raw_requests:
+        if isinstance(raw, Mapping):
+            row = dict(raw)
+            name = row.get("diagnostic") or row.get("diagnostic_request") or row.get("request") or row.get("kind") or row.get("name")
+        else:
+            row = {"diagnostic": str(raw)}
+            name = raw
+        name_text = str(name or "").strip()
+        if not name_text:
+            continue
+        row.setdefault("diagnostic", name_text)
+        row.setdefault(
+            "bundle_key",
+            meta.get("objective_bundle_key")
+            or strategy_hints.get("diagnostic_frontier_bundle_key")
+            or strategy_hints.get("gate_report_frontier_bundle_key")
+            or strategy_hints.get("selected_bundle_key"),
+        )
+        row.setdefault("objective_bundle_key", meta.get("objective_bundle_key") or row.get("bundle_key"))
+        row.setdefault("step_actuator_bundle_key", meta.get("step_actuator_bundle_key") or row.get("bundle_key"))
+        row.setdefault(
+            "next_evidence_needed",
+            meta.get("next_evidence_needed")
+            or strategy_hints.get("diagnostic_frontier_next_evidence"),
+        )
+        row.setdefault("reason", meta.get("why_not_apply") or strategy_hints.get("diagnostic_frontier_reason_text"))
+        dedupe_key = "|".join(str(row.get(key, "") or "") for key in ("diagnostic", "bundle_key", "objective_bundle_key"))
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        normalized.append(row)
+    return normalized
+
+
 def _packet_strategy_hints(packet: Mapping[str, Any]) -> Mapping[str, Any]:
     strategy_hints = packet.get("strategy_hints")
     if isinstance(strategy_hints, Mapping):
@@ -1054,6 +1120,21 @@ def _log_pending_tool_events(
         logger.log({"event": "controller_tool_result", "step": step, **dict(event)})
 
 
+def _log_pending_diagnostic_events(
+    logger: StructuredLogger | None,
+    *,
+    step: int,
+    worker_runtime: Any,
+) -> None:
+    if logger is None:
+        return
+    reader = getattr(worker_runtime, "pop_diagnostic_events", None)
+    if not callable(reader):
+        return
+    for event in reader():
+        logger.log({"event": "controller_diagnostic_result", "step": step, **dict(event)})
+
+
 def _record_controller_memory(
     worker_runtime: Any,
     command: Any,
@@ -1149,6 +1230,25 @@ def run_episode(
                     request_event["executed"] = bool(results)
                     logger.log(request_event)
             _log_pending_tool_events(logger, step=step_count, worker_runtime=worker_runtime)
+
+        diagnostic_requests = _extract_diagnostic_requests(command, packet)
+        if diagnostic_requests:
+            requester = getattr(worker_runtime, "request_controller_diagnostics", None)
+            results = []
+            if callable(requester):
+                try:
+                    results = requester(diagnostic_requests, source="controller", packet=packet) or []
+                except TypeError:
+                    try:
+                        results = requester(diagnostic_requests, source="controller") or []
+                    except TypeError:
+                        results = requester(diagnostic_requests) or []
+            if logger is not None:
+                for request in diagnostic_requests:
+                    request_event = {"event": "controller_diagnostic_request", "step": step_count, **dict(request)}
+                    request_event["executed"] = bool(results)
+                    logger.log(request_event)
+            _log_pending_diagnostic_events(logger, step=step_count, worker_runtime=worker_runtime)
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

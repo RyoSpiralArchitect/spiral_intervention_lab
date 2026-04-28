@@ -491,9 +491,12 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
             {
                 "step": step,
                 "provider_attempts": [],
+                "controller_observation": None,
                 "controller_decision": None,
                 "controller_command": None,
                 "controller_selection": None,
+                "diagnostic_requests": [],
+                "diagnostic_results": [],
             },
         )
         event_name = str(event.get("event", "") or "")
@@ -508,12 +511,18 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
                     "normalization_delta": event.get("normalization_delta"),
                 }
             )
+        elif event_name == "controller_observation":
+            bucket["controller_observation"] = dict(event)
         elif event_name == "controller_decision":
             bucket["controller_decision"] = dict(event)
         elif event_name == "controller_command":
             bucket["controller_command"] = dict(event)
         elif event_name == "controller_selection":
             bucket["controller_selection"] = dict(event)
+        elif event_name == "controller_diagnostic_request":
+            bucket["diagnostic_requests"].append(dict(event))
+        elif event_name == "controller_diagnostic_result":
+            bucket["diagnostic_results"].append(dict(event))
     views: list[dict[str, Any]] = []
     for step in sorted(grouped):
         bucket = grouped[step]
@@ -524,9 +533,14 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
                 "step": step,
                 "provider_attempt_count": len(bucket["provider_attempts"]),
                 "provider_attempts": list(bucket["provider_attempts"]),
+                "controller_observation": bucket.get("controller_observation"),
                 "controller_decision": bucket.get("controller_decision"),
                 "controller_command": bucket.get("controller_command"),
                 "controller_selection": selection,
+                "diagnostic_request_count": len(bucket["diagnostic_requests"]),
+                "diagnostic_requests": list(bucket["diagnostic_requests"]),
+                "diagnostic_result_count": len(bucket["diagnostic_results"]),
+                "diagnostic_results": list(bucket["diagnostic_results"]),
                 "bridge_visible": bridge_visible,
                 "bridge_dual_layer_missing": (
                     bool(selection.get("controller_bridge_dual_layer_missing", False))
@@ -972,7 +986,7 @@ def create_readout_sidecar_analyzer(mode: str) -> ReadoutSidecarAnalyzer | None:
 
 class _FrontierReplayControllerClient:
     def __init__(self, *, replay_mode: str = "frontier_apply"):
-        self.replay_mode = str(replay_mode)
+        self.replay_mode = str(replay_mode).strip().lower().replace("-", "_")
         self.calls = 0
         self._last_trace: dict[str, Any] | None = None
 
@@ -989,6 +1003,116 @@ class _FrontierReplayControllerClient:
         )
         has_budget = int(isinstance(candidate.get("budget"), Mapping))
         return (has_source + has_op + has_target + has_budget, has_source + has_op)
+
+    @staticmethod
+    def _diagnostic_next_action(diagnostic_name: str) -> str:
+        normalized = str(diagnostic_name or "").strip().lower().replace("-", "_")
+        if normalized == "attention_head_ablation_on_frontier":
+            return "request_attention_head_ablation"
+        if normalized == "sae_feature_emitter_scan":
+            return "request_sae_feature_scan"
+        return "request_operator_diagnostic"
+
+    @staticmethod
+    def _compact_diagnostic_result(result: Mapping[str, Any]) -> dict[str, Any]:
+        evidence_rows = result.get("evidence_rows")
+        evidence_row_count = (
+            len(evidence_rows)
+            if isinstance(evidence_rows, SequenceABC) and not isinstance(evidence_rows, (str, bytes, bytearray))
+            else 0
+        )
+        return {
+            "diagnostic": result.get("diagnostic"),
+            "bundle_key": result.get("bundle_key"),
+            "objective_bundle_key": result.get("objective_bundle_key"),
+            "step_actuator_bundle_key": result.get("step_actuator_bundle_key"),
+            "next_evidence_needed": result.get("next_evidence_needed"),
+            "blocked_by": list(result.get("blocked_by", ()))
+            if isinstance(result.get("blocked_by"), SequenceABC)
+            and not isinstance(result.get("blocked_by"), (str, bytes, bytearray))
+            else [],
+            "operator_certified": result.get("operator_certified"),
+            "production_apply_allowed": result.get("production_apply_allowed"),
+            "evidence_row_count": evidence_row_count,
+        }
+
+    def _diagnostic_request_command(
+        self,
+        *,
+        packet: Mapping[str, Any],
+        strategy_hints: Mapping[str, Any],
+        frontier_bundle_key: Any,
+        suggested_bundle_key: Any,
+    ) -> dict[str, Any]:
+        objective_bundle_key = str(
+            strategy_hints.get(
+                "diagnostic_frontier_bundle_key",
+                frontier_bundle_key or suggested_bundle_key or strategy_hints.get("selected_bundle_key", ""),
+            )
+            or ""
+        )
+        step_actuator_bundle_key = str(
+            strategy_hints.get("bridge_plan_actuator_bundle_key", objective_bundle_key) or objective_bundle_key
+        )
+        diagnostic_name = str(strategy_hints.get("diagnostic_frontier_request", "") or "")
+        if diagnostic_name in {"", "none"}:
+            diagnostic_name = "operator_diagnostic_replay"
+        next_evidence = str(strategy_hints.get("diagnostic_frontier_next_evidence", "") or "")
+        if not next_evidence:
+            next_evidence = "certified_self_or_bridge_actuator"
+        why_not_apply = str(strategy_hints.get("diagnostic_frontier_reason_text", "") or "")
+        if not why_not_apply:
+            why_not_apply = "frontier visible but no certified actuator; request bounded diagnostic evidence"
+        diagnostic_request = {
+            "diagnostic": diagnostic_name,
+            "bundle_key": objective_bundle_key,
+            "objective_bundle_key": objective_bundle_key,
+            "step_actuator_bundle_key": step_actuator_bundle_key,
+            "next_evidence_needed": next_evidence,
+            "reason": why_not_apply,
+        }
+        latest_results = packet.get("latest_diagnostic_results")
+        has_latest_results = (
+            isinstance(latest_results, SequenceABC)
+            and not isinstance(latest_results, (str, bytes, bytearray))
+            and bool(latest_results)
+        )
+        meta: dict[str, Any] = {
+            "hypothesis": "request_bounded_readout_escape_diagnostic",
+            "micro_rationale": "frontier is visible, but apply stays blocked until diagnostic evidence is returned",
+            "objective_bundle_key": objective_bundle_key,
+            "step_actuator_bundle_key": step_actuator_bundle_key,
+            "why_not_apply": why_not_apply,
+            "next_evidence_needed": next_evidence,
+            "next_action": "noop_until_certified" if has_latest_results else self._diagnostic_next_action(diagnostic_name),
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "shadow_proposals": [
+                {
+                    "kind": "frontier_shadow",
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "actuator_bundle_key": step_actuator_bundle_key,
+                    "reason": "diagnostic_request_mode_keeps_frontier_shadow_only",
+                    "decision": "shadow",
+                }
+            ]
+            if objective_bundle_key
+            else [],
+            "controller_memory": {
+                "objective_bundle_key": objective_bundle_key,
+                "step_actuator_bundle_key": step_actuator_bundle_key,
+                "next_evidence_needed": next_evidence,
+                "next_action": "noop_until_certified" if has_latest_results else self._diagnostic_next_action(diagnostic_name),
+            },
+        }
+        if has_latest_results:
+            meta["observed_outcome"] = "diagnostic_result_received"
+            meta["latest_diagnostic_result_count"] = len(latest_results)
+        else:
+            meta["diagnostic_request"] = diagnostic_request
+            meta["controller_memory"]["diagnostic_request"] = diagnostic_name
+        return {"version": "0.1", "decision": "noop", "meta": meta}
 
     def invoke(self, packet: dict[str, Any]) -> dict[str, Any]:
         self.calls += 1
@@ -1010,7 +1134,14 @@ class _FrontierReplayControllerClient:
 
         command: dict[str, Any] = {"version": "0.1", "decision": "noop"}
         selected_bundle_key: str | None = None
-        if self.calls == 1:
+        if self.replay_mode == "diagnostic_request":
+            command = self._diagnostic_request_command(
+                packet=packet,
+                strategy_hints=strategy_hints,
+                frontier_bundle_key=frontier_bundle_key,
+                suggested_bundle_key=suggested_bundle_key,
+            )
+        elif self.calls == 1:
             target_bundle_key = frontier_bundle_key or suggested_bundle_key
             matching = [
                 dict(item)
@@ -1071,6 +1202,20 @@ class _FrontierReplayControllerClient:
                 "control_phase_hint": packet.get("control_phase_hint"),
                 "sidecar_suggested_bundle_key": suggested_bundle_key,
                 "gate_report_frontier_bundle_key": frontier_bundle_key,
+                "diagnostic_call_count": packet.get("diagnostic_call_count"),
+                "diagnostic_call_budget_left": packet.get("diagnostic_call_budget_left"),
+                "latest_diagnostic_result_count": len(packet.get("latest_diagnostic_results", ()))
+                if isinstance(packet.get("latest_diagnostic_results"), SequenceABC)
+                and not isinstance(packet.get("latest_diagnostic_results"), (str, bytes, bytearray))
+                else 0,
+                "latest_diagnostic_results": [
+                    self._compact_diagnostic_result(item)
+                    for item in packet.get("latest_diagnostic_results", ())
+                    if isinstance(item, Mapping)
+                ][:2]
+                if isinstance(packet.get("latest_diagnostic_results"), SequenceABC)
+                and not isinstance(packet.get("latest_diagnostic_results"), (str, bytes, bytearray))
+                else [],
             },
             "attempts": [
                 {
@@ -1290,6 +1435,11 @@ class ReadoutEscapeReplayHarnessResult:
     diagnostic_frontier_next_evidence: str | None
     diagnostic_frontier_request: str | None
     diagnostic_frontier_reason_text: str | None
+    diagnostic_request_event_count: int
+    diagnostic_result_event_count: int
+    controller_diagnostic_request_names: tuple[str, ...]
+    latest_diagnostic_results: tuple[dict[str, Any], ...]
+    recent_diagnostic_results: tuple[dict[str, Any], ...]
     bridge_eval_extra_operator_diagnostics: tuple[dict[str, Any], ...]
     bridge_eval_poststep_comparison: dict[str, Any] | None
     bridge_eval_candidate_swap_comparison: dict[str, Any] | None
@@ -1362,6 +1512,11 @@ class ReadoutEscapeReplayHarnessResult:
             "diagnostic_frontier_next_evidence": self.diagnostic_frontier_next_evidence,
             "diagnostic_frontier_request": self.diagnostic_frontier_request,
             "diagnostic_frontier_reason_text": self.diagnostic_frontier_reason_text,
+            "diagnostic_request_event_count": int(self.diagnostic_request_event_count),
+            "diagnostic_result_event_count": int(self.diagnostic_result_event_count),
+            "controller_diagnostic_request_names": list(self.controller_diagnostic_request_names),
+            "latest_diagnostic_results": [dict(item) for item in self.latest_diagnostic_results],
+            "recent_diagnostic_results": [dict(item) for item in self.recent_diagnostic_results],
             "bridge_eval_extra_operator_diagnostics": [
                 dict(item) for item in self.bridge_eval_extra_operator_diagnostics
             ],
@@ -2010,6 +2165,7 @@ def run_readout_escape_replay_harness(
     worker_model_name: str,
     seed: int,
     packet_mode: str = "forced_frontier",
+    controller_replay_mode: str = "frontier_apply",
     worker_model: Any | None = None,
     task_env: ExperimentTaskEnv | None = None,
     log_dir: str | Path | None = None,
@@ -2036,6 +2192,11 @@ def run_readout_escape_replay_harness(
     normalized_packet_mode = str(packet_mode).strip().lower().replace("-", "_")
     if normalized_packet_mode not in {"forced_frontier", "directscan", "fixed_candidate"}:
         raise ValueError("run_readout_escape_replay_harness packet_mode must be one of forced_frontier, directscan, fixed_candidate")
+    normalized_controller_replay_mode = str(controller_replay_mode).strip().lower().replace("-", "_")
+    if normalized_controller_replay_mode not in {"frontier_apply", "diagnostic_request"}:
+        raise ValueError(
+            "run_readout_escape_replay_harness controller_replay_mode must be one of frontier_apply, diagnostic_request"
+        )
     env = task_env or SpiralConstrainedRewriteEnv()
     model = worker_model or load_worker_model(
         worker_model_name,
@@ -3669,7 +3830,7 @@ def run_readout_escape_replay_harness(
     worker.build_controller_packet = MethodType(_forced_build_controller_packet, worker)
 
     try:
-        controller_client = _FrontierReplayControllerClient()
+        controller_client = _FrontierReplayControllerClient(replay_mode=normalized_controller_replay_mode)
         ctx = StepContext(
             packet={},
             runtime_state=worker.runtime_state,
@@ -3685,6 +3846,33 @@ def run_readout_escape_replay_harness(
 
     selection_events = [event for event in memory_logger.events if event.get("event") == "controller_selection"]
     first_selection_event = dict(selection_events[0]) if selection_events else None
+    diagnostic_request_events = [
+        dict(event) for event in memory_logger.events if event.get("event") == "controller_diagnostic_request"
+    ]
+    diagnostic_result_events = [
+        dict(event) for event in memory_logger.events if event.get("event") == "controller_diagnostic_result"
+    ]
+    controller_diagnostic_request_names = tuple(
+        str(event.get("diagnostic", event.get("diagnostic_request", "")) or "")
+        for event in diagnostic_request_events
+        if str(event.get("diagnostic", event.get("diagnostic_request", "")) or "")
+    )
+    latest_diagnostic_results = tuple(
+        {
+            key: value
+            for key, value in event.items()
+            if key not in {"event", "step"}
+        }
+        for event in diagnostic_result_events[-2:]
+    )
+    recent_diagnostic_results = tuple(
+        {
+            key: value
+            for key, value in event.items()
+            if key not in {"event", "step"}
+        }
+        for event in diagnostic_result_events[-6:]
+    )
     controller_step_views = _controller_step_views(memory_logger.events)
     bridge_visible_step_views = tuple(
         dict(item)
@@ -3695,7 +3883,7 @@ def run_readout_escape_replay_harness(
         seed=seed,
         task_id=env.task_id,
         worker_model_name=worker_model_name,
-        replay_mode=f"{normalized_packet_mode}_apply",
+        replay_mode=f"{normalized_packet_mode}_{normalized_controller_replay_mode}",
         packet_mode=normalized_packet_mode,
         prompt=episode.prompt,
         episode=episode,
@@ -3955,6 +4143,11 @@ def run_readout_escape_replay_harness(
             or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_reason_text") in (None, "")
             else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_reason_text"))
         ),
+        diagnostic_request_event_count=len(diagnostic_request_events),
+        diagnostic_result_event_count=len(diagnostic_result_events),
+        controller_diagnostic_request_names=controller_diagnostic_request_names,
+        latest_diagnostic_results=latest_diagnostic_results,
+        recent_diagnostic_results=recent_diagnostic_results,
         bridge_eval_extra_operator_diagnostics=tuple(
             dict(item)
             for item in (

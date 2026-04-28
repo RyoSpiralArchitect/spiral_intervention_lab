@@ -309,6 +309,29 @@ def _noop_command_with_tool_requests():
     }
 
 
+def _noop_command_with_diagnostic_request():
+    return {
+        "version": "0.1",
+        "decision": "noop",
+        "meta": {
+            "hypothesis": "need_operator_evidence_before_apply",
+            "micro_rationale": "Frontier is visible, but needs bounded diagnostic evidence.",
+            "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+            "step_actuator_bundle_key": "kv_pair:budget:source_body:72:73",
+            "diagnostic_request": "operator_diagnostic_replay",
+            "next_evidence_needed": "certified_self_or_bridge_actuator",
+            "next_action": "request_operator_diagnostic",
+            "why_not_apply": "frontier visible but no certified actuator",
+            "controller_memory": {
+                "hypothesis": "need_operator_evidence_before_apply",
+                "diagnostic_request": "operator_diagnostic_replay",
+                "next_evidence_needed": "certified_self_or_bridge_actuator",
+                "next_action": "request_operator_diagnostic",
+            },
+        },
+    }
+
+
 def _rank1_command():
     return {
         "version": "0.1",
@@ -834,6 +857,8 @@ class _ToyWorkerRuntime:
         self._pending_observer_check_events = []
         self._tool_results = []
         self._pending_tool_events = []
+        self._diagnostic_results = []
+        self._pending_diagnostic_events = []
 
     def reset(self, prompt: str) -> None:
         self.prompt = prompt
@@ -844,6 +869,8 @@ class _ToyWorkerRuntime:
         self._pending_observer_check_events = []
         self._tool_results = []
         self._pending_tool_events = []
+        self._diagnostic_results = []
+        self._pending_diagnostic_events = []
 
     def step(self) -> None:
         self.steps += 1
@@ -869,6 +896,9 @@ class _ToyWorkerRuntime:
         if self._tool_results:
             packet["latest_tool_results"] = [dict(entry) for entry in self._tool_results[-2:]]
             packet["recent_tool_results"] = [dict(entry) for entry in self._tool_results[-4:]]
+        if self._diagnostic_results:
+            packet["latest_diagnostic_results"] = [dict(entry) for entry in self._diagnostic_results[-2:]]
+            packet["recent_diagnostic_results"] = [dict(entry) for entry in self._diagnostic_results[-4:]]
         return packet
 
     def observe_recent_effects(self) -> None:
@@ -967,6 +997,38 @@ class _ToyWorkerRuntime:
         self._pending_tool_events = []
         return events
 
+    def request_controller_diagnostics(self, requests, *, source="controller", packet=None):
+        results = []
+        for request in requests:
+            diagnostic = request.get("diagnostic", request.get("diagnostic_request", "operator_diagnostic_replay"))
+            result = {
+                "diagnostic": diagnostic,
+                "status": "ok",
+                "requested_by": source,
+                "recorded_step": self.steps,
+                "bundle_key": request.get("bundle_key"),
+                "next_evidence_needed": request.get("next_evidence_needed"),
+                "operator_certified": False,
+                "production_apply_allowed": False,
+                "evidence_rows": [
+                    {
+                        "evidence_kind": "operator_replay",
+                        "status": "blocked",
+                        "actuator_class": "dead_actuator",
+                    }
+                ],
+            }
+            self._diagnostic_results.append(result)
+            self._pending_diagnostic_events.append(result)
+            results.append(dict(result))
+        self._diagnostic_results = self._diagnostic_results[-4:]
+        return results
+
+    def pop_diagnostic_events(self):
+        events = [dict(entry) for entry in self._pending_diagnostic_events]
+        self._pending_diagnostic_events = []
+        return events
+
 
 class _BudgetExhaustedToyWorkerRuntime(_ToyWorkerRuntime):
     def build_controller_packet(self):
@@ -1020,6 +1082,14 @@ class _ToolRequestToyController(_ToyController):
         response = super().invoke(packet)
         if self.calls == 1:
             return _noop_command_with_tool_requests()
+        return response
+
+
+class _DiagnosticRequestToyController(_ToyController):
+    def invoke(self, packet):
+        response = super().invoke(packet)
+        if self.calls == 1:
+            return _noop_command_with_diagnostic_request()
         return response
 
 
@@ -1730,6 +1800,30 @@ class TestLoopAndEffects(unittest.TestCase):
         packet_after = worker.build_controller_packet()
         self.assertEqual(packet_after["tool_catalog"][0]["tool"], "tokenize_terms")
         self.assertEqual(packet_after["latest_tool_results"][0]["tool"], "tokenize_terms")
+
+    def test_run_episode_executes_controller_requested_diagnostics(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        worker = _ToyWorkerRuntime(runtime_state)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            worker,
+            _DiagnosticRequestToyController(),
+            ctx,
+            logger=logger,
+        )
+
+        self.assertTrue(any(event["event"] == "controller_diagnostic_request" for event in logger.events))
+        self.assertTrue(any(event["event"] == "controller_diagnostic_result" for event in logger.events))
+        self.assertEqual(worker._diagnostic_results[0]["diagnostic"], "operator_diagnostic_replay")
+        self.assertFalse(worker._diagnostic_results[0]["production_apply_allowed"])
+        packet_after = worker.build_controller_packet()
+        self.assertEqual(packet_after["latest_diagnostic_results"][0]["diagnostic"], "operator_diagnostic_replay")
+        self.assertEqual(packet_after["latest_diagnostic_results"][0]["next_evidence_needed"], "certified_self_or_bridge_actuator")
 
 
 class TestRank1Bridge(unittest.TestCase):

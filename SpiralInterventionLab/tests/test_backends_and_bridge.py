@@ -400,6 +400,24 @@ class TestBackendsAndBridge(unittest.TestCase):
                         "topk_token_diff": [{"piece": "M", "prob_delta": 0.2}],
                     },
                 ],
+                "latest_diagnostic_results": [
+                    {
+                        "diagnostic": "operator_diagnostic_replay",
+                        "status": "ok",
+                        "bundle_key": "kv_pair:budget:source_body:72:73",
+                        "next_evidence_needed": "certified_self_or_bridge_actuator",
+                        "operator_certified": False,
+                        "production_apply_allowed": False,
+                        "blocked_by": ["dead_actuator"],
+                        "evidence_rows": [
+                            {
+                                "evidence_kind": "operator_replay",
+                                "status": "blocked",
+                                "actuator_class": "dead_actuator",
+                            }
+                        ],
+                    }
+                ],
             }
         )
         trace = client.latest_trace()
@@ -428,6 +446,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["probe_family"], "kv_v")
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["probe_summary"]["label"], "weak_positive_subthreshold")
         self.assertEqual(trace["observation"]["latest_tool_results"][1]["topk_token_diff"][0]["piece"], "M")
+        self.assertEqual(trace["observation"]["latest_diagnostic_results"][0]["diagnostic"], "operator_diagnostic_replay")
+        self.assertEqual(trace["observation"]["latest_diagnostic_results"][0]["blocked_by"], ["dead_actuator"])
 
     def test_provider_controller_client_observation_includes_controller_memory(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
@@ -608,6 +628,19 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(command.meta["tool_requests"][1]["tool"], "dry_run_decode")
         self.assertEqual(trace["decision"]["tool_requests"][0]["term_count"], 2)
         self.assertEqual(trace["decision"]["tool_requests"][1]["surface_id"], "s_resid_pre_l4_last")
+
+    def test_provider_controller_client_normalizes_diagnostic_request_into_meta(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\",\"request_diagnostic\":\"operator_diagnostic_replay\",\"next_evidence_needed\":\"certified_self_or_bridge_actuator\",\"next_action\":\"request_operator_diagnostic\"}"
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
+
+        command = client.invoke({"step": 1})
+        trace = client.latest_trace()
+
+        self.assertEqual(command.meta["diagnostic_request"], "operator_diagnostic_replay")
+        self.assertEqual(command.meta["next_evidence_needed"], "certified_self_or_bridge_actuator")
+        self.assertEqual(trace["decision"]["controller_memory"]["diagnostic_request"], "operator_diagnostic_replay")
 
     def test_provider_controller_client_normalizes_next_trigger_and_action_into_meta(self):
         provider = _FakeProvider(

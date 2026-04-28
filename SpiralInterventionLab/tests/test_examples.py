@@ -813,6 +813,72 @@ class TestExamples(unittest.TestCase):
                 self.assertGreaterEqual(payload["nonnull_controller_selected_count"], 1)
                 self.assertEqual(payload["controller_selected_bundle_key"], payload["gate_report_frontier_bundle_key"])
 
+    def test_run_readout_escape_replay_harness_directscan_executes_diagnostic_request_mode(self):
+        model, codec = self._make_model_and_codec()
+
+        class _ShortReplayEnv:
+            task_id = "readout_escape_replay"
+
+            def reset(self, seed: int) -> str:
+                return "Keep these terms: send, budget\nSOURCE: send budget now\nANSWER:"
+
+            def score(self, output: str) -> float:
+                return 0.0
+
+            def done(self, output: str) -> bool:
+                return len(output) >= 3
+
+            def worker_runtime_kwargs(self) -> dict[str, int]:
+                return {"max_generated_tokens": 3}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_readout_escape_replay_harness(
+                worker_model_name="tiny-random",
+                seed=7,
+                packet_mode="directscan",
+                controller_replay_mode="diagnostic_request",
+                worker_model=model,
+                task_env=_ShortReplayEnv(),
+                codec=codec,
+                log_dir=tmpdir,
+                readout_sidecar_analyzer=create_readout_sidecar_analyzer("heuristic"),
+                readout_analyzer_rerank_mode="apply",
+            )
+
+            payload = result.to_dict()
+            self.assertEqual(payload["replay_mode"], "directscan_diagnostic_request")
+            self.assertGreaterEqual(payload["diagnostic_request_event_count"], 1)
+            self.assertGreaterEqual(payload["diagnostic_result_event_count"], 1)
+            self.assertTrue(payload["controller_diagnostic_request_names"])
+            self.assertTrue(payload["latest_diagnostic_results"])
+            latest = payload["latest_diagnostic_results"][-1]
+            self.assertFalse(latest["production_apply_allowed"])
+            self.assertIn(
+                latest["diagnostic"],
+                {
+                    "operator_diagnostic_replay",
+                    "attention_head_ablation_on_frontier",
+                    "readout_logit_adjacent_probe",
+                    "sae_feature_emitter_scan",
+                    "compare_extra_operator_diagnostics",
+                },
+            )
+            self.assertTrue(
+                any(
+                    view["diagnostic_request_count"] >= 1 and view["diagnostic_result_count"] >= 1
+                    for view in payload["controller_step_views"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    isinstance(view.get("controller_observation"), dict)
+                    and view["controller_observation"].get("latest_diagnostic_result_count", 0) >= 1
+                    for view in payload["controller_step_views"]
+                )
+            )
+            self.assertTrue(Path(tmpdir, "readout_escape_replay.jsonl").exists())
+            self.assertTrue(Path(tmpdir, "readout_escape_replay_summary.json").exists())
+
     def test_focused_bridge_eval_recipe_specs_stay_small_and_ownership_oriented(self):
         recipe_names = [item["recipe_name"] for item in _focused_bridge_eval_recipe_specs()]
 

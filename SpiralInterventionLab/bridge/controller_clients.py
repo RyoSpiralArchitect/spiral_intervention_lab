@@ -576,6 +576,72 @@ def _tool_result_summaries(items: Any) -> list[dict[str, Any]]:
     return summaries
 
 
+def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    summary: dict[str, Any] = {}
+    for key in (
+        "diagnostic",
+        "status",
+        "bundle_key",
+        "objective_bundle_key",
+        "step_actuator_bundle_key",
+        "next_evidence_needed",
+        "operator_certified",
+        "readout_reachable",
+        "head_sensitive",
+        "feature_supported",
+        "certified_for_apply",
+        "production_apply_allowed",
+        "feature_backend",
+    ):
+        if value.get(key) not in (None, "", []):
+            summary[key] = value.get(key)
+    blocked_by = value.get("blocked_by")
+    if isinstance(blocked_by, Sequence) and not isinstance(blocked_by, (str, bytes, bytearray)):
+        compact_blocked = [str(item) for item in blocked_by[:4] if str(item)]
+        if compact_blocked:
+            summary["blocked_by"] = compact_blocked
+    evidence_rows = value.get("evidence_rows")
+    if isinstance(evidence_rows, Sequence) and not isinstance(evidence_rows, (str, bytes, bytearray)):
+        rows: list[dict[str, Any]] = []
+        for item in evidence_rows[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            rows.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "status",
+                        "actuator_class",
+                        "recipe_name",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "focus_rank_delta",
+                        "support_score",
+                        "blocked_by",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if rows:
+            summary["evidence_rows"] = rows
+    return summary or None
+
+
+def _diagnostic_result_summaries(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    summaries: list[dict[str, Any]] = []
+    for item in items:
+        summary = _compact_diagnostic_result(item)
+        if summary is not None:
+            summaries.append(summary)
+    return summaries
+
+
 def _recent_effect_summaries(items: Any) -> list[dict[str, Any]]:
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
         return []
@@ -645,6 +711,8 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
             "tool_catalog": _compact_tool_catalog(payload.get("tool_catalog")),
             "latest_tool_results": _tool_result_summaries(payload.get("latest_tool_results")),
             "recent_tool_results": _tool_result_summaries(payload.get("recent_tool_results")),
+            "latest_diagnostic_results": _diagnostic_result_summaries(payload.get("latest_diagnostic_results")),
+            "recent_diagnostic_results": _diagnostic_result_summaries(payload.get("recent_diagnostic_results")),
             "controller_memory": _controller_memory_summaries(payload.get("controller_memory")),
         }
     )
@@ -867,6 +935,12 @@ def _normalize_controller_payload(value: Any) -> Any:
                 meta["tool_requests"] = meta.pop("request_tools")
             if isinstance(meta.get("tool_requests"), Mapping):
                 meta["tool_requests"] = [dict(meta["tool_requests"])]
+            if "request_diagnostic" in normalized and "diagnostic_request" not in meta:
+                meta["diagnostic_request"] = normalized.pop("request_diagnostic")
+            if "diagnostic_request" in normalized and "diagnostic_request" not in meta:
+                meta["diagnostic_request"] = normalized.pop("diagnostic_request")
+            if "request_diagnostic" in meta and "diagnostic_request" not in meta:
+                meta["diagnostic_request"] = meta.pop("request_diagnostic")
             for source_key, target_key in (
                 ("objective_bundle_key", "objective_bundle_key"),
                 ("objective_bundle", "objective_bundle_key"),
@@ -922,6 +996,7 @@ def _normalize_controller_payload(value: Any) -> Any:
                 "step_actuator_bundle_key",
                 "blocked_by",
                 "next_evidence_needed",
+                "diagnostic_request",
                 "why_not_apply",
                 "transfer_confidence",
                 "same_family_escalation_risk",

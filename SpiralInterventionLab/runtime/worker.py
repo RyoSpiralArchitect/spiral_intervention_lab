@@ -85,6 +85,13 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "stop",
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
+_CONTROLLER_DIAGNOSTIC_NAMES = {
+    "operator_diagnostic_replay",
+    "attention_head_ablation_on_frontier",
+    "readout_logit_adjacent_probe",
+    "sae_feature_emitter_scan",
+    "compare_extra_operator_diagnostics",
+}
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
 
@@ -299,6 +306,50 @@ def _normalize_controller_tool_request(value: Any) -> dict[str, Any] | None:
     return normalized
 
 
+def _normalize_controller_diagnostic_name(value: Any) -> str | None:
+    text = _normalize_controller_tool_name(value)
+    if text == "request_operator_diagnostic":
+        return "operator_diagnostic_replay"
+    if text == "request_attention_head_ablation":
+        return "attention_head_ablation_on_frontier"
+    if text == "request_sae_feature_scan":
+        return "sae_feature_emitter_scan"
+    if text in _CONTROLLER_DIAGNOSTIC_NAMES:
+        return text
+    return None
+
+
+def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, str):
+        diagnostic_name = _normalize_controller_diagnostic_name(value)
+        return None if diagnostic_name is None else {"diagnostic": diagnostic_name}
+    if not isinstance(value, Mapping):
+        return None
+    diagnostic_name = _normalize_controller_diagnostic_name(
+        value.get("diagnostic")
+        or value.get("diagnostic_request")
+        or value.get("request")
+        or value.get("tool")
+        or value.get("kind")
+        or value.get("name")
+    )
+    if diagnostic_name is None:
+        return None
+    normalized: dict[str, Any] = {"diagnostic": diagnostic_name}
+    for key, limit in (
+        ("reason", 120),
+        ("bundle_key", 160),
+        ("objective_bundle_key", 160),
+        ("step_actuator_bundle_key", 160),
+        ("next_evidence_needed", 96),
+        ("focus_term", 80),
+    ):
+        text = _clean_controller_memory_text(value.get(key), limit=limit)
+        if text is not None:
+            normalized[key] = text
+    return normalized
+
+
 def _tool_contains_term(text: str, term: str) -> bool:
     haystack = " ".join(str(text).split()).strip()
     needle = " ".join(str(term).split()).strip()
@@ -367,6 +418,8 @@ class HookedTransformerWorkerRuntime:
         observer_check_window: int = 4,
         max_tool_calls_per_run: int = 6,
         tool_result_window: int = 6,
+        max_diagnostic_calls_per_run: int = 6,
+        diagnostic_result_window: int = 6,
         readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
         readout_analyzer_rerank_mode: str = "apply",
     ) -> None:
@@ -409,6 +462,8 @@ class HookedTransformerWorkerRuntime:
         self.observer_check_window = max(1, int(observer_check_window))
         self.max_tool_calls_per_run = max(0, int(max_tool_calls_per_run))
         self.tool_result_window = max(1, int(tool_result_window))
+        self.max_diagnostic_calls_per_run = max(0, int(max_diagnostic_calls_per_run))
+        self.diagnostic_result_window = max(1, int(diagnostic_result_window))
         self.readout_sidecar_analyzer = readout_sidecar_analyzer
         self.readout_analyzer_rerank_mode = _normalize_readout_analyzer_rerank_mode(readout_analyzer_rerank_mode)
 
@@ -442,6 +497,9 @@ class HookedTransformerWorkerRuntime:
         self._tool_results: list[dict[str, Any]] = []
         self._latest_tool_results: list[dict[str, Any]] = []
         self._pending_tool_events: list[dict[str, Any]] = []
+        self._diagnostic_results: list[dict[str, Any]] = []
+        self._latest_diagnostic_results: list[dict[str, Any]] = []
+        self._pending_diagnostic_events: list[dict[str, Any]] = []
         self._last_observer_candidate_hash: str | None = None
         self._feature_prototype_cache: dict[str, torch.Tensor] = {}
         self._kv_projection_cache: dict[tuple[int, str, int, int, int], torch.Tensor | None] = {}
@@ -600,6 +658,8 @@ class HookedTransformerWorkerRuntime:
                 else str(self._latest_observer_check.get("trigger", "")),
                 "tool_call_count": len(self._tool_results),
                 "tool_call_budget_left": max(0, self.max_tool_calls_per_run - len(self._tool_results)),
+                "diagnostic_call_count": len(self._diagnostic_results),
+                "diagnostic_call_budget_left": max(0, self.max_diagnostic_calls_per_run - len(self._diagnostic_results)),
                 "decoder_control_mode": self.decoder_control_mode,
                 "decoder_control_track": str(self._last_decoder_control.get("track", "baseline")),
                 "decoder_rescue_active": bool(self._last_decoder_control.get("active", False)),
@@ -655,6 +715,10 @@ class HookedTransformerWorkerRuntime:
             packet["latest_tool_results"] = [dict(result) for result in self._latest_tool_results]
         if self._tool_results:
             packet["recent_tool_results"] = [dict(result) for result in self._tool_results]
+        if self._latest_diagnostic_results:
+            packet["latest_diagnostic_results"] = [dict(result) for result in self._latest_diagnostic_results]
+        if self._diagnostic_results:
+            packet["recent_diagnostic_results"] = [dict(result) for result in self._diagnostic_results]
         if self.controller_reflection_mode != "off":
             packet["controller_memory"] = [dict(entry) for entry in self._controller_memory]
         self._last_packet = packet
@@ -679,6 +743,11 @@ class HookedTransformerWorkerRuntime:
     def pop_tool_events(self) -> list[dict[str, Any]]:
         events = [dict(event) for event in self._pending_tool_events]
         self._pending_tool_events = []
+        return events
+
+    def pop_diagnostic_events(self) -> list[dict[str, Any]]:
+        events = [dict(event) for event in self._pending_diagnostic_events]
+        self._pending_diagnostic_events = []
         return events
 
     def latent_feature_scan(
@@ -1093,6 +1162,50 @@ class HookedTransformerWorkerRuntime:
         self._last_packet = None
         return [dict(result) for result in self._latest_tool_results]
 
+    def request_controller_diagnostics(
+        self,
+        requests: Sequence[Mapping[str, Any]] | Mapping[str, Any] | str | None,
+        *,
+        source: str = "controller",
+        packet: Mapping[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        if self.max_diagnostic_calls_per_run <= 0:
+            return []
+        raw_items: Sequence[Any]
+        if isinstance(requests, (str, Mapping)):
+            raw_items = [requests]
+        elif isinstance(requests, SequenceABC) and not isinstance(requests, (bytes, bytearray)):
+            raw_items = requests
+        else:
+            return []
+        budget_left = max(0, self.max_diagnostic_calls_per_run - len(self._diagnostic_results))
+        if budget_left <= 0:
+            return []
+
+        packet_context = packet if isinstance(packet, Mapping) else self._last_packet
+        results: list[dict[str, Any]] = []
+        for raw_request in raw_items[:budget_left]:
+            request = _normalize_controller_diagnostic_request(raw_request)
+            if request is None:
+                continue
+            result = self._execute_controller_diagnostic_request(
+                request,
+                source=source,
+                packet=packet_context,
+            )
+            if result is None:
+                continue
+            results.append(result)
+
+        if not results:
+            return []
+        self._latest_diagnostic_results = [dict(result) for result in results]
+        self._diagnostic_results.extend(self._latest_diagnostic_results)
+        self._diagnostic_results = self._diagnostic_results[-self.diagnostic_result_window :]
+        self._pending_diagnostic_events.extend(dict(result) for result in self._latest_diagnostic_results)
+        self._last_packet = None
+        return [dict(result) for result in self._latest_diagnostic_results]
+
     def observe_recent_effects(self) -> None:
         current_metrics = self._effect_metrics()
         completed = [
@@ -1233,6 +1346,9 @@ class HookedTransformerWorkerRuntime:
         self._tool_results = []
         self._latest_tool_results = []
         self._pending_tool_events = []
+        self._diagnostic_results = []
+        self._latest_diagnostic_results = []
+        self._pending_diagnostic_events = []
         self._last_observer_candidate_hash = None
         self._kv_canary_eval_active = False
         self._last_simulate_decode_error = None
@@ -7322,6 +7438,121 @@ class HookedTransformerWorkerRuntime:
         if payload is None:
             return None
         return base | payload
+
+    def _execute_controller_diagnostic_request(
+        self,
+        request: Mapping[str, Any],
+        *,
+        source: str,
+        packet: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        diagnostic_name = str(request.get("diagnostic", "") or "")
+        if diagnostic_name not in _CONTROLLER_DIAGNOSTIC_NAMES:
+            return None
+        packet_context = packet if isinstance(packet, Mapping) else {}
+        strategy_hints = packet_context.get("strategy_hints") if isinstance(packet_context.get("strategy_hints"), Mapping) else {}
+        bundle_key = str(
+            request.get("bundle_key")
+            or request.get("objective_bundle_key")
+            or strategy_hints.get("diagnostic_frontier_bundle_key")
+            or strategy_hints.get("gate_report_frontier_bundle_key")
+            or strategy_hints.get("selected_bundle_key")
+            or ""
+        )
+        bundle_statuses = strategy_hints.get("bundle_diagnostic_status")
+        bundle_status = (
+            dict(bundle_statuses.get(bundle_key, {}))
+            if isinstance(bundle_statuses, Mapping) and bundle_key
+            else {}
+        )
+        if not bundle_status and isinstance(strategy_hints.get("diagnostic_frontier_status"), Mapping):
+            bundle_status = dict(strategy_hints["diagnostic_frontier_status"])
+        ledger_raw = strategy_hints.get("diagnostic_evidence_ledger")
+        ledger_rows = [
+            dict(item)
+            for item in ledger_raw
+            if isinstance(item, Mapping)
+            and (not bundle_key or str(item.get("bundle_key", "") or "") == bundle_key)
+        ] if isinstance(ledger_raw, SequenceABC) and not isinstance(ledger_raw, (str, bytes, bytearray)) else []
+
+        evidence_kind_by_request = {
+            "operator_diagnostic_replay": "operator_replay",
+            "attention_head_ablation_on_frontier": "attention_ablation",
+            "readout_logit_adjacent_probe": "readout_probe",
+            "sae_feature_emitter_scan": "feature_emitter",
+        }
+        evidence_kind = evidence_kind_by_request.get(diagnostic_name)
+        matching_rows = [
+            row for row in ledger_rows
+            if evidence_kind is None or str(row.get("evidence_kind", "") or "") == evidence_kind
+        ]
+        if diagnostic_name == "compare_extra_operator_diagnostics":
+            matching_rows = [
+                row for row in ledger_rows
+                if str(row.get("evidence_kind", "") or "") in {"operator_probe", "attention_ablation", "readout_probe"}
+            ]
+
+        result = {
+            "diagnostic": diagnostic_name,
+            "status": "ok" if matching_rows or bundle_status else "no_cached_evidence",
+            "requested_by": str(source),
+            "recorded_step": int(self._steps),
+            "bundle_key": bundle_key or None,
+            "objective_bundle_key": request.get("objective_bundle_key") or bundle_key or None,
+            "step_actuator_bundle_key": request.get("step_actuator_bundle_key") or bundle_key or None,
+            "next_evidence_needed": request.get("next_evidence_needed")
+            or bundle_status.get("next_evidence_needed")
+            or strategy_hints.get("diagnostic_frontier_next_evidence"),
+            "diagnostic_request_reason": request.get("reason") or strategy_hints.get("diagnostic_frontier_reason_text"),
+            "operator_certified": bool(bundle_status.get("operator_certified", False)),
+            "readout_reachable": bool(bundle_status.get("readout_reachable", False)),
+            "head_sensitive": bool(bundle_status.get("head_sensitive", False)),
+            "feature_supported": bool(bundle_status.get("feature_supported", False)),
+            "blocked_by": [
+                str(item)
+                for item in (
+                    bundle_status.get("blocked_by", ())
+                    if isinstance(bundle_status.get("blocked_by"), SequenceABC)
+                    and not isinstance(bundle_status.get("blocked_by"), (str, bytes, bytearray))
+                    else ()
+                )
+                if str(item)
+            ][:6],
+            "evidence_rows": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "status",
+                        "actuator_class",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "focus_rank_delta",
+                        "support_score",
+                        "blocked_by",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in matching_rows[:8]
+            ],
+        }
+        if diagnostic_name == "operator_diagnostic_replay":
+            result["certified_for_apply"] = bool(bundle_status.get("operator_certified", False))
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "attention_head_ablation_on_frontier":
+            result["head_sensitive"] = bool(bundle_status.get("head_sensitive", False))
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "sae_feature_emitter_scan":
+            result["feature_backend"] = "sae_sidecar"
+            result["feature_supported"] = bool(bundle_status.get("feature_supported", False))
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "readout_logit_adjacent_probe":
+            result["readout_reachable"] = bool(bundle_status.get("readout_reachable", False))
+            result["production_apply_allowed"] = False
+        return result
 
     def _tokenize_terms_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
         raw_terms = request.get("terms")

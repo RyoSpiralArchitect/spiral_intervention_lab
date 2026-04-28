@@ -40,6 +40,7 @@ What you receive:
 - latest_observer_check and recent_observer_checks may also include kv_feature_scan summaries with k_cache/v_cache layer-head candidates when cache-space lensing is available
 - tool_catalog when bounded local tools are available
 - latest_tool_results and recent_tool_results when you or the runtime have already requested local tools
+- latest_diagnostic_results and recent_diagnostic_results when you requested bounded diagnostic evidence on earlier steps
 - tokenize_terms results may include single_token_terms, multi_piece_terms, soft_logit_bias_ok_terms, needs_sequence_support_terms, span_progress_watch_terms, and per-term control_profile hints
 - control_phase_hint may say loop_break, entity_insertion, shot_mode, readout_escape, or monitor
 - strategy_hints may include loop_severity, prefer_space_prefixed_logit_bias, prefer_auxiliary_entity_bias, direct_entity_edit_gate, easy_entity_terms, hard_entity_terms, watch_span_progress_terms, shot_mode_ready, shot_probe_needed, kv_probe_needed, kv_retry_needed, shot_candidate_edits, kv_candidate_edits, kv_retry_candidate_edits, preferred_shot_surface_id, preferred_kv_surface_id, preferred_kv_retry_surface_id, loop_break_attempt_count, stabilizing_only_count, semantic_focus_term, semantic_focus_source, reachable_focus_term, reachable_focus_rank, controller_focus_term, controller_focus_source, target_mass, target_top20_hits, attractor_family_mass, attractor_family_top_overlap, attractor_family_overlap_tokens, kv_effect_family_count, kv_effect_family_collapsed, kv_retry_effect_family_count, readout_escape_needed, readout_escape_reason, readout_escape_block_reason, kv_candidate_builder_output_count, kv_candidate_builder_prune_reasons, kv_candidate_builder_prune_reason_counts, escape_builder_called, escape_builder_target_terms, escape_builder_candidates_before_prune, escape_builder_candidates_after_prune, escape_builder_prune_reasons, escape_builder_candidate_families, candidate_provenance_counts_before_prune, candidate_provenance_counts_after_prune, dominance_prune_drops, same_term_family_drops, sidecar_veto_drops, bundle_inputs, bridge_plan_available, bridge_plan_required, bridge_plan_report, bridge_plan_objective_bundle_key, bridge_plan_actuator_bundle_key, bridge_plan_objective_term, bridge_plan_actuator_term, bridge_plan_recipe_id, bridge_plan_actuator_class, bridge_plan_reason, bridge_eval_extra_operator_diagnostic_count, diagnostic_evidence_ledger, bundle_diagnostic_status, diagnostic_frontier_next_evidence, diagnostic_frontier_request, diagnostic_frontier_reason_text, and l4_term_nudge_cooldown
@@ -64,12 +65,14 @@ What you control:
 - meta.micro_rationale as one short control-oriented sentence, not free-form chain-of-thought
 - meta.next_trigger as one short signal label for what evidence should change your next move
 - meta.next_action as one short planned response to that trigger: wait | noop | apply | rollback | request_observer_check | request_operator_diagnostic | request_attention_head_ablation | request_sae_feature_scan | stop
+- meta.diagnostic_request as one bounded request when meta.next_action asks for diagnostic evidence: operator_diagnostic_replay | attention_head_ablation_on_frontier | readout_logit_adjacent_probe | sae_feature_emitter_scan | compare_extra_operator_diagnostics
 
 Compact decision scratchpad:
 - Keep reasoning short and structured: objective_bundle_key, step_actuator_bundle_key, blocked_by, shadow_proposals, next_evidence_needed, next_action.
 - Prefer these compact bullets over long prose, free-form deliberation, or repeated meta commentary.
 - In readout_escape, if bridge_plan_available is true and you choose noop or shadow-only, do not omit the dual-layer scratchpad: keep meta.objective_bundle_key on the frontier objective, meta.step_actuator_bundle_key on the bridge actuator, and explain the block with blocked_by + why_not_apply.
 - In readout_escape, treat diagnostic_evidence_ledger and bundle_diagnostic_status as a map for the next measurement, not as permission to apply. If the frontier is visible but no safe actuator exists, prefer noop/shadow plus meta.next_evidence_needed and meta.next_action matching diagnostic_frontier_request.
+- If you request a diagnostic, keep decision as noop unless you also have an independently certified safe edit. Diagnostic requests improve the next observation; they are not edits.
 
 General policy:
 1. If edits_left_this_run is 0, choose noop by default.
@@ -272,6 +275,7 @@ Output requirements:
 - You may include meta.next_evidence_needed as one short label such as certified_bridge_actuator or readout_probe_gain_on_budget.
 - You may include meta.next_trigger as a short snake_case-style signal label such as "loop_relief_without_coverage" or "required_term_span_progress_up".
 - You may include meta.next_action as one of: "wait", "noop", "apply", "rollback", "request_observer_check", "request_operator_diagnostic", "request_attention_head_ablation", "request_sae_feature_scan", or "stop".
+- You may include meta.diagnostic_request as "operator_diagnostic_replay", "attention_head_ablation_on_frontier", "readout_logit_adjacent_probe", "sae_feature_emitter_scan", or "compare_extra_operator_diagnostics".
 - When structured reflection is enabled, you may also include meta.controller_memory as one compact object.
 - meta.controller_memory is for intervention strategy only. Do not include task text, hidden-answer guesses, prompt reconstruction, or copied worker text.
 - Prefer these controller_memory fields only:

@@ -55,6 +55,11 @@ The current implementation includes:
 - a minimal offline readout sidecar scaffold that can analyze captured sites and feed small hints back into candidate ranking
 - a scaffolded SAE-style readout analyzer backend that emits feature hints without becoming a runtime dependency
 - diagnostic-only readout tools, including first-piece logit probes and attention head ablation
+- a bounded controller diagnostic request loop:
+  - controller emits `meta.diagnostic_request`
+  - runtime executes cached/bounded diagnostics
+  - next packets expose `latest_diagnostic_results` and `recent_diagnostic_results`
+  - production apply remains blocked unless independently certified
 - a stricter `controller / analyzer / gate / runtime guardrail` separation with explicit logging of:
   - `sidecar_suggested_*`
   - `gate_report_*`
@@ -110,6 +115,16 @@ The latest runs narrow this further. For the `budget` frontier in the constraine
 - `blocked_by = dead_actuator / all_dead_actuator`
 
 That means the current bottleneck is not visibility. The stack can now see a plausible frontier and collect non-dead diagnostic signals, but it still lacks a certified self or bridge actuator that can safely move the worker at the answer boundary.
+
+The newest diagnostic-request replay closes one more control-plane loop:
+
+- the controller sees the `budget` frontier
+- the controller asks for `operator_diagnostic_replay`
+- runtime returns one diagnostic result in `latest_diagnostic_results`
+- the result says `production_apply_allowed = false`
+- the reason remains `blocked_by = dead_actuator / all_dead_actuator`
+
+This is an important negative result. The controller can now request the next measurement without converting that measurement into apply authority.
 
 ## What We Have Learned
 
@@ -183,6 +198,25 @@ This ledger gives the controller more room to reason about what evidence to requ
 
 That last point is important. The current design intentionally lets the controller become more curious without letting helper modules become covert selectors.
 
+The replay harness now has a `diagnostic_request` controller mode for this contract. In direct-scan GPT-2 replay it produces:
+
+```json
+{
+  "replay_mode": "directscan_diagnostic_request",
+  "diagnostic_request_event_count": 1,
+  "diagnostic_result_event_count": 1,
+  "controller_diagnostic_request_names": ["operator_diagnostic_replay"],
+  "latest_diagnostic_results": [
+    {
+      "diagnostic": "operator_diagnostic_replay",
+      "bundle_key": "kv_pair:budget:source_body:72:73",
+      "production_apply_allowed": false,
+      "blocked_by": ["dead_actuator", "all_dead_actuator"]
+    }
+  ]
+}
+```
+
 ## Decision Ownership
 
 The current runtime is intentionally moving toward a stricter separation of powers:
@@ -208,10 +242,10 @@ The operator layer is especially sensitive here. Operator replay and certificati
 
 The next steps are now fairly concrete:
 
-1. Keep selector and gate mostly frozen while operator quality is the active workstream.
+1. Keep operator certification under controller ownership.
+   Operator replay is now powerful enough to shape the agenda, so it must remain an auditable evidence source rather than an implicit policy layer.
+2. Keep selector and gate mostly frozen while operator quality is the active workstream.
    The main measurement axis is now operator certification and ownership, not candidate churn.
-2. Keep operator certification under controller ownership.
-   Operator replay is now powerful enough to shape the agenda, so the next cleanup is to ensure it remains an auditable evidence source rather than an implicit policy layer.
 3. Search for a `budget` self-actuator recipe.
    Current real-packet replay shows that several recipes move something, but the lift is often stolen by `send`.
 4. Continue ownership-first operator sweeps.
