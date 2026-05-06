@@ -81,16 +81,26 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "request_observer_check",
     "request_operator_diagnostic",
     "request_attention_head_ablation",
+    "request_attention_readout_carrier_probe",
     "request_sae_feature_scan",
+    "request_compare_extra_operator_diagnostics",
+    "request_non_kv_operator_search",
+    "request_activation_patch_candidate_review",
+    "request_activation_patch_runtime_support_probe",
+    "request_activation_patch_promotion_gate_review",
     "stop",
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
 _CONTROLLER_DIAGNOSTIC_NAMES = {
     "operator_diagnostic_replay",
     "attention_head_ablation_on_frontier",
+    "attention_readout_carrier_probe",
     "readout_logit_adjacent_probe",
     "sae_feature_emitter_scan",
     "compare_extra_operator_diagnostics",
+    "activation_patch_candidate_review",
+    "activation_patch_runtime_support_probe",
+    "activation_patch_promotion_gate_review",
 }
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
@@ -312,8 +322,18 @@ def _normalize_controller_diagnostic_name(value: Any) -> str | None:
         return "operator_diagnostic_replay"
     if text == "request_attention_head_ablation":
         return "attention_head_ablation_on_frontier"
+    if text == "request_attention_readout_carrier_probe":
+        return "attention_readout_carrier_probe"
     if text == "request_sae_feature_scan":
         return "sae_feature_emitter_scan"
+    if text in {"request_compare_extra_operator_diagnostics", "request_non_kv_operator_search"}:
+        return "compare_extra_operator_diagnostics"
+    if text == "request_activation_patch_candidate_review":
+        return "activation_patch_candidate_review"
+    if text == "request_activation_patch_runtime_support_probe":
+        return "activation_patch_runtime_support_probe"
+    if text == "request_activation_patch_promotion_gate_review":
+        return "activation_patch_promotion_gate_review"
     if text in _CONTROLLER_DIAGNOSTIC_NAMES:
         return text
     return None
@@ -2715,6 +2735,18 @@ class HookedTransformerWorkerRuntime:
                 candidate_summary = {
                     "operator_recipe_id": recipe_id,
                     "operator_recipe_seed_key": recipe_seed_key,
+                    "recipe_name": str(item.get("recipe_name", "") or "").split(":", 1)[0]
+                    or str(item.get("label", "") or "").split(":", 1)[0]
+                    or None,
+                    "recipe_mode": str(item.get("recipe_mode", "") or "")
+                    or (
+                        str(item.get("label", "") or "").split(":", 2)[1]
+                        if len(str(item.get("label", "") or "").split(":", 2)) > 1
+                        else None
+                    ),
+                    "recipe_localization": str(item.get("recipe_localization", "") or "") or None,
+                    "recipe_pooling": str(item.get("recipe_pooling", "") or "") or None,
+                    "competitor_strategy": str(item.get("competitor_strategy", "") or "") or None,
                     "contrast_mode": str(item.get("contrast_mode", "") or "none"),
                     "intended_bundle_key": intended_bundle_key,
                     "intended_term": intended_term or None,
@@ -2773,6 +2805,124 @@ class HookedTransformerWorkerRuntime:
             )
         )
         return summaries
+
+    def _summarize_operator_recipe_mode_diagnostics(
+        self,
+        ownership: Sequence[Mapping[str, Any]],
+    ) -> list[dict[str, Any]]:
+        def _as_float(item: Mapping[str, Any], key: str) -> float:
+            return float(item.get(key, 0.0) or 0.0)
+
+        def _mode_score(item: Mapping[str, Any]) -> tuple[float, float, float, str]:
+            return (
+                _as_float(item, "self_delta"),
+                _as_float(item, "alignment_margin"),
+                -_as_float(item, "cross_delta"),
+                str(item.get("operator_recipe_id", "") or ""),
+            )
+
+        def _compact_mode(item: Mapping[str, Any] | None) -> dict[str, Any] | None:
+            if item is None:
+                return None
+            return {
+                "recipe_mode": item.get("recipe_mode"),
+                "actuator_class": item.get("actuator_class"),
+                "operator_recipe_id": item.get("operator_recipe_id"),
+                "realized_lift_bundle_key": item.get("realized_lift_bundle_key"),
+                "self_delta": round(_as_float(item, "self_delta"), 6),
+                "cross_delta": round(_as_float(item, "cross_delta"), 6),
+                "alignment_margin": round(_as_float(item, "alignment_margin"), 6),
+                "target_mass_delta": round(_as_float(item, "best_eval_target_mass_delta"), 6),
+                "target_top20_hit_delta": int(item.get("best_eval_target_top20_hit_delta", 0) or 0),
+            }
+
+        grouped: dict[tuple[str, str, str, str], dict[str, Mapping[str, Any]]] = {}
+        for item in ownership:
+            if not isinstance(item, Mapping):
+                continue
+            intended_bundle_key = str(item.get("intended_bundle_key", "") or "")
+            recipe_name = str(item.get("recipe_name", "") or "")
+            recipe_mode = str(item.get("recipe_mode", "") or "")
+            contrast_mode = str(item.get("contrast_mode", "") or "none")
+            competitor_strategy = str(item.get("competitor_strategy", "") or "")
+            if not intended_bundle_key or not recipe_name or not recipe_mode:
+                continue
+            key = (intended_bundle_key, recipe_name, contrast_mode, competitor_strategy)
+            modes = grouped.setdefault(key, {})
+            previous = modes.get(recipe_mode)
+            if previous is None or _mode_score(item) > _mode_score(previous):
+                modes[recipe_mode] = item
+
+        rows: list[dict[str, Any]] = []
+        for (bundle_key, recipe_name, contrast_mode, competitor_strategy), modes in grouped.items():
+            best_single = max(
+                (modes.get(mode) for mode in ("kv_v", "kv_k") if modes.get(mode) is not None),
+                key=_mode_score,
+                default=None,
+            )
+            best_pair = max(
+                (modes.get(mode) for mode in ("kv_pair", "kv_pair_asymmetric") if modes.get(mode) is not None),
+                key=_mode_score,
+                default=None,
+            )
+            best_any = max(modes.values(), key=_mode_score, default=None)
+            max_self_delta = max((_as_float(item, "self_delta") for item in modes.values()), default=0.0)
+            max_cross_delta = max((_as_float(item, "cross_delta") for item in modes.values()), default=0.0)
+            pair_interaction_delta = (
+                round(_as_float(best_pair, "self_delta") - _as_float(best_single, "self_delta"), 6)
+                if best_pair is not None and best_single is not None
+                else None
+            )
+            pair_alignment_delta = (
+                round(_as_float(best_pair, "alignment_margin") - _as_float(best_single, "alignment_margin"), 6)
+                if best_pair is not None and best_single is not None
+                else None
+            )
+            if max(max_self_delta, max_cross_delta) <= 0.01:
+                diagnosis = "all_dead_or_weak"
+            elif best_pair is not None and str(best_pair.get("actuator_class", "") or "") in {"collapse_sharpener", "harmful"}:
+                diagnosis = "pair_unsafe"
+            elif pair_interaction_delta is not None and pair_interaction_delta > 0.005:
+                diagnosis = "pair_synergy"
+            elif pair_interaction_delta is not None and pair_interaction_delta < -0.005:
+                diagnosis = "single_lung_preferred"
+            elif best_pair is not None and str(best_pair.get("actuator_class", "") or "") == "self_actuator":
+                diagnosis = "pair_self_candidate"
+            else:
+                diagnosis = "flat_or_inconclusive"
+            rows.append(
+                {
+                    "intended_bundle_key": bundle_key,
+                    "intended_term": None if best_any is None else best_any.get("intended_term"),
+                    "recipe_name": recipe_name,
+                    "contrast_mode": contrast_mode,
+                    "competitor_strategy": competitor_strategy or None,
+                    "diagnosis": diagnosis,
+                    "best_single_mode": None if best_single is None else best_single.get("recipe_mode"),
+                    "best_pair_mode": None if best_pair is None else best_pair.get("recipe_mode"),
+                    "best_mode": None if best_any is None else best_any.get("recipe_mode"),
+                    "best_single": _compact_mode(best_single),
+                    "best_pair": _compact_mode(best_pair),
+                    "best_any": _compact_mode(best_any),
+                    "pair_interaction_delta": pair_interaction_delta,
+                    "pair_alignment_delta": pair_alignment_delta,
+                    "mode_count": len(modes),
+                    "modes": {
+                        str(mode): _compact_mode(item)
+                        for mode, item in sorted(modes.items(), key=lambda entry: str(entry[0]))
+                    },
+                }
+            )
+
+        rows.sort(
+            key=lambda item: (
+                str(item.get("intended_bundle_key", "") or ""),
+                str(item.get("recipe_name", "") or ""),
+                str(item.get("contrast_mode", "") or ""),
+                str(item.get("competitor_strategy", "") or ""),
+            )
+        )
+        return rows
 
     def _infer_recipe_stealer_bundles(
         self,
@@ -7439,6 +7589,311 @@ class HookedTransformerWorkerRuntime:
             return None
         return base | payload
 
+    def _activation_patch_candidate_review(self, bundle_status: Mapping[str, Any]) -> dict[str, Any] | None:
+        shadow = bundle_status.get("activation_patch_shadow_actuator")
+        if not isinstance(shadow, Mapping):
+            return None
+        actuator_class = str(shadow.get("activation_patch_actuator_class", "") or "")
+        promotable = bool(shadow.get("promotable_to_candidate_compiler", False))
+        owns_lift = actuator_class == "self_actuator"
+        compiler_status = "shadow_blueprint_ready" if promotable else "bridge_plan_or_more_evidence_required"
+        blueprint = {
+            "kind": "activation_patch_candidate_blueprint",
+            "objective_bundle_key": shadow.get("objective_bundle_key"),
+            "actuator_bundle_key": shadow.get("actuator_bundle_key"),
+            "recipe_name": shadow.get("recipe_name"),
+            "operator_recipe_id": shadow.get("operator_recipe_id"),
+            "site": shadow.get("activation_patch_site"),
+            "layer": shadow.get("activation_patch_layer"),
+            "alpha": shadow.get("activation_patch_alpha"),
+            "source": "source_body_span",
+            "target": "answer_boundary_last",
+            "patch_mode": "blend",
+            "compile_state": "shadow_blueprint_only",
+            "required_runtime_support": "activation_patch_blend_operator",
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        actual_delta_class = str(shadow.get("actual_delta_class", "") or "")
+        compile_preview_blocked_reason: str | None
+        if owns_lift and promotable:
+            compile_preview_blocked_reason = None
+            compile_preview = {
+                "kind": "activation_patch_compile_preview",
+                "objective_bundle_key": shadow.get("objective_bundle_key"),
+                "actuator_bundle_key": shadow.get("actuator_bundle_key"),
+                "recipe_name": shadow.get("recipe_name"),
+                "operator_recipe_id": shadow.get("operator_recipe_id"),
+                "site": shadow.get("activation_patch_site"),
+                "layer": shadow.get("activation_patch_layer"),
+                "alpha": shadow.get("activation_patch_alpha"),
+                "source": "source_body_span",
+                "target": "answer_boundary_last",
+                "patch_mode": "blend",
+                "ownership_gate": "self_actuator",
+                "compile_state": "preview_only",
+                "actual_delta_class": actual_delta_class or None,
+                "required_runtime_support": "activation_patch_blend_operator",
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+            }
+        else:
+            compile_preview = None
+            if actuator_class == "bridge_actuator":
+                compile_preview_blocked_reason = "bridge_actuator_requires_dual_layer_plan"
+            elif actuator_class == "cross_bound":
+                compile_preview_blocked_reason = "cross_bound_lift_not_owned_by_objective_bundle"
+            elif actuator_class in {"dead_actuator", "collapse_sharpener", "harmful"}:
+                compile_preview_blocked_reason = f"{actuator_class}_not_compileable"
+            elif not promotable:
+                compile_preview_blocked_reason = "activation_patch_not_promotable_to_candidate_compiler"
+            else:
+                compile_preview_blocked_reason = "activation_patch_ownership_gate_not_satisfied"
+        ownership_gate = {
+            "gate": "activation_patch_compile_preview",
+            "actuator_class": actuator_class or None,
+            "owns_lift": bool(owns_lift),
+            "promotable_to_candidate_compiler": bool(promotable),
+            "compile_preview_created": bool(compile_preview is not None),
+            "blocked_reason": compile_preview_blocked_reason,
+            "policy_owner": "controller",
+            "production_apply_allowed": False,
+        }
+        return {
+            "status": compiler_status,
+            "actuator_class": actuator_class or None,
+            "actual_delta_class": actual_delta_class or None,
+            "promotable_to_candidate_compiler": promotable,
+            "promotion_reason": shadow.get("promotion_reason"),
+            "ownership_gate": ownership_gate,
+            "compile_preview_created": bool(compile_preview is not None),
+            "compile_preview_blocked_reason": compile_preview_blocked_reason,
+            "compile_preview": compile_preview,
+            "counterfactual_delta": dict(shadow.get("counterfactual_delta", {}))
+            if isinstance(shadow.get("counterfactual_delta"), Mapping)
+            else {},
+            "blueprint": blueprint,
+            "why_not_apply": (
+                "activation patch blueprint is shadow-only until runtime has a compileable operator and guardrails"
+            ),
+        }
+
+    def _activation_patch_runtime_support_probe(self, bundle_status: Mapping[str, Any]) -> dict[str, Any] | None:
+        review = self._activation_patch_candidate_review(bundle_status)
+        if not isinstance(review, Mapping):
+            return None
+        preview = review.get("compile_preview")
+        actuator_class = str(review.get("actuator_class", "") or "")
+        actual_delta_class = str(review.get("actual_delta_class", "") or "")
+        blocked_reason = review.get("compile_preview_blocked_reason")
+        base: dict[str, Any] = {
+            "kind": "activation_patch_runtime_support_probe",
+            "required_runtime_support": "activation_patch_blend_operator",
+            "execution_mode": "quarantine_diagnostic",
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "policy_owner": "controller",
+            "source_review_status": review.get("status"),
+            "actuator_class": actuator_class or None,
+            "actual_delta_class": actual_delta_class or None,
+        }
+        if not isinstance(preview, Mapping):
+            reason = str(blocked_reason or "activation_patch_compile_preview_unavailable")
+            return base | {
+                "status": "blocked",
+                "diagnostic_executable_created": False,
+                "runtime_support_status": "runtime_support_blocked",
+                "runtime_supported_shadow_candidate": False,
+                "blocked_reason": reason,
+                "executable_shadow": None,
+                "actual_delta_certification": {
+                    "status": "blocked",
+                    "reason": reason,
+                    "actuator_class": actuator_class or None,
+                    "actual_delta_class": actual_delta_class or None,
+                    "production_apply_allowed": False,
+                },
+                "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+                "why_not_apply": reason,
+            }
+
+        counterfactual_delta = (
+            dict(review.get("counterfactual_delta", {}))
+            if isinstance(review.get("counterfactual_delta"), Mapping)
+            else {}
+        )
+        collapse_or_harm = actuator_class in {"collapse_sharpener", "harmful"} or actual_delta_class in {
+            "collapse_sharpener",
+            "harmful",
+        }
+        supported_shadow = actuator_class == "self_actuator" and not collapse_or_harm
+        runtime_support_status = (
+            "runtime_supported_shadow_candidate" if supported_shadow else "runtime_support_vetoed"
+        )
+        if collapse_or_harm:
+            blocked_reason = f"{actual_delta_class or actuator_class}_veto"
+        elif actuator_class != "self_actuator":
+            blocked_reason = f"{actuator_class or 'unknown'}_not_owned_by_objective_bundle"
+        else:
+            blocked_reason = None
+        alpha_value = preview.get("alpha")
+        try:
+            alpha_value = max(0.0, min(0.15, float(alpha_value)))
+        except Exception:
+            alpha_value = 0.15
+        executable_shadow = {
+            "kind": "activation_patch_blend_operator",
+            "compile_state": "executable_shadow",
+            "execution_mode": "quarantine_diagnostic",
+            "apply_kind": "diagnostic_probe",
+            "diagnostic_only": True,
+            "objective_bundle_key": preview.get("objective_bundle_key"),
+            "actuator_bundle_key": preview.get("actuator_bundle_key"),
+            "recipe_name": preview.get("recipe_name"),
+            "operator_recipe_id": preview.get("operator_recipe_id"),
+            "site": preview.get("site"),
+            "layer": preview.get("layer"),
+            "alpha": round(float(alpha_value), 6),
+            "source": preview.get("source", "source_body_span"),
+            "target": preview.get("target", "answer_boundary_last"),
+            "patch_mode": preview.get("patch_mode", "blend"),
+            "ttl_steps": 1,
+            "norm_clip": 1.0,
+            "counterfactual_delta": counterfactual_delta,
+            "actuator_class": actuator_class or None,
+            "actual_delta_class": actual_delta_class or None,
+            "runtime_support_status": runtime_support_status,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        actual_delta_certification = {
+            "status": "shadow_supported" if supported_shadow else "blocked",
+            "source": "activation_patch_candidate_review_actual_delta",
+            "actuator_class": actuator_class or None,
+            "actual_delta_class": actual_delta_class or None,
+            "counterfactual_delta": counterfactual_delta,
+            "blocked_reason": blocked_reason,
+            "runtime_supported_shadow_candidate": bool(supported_shadow),
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        return base | {
+            "status": "shadow_supported" if supported_shadow else "blocked",
+            "diagnostic_executable_created": True,
+            "runtime_support_status": runtime_support_status,
+            "runtime_supported_shadow_candidate": bool(supported_shadow),
+            "blocked_reason": blocked_reason,
+            "executable_shadow": executable_shadow,
+            "actual_delta_certification": actual_delta_certification,
+            "next_evidence_needed": "activation_patch_promotion_gate_review"
+            if supported_shadow
+            else "alternate_activation_patch_or_bridge_evidence",
+            "why_not_apply": (
+                "activation patch executable shadow is diagnostic-only; production apply remains closed"
+                if supported_shadow
+                else str(blocked_reason or "activation_patch_runtime_support_blocked")
+            ),
+        }
+
+    def _activation_patch_promotion_gate_review(self, bundle_status: Mapping[str, Any]) -> dict[str, Any] | None:
+        runtime_probe = self._activation_patch_runtime_support_probe(bundle_status)
+        if not isinstance(runtime_probe, Mapping):
+            return None
+        executable_shadow = runtime_probe.get("executable_shadow")
+        gate_checks: dict[str, bool] = {
+            "runtime_supported_shadow_candidate": bool(
+                runtime_probe.get("runtime_supported_shadow_candidate", False)
+            ),
+            "executable_shadow_present": isinstance(executable_shadow, Mapping),
+            "production_still_closed": not bool(runtime_probe.get("production_apply_allowed", False)),
+        }
+        counterfactual_delta = (
+            dict(runtime_probe.get("actual_delta_certification", {}).get("counterfactual_delta", {}))
+            if isinstance(runtime_probe.get("actual_delta_certification"), Mapping)
+            and isinstance(runtime_probe["actual_delta_certification"].get("counterfactual_delta"), Mapping)
+            else {}
+        )
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return default
+
+        target_mass_delta = _as_float(counterfactual_delta.get("target_mass_delta"), 0.0)
+        focus_rank_delta = _as_float(counterfactual_delta.get("focus_rank_delta"), 0.0)
+        self_delta = _as_float(counterfactual_delta.get("self_delta"), 0.0)
+        alignment_margin = _as_float(counterfactual_delta.get("alignment_margin"), 0.0)
+        target_top20_delta = _as_float(counterfactual_delta.get("target_top20_hit_delta"), 0.0)
+        actuator_class = str(runtime_probe.get("actuator_class", "") or "")
+        actual_delta_class = str(runtime_probe.get("actual_delta_class", "") or "")
+        no_collapse_veto = actuator_class not in {"collapse_sharpener", "harmful"} and actual_delta_class not in {
+            "collapse_sharpener",
+            "harmful",
+        }
+        gate_checks.update(
+            {
+                "owned_self_actuator": actuator_class == "self_actuator",
+                "actual_delta_target_lift": actual_delta_class == "target_lift",
+                "positive_readout_delta": bool(
+                    target_mass_delta > 0.0
+                    or target_top20_delta > 0.0
+                    or focus_rank_delta > 0.0
+                    or self_delta > 0.0
+                ),
+                "alignment_non_negative": alignment_margin >= 0.0,
+                "no_collapse_or_harm_veto": no_collapse_veto,
+            }
+        )
+        missing_checks = [key for key, ok in gate_checks.items() if not ok]
+        gate_passed = not missing_checks
+        production_apply_candidate = None
+        certified_runtime_operator = None
+        if isinstance(executable_shadow, Mapping):
+            certified_runtime_operator = dict(executable_shadow)
+            certified_runtime_operator.update(
+                {
+                    "kind": "activation_patch_certified_runtime_operator",
+                    "compile_state": "certified_runtime_operator" if gate_passed else "promotion_gate_blocked",
+                    "promotion_gate_passed": bool(gate_passed),
+                    "promotion_gate_missing_checks": list(missing_checks),
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                }
+            )
+            if gate_passed:
+                production_apply_candidate = dict(certified_runtime_operator)
+                production_apply_candidate.update(
+                    {
+                        "kind": "activation_patch_production_apply_candidate",
+                        "compile_state": "production_apply_candidate",
+                        "candidate_state": "policy_review_required",
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                        "policy_owner": "controller",
+                    }
+                )
+        return {
+            "kind": "activation_patch_promotion_gate_review",
+            "status": "candidate_ready_for_policy_review" if gate_passed else "blocked",
+            "gate": "activation_patch_promotion_gate",
+            "gate_passed": bool(gate_passed),
+            "gate_checks": gate_checks,
+            "missing_checks": missing_checks,
+            "runtime_support_status": runtime_probe.get("runtime_support_status"),
+            "runtime_supported_shadow_candidate": bool(runtime_probe.get("runtime_supported_shadow_candidate", False)),
+            "certified_runtime_operator": certified_runtime_operator,
+            "production_apply_candidate": production_apply_candidate,
+            "counterfactual_delta": counterfactual_delta,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "next_evidence_needed": "production_policy_review" if gate_passed else "alternate_activation_patch_or_bridge_evidence",
+            "why_not_apply": (
+                "activation patch is a production apply candidate, but policy review and production apply permission remain closed"
+                if gate_passed
+                else "activation patch promotion gate blocked: " + ",".join(missing_checks[:4])
+            ),
+        }
+
     def _execute_controller_diagnostic_request(
         self,
         request: Mapping[str, Any],
@@ -7475,22 +7930,189 @@ class HookedTransformerWorkerRuntime:
             and (not bundle_key or str(item.get("bundle_key", "") or "") == bundle_key)
         ] if isinstance(ledger_raw, SequenceABC) and not isinstance(ledger_raw, (str, bytes, bytearray)) else []
 
-        evidence_kind_by_request = {
-            "operator_diagnostic_replay": "operator_replay",
-            "attention_head_ablation_on_frontier": "attention_ablation",
-            "readout_logit_adjacent_probe": "readout_probe",
-            "sae_feature_emitter_scan": "feature_emitter",
+        evidence_kinds_by_request = {
+            "operator_diagnostic_replay": {
+                "operator_replay",
+                "operator_mode_decomposition",
+                "attention_guided_operator_certification",
+                "activation_patch_certification",
+            },
+            "attention_head_ablation_on_frontier": {
+                "attention_ablation",
+                "attention_scale_response",
+                "attention_readout_carrier",
+                "attention_shadow_actuator",
+            },
+            "attention_readout_carrier_probe": {
+                "attention_readout_carrier",
+                "attention_scale_response",
+                "attention_ablation",
+                "attention_shadow_actuator",
+            },
+            "readout_logit_adjacent_probe": {"readout_probe"},
+            "sae_feature_emitter_scan": {"feature_emitter"},
+            "activation_patch_candidate_review": {
+                "activation_patch_certification",
+                "feature_emitter",
+            },
+            "activation_patch_runtime_support_probe": {
+                "activation_patch_certification",
+            },
+            "activation_patch_promotion_gate_review": {
+                "activation_patch_certification",
+            },
         }
-        evidence_kind = evidence_kind_by_request.get(diagnostic_name)
+        evidence_kinds = evidence_kinds_by_request.get(diagnostic_name)
         matching_rows = [
             row for row in ledger_rows
-            if evidence_kind is None or str(row.get("evidence_kind", "") or "") == evidence_kind
+            if evidence_kinds is None or str(row.get("evidence_kind", "") or "") in evidence_kinds
         ]
         if diagnostic_name == "compare_extra_operator_diagnostics":
             matching_rows = [
                 row for row in ledger_rows
-                if str(row.get("evidence_kind", "") or "") in {"operator_probe", "attention_ablation", "readout_probe"}
+                if str(row.get("evidence_kind", "") or "") in {
+                    "operator_probe",
+                    "attention_ablation",
+                    "attention_readout_carrier",
+                    "attention_shadow_actuator",
+                    "attention_guided_operator_certification",
+                    "activation_patch_certification",
+                    "readout_probe",
+                }
             ]
+        if diagnostic_name in {
+            "operator_diagnostic_replay",
+            "compare_extra_operator_diagnostics",
+            "activation_patch_candidate_review",
+            "activation_patch_runtime_support_probe",
+            "activation_patch_promotion_gate_review",
+        }:
+            # Surface the highest-value operator evidence first.  In particular,
+            # attention-guided certification answers "did the carrier convert
+            # into an actuator?", so it should not be hidden behind many recipe
+            # decomposition rows.
+            evidence_priority = {
+                "attention_guided_operator_certification": 0,
+                "activation_patch_certification": 1,
+                "operator_mode_decomposition": 2,
+                "operator_replay": 3,
+                "operator_probe": 4,
+                "readout_probe": 5,
+                "attention_readout_carrier": 6,
+                "attention_shadow_actuator": 7,
+            }
+            status_priority = {
+                "certified": 0,
+                "supportive": 1,
+                "blocked": 2,
+                "shadow": 3,
+                "observed": 4,
+            }
+            matching_rows.sort(
+                key=lambda row: (
+                    evidence_priority.get(str(row.get("evidence_kind", "") or ""), 9),
+                    status_priority.get(str(row.get("status", "") or ""), 9),
+                    str(row.get("recipe_name", "") or ""),
+                    str(row.get("operator_recipe_id", "") or ""),
+                )
+            )
+
+        evidence_kind_counts: dict[str, int] = {}
+        status_counts: dict[str, int] = {}
+        for row in matching_rows:
+            evidence_kind = str(row.get("evidence_kind", "") or "unknown")
+            status = str(row.get("status", "") or "unknown")
+            evidence_kind_counts[evidence_kind] = evidence_kind_counts.get(evidence_kind, 0) + 1
+            status_counts[status] = status_counts.get(status, 0) + 1
+        attention_guided_rows = [
+            row
+            for row in matching_rows
+            if str(row.get("evidence_kind", "") or "") == "attention_guided_operator_certification"
+        ]
+        attention_guided_checked = bool(bundle_status.get("attention_guided_operator_checked", False)) or bool(
+            attention_guided_rows
+        )
+        attention_guided_blocked = sum(
+            1 for row in attention_guided_rows if str(row.get("status", "") or "") == "blocked"
+        )
+        attention_guided_supportive = sum(
+            1 for row in attention_guided_rows if str(row.get("status", "") or "") in {"supportive", "certified"}
+        )
+        activation_patch_rows = [
+            row
+            for row in matching_rows
+            if str(row.get("evidence_kind", "") or "") == "activation_patch_certification"
+        ]
+        activation_patch_blocked = sum(
+            1 for row in activation_patch_rows if str(row.get("status", "") or "") == "blocked"
+        )
+        activation_patch_supportive = sum(
+            1 for row in activation_patch_rows if str(row.get("status", "") or "") in {"supportive", "certified"}
+        )
+        activation_patch_candidate_review = self._activation_patch_candidate_review(bundle_status)
+        activation_patch_compile_preview = (
+            dict(activation_patch_candidate_review["compile_preview"])
+            if isinstance(activation_patch_candidate_review, Mapping)
+            and isinstance(activation_patch_candidate_review.get("compile_preview"), Mapping)
+            else None
+        )
+        activation_patch_runtime_support_probe = (
+            self._activation_patch_runtime_support_probe(bundle_status)
+            if diagnostic_name == "activation_patch_runtime_support_probe"
+            else None
+        )
+        activation_patch_promotion_gate_review = (
+            self._activation_patch_promotion_gate_review(bundle_status)
+            if diagnostic_name == "activation_patch_promotion_gate_review"
+            else None
+        )
+        activation_patch_review_next_evidence = None
+        if activation_patch_compile_preview is not None:
+            activation_patch_review_next_evidence = "production_activation_patch_operator_support"
+        elif isinstance(activation_patch_candidate_review, Mapping) and activation_patch_candidate_review.get(
+            "compile_preview_blocked_reason"
+        ):
+            activation_patch_review_next_evidence = "alternate_activation_patch_or_bridge_evidence"
+        activation_patch_runtime_next_evidence = (
+            activation_patch_runtime_support_probe.get("next_evidence_needed")
+            if isinstance(activation_patch_runtime_support_probe, Mapping)
+            else None
+        )
+        activation_patch_promotion_next_evidence = (
+            activation_patch_promotion_gate_review.get("next_evidence_needed")
+            if isinstance(activation_patch_promotion_gate_review, Mapping)
+            else None
+        )
+        activation_patch_policy_candidate_ready = bool(
+            isinstance(activation_patch_promotion_gate_review, Mapping)
+            and isinstance(activation_patch_promotion_gate_review.get("production_apply_candidate"), Mapping)
+        )
+        activation_patch_runtime_shadow_supported = bool(
+            isinstance(activation_patch_runtime_support_probe, Mapping)
+            and activation_patch_runtime_support_probe.get("runtime_supported_shadow_candidate")
+        )
+        activation_patch_promotion_supported = bool(
+            isinstance(activation_patch_promotion_gate_review, Mapping)
+            and activation_patch_promotion_gate_review.get("gate_passed")
+        )
+        diagnostic_operator_supported = bool(
+            bundle_status.get("diagnostic_operator_supported", False)
+            or bundle_status.get("operator_certified", False)
+            or activation_patch_runtime_shadow_supported
+            or activation_patch_promotion_supported
+        )
+        policy_candidate_ready = bool(
+            bundle_status.get("policy_candidate_ready", False)
+            or activation_patch_policy_candidate_ready
+        )
+        carrier_to_actuator_status = str(bundle_status.get("carrier_to_actuator_status", "") or "")
+        if (
+            not carrier_to_actuator_status
+            and attention_guided_checked
+            and attention_guided_blocked
+            and not diagnostic_operator_supported
+        ):
+            carrier_to_actuator_status = "missing_after_attention_guided_operator"
 
         result = {
             "diagnostic": diagnostic_name,
@@ -7500,13 +8122,98 @@ class HookedTransformerWorkerRuntime:
             "bundle_key": bundle_key or None,
             "objective_bundle_key": request.get("objective_bundle_key") or bundle_key or None,
             "step_actuator_bundle_key": request.get("step_actuator_bundle_key") or bundle_key or None,
-            "next_evidence_needed": request.get("next_evidence_needed")
+            "next_evidence_needed": (
+                activation_patch_runtime_next_evidence
+                if diagnostic_name == "activation_patch_runtime_support_probe"
+                else activation_patch_promotion_next_evidence
+                if diagnostic_name == "activation_patch_promotion_gate_review"
+                else activation_patch_review_next_evidence
+            )
+            or request.get("next_evidence_needed")
             or bundle_status.get("next_evidence_needed")
             or strategy_hints.get("diagnostic_frontier_next_evidence"),
             "diagnostic_request_reason": request.get("reason") or strategy_hints.get("diagnostic_frontier_reason_text"),
-            "operator_certified": bool(bundle_status.get("operator_certified", False)),
+            "operator_certified": False,
+            "diagnostic_operator_supported": diagnostic_operator_supported,
+            "policy_candidate_ready": policy_candidate_ready,
+            "production_operator_certified": False,
             "readout_reachable": bool(bundle_status.get("readout_reachable", False)),
             "head_sensitive": bool(bundle_status.get("head_sensitive", False)),
+            "rank_readout_carrier": bool(bundle_status.get("rank_readout_carrier", False)),
+            "attention_carrier_profile": bundle_status.get("attention_carrier_profile")
+            or bundle_status.get("attention_scale_response_profile"),
+            "attention_carrier_next_probe": bundle_status.get("attention_carrier_next_probe")
+            or bundle_status.get("attention_scale_next_probe"),
+            "attention_shadow_actuator": dict(bundle_status["attention_shadow_actuator"])
+            if isinstance(bundle_status.get("attention_shadow_actuator"), Mapping)
+            else None,
+            "attention_shadow_actuator_class": bundle_status.get("attention_shadow_actuator_class"),
+            "attention_shadow_promotable_to_certification_replay": bool(
+                bundle_status.get("attention_shadow_promotable_to_certification_replay", False)
+            ),
+            "attention_shadow_promotion_reason": bundle_status.get("attention_shadow_promotion_reason"),
+            "activation_patch_shadow_actuator": dict(bundle_status["activation_patch_shadow_actuator"])
+            if isinstance(bundle_status.get("activation_patch_shadow_actuator"), Mapping)
+            else None,
+            "activation_patch_actuator_class": bundle_status.get("activation_patch_actuator_class"),
+            "activation_patch_promotable_to_candidate": bool(
+                bundle_status.get("activation_patch_promotable_to_candidate", False)
+            ),
+            "activation_patch_promotion_reason": bundle_status.get("activation_patch_promotion_reason"),
+            "activation_patch_candidate_review": activation_patch_candidate_review,
+            "activation_patch_compile_preview_created": bool(activation_patch_compile_preview is not None),
+            "activation_patch_compile_preview_blocked_reason": (
+                activation_patch_candidate_review.get("compile_preview_blocked_reason")
+                if isinstance(activation_patch_candidate_review, Mapping)
+                else None
+            ),
+            "activation_patch_compile_preview": activation_patch_compile_preview,
+            "activation_patch_runtime_support_probe": activation_patch_runtime_support_probe,
+            "activation_patch_diagnostic_executable_created": bool(
+                isinstance(activation_patch_runtime_support_probe, Mapping)
+                and activation_patch_runtime_support_probe.get("diagnostic_executable_created")
+            ),
+            "activation_patch_executable_shadow": (
+                dict(activation_patch_runtime_support_probe["executable_shadow"])
+                if isinstance(activation_patch_runtime_support_probe, Mapping)
+                and isinstance(activation_patch_runtime_support_probe.get("executable_shadow"), Mapping)
+                else None
+            ),
+            "activation_patch_runtime_support_status": (
+                activation_patch_runtime_support_probe.get("runtime_support_status")
+                if isinstance(activation_patch_runtime_support_probe, Mapping)
+                else None
+            ),
+            "activation_patch_runtime_supported_shadow_candidate": bool(
+                isinstance(activation_patch_runtime_support_probe, Mapping)
+                and activation_patch_runtime_support_probe.get("runtime_supported_shadow_candidate")
+            ),
+            "activation_patch_promotion_gate_review": activation_patch_promotion_gate_review,
+            "activation_patch_promotion_gate_passed": bool(
+                isinstance(activation_patch_promotion_gate_review, Mapping)
+                and activation_patch_promotion_gate_review.get("gate_passed")
+            ),
+            "activation_patch_certified_runtime_operator": (
+                dict(activation_patch_promotion_gate_review["certified_runtime_operator"])
+                if isinstance(activation_patch_promotion_gate_review, Mapping)
+                and isinstance(activation_patch_promotion_gate_review.get("certified_runtime_operator"), Mapping)
+                else None
+            ),
+            "activation_patch_production_apply_candidate": (
+                dict(activation_patch_promotion_gate_review["production_apply_candidate"])
+                if isinstance(activation_patch_promotion_gate_review, Mapping)
+                and isinstance(activation_patch_promotion_gate_review.get("production_apply_candidate"), Mapping)
+                else None
+            ),
+            "attention_guided_operator_checked": attention_guided_checked,
+            "attention_guided_operator_status": bundle_status.get("attention_guided_operator_status"),
+            "attention_guided_operator_blocked_count": int(
+                bundle_status.get("attention_guided_operator_blocked_count", attention_guided_blocked) or 0
+            ),
+            "attention_guided_operator_recipe_count": int(
+                bundle_status.get("attention_guided_operator_recipe_count", len(attention_guided_rows)) or 0
+            ),
+            "carrier_to_actuator_status": carrier_to_actuator_status or None,
             "feature_supported": bool(bundle_status.get("feature_supported", False)),
             "blocked_by": [
                 str(item)
@@ -7518,6 +8225,49 @@ class HookedTransformerWorkerRuntime:
                 )
                 if str(item)
             ][:6],
+            "diagnostic_summary": {
+                "evidence_row_total": len(matching_rows),
+                "evidence_row_omitted_count": max(0, len(matching_rows) - 8),
+                "evidence_kind_counts": evidence_kind_counts,
+                "status_counts": status_counts,
+                "operator_mode_diagnosis": bundle_status.get("operator_mode_diagnosis"),
+                "best_single_mode": bundle_status.get("best_single_mode"),
+                "best_pair_mode": bundle_status.get("best_pair_mode"),
+                "pair_interaction_delta": bundle_status.get("pair_interaction_delta"),
+                "attention_guided_operator_checked": attention_guided_checked,
+                "attention_guided_operator_blocked_count": attention_guided_blocked,
+                "attention_guided_operator_supportive_count": attention_guided_supportive,
+                "activation_patch_checked": bool(bundle_status.get("activation_patch_checked", False)) or bool(activation_patch_rows),
+                "activation_patch_blocked_count": activation_patch_blocked,
+                "activation_patch_supportive_count": activation_patch_supportive,
+                "activation_patch_promotable_to_candidate": bool(
+                    bundle_status.get("activation_patch_promotable_to_candidate", False)
+                ),
+                "activation_patch_compile_preview_created": bool(activation_patch_compile_preview is not None),
+                "activation_patch_compile_preview_blocked_reason": (
+                    activation_patch_candidate_review.get("compile_preview_blocked_reason")
+                    if isinstance(activation_patch_candidate_review, Mapping)
+                    else None
+                ),
+                "activation_patch_next_evidence_after_review": activation_patch_review_next_evidence,
+                "activation_patch_runtime_support_status": (
+                    activation_patch_runtime_support_probe.get("runtime_support_status")
+                    if isinstance(activation_patch_runtime_support_probe, Mapping)
+                    else None
+                ),
+                "activation_patch_diagnostic_executable_created": bool(
+                    isinstance(activation_patch_runtime_support_probe, Mapping)
+                    and activation_patch_runtime_support_probe.get("diagnostic_executable_created")
+                ),
+                "activation_patch_promotion_gate_passed": bool(
+                    isinstance(activation_patch_promotion_gate_review, Mapping)
+                    and activation_patch_promotion_gate_review.get("gate_passed")
+                ),
+                "diagnostic_operator_supported": diagnostic_operator_supported,
+                "policy_candidate_ready": policy_candidate_ready,
+                "production_operator_certified": False,
+                "carrier_to_actuator_status": carrier_to_actuator_status or None,
+            },
             "evidence_rows": [
                 {
                     key: row.get(key)
@@ -7526,13 +8276,52 @@ class HookedTransformerWorkerRuntime:
                         "diagnostic_family",
                         "status",
                         "actuator_class",
+                        "operator_axis",
                         "recipe_name",
                         "operator_recipe_id",
+                        "operator_family_prior",
+                        "operator_family_priors",
                         "target_mass_delta",
                         "target_top20_hit_delta",
                         "focus_rank_delta",
                         "support_score",
                         "blocked_by",
+                        "best_single_mode",
+                        "best_pair_mode",
+                        "pair_interaction_delta",
+                        "pair_alignment_delta",
+                        "response_profile",
+                        "next_probe",
+                        "zero_focus_rank_delta",
+                        "best_partial_focus_rank_delta",
+                        "partial_to_zero_logit_delta_ratio",
+                        "attention_hook_call_count",
+                        "attention_head_norm_before",
+                        "attention_head_norm_after",
+                        "attention_head_norm_removed_estimate",
+                        "activation_hook_call_count",
+                        "activation_patch_site",
+                        "activation_patch_layer",
+                        "activation_patch_alpha",
+                        "activation_source_norm",
+                        "activation_target_norm_before",
+                        "activation_target_norm_after",
+                        "actual_delta_class",
+                        "realized_lift_bundle_key",
+                        "realized_lift_term",
+                        "self_delta",
+                        "cross_delta",
+                        "alignment_margin",
+                        "bundle_lift_scores",
+                        "activation_patch_shadow_actuator",
+                        "activation_patch_actuator_class",
+                        "activation_patch_promotable_to_candidate",
+                        "activation_patch_promotion_reason",
+                        "shadow_actuator",
+                        "attention_shadow_actuator_class",
+                        "promotable_to_certification_replay",
+                        "promotion_reason",
+                        "counterfactual_delta",
                     )
                     if row.get(key) not in (None, "", [])
                 }
@@ -7540,10 +8329,28 @@ class HookedTransformerWorkerRuntime:
             ],
         }
         if diagnostic_name == "operator_diagnostic_replay":
-            result["certified_for_apply"] = bool(bundle_status.get("operator_certified", False))
+            result["certified_for_apply"] = False
             result["production_apply_allowed"] = False
-        elif diagnostic_name == "attention_head_ablation_on_frontier":
+        elif diagnostic_name == "compare_extra_operator_diagnostics":
+            result["diagnostic_role"] = "operator_evidence_view"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "activation_patch_candidate_review":
+            result["diagnostic_role"] = "activation_patch_candidate_review"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "activation_patch_runtime_support_probe":
+            result["diagnostic_role"] = "activation_patch_runtime_support_probe"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "activation_patch_promotion_gate_review":
+            result["diagnostic_role"] = "activation_patch_promotion_gate_review"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+        elif diagnostic_name in {"attention_head_ablation_on_frontier", "attention_readout_carrier_probe"}:
             result["head_sensitive"] = bool(bundle_status.get("head_sensitive", False))
+            result["rank_readout_carrier"] = bool(bundle_status.get("rank_readout_carrier", False))
+            result["diagnostic_role"] = "rank_readout_carrier"
             result["production_apply_allowed"] = False
         elif diagnostic_name == "sae_feature_emitter_scan":
             result["feature_backend"] = "sae_sidecar"
@@ -8338,6 +9145,10 @@ class HookedTransformerWorkerRuntime:
                                     result["operator_recipe_seed_key"] = recipe_seed_key
                                     result["recipe_mode"] = "kv_pair"
                                     result["recipe_name"] = recipe_name
+                                    result["recipe_localization"] = localization
+                                    result["recipe_pooling"] = pooling
+                                    result["contrast_mode"] = contrast_mode
+                                    result["contrast_scale"] = round(float(contrast_scale), 6)
                                     result["competitor_strategy"] = competitor_strategy
                                     local_evaluations.append(result)
                         elif mode == "kv_pair_asymmetric":
@@ -8395,6 +9206,10 @@ class HookedTransformerWorkerRuntime:
                             result["operator_recipe_seed_key"] = recipe_seed_key
                             result["recipe_mode"] = "kv_pair_asymmetric"
                             result["recipe_name"] = recipe_name
+                            result["recipe_localization"] = localization
+                            result["recipe_pooling"] = pooling
+                            result["contrast_mode"] = contrast_mode
+                            result["contrast_scale"] = round(float(contrast_scale), 6)
                             result["competitor_strategy"] = competitor_strategy
                             local_evaluations.append(result)
                         else:
@@ -8428,6 +9243,10 @@ class HookedTransformerWorkerRuntime:
                             result["operator_recipe_seed_key"] = recipe_seed_key
                             result["recipe_mode"] = str(mode)
                             result["recipe_name"] = recipe_name
+                            result["recipe_localization"] = localization
+                            result["recipe_pooling"] = pooling
+                            result["contrast_mode"] = contrast_mode
+                            result["contrast_scale"] = round(float(contrast_scale), 6)
                             result["competitor_strategy"] = competitor_strategy
                             local_evaluations.append(result)
             return local_evaluations
@@ -8458,6 +9277,7 @@ class HookedTransformerWorkerRuntime:
             evaluations,
             bundle_term_by_key=bundle_term_by_key,
         )
+        mode_diagnostics = self._summarize_operator_recipe_mode_diagnostics(ownership)
         bridge_plan_recommendations = self._summarize_bridge_plan_recommendations(ownership)
         self._operator_bridge_plan_table = {
             str(item.get("objective_bundle_key", "") or ""): dict(item)
@@ -8472,6 +9292,7 @@ class HookedTransformerWorkerRuntime:
             "evaluations": evaluations,
             "operator_recipe_certifications": recipe_certifications,
             "operator_recipe_bundle_ownership": ownership,
+            "operator_recipe_mode_diagnostics": mode_diagnostics,
             "bridge_plan_recommendations": bridge_plan_recommendations,
             "recipe_stealer_bundle_keys": {
                 f"{str(seed_key)}::{str(bundle_key)}": str(stealer_key)

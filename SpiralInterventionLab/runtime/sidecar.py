@@ -346,6 +346,15 @@ def build_sae_feature_emitter_readout_analyzer(
                         "feature_family": "source_body_anchor"
                         if bool(vector.get("source_body_exact", False))
                         else "prompt_anchor",
+                        "operator_family_prior": "resid_or_readout_boundary"
+                        if bool(vector.get("source_body_exact", False))
+                        else "attention_carrier_probe",
+                        "operator_family_priors": [
+                            "activation_patch_source_to_boundary",
+                            "resid_or_readout_boundary",
+                        ]
+                        if bool(vector.get("source_body_exact", False))
+                        else ["attention_carrier_probe"],
                         "support": _clip_score(vector.get("semantic_residual_support"), minimum=-2.0, maximum=2.0),
                         "anchor_strength": _clip_score(vector.get("anchor_strength"), minimum=-2.0, maximum=2.0),
                         "provenance_class": _clean_text(vector.get("provenance_class"), limit=32),
@@ -485,12 +494,22 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
             for key, limit in (
                 ("bundle_key", 160),
                 ("feature_family", 64),
+                ("operator_family_prior", 64),
                 ("provenance_class", 32),
                 ("span_kind", 64),
             ):
                 text = _clean_text(item.get(key), limit=limit)
                 if text is not None:
                     row[key] = text
+            raw_priors = item.get("operator_family_priors")
+            if isinstance(raw_priors, Sequence) and not isinstance(raw_priors, (str, bytes, bytearray)):
+                priors = [
+                    text
+                    for text in (_clean_text(raw_prior, limit=64) for raw_prior in raw_priors[:4])
+                    if text is not None
+                ]
+                if priors:
+                    row["operator_family_priors"] = priors
             for key in ("support", "anchor_strength"):
                 score = _clip_score(item.get(key))
                 if score is not None:

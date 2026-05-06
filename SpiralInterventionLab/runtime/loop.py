@@ -444,7 +444,14 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
     return {
         "request_operator_diagnostic": "operator_diagnostic_replay",
         "request_attention_head_ablation": "attention_head_ablation_on_frontier",
+        "request_attention_readout_carrier_probe": "attention_readout_carrier_probe",
+        "request_readout_logit_adjacent_probe": "readout_logit_adjacent_probe",
         "request_sae_feature_scan": "sae_feature_emitter_scan",
+        "request_compare_extra_operator_diagnostics": "compare_extra_operator_diagnostics",
+        "request_non_kv_operator_search": "compare_extra_operator_diagnostics",
+        "request_activation_patch_candidate_review": "activation_patch_candidate_review",
+        "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
+        "request_activation_patch_promotion_gate_review": "activation_patch_promotion_gate_review",
     }.get(text)
 
 
@@ -503,6 +510,78 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         seen.add(dedupe_key)
         normalized.append(row)
     return normalized
+
+
+def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
+    return "|".join(
+        str(request.get(key, "") or "")
+        for key in ("diagnostic", "bundle_key", "objective_bundle_key")
+    )
+
+
+def _diagnostic_requests_next_evidence(requests: Sequence[Mapping[str, Any]]) -> str | None:
+    for request in requests:
+        if not isinstance(request, Mapping):
+            continue
+        value = request.get("next_evidence_needed")
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def _diagnostic_results_next_evidence(results: Sequence[Any]) -> str | None:
+    for result in reversed(list(results)):
+        if not isinstance(result, Mapping):
+            continue
+        value = result.get("next_evidence_needed")
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def _diagnostic_context_next_evidence(packet: Mapping[str, Any]) -> str | None:
+    strategy_hints = _packet_strategy_hints(packet)
+    value = strategy_hints.get("diagnostic_frontier_next_evidence")
+    if value not in (None, ""):
+        return str(value)
+    return None
+
+
+def _command_next_evidence_needed(command: Any) -> str | None:
+    meta = _command_meta(command)
+    if not isinstance(meta, Mapping):
+        return None
+    value = meta.get("next_evidence_needed")
+    if value not in (None, ""):
+        return str(value)
+    controller_memory = meta.get("controller_memory")
+    if isinstance(controller_memory, Mapping):
+        value = controller_memory.get("next_evidence_needed")
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def _diagnostic_next_evidence_transition(before: str | None, after: str | None) -> bool:
+    return bool(before not in (None, "") and after not in (None, "") and str(before) != str(after))
+
+
+def _filter_repeated_diagnostic_requests(
+    requests: Sequence[Mapping[str, Any]],
+    seen_signatures: set[str],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    fresh: list[dict[str, Any]] = []
+    repeated: list[dict[str, Any]] = []
+    for request in requests:
+        if not isinstance(request, Mapping):
+            continue
+        normalized = dict(request)
+        signature = _diagnostic_request_signature(normalized)
+        if signature in seen_signatures:
+            repeated.append(normalized | {"diagnostic_signature": signature})
+            continue
+        fresh.append(normalized)
+    return fresh, repeated
 
 
 def _packet_strategy_hints(packet: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -901,6 +980,11 @@ def _visible_no_safe_actuator_guidance(
             "request_operator_diagnostic",
             "request_attention_head_ablation",
             "request_sae_feature_scan",
+            "request_compare_extra_operator_diagnostics",
+            "request_non_kv_operator_search",
+            "request_activation_patch_candidate_review",
+            "request_activation_patch_runtime_support_probe",
+            "request_activation_patch_promotion_gate_review",
             "noop_until_certified",
         ],
     }
@@ -1164,6 +1248,7 @@ def run_episode(
     *,
     logger: StructuredLogger | None = None,
     policy: Any | None = None,
+    max_controller_diagnostic_rethink_rounds: int = 0,
 ) -> EpisodeResult:
     prompt = task_env.reset(seed=ctx.runtime_state.seed)
     worker_runtime.reset(prompt)
@@ -1232,23 +1317,193 @@ def run_episode(
             _log_pending_tool_events(logger, step=step_count, worker_runtime=worker_runtime)
 
         diagnostic_requests = _extract_diagnostic_requests(command, packet)
+        diagnostic_results: list[Any] = []
+        seen_diagnostic_signatures: set[str] = set()
+        diagnostic_next_evidence_before = (
+            _diagnostic_requests_next_evidence(diagnostic_requests)
+            or _diagnostic_context_next_evidence(packet)
+        )
         if diagnostic_requests:
+            seen_diagnostic_signatures.update(_diagnostic_request_signature(request) for request in diagnostic_requests)
             requester = getattr(worker_runtime, "request_controller_diagnostics", None)
-            results = []
             if callable(requester):
                 try:
-                    results = requester(diagnostic_requests, source="controller", packet=packet) or []
+                    diagnostic_results = requester(diagnostic_requests, source="controller", packet=packet) or []
                 except TypeError:
                     try:
-                        results = requester(diagnostic_requests, source="controller") or []
+                        diagnostic_results = requester(diagnostic_requests, source="controller") or []
                     except TypeError:
-                        results = requester(diagnostic_requests) or []
+                        diagnostic_results = requester(diagnostic_requests) or []
             if logger is not None:
                 for request in diagnostic_requests:
                     request_event = {"event": "controller_diagnostic_request", "step": step_count, **dict(request)}
-                    request_event["executed"] = bool(results)
+                    request_event["executed"] = bool(diagnostic_results)
                     logger.log(request_event)
             _log_pending_diagnostic_events(logger, step=step_count, worker_runtime=worker_runtime)
+
+        rethink_round = 0
+        max_rethink_rounds = max(0, int(max_controller_diagnostic_rethink_rounds))
+        readout_escape_rethink_enabled = str(packet.get("control_phase_hint", "") or "") == "readout_escape"
+        diagnostic_next_evidence_after = _diagnostic_results_next_evidence(diagnostic_results)
+        diagnostic_transition_open = _diagnostic_next_evidence_transition(
+            diagnostic_next_evidence_before,
+            diagnostic_next_evidence_after,
+        )
+        if logger is not None and diagnostic_requests:
+            logger.log(
+                {
+                    "event": "controller_loop_patience",
+                    "step": step_count,
+                    "controller_round": 0,
+                    "control_phase_hint": packet.get("control_phase_hint"),
+                    "readout_escape_rethink_enabled": bool(readout_escape_rethink_enabled),
+                    "loop_patience_budget_left": int(max_rethink_rounds),
+                    "next_evidence_before": diagnostic_next_evidence_before,
+                    "next_evidence_after": diagnostic_next_evidence_after,
+                    "next_evidence_transition": bool(diagnostic_transition_open),
+                    "repeated_diagnostic_veto": False,
+                }
+            )
+        while (
+            rethink_round < max_rethink_rounds
+            and diagnostic_requests
+            and diagnostic_results
+            and _command_decision(command) == "noop"
+            and readout_escape_rethink_enabled
+            and diagnostic_transition_open
+        ):
+            rethink_round += 1
+            packet = worker_runtime.build_controller_packet()
+            try:
+                command = controller_client.invoke(packet)
+            except Exception as exc:
+                _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
+                if logger is not None:
+                    logger.log(
+                        {
+                            "event": "controller_error",
+                            "step": step_count,
+                            "controller_round": rethink_round,
+                            "phase": "diagnostic_rethink_invoke",
+                            "error": str(exc),
+                        }
+                    )
+                raise
+
+            command, guard_event = _guard_exhausted_apply_command(command, packet)
+            command, budget_guard_event = _guard_budget_violating_apply_command(command, packet, policy=policy)
+            _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
+
+            if logger is not None:
+                selection_report = _build_controller_selection_report(packet, command)
+                if guard_event is not None:
+                    logger.log(
+                        {
+                            "event": "controller_guardrail",
+                            "step": step_count,
+                            "controller_round": rethink_round,
+                            **guard_event,
+                        }
+                    )
+                if budget_guard_event is not None:
+                    logger.log(
+                        {
+                            "event": "controller_guardrail",
+                            "step": step_count,
+                            "controller_round": rethink_round,
+                            **budget_guard_event,
+                        }
+                    )
+                logger.log(
+                    {
+                        "event": "controller_command",
+                        "step": step_count,
+                        "controller_round": rethink_round,
+                        "controller_round_kind": "diagnostic_rethink",
+                        "command": command,
+                        **selection_report,
+                    }
+                )
+                logger.log(
+                    {
+                        "event": "controller_selection",
+                        "step": step_count,
+                        "controller_round": rethink_round,
+                        "controller_round_kind": "diagnostic_rethink",
+                        **selection_report,
+                    }
+                )
+            _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
+
+            diagnostic_requests = _extract_diagnostic_requests(command, packet)
+            diagnostic_requests, repeated_diagnostic_requests = _filter_repeated_diagnostic_requests(
+                diagnostic_requests,
+                seen_diagnostic_signatures,
+            )
+            if logger is not None and repeated_diagnostic_requests:
+                for request in repeated_diagnostic_requests:
+                    logger.log(
+                        {
+                            "event": "controller_diagnostic_veto",
+                            "step": step_count,
+                            "controller_round": rethink_round,
+                            "reason": "repeated_diagnostic_veto",
+                            "repeated_diagnostic_veto": True,
+                            "loop_patience_budget_left": max(0, max_rethink_rounds - rethink_round),
+                            **dict(request),
+                        }
+                    )
+            diagnostic_next_evidence_before = (
+                _diagnostic_requests_next_evidence(diagnostic_requests)
+                or _command_next_evidence_needed(command)
+                or _diagnostic_context_next_evidence(packet)
+                or diagnostic_next_evidence_after
+            )
+            diagnostic_results = []
+            if diagnostic_requests:
+                seen_diagnostic_signatures.update(
+                    _diagnostic_request_signature(request) for request in diagnostic_requests
+                )
+                requester = getattr(worker_runtime, "request_controller_diagnostics", None)
+                if callable(requester):
+                    try:
+                        diagnostic_results = requester(diagnostic_requests, source="controller", packet=packet) or []
+                    except TypeError:
+                        try:
+                            diagnostic_results = requester(diagnostic_requests, source="controller") or []
+                        except TypeError:
+                            diagnostic_results = requester(diagnostic_requests) or []
+                if logger is not None:
+                    for request in diagnostic_requests:
+                        request_event = {
+                            "event": "controller_diagnostic_request",
+                            "step": step_count,
+                            "controller_round": rethink_round,
+                            **dict(request),
+                        }
+                        request_event["executed"] = bool(diagnostic_results)
+                        logger.log(request_event)
+                _log_pending_diagnostic_events(logger, step=step_count, worker_runtime=worker_runtime)
+            diagnostic_next_evidence_after = _diagnostic_results_next_evidence(diagnostic_results)
+            diagnostic_transition_open = _diagnostic_next_evidence_transition(
+                diagnostic_next_evidence_before,
+                diagnostic_next_evidence_after,
+            )
+            if logger is not None:
+                logger.log(
+                    {
+                        "event": "controller_loop_patience",
+                        "step": step_count,
+                        "controller_round": rethink_round,
+                        "control_phase_hint": packet.get("control_phase_hint"),
+                        "readout_escape_rethink_enabled": bool(readout_escape_rethink_enabled),
+                        "loop_patience_budget_left": max(0, max_rethink_rounds - rethink_round),
+                        "next_evidence_before": diagnostic_next_evidence_before,
+                        "next_evidence_after": diagnostic_next_evidence_after,
+                        "next_evidence_transition": bool(diagnostic_transition_open),
+                        "repeated_diagnostic_veto": bool(repeated_diagnostic_requests),
+                    }
+                )
 
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)

@@ -497,6 +497,8 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
                 "controller_selection": None,
                 "diagnostic_requests": [],
                 "diagnostic_results": [],
+                "diagnostic_vetoes": [],
+                "loop_patience": [],
             },
         )
         event_name = str(event.get("event", "") or "")
@@ -523,6 +525,10 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
             bucket["diagnostic_requests"].append(dict(event))
         elif event_name == "controller_diagnostic_result":
             bucket["diagnostic_results"].append(dict(event))
+        elif event_name == "controller_diagnostic_veto":
+            bucket["diagnostic_vetoes"].append(dict(event))
+        elif event_name == "controller_loop_patience":
+            bucket["loop_patience"].append(dict(event))
     views: list[dict[str, Any]] = []
     for step in sorted(grouped):
         bucket = grouped[step]
@@ -541,6 +547,10 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
                 "diagnostic_requests": list(bucket["diagnostic_requests"]),
                 "diagnostic_result_count": len(bucket["diagnostic_results"]),
                 "diagnostic_results": list(bucket["diagnostic_results"]),
+                "diagnostic_veto_count": len(bucket["diagnostic_vetoes"]),
+                "diagnostic_vetoes": list(bucket["diagnostic_vetoes"]),
+                "loop_patience_count": len(bucket["loop_patience"]),
+                "loop_patience": list(bucket["loop_patience"]),
                 "bridge_visible": bridge_visible,
                 "bridge_dual_layer_missing": (
                     bool(selection.get("controller_bridge_dual_layer_missing", False))
@@ -656,6 +666,222 @@ def _bridge_plan_unavailable_summary(
     }
 
 
+def _classify_attention_shadow_actuator(
+    *,
+    response_profile: str,
+    focus_rank_delta: int,
+    target_mass_delta: float,
+    target_top20_hit_delta: int,
+    first_logit_delta_l2: float,
+) -> tuple[str, bool, str]:
+    """Classify attention-scale evidence as a shadow diagnostic, not an apply permit."""
+    if response_profile == "unsafe_zero_response":
+        return "unsafe_sharpener", False, "unsafe_attention_zero_response"
+    if target_top20_hit_delta > 0:
+        return "top20_carrier", True, "target_entered_top20_counterfactually"
+    if target_mass_delta > 0.00002:
+        return "mass_positive_carrier", True, "target_mass_increased_counterfactually"
+    if focus_rank_delta >= 20 and target_mass_delta >= -0.00001 and first_logit_delta_l2 > 0.0:
+        return "rank_carrier_only", True, "rank_lift_without_mass_or_top20_gain"
+    if focus_rank_delta >= 4 and target_mass_delta >= -0.00002 and first_logit_delta_l2 > 0.0:
+        return "weak_rank_carrier", False, "rank_lift_below_certification_threshold"
+    if focus_rank_delta <= 0 and target_mass_delta <= 0.0 and target_top20_hit_delta <= 0:
+        return "flat_shadow", False, "no_rank_or_target_lift"
+    return "unresolved_shadow", False, "mixed_signal_requires_more_diagnostics"
+
+
+def _attention_scale_response_diagnostics(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, int, int], list[dict[str, Any]]] = {}
+    for item in rows:
+        if not isinstance(item, Mapping) or str(item.get("diagnostic_family", "") or "") != "attention_head_scale":
+            continue
+        fingerprint = item.get("candidate_fingerprint") if isinstance(item.get("candidate_fingerprint"), Mapping) else {}
+        objective_key = str(item.get("objective_bundle_key", "") or "")
+        site = str(fingerprint.get("site", "") or "")
+        layer = fingerprint.get("layer")
+        head = fingerprint.get("head")
+        if not objective_key or not site:
+            continue
+        if isinstance(layer, bool) or not isinstance(layer, int):
+            continue
+        if isinstance(head, bool) or not isinstance(head, int):
+            continue
+        grouped.setdefault((objective_key, site, int(layer), int(head)), []).append(dict(item))
+
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def _as_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    summaries: list[dict[str, Any]] = []
+    for (objective_key, site, layer, head), items in grouped.items():
+        normalized: list[dict[str, Any]] = []
+        for item in items:
+            fingerprint = item.get("candidate_fingerprint") if isinstance(item.get("candidate_fingerprint"), Mapping) else {}
+            row = dict(item)
+            row["_scale"] = _as_float(fingerprint.get("scale"), default=1.0)
+            row["_focus_rank_delta"] = max(
+                _as_int(item.get("focus_rank_delta", 0)),
+                _as_int(item.get("rank_focus_delta", 0)),
+            )
+            row["_target_mass_delta"] = _as_float(item.get("target_mass_delta", 0.0))
+            row["_target_top20_hit_delta"] = _as_int(item.get("target_top20_hit_delta", 0))
+            row["_logit_l2"] = _as_float(item.get("first_logit_delta_l2", 0.0))
+            normalized.append(row)
+        normalized.sort(key=lambda item: float(item["_scale"]))
+        zero_rows = [item for item in normalized if abs(float(item["_scale"])) <= 1e-9]
+        partial_rows = [item for item in normalized if float(item["_scale"]) > 1e-9]
+        zero = zero_rows[0] if zero_rows else None
+        best_partial = max(
+            partial_rows,
+            key=lambda item: (
+                int(item["_target_top20_hit_delta"]),
+                float(item["_target_mass_delta"]),
+                int(item["_focus_rank_delta"]),
+                -float(item["_scale"]),
+            ),
+            default=None,
+        )
+        zero_focus_rank_delta = 0 if zero is None else int(zero["_focus_rank_delta"])
+        zero_target_mass_delta = 0.0 if zero is None else float(zero["_target_mass_delta"])
+        partial_focus_rank_delta = 0 if best_partial is None else int(best_partial["_focus_rank_delta"])
+        partial_target_mass_delta = 0.0 if best_partial is None else float(best_partial["_target_mass_delta"])
+        zero_logit_l2 = 0.0 if zero is None else float(zero["_logit_l2"])
+        partial_logit_l2 = max((float(item["_logit_l2"]) for item in partial_rows), default=0.0)
+        partial_to_zero_logit_ratio = (
+            round(float(partial_logit_l2 / zero_logit_l2), 6)
+            if zero_logit_l2 > 1e-12
+            else None
+        )
+        if zero is not None and str(zero.get("actuator_class", "") or "") in {"harmful", "collapse_sharpener"}:
+            response_profile = "unsafe_zero_response"
+            next_probe = "avoid_head_scale_apply_until_counterfactual_safe"
+        elif zero_focus_rank_delta >= 6 and partial_focus_rank_delta < 4 and partial_target_mass_delta <= 0.00002:
+            response_profile = "zero_only_rank_lift"
+            next_probe = "try_sparse_head_suppression_or_compensated_head_patch"
+        elif partial_focus_rank_delta >= 4 or partial_target_mass_delta > 0.00002:
+            response_profile = "partial_scale_signal"
+            next_probe = "refine_scale_sweep_near_best_partial"
+        elif zero is not None and str(zero.get("actuator_class", "") or "") == "target_lift":
+            response_profile = "zero_only_weak_target_lift"
+            next_probe = "test_zero_with_repetition_and_semantic_guardrails"
+        else:
+            response_profile = "attention_scale_flat"
+            next_probe = "do_not_promote_attention_scale_yet"
+        shadow_source = best_partial if best_partial is not None else zero
+        shadow_actuator = None
+        shadow_actuator_class = None
+        shadow_promotable = False
+        shadow_promotion_reason = None
+        if shadow_source is not None:
+            shadow_scale = float(shadow_source["_scale"])
+            shadow_actuator_class, shadow_promotable, shadow_promotion_reason = (
+                _classify_attention_shadow_actuator(
+                    response_profile=response_profile,
+                    focus_rank_delta=int(shadow_source["_focus_rank_delta"]),
+                    target_mass_delta=float(shadow_source["_target_mass_delta"]),
+                    target_top20_hit_delta=int(shadow_source["_target_top20_hit_delta"]),
+                    first_logit_delta_l2=float(shadow_source["_logit_l2"]),
+                )
+            )
+            shadow_actuator = {
+                "kind": "attention_shadow_actuator",
+                "decision": "shadow",
+                "objective_bundle_key": objective_key,
+                "actuator_bundle_key": objective_key,
+                "objective_term": shadow_source.get("objective_term"),
+                "site": site,
+                "layer": int(layer),
+                "head": int(head),
+                "scale": round(float(shadow_scale), 6),
+                "recipe_name": shadow_source.get("recipe_name"),
+                "response_profile": response_profile,
+                "attention_shadow_actuator_class": shadow_actuator_class,
+                "promotable_to_certification_replay": bool(shadow_promotable),
+                "promotion_reason": shadow_promotion_reason,
+                "counterfactual_delta": {
+                    "focus_rank_delta": int(shadow_source["_focus_rank_delta"]),
+                    "target_mass_delta": round(float(shadow_source["_target_mass_delta"]), 6),
+                    "target_top20_hit_delta": int(shadow_source["_target_top20_hit_delta"]),
+                    "first_logit_delta_l2": round(float(shadow_source["_logit_l2"]), 6),
+                    "head_norm_before": round(_as_float(shadow_source.get("attention_head_norm_before", 0.0)), 6),
+                    "head_norm_after": round(_as_float(shadow_source.get("attention_head_norm_after", 0.0)), 6),
+                    "head_norm_removed_estimate": round(
+                        _as_float(shadow_source.get("attention_head_norm_removed_estimate", 0.0)),
+                        6,
+                    ),
+                },
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+            }
+        summaries.append(
+            {
+                "objective_bundle_key": objective_key,
+                "objective_term": normalized[0].get("objective_term") if normalized else None,
+                "site": site,
+                "layer": int(layer),
+                "head": int(head),
+                "response_profile": response_profile,
+                "next_probe": next_probe,
+                "zero_actuator_class": None if zero is None else zero.get("actuator_class"),
+                "zero_focus_rank_delta": int(zero_focus_rank_delta),
+                "zero_target_mass_delta": round(float(zero_target_mass_delta), 6),
+                "zero_target_top20_hit_delta": 0 if zero is None else int(zero["_target_top20_hit_delta"]),
+                "zero_logit_delta_l2": round(float(zero_logit_l2), 6),
+                "best_partial_recipe": None if best_partial is None else best_partial.get("recipe_name"),
+                "best_partial_scale": None if best_partial is None else round(float(best_partial["_scale"]), 6),
+                "best_partial_actuator_class": None if best_partial is None else best_partial.get("actuator_class"),
+                "best_partial_focus_rank_delta": int(partial_focus_rank_delta),
+                "best_partial_target_mass_delta": round(float(partial_target_mass_delta), 6),
+                "best_partial_target_top20_hit_delta": 0
+                if best_partial is None
+                else int(best_partial["_target_top20_hit_delta"]),
+                "partial_to_zero_logit_delta_ratio": partial_to_zero_logit_ratio,
+                "attention_shadow_actuator_class": shadow_actuator_class,
+                "attention_shadow_promotable_to_certification_replay": bool(shadow_promotable),
+                "attention_shadow_promotion_reason": shadow_promotion_reason,
+                "shadow_actuator": shadow_actuator,
+                "scale_points": [
+                    {
+                        "scale": round(float(item["_scale"]), 6),
+                        "recipe_name": item.get("recipe_name"),
+                        "actuator_class": item.get("actuator_class"),
+                        "focus_rank_delta": int(item["_focus_rank_delta"]),
+                        "target_mass_delta": round(float(item["_target_mass_delta"]), 6),
+                        "target_top20_hit_delta": int(item["_target_top20_hit_delta"]),
+                        "first_logit_delta_l2": round(float(item["_logit_l2"]), 6),
+                        "hook_call_count": _as_int(item.get("attention_hook_call_count", 0)),
+                        "head_norm_before": round(_as_float(item.get("attention_head_norm_before", 0.0)), 6),
+                        "head_norm_after": round(_as_float(item.get("attention_head_norm_after", 0.0)), 6),
+                        "head_norm_removed_estimate": round(
+                            _as_float(item.get("attention_head_norm_removed_estimate", 0.0)),
+                            6,
+                        ),
+                    }
+                    for item in normalized
+                ],
+            }
+        )
+    summaries.sort(
+        key=lambda item: (
+            str(item.get("objective_bundle_key", "") or ""),
+            str(item.get("site", "") or ""),
+            int(item.get("layer", 0) or 0),
+            int(item.get("head", 0) or 0),
+        )
+    )
+    return summaries
+
+
 def _diagnostic_evidence_ledger(
     bridge_eval_summary: Mapping[str, Any],
     strategy_hints: Mapping[str, Any],
@@ -684,8 +910,37 @@ def _diagnostic_evidence_ledger(
                 "bundle_key": bundle_key,
                 "readout_reachable": False,
                 "head_sensitive": False,
+                "rank_readout_carrier": False,
                 "feature_supported": False,
                 "operator_certified": False,
+                "diagnostic_operator_supported": False,
+                "policy_candidate_ready": False,
+                "production_operator_certified": False,
+                "operator_mode_diagnosis": None,
+                "best_single_mode": None,
+                "best_pair_mode": None,
+                "pair_interaction_delta": None,
+                "attention_scale_response_profile": None,
+                "attention_scale_next_probe": None,
+                "attention_carrier_profile": None,
+                "attention_carrier_next_probe": None,
+                "attention_shadow_actuator": None,
+                "attention_shadow_actuator_class": None,
+                "attention_shadow_promotable_to_certification_replay": False,
+                "attention_shadow_promotion_reason": None,
+                "attention_guided_operator_checked": False,
+                "attention_guided_operator_status": None,
+                "attention_guided_operator_blocked_count": 0,
+                "attention_guided_operator_recipe_count": 0,
+                "activation_patch_checked": False,
+                "activation_patch_status": None,
+                "activation_patch_blocked_count": 0,
+                "activation_patch_recipe_count": 0,
+                "activation_patch_shadow_actuator": None,
+                "activation_patch_actuator_class": None,
+                "activation_patch_promotable_to_candidate": False,
+                "activation_patch_promotion_reason": None,
+                "carrier_to_actuator_status": None,
                 "blocked_by": [],
                 "evidence_count": 0,
                 "evidence_kinds": [],
@@ -766,7 +1021,7 @@ def _diagnostic_evidence_ledger(
             actuator_class = str(item.get("actuator_class", "") or "")
             bundle_status = _status_for(bundle_key)
             if actuator_class in {"self_actuator", "bridge_actuator"}:
-                bundle_status["operator_certified"] = True
+                bundle_status["diagnostic_operator_supported"] = True
                 evidence_status = "certified"
             elif actuator_class in {"dead_actuator", "collapse_sharpener"}:
                 evidence_status = "blocked"
@@ -786,6 +1041,126 @@ def _diagnostic_evidence_ledger(
                 blocked_by=actuator_class if evidence_status == "blocked" else None,
             )
 
+    mode_diagnostics = bridge_eval_summary.get("operator_recipe_mode_diagnostics", ())
+    if isinstance(mode_diagnostics, SequenceABC) and not isinstance(mode_diagnostics, (str, bytes, bytearray)):
+        for item in mode_diagnostics:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("intended_bundle_key", "") or "")
+            if not bundle_key:
+                continue
+            diagnosis = str(item.get("diagnosis", "") or "")
+            bundle_status = _status_for(bundle_key)
+            if diagnosis:
+                bundle_status["operator_mode_diagnosis"] = diagnosis
+            if item.get("best_single_mode") not in (None, ""):
+                bundle_status["best_single_mode"] = str(item.get("best_single_mode"))
+            if item.get("best_pair_mode") not in (None, ""):
+                bundle_status["best_pair_mode"] = str(item.get("best_pair_mode"))
+            if item.get("pair_interaction_delta") is not None:
+                bundle_status["pair_interaction_delta"] = round(_as_float(item.get("pair_interaction_delta")), 6)
+            if diagnosis == "all_dead_or_weak":
+                _append_unique(bundle_status["blocked_by"], "all_modes_dead_or_weak")
+            best_any = item.get("best_any") if isinstance(item.get("best_any"), Mapping) else {}
+            _record(
+                bundle_key=bundle_key,
+                evidence_kind="operator_mode_decomposition",
+                diagnostic_family="kv_mode_decomposition",
+                actuator_class=diagnosis or None,
+                evidence_status="blocked" if diagnosis == "all_dead_or_weak" else "observed",
+                recipe_name=item.get("recipe_name"),
+                operator_recipe_id=best_any.get("operator_recipe_id") if isinstance(best_any, Mapping) else None,
+                target_mass_delta=best_any.get("target_mass_delta") if isinstance(best_any, Mapping) else None,
+                target_top20_hit_delta=best_any.get("target_top20_hit_delta") if isinstance(best_any, Mapping) else None,
+                blocked_by="all_modes_dead_or_weak" if diagnosis == "all_dead_or_weak" else None,
+            )
+            ledger[-1]["best_single_mode"] = item.get("best_single_mode")
+            ledger[-1]["best_pair_mode"] = item.get("best_pair_mode")
+            ledger[-1]["pair_interaction_delta"] = item.get("pair_interaction_delta")
+            ledger[-1]["pair_alignment_delta"] = item.get("pair_alignment_delta")
+
+    attention_response = bridge_eval_summary.get("attention_scale_response_diagnostics", ())
+    if isinstance(attention_response, SequenceABC) and not isinstance(attention_response, (str, bytes, bytearray)):
+        for item in attention_response:
+            if not isinstance(item, Mapping):
+                continue
+            bundle_key = str(item.get("objective_bundle_key", "") or "")
+            if not bundle_key:
+                continue
+            profile = str(item.get("response_profile", "") or "")
+            bundle_status = _status_for(bundle_key)
+            if profile:
+                bundle_status["attention_scale_response_profile"] = profile
+                bundle_status["attention_carrier_profile"] = profile
+            if item.get("next_probe") not in (None, ""):
+                bundle_status["attention_scale_next_probe"] = str(item.get("next_probe"))
+                bundle_status["attention_carrier_next_probe"] = str(item.get("next_probe"))
+            shadow_actuator = item.get("shadow_actuator") if isinstance(item.get("shadow_actuator"), Mapping) else None
+            if shadow_actuator is not None:
+                bundle_status["attention_shadow_actuator"] = dict(shadow_actuator)
+                bundle_status["attention_shadow_actuator_class"] = shadow_actuator.get(
+                    "attention_shadow_actuator_class"
+                )
+                bundle_status["attention_shadow_promotable_to_certification_replay"] = bool(
+                    shadow_actuator.get("promotable_to_certification_replay", False)
+                )
+                bundle_status["attention_shadow_promotion_reason"] = shadow_actuator.get("promotion_reason")
+            if profile in {"attention_scale_flat", "unsafe_zero_response"}:
+                _append_unique(bundle_status["blocked_by"], profile)
+            if profile in {"zero_only_rank_lift", "zero_only_weak_target_lift", "partial_scale_signal"}:
+                bundle_status["rank_readout_carrier"] = True
+                bundle_status["head_sensitive"] = True
+            _record(
+                bundle_key=bundle_key,
+                evidence_kind="attention_readout_carrier",
+                diagnostic_family="attention_head_scale_response",
+                actuator_class=profile or None,
+                evidence_status="supportive"
+                if profile in {"zero_only_rank_lift", "zero_only_weak_target_lift", "partial_scale_signal"}
+                else "blocked",
+                recipe_name=item.get("best_partial_recipe") or "head_zero_ablation",
+                target_mass_delta=item.get("zero_target_mass_delta"),
+                target_top20_hit_delta=item.get("zero_target_top20_hit_delta"),
+                focus_rank_delta=item.get("zero_focus_rank_delta"),
+                blocked_by=profile if profile in {"attention_scale_flat", "unsafe_zero_response"} else None,
+            )
+            ledger[-1]["response_profile"] = profile
+            ledger[-1]["next_probe"] = item.get("next_probe")
+            ledger[-1]["zero_focus_rank_delta"] = item.get("zero_focus_rank_delta")
+            ledger[-1]["best_partial_focus_rank_delta"] = item.get("best_partial_focus_rank_delta")
+            ledger[-1]["partial_to_zero_logit_delta_ratio"] = item.get("partial_to_zero_logit_delta_ratio")
+            ledger[-1]["attention_shadow_actuator_class"] = item.get("attention_shadow_actuator_class")
+            ledger[-1]["promotable_to_certification_replay"] = item.get(
+                "attention_shadow_promotable_to_certification_replay"
+            )
+            ledger[-1]["promotion_reason"] = item.get("attention_shadow_promotion_reason")
+            if shadow_actuator is not None:
+                ledger[-1]["shadow_actuator"] = dict(shadow_actuator)
+                delta = shadow_actuator.get("counterfactual_delta")
+                if isinstance(delta, Mapping):
+                    ledger[-1]["counterfactual_delta"] = dict(delta)
+                _record(
+                    bundle_key=bundle_key,
+                    evidence_kind="attention_shadow_actuator",
+                    diagnostic_family="attention_head_scale_shadow",
+                    actuator_class=profile or None,
+                    evidence_status="shadow",
+                    recipe_name=shadow_actuator.get("recipe_name"),
+                    target_mass_delta=(delta or {}).get("target_mass_delta") if isinstance(delta, Mapping) else None,
+                    target_top20_hit_delta=(delta or {}).get("target_top20_hit_delta") if isinstance(delta, Mapping) else None,
+                    focus_rank_delta=(delta or {}).get("focus_rank_delta") if isinstance(delta, Mapping) else None,
+                )
+                ledger[-1]["shadow_actuator"] = dict(shadow_actuator)
+                ledger[-1]["attention_shadow_actuator_class"] = shadow_actuator.get(
+                    "attention_shadow_actuator_class"
+                )
+                ledger[-1]["promotable_to_certification_replay"] = shadow_actuator.get(
+                    "promotable_to_certification_replay"
+                )
+                ledger[-1]["promotion_reason"] = shadow_actuator.get("promotion_reason")
+                if isinstance(delta, Mapping):
+                    ledger[-1]["counterfactual_delta"] = dict(delta)
+
     extras = bridge_eval_summary.get("extra_operator_diagnostics", ())
     if isinstance(extras, SequenceABC) and not isinstance(extras, (str, bytes, bytearray)):
         for item in extras:
@@ -802,6 +1177,7 @@ def _diagnostic_evidence_ledger(
             bundle_status = _status_for(bundle_key)
             evidence_kind = "operator_probe"
             evidence_status = "observed"
+            activation_shadow_actuator: dict[str, Any] | None = None
             if diagnostic_family == "logit_adjacent":
                 evidence_kind = "readout_probe"
                 if actuator_class == "target_lift" or target_mass_delta > 0.0 or target_top20_hit_delta > 0 or focus_rank_delta > 0:
@@ -812,6 +1188,118 @@ def _diagnostic_evidence_ledger(
                 if actuator_class not in {"dead_actuator", "collapse_sharpener", ""} or focus_rank_delta > 0:
                     bundle_status["head_sensitive"] = True
                     evidence_status = "supportive"
+            elif diagnostic_family == "attention_head_scale":
+                evidence_kind = "attention_readout_carrier"
+                if actuator_class not in {"dead_actuator", "collapse_sharpener", ""} or focus_rank_delta > 0:
+                    bundle_status["rank_readout_carrier"] = True
+                    bundle_status["head_sensitive"] = True
+                    evidence_status = "supportive"
+            elif diagnostic_family == "attention_guided_operator":
+                evidence_kind = "attention_guided_operator_certification"
+                bundle_status["rank_readout_carrier"] = True
+                bundle_status["head_sensitive"] = True
+                bundle_status["attention_guided_operator_checked"] = True
+                bundle_status["attention_guided_operator_recipe_count"] = int(
+                    bundle_status.get("attention_guided_operator_recipe_count", 0) or 0
+                ) + 1
+                if actuator_class in {"target_lift", "self_actuator", "bridge_actuator"} or target_mass_delta > 0.0 or target_top20_hit_delta > 0:
+                    evidence_status = "supportive"
+                    bundle_status["attention_guided_operator_status"] = "supportive"
+                    bundle_status["diagnostic_operator_supported"] = True
+                elif actuator_class in {"dead_actuator", "collapse_sharpener", "harmful"}:
+                    evidence_status = "blocked"
+                    bundle_status["attention_guided_operator_status"] = "blocked"
+                    bundle_status["attention_guided_operator_blocked_count"] = int(
+                        bundle_status.get("attention_guided_operator_blocked_count", 0) or 0
+                    ) + 1
+                    _append_unique(bundle_status["blocked_by"], actuator_class)
+                    _append_unique(bundle_status["blocked_by"], "attention_guided_operator_blocked")
+            elif diagnostic_family == "activation_patch":
+                evidence_kind = "activation_patch_certification"
+                bundle_status["activation_patch_checked"] = True
+                bundle_status["activation_patch_recipe_count"] = int(
+                    bundle_status.get("activation_patch_recipe_count", 0) or 0
+                ) + 1
+                if actuator_class in {"self_actuator", "bridge_actuator"}:
+                    evidence_status = "supportive"
+                    bundle_status["activation_patch_status"] = "supportive"
+                    bundle_status["diagnostic_operator_supported"] = True
+                    delta = {
+                        "target_mass_delta": round(float(target_mass_delta), 6),
+                        "target_top20_hit_delta": int(target_top20_hit_delta),
+                        "focus_rank_delta": int(focus_rank_delta),
+                        "self_delta": round(_as_float(item.get("self_delta", 0.0)), 6),
+                        "cross_delta": round(_as_float(item.get("cross_delta", 0.0)), 6),
+                        "alignment_margin": round(_as_float(item.get("alignment_margin", 0.0)), 6),
+                    }
+                    promotion_reason = (
+                        "owned_activation_patch_self_actuator"
+                        if actuator_class == "self_actuator"
+                        else "activation_patch_bridge_requires_dual_layer_plan"
+                    )
+                    activation_shadow_actuator = {
+                        "kind": "activation_patch_shadow_actuator",
+                        "decision": "shadow",
+                        "objective_bundle_key": bundle_key,
+                        "actuator_bundle_key": str(item.get("actuator_bundle_key", "") or bundle_key),
+                        "objective_term": item.get("objective_term"),
+                        "recipe_name": item.get("recipe_name"),
+                        "operator_recipe_id": item.get("operator_recipe_id"),
+                        "activation_patch_site": item.get("activation_patch_site"),
+                        "activation_patch_layer": item.get("activation_patch_layer"),
+                        "activation_patch_alpha": item.get("activation_patch_alpha"),
+                        "activation_patch_actuator_class": actuator_class,
+                        "actual_delta_class": item.get("actual_delta_class"),
+                        "realized_lift_bundle_key": item.get("realized_lift_bundle_key"),
+                        "realized_lift_term": item.get("realized_lift_term"),
+                        "counterfactual_delta": delta,
+                        "promotable_to_candidate_compiler": bool(actuator_class == "self_actuator"),
+                        "promotion_reason": promotion_reason,
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                    }
+                    existing_shadow = bundle_status.get("activation_patch_shadow_actuator")
+                    existing_delta = (
+                        existing_shadow.get("counterfactual_delta", {})
+                        if isinstance(existing_shadow, Mapping)
+                        else {}
+                    )
+                    shadow_rank = (
+                        2 if actuator_class == "self_actuator" else 1,
+                        1 if str(item.get("actual_delta_class", "") or "") == "target_lift" else 0,
+                        float(delta.get("self_delta", 0.0) or 0.0)
+                        if actuator_class == "self_actuator"
+                        else float(delta.get("cross_delta", 0.0) or 0.0),
+                        float(delta.get("alignment_margin", 0.0) or 0.0),
+                    )
+                    existing_rank = (
+                        2
+                        if str(existing_shadow.get("activation_patch_actuator_class", "") or "") == "self_actuator"
+                        else 1,
+                        1 if str(existing_shadow.get("actual_delta_class", "") or "") == "target_lift" else 0,
+                        _as_float(existing_delta.get("self_delta", 0.0))
+                        if str(existing_shadow.get("activation_patch_actuator_class", "") or "") == "self_actuator"
+                        else _as_float(existing_delta.get("cross_delta", 0.0)),
+                        _as_float(existing_delta.get("alignment_margin", 0.0)),
+                    ) if isinstance(existing_shadow, Mapping) else (-1, -1, -1.0, -10.0)
+                    if (
+                        not isinstance(existing_shadow, Mapping)
+                        or shadow_rank > existing_rank
+                    ):
+                        bundle_status["activation_patch_shadow_actuator"] = dict(activation_shadow_actuator)
+                        bundle_status["activation_patch_actuator_class"] = actuator_class
+                        bundle_status["activation_patch_promotable_to_candidate"] = bool(
+                            activation_shadow_actuator["promotable_to_candidate_compiler"]
+                        )
+                        bundle_status["activation_patch_promotion_reason"] = promotion_reason
+                elif actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "cross_bound"}:
+                    evidence_status = "blocked"
+                    bundle_status["activation_patch_status"] = "blocked"
+                    bundle_status["activation_patch_blocked_count"] = int(
+                        bundle_status.get("activation_patch_blocked_count", 0) or 0
+                    ) + 1
+                    _append_unique(bundle_status["blocked_by"], actuator_class)
+                    _append_unique(bundle_status["blocked_by"], "activation_patch_blocked")
             elif actuator_class in {"dead_actuator", "collapse_sharpener"}:
                 evidence_status = "blocked"
                 _append_unique(bundle_status["blocked_by"], actuator_class)
@@ -828,6 +1316,35 @@ def _diagnostic_evidence_ledger(
                 focus_rank_delta=item.get("focus_rank_delta"),
                 blocked_by=actuator_class if evidence_status == "blocked" else None,
             )
+            if item.get("operator_axis") not in (None, ""):
+                ledger[-1]["operator_axis"] = str(item.get("operator_axis"))
+            if activation_shadow_actuator is not None:
+                ledger[-1]["activation_patch_shadow_actuator"] = dict(activation_shadow_actuator)
+                ledger[-1]["activation_patch_actuator_class"] = actuator_class
+                ledger[-1]["activation_patch_promotable_to_candidate"] = bool(
+                    activation_shadow_actuator.get("promotable_to_candidate_compiler", False)
+                )
+                ledger[-1]["activation_patch_promotion_reason"] = activation_shadow_actuator.get(
+                    "promotion_reason"
+                )
+            for activation_key in (
+                "activation_hook_call_count",
+                "activation_patch_site",
+                "activation_patch_layer",
+                "activation_patch_alpha",
+                "activation_source_norm",
+                "activation_target_norm_before",
+                "activation_target_norm_after",
+                "actual_delta_class",
+                "realized_lift_bundle_key",
+                "realized_lift_term",
+                "self_delta",
+                "cross_delta",
+                "alignment_margin",
+                "bundle_lift_scores",
+            ):
+                if item.get(activation_key) not in (None, ""):
+                    ledger[-1][activation_key] = item.get(activation_key)
 
     analyzer_hints = strategy_hints.get("readout_analyzer_hints")
     if not isinstance(analyzer_hints, Mapping):
@@ -871,6 +1388,13 @@ def _diagnostic_evidence_ledger(
                 recipe_name=item.get("feature_family"),
             )
             ledger[-1]["support_score"] = round(float(support), 6)
+            if item.get("operator_family_prior") not in (None, ""):
+                ledger[-1]["operator_family_prior"] = str(item.get("operator_family_prior"))
+            raw_priors = item.get("operator_family_priors")
+            if isinstance(raw_priors, SequenceABC) and not isinstance(raw_priors, (str, bytes, bytearray)):
+                priors = [str(raw_prior) for raw_prior in raw_priors[:4] if str(raw_prior or "")]
+                if priors:
+                    ledger[-1]["operator_family_priors"] = priors
 
     unavailable_reasons = bridge_eval_summary.get("unavailable_objective_reasons")
     if isinstance(unavailable_reasons, Mapping):
@@ -881,25 +1405,74 @@ def _diagnostic_evidence_ledger(
                 _append_unique(_status_for(bundle_key)["blocked_by"], reason)
 
     def _finalize(bundle_key: str, bundle_status: dict[str, Any]) -> None:
+        diagnostic_operator_supported = bool(bundle_status.get("diagnostic_operator_supported", False))
+        guided_checked = bool(bundle_status.get("attention_guided_operator_checked", False))
+        guided_blocked = (
+            guided_checked
+            and not diagnostic_operator_supported
+            and str(bundle_status.get("attention_guided_operator_status", "") or "") == "blocked"
+        )
+        activation_patch_checked = bool(bundle_status.get("activation_patch_checked", False))
+        activation_patch_blocked = (
+            activation_patch_checked
+            and not diagnostic_operator_supported
+            and str(bundle_status.get("activation_patch_status", "") or "") == "blocked"
+        )
+        if guided_blocked and bundle_status["rank_readout_carrier"]:
+            bundle_status["carrier_to_actuator_status"] = "missing_after_attention_guided_operator"
+        if activation_patch_blocked and not diagnostic_operator_supported:
+            bundle_status["carrier_to_actuator_status"] = "missing_after_activation_patch"
         if not bundle_status["readout_reachable"]:
             bundle_status["next_evidence_needed"] = "readout_reachable_signal"
             bundle_status["diagnostic_request"] = "readout_logit_adjacent_probe"
-        elif not bundle_status["head_sensitive"]:
-            bundle_status["next_evidence_needed"] = "non_dead_attention_ablation_signal"
-            bundle_status["diagnostic_request"] = "attention_head_ablation_on_frontier"
+        elif not bundle_status["rank_readout_carrier"]:
+            bundle_status["next_evidence_needed"] = "rank_readout_carrier_signal"
+            bundle_status["diagnostic_request"] = "attention_readout_carrier_probe"
+        elif (
+            bool(bundle_status.get("attention_shadow_promotable_to_certification_replay", False))
+            and not diagnostic_operator_supported
+            and not guided_checked
+        ):
+            bundle_status["next_evidence_needed"] = "attention_guided_operator_certification"
+            bundle_status["diagnostic_request"] = "operator_diagnostic_replay"
+        elif isinstance(bundle_status.get("activation_patch_shadow_actuator"), Mapping):
+            bundle_status["next_evidence_needed"] = "activation_patch_candidate_compiler_review"
+            bundle_status["diagnostic_request"] = "activation_patch_candidate_review"
+        elif guided_blocked:
+            bundle_status["next_evidence_needed"] = "carrier_to_actuator_bridge_missing"
+            bundle_status["diagnostic_request"] = "compare_extra_operator_diagnostics"
+        elif activation_patch_blocked:
+            bundle_status["next_evidence_needed"] = "non_kv_operator_search"
+            bundle_status["diagnostic_request"] = "compare_extra_operator_diagnostics"
         elif not bundle_status["feature_supported"]:
             bundle_status["next_evidence_needed"] = "readout_feature_emitter_support"
             bundle_status["diagnostic_request"] = "sae_feature_emitter_scan"
-        elif not bundle_status["operator_certified"]:
+        elif not diagnostic_operator_supported:
             bundle_status["next_evidence_needed"] = "certified_self_or_bridge_actuator"
             bundle_status["diagnostic_request"] = "operator_diagnostic_replay"
         else:
             bundle_status["next_evidence_needed"] = "production_policy_review"
             bundle_status["diagnostic_request"] = "none"
         blocked = ", ".join(str(item) for item in bundle_status["blocked_by"][:3])
+        guided_note = ""
+        if guided_checked:
+            guided_note = (
+                f"; attention_guided={bundle_status.get('attention_guided_operator_status')}"
+                f"({bundle_status.get('attention_guided_operator_blocked_count', 0)}/"
+                f"{bundle_status.get('attention_guided_operator_recipe_count', 0)} blocked)"
+            )
+        patch_note = ""
+        if activation_patch_checked:
+            patch_note = (
+                f"; activation_patch={bundle_status.get('activation_patch_status')}"
+                f"({bundle_status.get('activation_patch_blocked_count', 0)}/"
+                f"{bundle_status.get('activation_patch_recipe_count', 0)} blocked)"
+            )
         bundle_status["reason_text"] = (
             f"{bundle_key} needs {bundle_status['next_evidence_needed']}"
             + (f"; blocked_by={blocked}" if blocked else "")
+            + guided_note
+            + patch_note
         )
 
     for key, bundle_status in status.items():
@@ -915,8 +1488,17 @@ def _diagnostic_evidence_ledger(
     if not frontier_bundle_key or frontier_bundle_key not in status:
         frontier_bundle_key = next(iter(status), "")
     frontier_status = dict(status.get(frontier_bundle_key, {})) if frontier_bundle_key else {}
+    visible_ledger = sorted(
+        ledger,
+        key=lambda row: (
+            0 if str(row.get("evidence_kind", "") or "") == "operator_mode_decomposition" else 1,
+            str(row.get("bundle_key", "") or ""),
+            str(row.get("recipe_name", "") or ""),
+            str(row.get("evidence_kind", "") or ""),
+        ),
+    )
     return {
-        "diagnostic_evidence_ledger": ledger[:24],
+        "diagnostic_evidence_ledger": visible_ledger[:48],
         "diagnostic_evidence_ledger_count": len(ledger),
         "bundle_diagnostic_status": status,
         "diagnostic_frontier_bundle_key": frontier_bundle_key or None,
@@ -1007,10 +1589,18 @@ class _FrontierReplayControllerClient:
     @staticmethod
     def _diagnostic_next_action(diagnostic_name: str) -> str:
         normalized = str(diagnostic_name or "").strip().lower().replace("-", "_")
-        if normalized == "attention_head_ablation_on_frontier":
-            return "request_attention_head_ablation"
+        if normalized in {"attention_head_ablation_on_frontier", "attention_readout_carrier_probe"}:
+            return "request_attention_readout_carrier_probe"
         if normalized == "sae_feature_emitter_scan":
             return "request_sae_feature_scan"
+        if normalized == "activation_patch_candidate_review":
+            return "request_activation_patch_candidate_review"
+        if normalized == "activation_patch_runtime_support_probe":
+            return "request_activation_patch_runtime_support_probe"
+        if normalized == "activation_patch_promotion_gate_review":
+            return "request_activation_patch_promotion_gate_review"
+        if normalized == "compare_extra_operator_diagnostics":
+            return "wait"
         return "request_operator_diagnostic"
 
     @staticmethod
@@ -1032,9 +1622,145 @@ class _FrontierReplayControllerClient:
             and not isinstance(result.get("blocked_by"), (str, bytes, bytearray))
             else [],
             "operator_certified": result.get("operator_certified"),
+            "diagnostic_operator_supported": result.get("diagnostic_operator_supported"),
+            "policy_candidate_ready": result.get("policy_candidate_ready"),
+            "production_operator_certified": result.get("production_operator_certified"),
+            "rank_readout_carrier": result.get("rank_readout_carrier"),
+            "attention_carrier_profile": result.get("attention_carrier_profile"),
+            "attention_shadow_actuator": result.get("attention_shadow_actuator"),
+            "attention_shadow_actuator_class": result.get("attention_shadow_actuator_class"),
+            "attention_shadow_promotable_to_certification_replay": result.get(
+                "attention_shadow_promotable_to_certification_replay"
+            ),
+            "attention_shadow_promotion_reason": result.get("attention_shadow_promotion_reason"),
+            "activation_patch_compile_preview_created": result.get("activation_patch_compile_preview_created"),
+            "activation_patch_compile_preview_blocked_reason": result.get(
+                "activation_patch_compile_preview_blocked_reason"
+            ),
+            "activation_patch_compile_preview": result.get("activation_patch_compile_preview"),
+            "activation_patch_runtime_support_status": result.get("activation_patch_runtime_support_status"),
+            "activation_patch_diagnostic_executable_created": result.get(
+                "activation_patch_diagnostic_executable_created"
+            ),
+            "activation_patch_executable_shadow": result.get("activation_patch_executable_shadow"),
+            "activation_patch_runtime_supported_shadow_candidate": result.get(
+                "activation_patch_runtime_supported_shadow_candidate"
+            ),
+            "activation_patch_promotion_gate_passed": result.get("activation_patch_promotion_gate_passed"),
+            "activation_patch_production_apply_candidate": result.get(
+                "activation_patch_production_apply_candidate"
+            ),
             "production_apply_allowed": result.get("production_apply_allowed"),
             "evidence_row_count": evidence_row_count,
         }
+
+    @staticmethod
+    def _activation_patch_compile_preview_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            preview = result.get("activation_patch_compile_preview")
+            if isinstance(preview, Mapping):
+                return dict(preview)
+            review = result.get("activation_patch_candidate_review")
+            if isinstance(review, Mapping) and isinstance(review.get("compile_preview"), Mapping):
+                return dict(review["compile_preview"])
+        return None
+
+    @staticmethod
+    def _activation_patch_runtime_support_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            probe = result.get("activation_patch_runtime_support_probe")
+            if isinstance(probe, Mapping):
+                return dict(probe)
+            executable = result.get("activation_patch_executable_shadow")
+            if isinstance(executable, Mapping):
+                return {
+                    "status": result.get("activation_patch_runtime_support_status"),
+                    "executable_shadow": dict(executable),
+                    "runtime_supported_shadow_candidate": result.get(
+                        "activation_patch_runtime_supported_shadow_candidate"
+                    ),
+                    "next_evidence_needed": result.get("next_evidence_needed"),
+                }
+        return None
+
+    @staticmethod
+    def _activation_patch_promotion_gate_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            review = result.get("activation_patch_promotion_gate_review")
+            if isinstance(review, Mapping):
+                return dict(review)
+            candidate = result.get("activation_patch_production_apply_candidate")
+            if isinstance(candidate, Mapping):
+                return {
+                    "status": "candidate_ready_for_policy_review",
+                    "production_apply_candidate": dict(candidate),
+                    "gate_passed": result.get("activation_patch_promotion_gate_passed"),
+                    "next_evidence_needed": result.get("next_evidence_needed"),
+                }
+        return None
+
+    @staticmethod
+    def _activation_patch_compile_preview_blocked_reason_from_results(results: Sequence[Any]) -> str | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            reason = result.get("activation_patch_compile_preview_blocked_reason")
+            if reason not in (None, ""):
+                return str(reason)
+            review = result.get("activation_patch_candidate_review")
+            if isinstance(review, Mapping) and review.get("compile_preview_blocked_reason") not in (None, ""):
+                return str(review["compile_preview_blocked_reason"])
+        return None
+
+    @staticmethod
+    def _attention_shadow_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            shadow = result.get("attention_shadow_actuator")
+            if isinstance(shadow, Mapping):
+                return dict(shadow)
+            rows = result.get("evidence_rows")
+            if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
+                continue
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                shadow = row.get("shadow_actuator")
+                if isinstance(shadow, Mapping):
+                    return dict(shadow)
+        return None
+
+    @staticmethod
+    def _should_request_attention_shadow_round(results: Sequence[Any], diagnostic_budget_left: Any) -> bool:
+        try:
+            budget_left = int(diagnostic_budget_left)
+        except Exception:
+            budget_left = 0
+        if budget_left <= 0:
+            return False
+        saw_operator_block = False
+        saw_attention_round = False
+        saw_carrier = False
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            diagnostic = str(result.get("diagnostic", "") or "")
+            if diagnostic == "attention_readout_carrier_probe":
+                saw_attention_round = True
+            if diagnostic == "operator_diagnostic_replay" and not bool(
+                result.get("diagnostic_operator_supported", result.get("operator_certified", False))
+            ):
+                saw_operator_block = True
+            if bool(result.get("rank_readout_carrier", False)) or isinstance(result.get("attention_shadow_actuator"), Mapping):
+                saw_carrier = True
+        return saw_operator_block and saw_carrier and not saw_attention_round
 
     def _diagnostic_request_command(
         self,
@@ -1077,6 +1803,122 @@ class _FrontierReplayControllerClient:
             and not isinstance(latest_results, (str, bytes, bytearray))
             and bool(latest_results)
         )
+        telemetry = packet.get("telemetry") if isinstance(packet.get("telemetry"), Mapping) else {}
+        latest_result_items = list(latest_results) if has_latest_results else []
+        activation_patch_preview = self._activation_patch_compile_preview_from_results(latest_result_items)
+        activation_patch_runtime_support = self._activation_patch_runtime_support_from_results(latest_result_items)
+        activation_patch_promotion_gate = self._activation_patch_promotion_gate_from_results(latest_result_items)
+        activation_patch_preview_blocked_reason = self._activation_patch_compile_preview_blocked_reason_from_results(
+            latest_result_items
+        )
+        attention_shadow = self._attention_shadow_from_results(latest_result_items)
+        request_attention_shadow_round = self._should_request_attention_shadow_round(
+            latest_result_items,
+            telemetry.get("diagnostic_call_budget_left", 0),
+        )
+        request_activation_patch_runtime_round = False
+        request_activation_patch_promotion_round = False
+        activation_patch_executable_shadow = (
+            dict(activation_patch_runtime_support["executable_shadow"])
+            if isinstance(activation_patch_runtime_support, Mapping)
+            and isinstance(activation_patch_runtime_support.get("executable_shadow"), Mapping)
+            else None
+        )
+        activation_patch_production_candidate = (
+            dict(activation_patch_promotion_gate["production_apply_candidate"])
+            if isinstance(activation_patch_promotion_gate, Mapping)
+            and isinstance(activation_patch_promotion_gate.get("production_apply_candidate"), Mapping)
+            else None
+        )
+        if activation_patch_preview is not None:
+            request_attention_shadow_round = False
+            if activation_patch_promotion_gate is not None:
+                next_evidence = str(
+                    activation_patch_promotion_gate.get("next_evidence_needed", "production_policy_review")
+                    or "production_policy_review"
+                )
+                why_not_apply = (
+                    "activation patch production candidate still requires policy review and production apply permission"
+                    if activation_patch_production_candidate is not None
+                    else activation_patch_promotion_gate.get(
+                        "why_not_apply",
+                        "activation patch promotion gate did not produce a production candidate",
+                    )
+                )
+            elif activation_patch_runtime_support is None:
+                request_activation_patch_runtime_round = True
+                diagnostic_name = "activation_patch_runtime_support_probe"
+                next_evidence = "activation_patch_runtime_operator_certification"
+                why_not_apply = (
+                    "activation_patch_compile_preview needs quarantine executable support before any promotion gate"
+                )
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                }
+            elif activation_patch_promotion_gate is None and bool(
+                activation_patch_runtime_support.get("runtime_supported_shadow_candidate", False)
+            ):
+                request_activation_patch_promotion_round = True
+                diagnostic_name = "activation_patch_promotion_gate_review"
+                next_evidence = "activation_patch_promotion_gate_review"
+                why_not_apply = (
+                    "activation_patch executable shadow needs promotion gate review before policy can consider it"
+                )
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                }
+            else:
+                next_evidence = str(
+                    (
+                        activation_patch_promotion_gate.get("next_evidence_needed")
+                        if isinstance(activation_patch_promotion_gate, Mapping)
+                        else activation_patch_runtime_support.get(
+                            "next_evidence_needed",
+                            "activation_patch_promotion_gate_review",
+                        )
+                    )
+                    or "activation_patch_promotion_gate_review"
+                )
+                why_not_apply = (
+                    "activation patch production candidate still requires policy review and production apply permission"
+                    if activation_patch_production_candidate is not None
+                    else "activation_patch executable shadow is diagnostic-only; production apply remains closed"
+                )
+        elif activation_patch_preview_blocked_reason is not None:
+            next_evidence = "alternate_activation_patch_or_bridge_evidence"
+            why_not_apply = activation_patch_preview_blocked_reason
+        proposal_attention_shadow = None if activation_patch_preview is not None else attention_shadow
+        if request_attention_shadow_round:
+            diagnostic_name = "attention_readout_carrier_probe"
+            next_evidence = "attention_shadow_actuator_counterfactual"
+            diagnostic_request = {
+                "diagnostic": diagnostic_name,
+                "bundle_key": objective_bundle_key,
+                "objective_bundle_key": objective_bundle_key,
+                "step_actuator_bundle_key": step_actuator_bundle_key,
+                "next_evidence_needed": next_evidence,
+                "reason": "operator remains uncertified; inspect attention shadow actuator as carrier evidence only",
+            }
+        next_action = (
+            self._diagnostic_next_action(diagnostic_name)
+            if (
+                request_activation_patch_runtime_round
+                or request_activation_patch_promotion_round
+                or request_attention_shadow_round
+                or not has_latest_results
+            )
+            else "noop"
+        )
         meta: dict[str, Any] = {
             "hypothesis": "request_bounded_readout_escape_diagnostic",
             "micro_rationale": "frontier is visible, but apply stays blocked until diagnostic evidence is returned",
@@ -1084,16 +1926,119 @@ class _FrontierReplayControllerClient:
             "step_actuator_bundle_key": step_actuator_bundle_key,
             "why_not_apply": why_not_apply,
             "next_evidence_needed": next_evidence,
-            "next_action": "noop_until_certified" if has_latest_results else self._diagnostic_next_action(diagnostic_name),
+            "next_action": next_action,
             "production_apply_allowed": False,
             "certified_for_apply": False,
             "shadow_proposals": [
                 {
-                    "kind": "frontier_shadow",
+                    "kind": (
+                        "activation_patch_production_apply_candidate"
+                        if activation_patch_production_candidate is not None
+                        else "activation_patch_executable_shadow"
+                        if activation_patch_executable_shadow is not None
+                        else "activation_patch_compile_preview"
+                        if activation_patch_preview is not None
+                        else "attention_shadow_actuator"
+                        if proposal_attention_shadow is not None
+                        else "frontier_shadow"
+                    ),
                     "bundle_key": objective_bundle_key,
                     "objective_bundle_key": objective_bundle_key,
-                    "actuator_bundle_key": step_actuator_bundle_key,
-                    "reason": "diagnostic_request_mode_keeps_frontier_shadow_only",
+                    "actuator_bundle_key": (
+                        activation_patch_production_candidate.get("actuator_bundle_key")
+                        if activation_patch_production_candidate is not None
+                        else activation_patch_executable_shadow.get("actuator_bundle_key")
+                        if activation_patch_executable_shadow is not None
+                        else activation_patch_preview.get("actuator_bundle_key")
+                        if activation_patch_preview is not None
+                        else
+                        proposal_attention_shadow.get("actuator_bundle_key")
+                        if proposal_attention_shadow is not None
+                        else step_actuator_bundle_key
+                    ),
+                    "recipe_name": activation_patch_production_candidate.get("recipe_name")
+                    if activation_patch_production_candidate is not None
+                    else activation_patch_executable_shadow.get("recipe_name")
+                    if activation_patch_executable_shadow is not None
+                    else activation_patch_preview.get("recipe_name")
+                    if activation_patch_preview is not None
+                    else None,
+                    "operator_recipe_id": activation_patch_production_candidate.get("operator_recipe_id")
+                    if activation_patch_production_candidate is not None
+                    else activation_patch_executable_shadow.get("operator_recipe_id")
+                    if activation_patch_executable_shadow is not None
+                    else activation_patch_preview.get("operator_recipe_id")
+                    if activation_patch_preview is not None
+                    else None,
+                    "compile_state": activation_patch_production_candidate.get("compile_state")
+                    if activation_patch_production_candidate is not None
+                    else activation_patch_executable_shadow.get("compile_state")
+                    if activation_patch_executable_shadow is not None
+                    else activation_patch_preview.get("compile_state")
+                    if activation_patch_preview is not None
+                    else None,
+                    "site": (
+                        activation_patch_production_candidate.get("site")
+                        if activation_patch_production_candidate is not None
+                        else activation_patch_executable_shadow.get("site")
+                        if activation_patch_executable_shadow is not None
+                        else activation_patch_preview.get("site")
+                        if activation_patch_preview is not None
+                        else proposal_attention_shadow.get("site")
+                        if proposal_attention_shadow is not None
+                        else None
+                    ),
+                    "layer": (
+                        activation_patch_production_candidate.get("layer")
+                        if activation_patch_production_candidate is not None
+                        else activation_patch_executable_shadow.get("layer")
+                        if activation_patch_executable_shadow is not None
+                        else activation_patch_preview.get("layer")
+                        if activation_patch_preview is not None
+                        else proposal_attention_shadow.get("layer")
+                        if proposal_attention_shadow is not None
+                        else None
+                    ),
+                    "alpha": activation_patch_production_candidate.get("alpha")
+                    if activation_patch_production_candidate is not None
+                    else activation_patch_executable_shadow.get("alpha")
+                    if activation_patch_executable_shadow is not None
+                    else activation_patch_preview.get("alpha")
+                    if activation_patch_preview is not None
+                    else None,
+                    "head": proposal_attention_shadow.get("head") if proposal_attention_shadow is not None else None,
+                    "scale": proposal_attention_shadow.get("scale") if proposal_attention_shadow is not None else None,
+                    "response_profile": proposal_attention_shadow.get("response_profile")
+                    if proposal_attention_shadow is not None
+                    else None,
+                    "attention_shadow_actuator_class": proposal_attention_shadow.get("attention_shadow_actuator_class")
+                    if proposal_attention_shadow is not None
+                    else None,
+                    "promotable_to_certification_replay": proposal_attention_shadow.get(
+                        "promotable_to_certification_replay"
+                    )
+                    if proposal_attention_shadow is not None
+                    else False,
+                    "promotion_reason": proposal_attention_shadow.get("promotion_reason")
+                    if proposal_attention_shadow is not None
+                    else None,
+                    "counterfactual_delta": proposal_attention_shadow.get("counterfactual_delta")
+                    if proposal_attention_shadow is not None
+                    else None,
+                    "production_apply_allowed": False,
+                    "reason": (
+                        "activation patch production candidate remains blocked until policy review opens production apply"
+                        if activation_patch_production_candidate is not None
+                        else
+                        "activation patch executable shadow remains diagnostic-only until promotion gate"
+                        if activation_patch_executable_shadow is not None
+                        else
+                        "activation patch compile preview remains shadow-only until production operator support exists"
+                        if activation_patch_preview is not None
+                        else "attention carrier remains shadow-only until certified"
+                        if proposal_attention_shadow is not None
+                        else "diagnostic_request_mode_keeps_frontier_shadow_only"
+                    ),
                     "decision": "shadow",
                 }
             ]
@@ -1103,15 +2048,50 @@ class _FrontierReplayControllerClient:
                 "objective_bundle_key": objective_bundle_key,
                 "step_actuator_bundle_key": step_actuator_bundle_key,
                 "next_evidence_needed": next_evidence,
-                "next_action": "noop_until_certified" if has_latest_results else self._diagnostic_next_action(diagnostic_name),
+                "next_action": next_action,
             },
         }
-        if has_latest_results:
+        if attention_shadow is not None and activation_patch_preview is None:
+            meta["attention_shadow_actuator"] = dict(attention_shadow)
+        if activation_patch_preview is not None:
+            meta["activation_patch_compile_preview"] = dict(activation_patch_preview)
+            if activation_patch_executable_shadow is not None:
+                meta["activation_patch_executable_shadow"] = dict(activation_patch_executable_shadow)
+                meta["activation_patch_runtime_support_status"] = activation_patch_runtime_support.get(
+                    "runtime_support_status",
+                    activation_patch_runtime_support.get("status"),
+                ) if isinstance(activation_patch_runtime_support, Mapping) else None
+                if activation_patch_production_candidate is not None:
+                    meta["activation_patch_production_apply_candidate"] = dict(activation_patch_production_candidate)
+                    meta["activation_patch_promotion_gate_passed"] = bool(
+                        activation_patch_promotion_gate.get("gate_passed", False)
+                    ) if isinstance(activation_patch_promotion_gate, Mapping) else False
+                    meta["hypothesis"] = "activation_patch_candidate_ready_for_policy_review"
+                    meta["micro_rationale"] = "activation patch passed promotion gate, but production apply remains closed"
+                    meta["blocked_by"] = "activation_patch_production_policy_review_required"
+                    meta["controller_memory"]["blocked_by"] = "activation_patch_production_policy_review_required"
+                else:
+                    meta["hypothesis"] = "activation_patch_executable_shadow_diagnostic_only"
+                    meta["micro_rationale"] = "activation patch reached quarantine executable support; production apply remains closed"
+                    meta["blocked_by"] = "activation_patch_promotion_gate_required"
+                    meta["controller_memory"]["blocked_by"] = "activation_patch_promotion_gate_required"
+            else:
+                meta["hypothesis"] = "activation_patch_compile_preview_shadow_only"
+                meta["micro_rationale"] = "activation patch preview exists, but production apply remains closed"
+                meta["blocked_by"] = "activation_patch_compile_preview_shadow_only"
+                meta["controller_memory"]["blocked_by"] = "activation_patch_compile_preview_shadow_only"
+        elif activation_patch_preview_blocked_reason is not None:
+            meta["blocked_by"] = activation_patch_preview_blocked_reason
+            meta["controller_memory"]["blocked_by"] = activation_patch_preview_blocked_reason
+        if has_latest_results and not request_attention_shadow_round:
             meta["observed_outcome"] = "diagnostic_result_received"
             meta["latest_diagnostic_result_count"] = len(latest_results)
         else:
             meta["diagnostic_request"] = diagnostic_request
             meta["controller_memory"]["diagnostic_request"] = diagnostic_name
+            if request_attention_shadow_round:
+                meta["observed_outcome"] = "operator_diagnostic_blocked_attention_shadow_round_requested"
+                meta["latest_diagnostic_result_count"] = len(latest_results)
         return {"version": "0.1", "decision": "noop", "meta": meta}
 
     def invoke(self, packet: dict[str, Any]) -> dict[str, Any]:
@@ -1202,8 +2182,24 @@ class _FrontierReplayControllerClient:
                 "control_phase_hint": packet.get("control_phase_hint"),
                 "sidecar_suggested_bundle_key": suggested_bundle_key,
                 "gate_report_frontier_bundle_key": frontier_bundle_key,
-                "diagnostic_call_count": packet.get("diagnostic_call_count"),
-                "diagnostic_call_budget_left": packet.get("diagnostic_call_budget_left"),
+                "diagnostic_call_count": (
+                    packet.get("diagnostic_call_count")
+                    if packet.get("diagnostic_call_count") is not None
+                    else (
+                        packet.get("telemetry", {}).get("diagnostic_call_count")
+                        if isinstance(packet.get("telemetry"), Mapping)
+                        else None
+                    )
+                ),
+                "diagnostic_call_budget_left": (
+                    packet.get("diagnostic_call_budget_left")
+                    if packet.get("diagnostic_call_budget_left") is not None
+                    else (
+                        packet.get("telemetry", {}).get("diagnostic_call_budget_left")
+                        if isinstance(packet.get("telemetry"), Mapping)
+                        else None
+                    )
+                ),
                 "latest_diagnostic_result_count": len(packet.get("latest_diagnostic_results", ()))
                 if isinstance(packet.get("latest_diagnostic_results"), SequenceABC)
                 and not isinstance(packet.get("latest_diagnostic_results"), (str, bytes, bytearray))
@@ -1424,6 +2420,8 @@ class ReadoutEscapeReplayHarnessResult:
     bridge_eval_shadow_bundle_keys: tuple[str, ...]
     bridge_eval_recipe_names: tuple[str, ...]
     bridge_eval_matrix: tuple[dict[str, Any], ...]
+    bridge_eval_operator_recipe_mode_diagnostics: tuple[dict[str, Any], ...]
+    bridge_eval_attention_scale_response_diagnostics: tuple[dict[str, Any], ...]
     bridge_eval_objective_class_counts: dict[str, dict[str, int]]
     bridge_eval_evaluations_count: int
     bridge_eval_ownership_count: int
@@ -1496,6 +2494,12 @@ class ReadoutEscapeReplayHarnessResult:
             "bridge_eval_shadow_bundle_keys": list(self.bridge_eval_shadow_bundle_keys),
             "bridge_eval_recipe_names": list(self.bridge_eval_recipe_names),
             "bridge_eval_matrix": [dict(item) for item in self.bridge_eval_matrix],
+            "bridge_eval_operator_recipe_mode_diagnostics": [
+                dict(item) for item in self.bridge_eval_operator_recipe_mode_diagnostics
+            ],
+            "bridge_eval_attention_scale_response_diagnostics": [
+                dict(item) for item in self.bridge_eval_attention_scale_response_diagnostics
+            ],
             "bridge_eval_objective_class_counts": {
                 str(key): {str(inner_key): int(inner_value) for inner_key, inner_value in sorted(value.items())}
                 for key, value in sorted(self.bridge_eval_objective_class_counts.items())
@@ -2908,11 +3912,13 @@ def run_readout_escape_replay_harness(
                 grouped.setdefault(bundle_key, []).append(dict(item))
             return grouped
 
-        def _run_attention_head_ablation(
+        def _run_attention_head_scale(
             candidate: Mapping[str, Any],
             *,
             objective_bundle_key: str,
             objective_term: str,
+            scale: float,
+            recipe_name: str,
         ) -> dict[str, Any] | None:
             site = str(candidate.get("site", "") or "")
             if site not in {"k_cache", "v_cache"}:
@@ -2932,26 +3938,53 @@ def run_readout_escape_replay_harness(
                 return None
 
             hook_point = hook_dict[hook_name]
-            handle = None
+            original_fwd_hooks = list(getattr(hook_point, "fwd_hooks", []))
+            scale_value = max(0.0, min(1.0, float(scale)))
+            hook_stats: dict[str, Any] = {
+                "call_count": 0,
+                "max_head_norm_before": 0.0,
+                "max_head_norm_after": 0.0,
+                "first_head_norm_before": None,
+                "first_head_norm_after": None,
+            }
 
-            def _ablate_head(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
+            def _scale_head(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
                 if not isinstance(act, torch.Tensor) or act.ndim < 4 or int(head) < 0 or act.shape[-2] <= int(head):
                     return act
                 out = act.clone()
-                out[..., :, int(head), :] = 0.0
+                head_slice = act[..., :, int(head), :]
+                scaled = head_slice * float(scale_value)
+                before_norm = float(torch.linalg.vector_norm(head_slice.detach().float()).item())
+                after_norm = float(torch.linalg.vector_norm(scaled.detach().float()).item())
+                hook_stats["call_count"] = int(hook_stats.get("call_count", 0) or 0) + 1
+                hook_stats["max_head_norm_before"] = max(float(hook_stats["max_head_norm_before"]), before_norm)
+                hook_stats["max_head_norm_after"] = max(float(hook_stats["max_head_norm_after"]), after_norm)
+                if hook_stats["first_head_norm_before"] is None:
+                    hook_stats["first_head_norm_before"] = before_norm
+                    hook_stats["first_head_norm_after"] = after_norm
+                out[..., :, int(head), :] = scaled
                 return out
 
             try:
                 before_len = len(getattr(hook_point, "fwd_hooks", []))
-                hook_point.add_hook(_ablate_head, dir="fwd")
+                hook_point.add_hook(_scale_head, dir="fwd")
                 fwd_hooks = getattr(hook_point, "fwd_hooks", [])
                 if len(fwd_hooks) <= before_len:
                     return None
-                handle = fwd_hooks[-1]
                 edited = self._simulate_decode(max_new_tokens=3, top_k=8)
             finally:
-                if handle is not None and hasattr(hook_point, "fwd_hooks"):
-                    hook_point.fwd_hooks = [item for item in hook_point.fwd_hooks if item is not handle]
+                if hasattr(hook_point, "fwd_hooks"):
+                    original_ids = {id(item) for item in original_fwd_hooks}
+                    for item in list(getattr(hook_point, "fwd_hooks", [])):
+                        if id(item) in original_ids:
+                            continue
+                        hook_handle = getattr(item, "hook", None)
+                        if hook_handle is not None and hasattr(hook_handle, "remove"):
+                            try:
+                                hook_handle.remove()
+                            except Exception:
+                                pass
+                    hook_point.fwd_hooks = list(original_fwd_hooks)
             if edited is None:
                 return None
 
@@ -2959,15 +3992,480 @@ def run_readout_escape_replay_harness(
             edited_score = edited.get("scoring", {}) if isinstance(edited.get("scoring"), Mapping) else {}
             result: dict[str, Any] = {
                 "status": "ok",
-                "label": f"attention_head_ablation:{site}:L{int(layer)}H{int(head)}:{objective_bundle_key}",
+                "label": f"attention_head_scale:{recipe_name}:{site}:L{int(layer)}H{int(head)}:{objective_bundle_key}",
                 "intended_bundle_key": objective_bundle_key,
                 "intended_term": objective_term,
-                "operator_recipe_id": f"diagnostic|attention_head_ablation|{site}|L{int(layer)}H{int(head)}",
+                "operator_recipe_id": (
+                    f"readout_escape|attention_head_scale|{site}|L{int(layer)}H{int(head)}|scale{scale_value:.2f}"
+                ),
                 "continuation_baseline": baseline["continuation"],
                 "continuation_candidate": edited["continuation"],
                 "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
                 "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"])),
                 "top1_margin_delta": round(float(edited.get("top1_margin", 0.0) or 0.0) - float(baseline.get("top1_margin", 0.0) or 0.0), 6),
+                "repetition_score_delta": round(
+                    float(edited.get("repetition_score", 0.0) or 0.0)
+                    - float(baseline.get("repetition_score", 0.0) or 0.0),
+                    6,
+                ),
+                "required_term_recall_delta": round(
+                    float(edited_score.get("required_term_recall") or 0.0)
+                    - float(baseline_score.get("required_term_recall") or 0.0),
+                    6,
+                ),
+                "required_term_span_progress_delta": round(
+                    float(edited_score.get("required_term_span_progress") or 0.0)
+                    - float(baseline_score.get("required_term_span_progress") or 0.0),
+                    6,
+                ),
+                "semantic_progress_delta": round(
+                    float(edited_score.get("semantic_progress_score") or 0.0)
+                    - float(baseline_score.get("semantic_progress_score") or 0.0),
+                    6,
+                ),
+            }
+            logit_delta = edited["first_logits"].detach().cpu().float() - baseline["first_logits"].detach().cpu().float()
+            result["first_logit_delta_l2"] = round(float(torch.linalg.vector_norm(logit_delta).item()), 6)
+            result["first_logit_delta_max_abs"] = round(float(logit_delta.abs().max().item()), 6)
+            result["first_logit_delta_mean_abs"] = round(float(logit_delta.abs().mean().item()), 6)
+            result["attention_hook_call_count"] = int(hook_stats.get("call_count", 0) or 0)
+            result["attention_head_norm_before"] = round(float(hook_stats.get("max_head_norm_before", 0.0) or 0.0), 6)
+            result["attention_head_norm_after"] = round(float(hook_stats.get("max_head_norm_after", 0.0) or 0.0), 6)
+            result["attention_head_norm_removed_estimate"] = round(
+                max(
+                    0.0,
+                    float(hook_stats.get("max_head_norm_before", 0.0) or 0.0)
+                    - float(hook_stats.get("max_head_norm_after", 0.0) or 0.0),
+                ),
+                6,
+            )
+            result["topk_token_diff"] = self._topk_token_diff(
+                baseline["first_logits"],
+                edited["first_logits"],
+                top_k=5,
+            )
+            readout_metrics = self._first_token_target_readout_metrics(
+                baseline["first_logits"],
+                edited["first_logits"],
+                focus_terms=ownership_terms,
+            )
+            if readout_metrics:
+                result.update(readout_metrics)
+            result["actual_delta_class"] = self._classify_actual_delta_result(result)
+            return {
+                "diagnostic_only": True,
+                "diagnostic_family": "attention_head_scale",
+                "recipe_name": recipe_name,
+                "objective_bundle_key": objective_bundle_key,
+                "objective_term": objective_term,
+                "actuator_bundle_key": objective_bundle_key,
+                "status": "ok",
+                "actuator_class": result.get("actual_delta_class"),
+                "operator_recipe_id": result.get("operator_recipe_id"),
+                "target_mass_delta": result.get("target_mass_delta"),
+                "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+                "focus_rank_delta": result.get("focus_rank_delta"),
+                "rank_focus_delta": result.get("rank_focus_delta"),
+                "required_term_recall_delta": result.get("required_term_recall_delta"),
+                "required_term_span_progress_delta": result.get("required_term_span_progress_delta"),
+                "entropy_delta": result.get("entropy_delta"),
+                "top1_margin_delta": result.get("top1_margin_delta"),
+                "repeat_delta": result.get("repeat_flag_delta"),
+                "first_logit_delta_l2": result.get("first_logit_delta_l2"),
+                "first_logit_delta_max_abs": result.get("first_logit_delta_max_abs"),
+                "first_logit_delta_mean_abs": result.get("first_logit_delta_mean_abs"),
+                "attention_hook_call_count": result.get("attention_hook_call_count"),
+                "attention_head_norm_before": result.get("attention_head_norm_before"),
+                "attention_head_norm_after": result.get("attention_head_norm_after"),
+                "attention_head_norm_removed_estimate": result.get("attention_head_norm_removed_estimate"),
+                "topk_token_diff": result.get("topk_token_diff"),
+                "candidate_fingerprint": {
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "actuator_bundle_key": objective_bundle_key,
+                    "term": objective_term,
+                    "recipe_name": recipe_name,
+                    "site": site,
+                    "layer": int(layer),
+                    "head": int(head),
+                    "op_kind": "attention_head_scale",
+                    "scale": round(float(scale_value), 6),
+                    "edit_count": 0,
+                },
+                "eval_context_fingerprint": self._eval_context_fingerprint(
+                    max_new_tokens=3,
+                    top_k=8,
+                    max_edits_per_step=0,
+                    focus_terms=ownership_terms,
+                ),
+            }
+
+        def _simulate_decode_with_attention_scale(
+            candidate: Mapping[str, Any],
+            *,
+            scale: float,
+            command: Mapping[str, Any] | None = None,
+            max_edits_per_step_override: int | None = None,
+        ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+            site = str(candidate.get("site", "") or "")
+            if site not in {"k_cache", "v_cache"}:
+                return None, {"error": "unsupported_attention_site"}
+            layer = candidate.get("layer")
+            head = candidate.get("head")
+            if isinstance(layer, bool) or not isinstance(layer, int):
+                return None, {"error": "invalid_attention_layer"}
+            if isinstance(head, bool) or not isinstance(head, int):
+                return None, {"error": "invalid_attention_head"}
+            hook_name = f"blocks.{int(layer)}.attn.hook_{'v' if site == 'v_cache' else 'k'}"
+            hook_dict = getattr(self.model, "hook_dict", None)
+            if hook_dict is None or hook_name not in hook_dict:
+                return None, {"error": "missing_attention_hook"}
+            hook_point = hook_dict[hook_name]
+            original_fwd_hooks = list(getattr(hook_point, "fwd_hooks", []))
+            scale_value = max(0.0, min(1.0, float(scale)))
+            hook_stats: dict[str, Any] = {
+                "call_count": 0,
+                "max_head_norm_before": 0.0,
+                "max_head_norm_after": 0.0,
+            }
+
+            def _scale_head(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
+                if not isinstance(act, torch.Tensor) or act.ndim < 4 or int(head) < 0 or act.shape[-2] <= int(head):
+                    return act
+                out = act.clone()
+                head_slice = act[..., :, int(head), :]
+                scaled = head_slice * float(scale_value)
+                before_norm = float(torch.linalg.vector_norm(head_slice.detach().float()).item())
+                after_norm = float(torch.linalg.vector_norm(scaled.detach().float()).item())
+                hook_stats["call_count"] = int(hook_stats.get("call_count", 0) or 0) + 1
+                hook_stats["max_head_norm_before"] = max(float(hook_stats["max_head_norm_before"]), before_norm)
+                hook_stats["max_head_norm_after"] = max(float(hook_stats["max_head_norm_after"]), after_norm)
+                out[..., :, int(head), :] = scaled
+                return out
+
+            try:
+                before_len = len(getattr(hook_point, "fwd_hooks", []))
+                hook_point.add_hook(_scale_head, dir="fwd")
+                fwd_hooks = getattr(hook_point, "fwd_hooks", [])
+                if len(fwd_hooks) <= before_len:
+                    return None, {"error": "attention_hook_not_registered"}
+                policy_override = (
+                    None
+                    if command is None
+                    else self._replay_policy(max_edits_per_step_override=max_edits_per_step_override)
+                )
+                return (
+                    self._simulate_decode(
+                        max_new_tokens=3,
+                        top_k=8,
+                        command=command,
+                        policy_override=policy_override,
+                    ),
+                    hook_stats,
+                )
+            finally:
+                if hasattr(hook_point, "fwd_hooks"):
+                    original_ids = {id(item) for item in original_fwd_hooks}
+                    for item in list(getattr(hook_point, "fwd_hooks", [])):
+                        if id(item) in original_ids:
+                            continue
+                        hook_handle = getattr(item, "hook", None)
+                        if hook_handle is not None and hasattr(hook_handle, "remove"):
+                            try:
+                                hook_handle.remove()
+                            except Exception:
+                                pass
+                    hook_point.fwd_hooks = list(original_fwd_hooks)
+
+        def _run_attention_guided_operator(
+            *,
+            attention_candidate: Mapping[str, Any],
+            operator_candidates: Sequence[Mapping[str, Any]],
+            objective_bundle_key: str,
+            objective_term: str,
+            recipe_name: str,
+            scale: float = 0.5,
+        ) -> dict[str, Any] | None:
+            prepared_edits = [_ensure_compileable_candidate(item) for item in operator_candidates if isinstance(item, Mapping)]
+            prepared_edits = [dict(item) for item in prepared_edits if isinstance(item, Mapping)]
+            if not prepared_edits:
+                return None
+            carrier, carrier_stats = _simulate_decode_with_attention_scale(
+                attention_candidate,
+                scale=scale,
+            )
+            if carrier is None:
+                return None
+            command = {"version": "0.1", "decision": "apply", "edits": prepared_edits}
+            edited, edited_stats = _simulate_decode_with_attention_scale(
+                attention_candidate,
+                scale=scale,
+                command=command,
+                max_edits_per_step_override=max(1, len(prepared_edits)),
+            )
+            if edited is None:
+                return None
+            carrier_score = carrier.get("scoring", {}) if isinstance(carrier.get("scoring"), Mapping) else {}
+            edited_score = edited.get("scoring", {}) if isinstance(edited.get("scoring"), Mapping) else {}
+            result: dict[str, Any] = {
+                "status": "ok",
+                "label": f"{recipe_name}:{objective_bundle_key}",
+                "edit_count": len(prepared_edits),
+                "intended_bundle_key": objective_bundle_key,
+                "intended_term": objective_term,
+                "operator_recipe_id": f"attention_guided|scale{float(scale):.2f}|{recipe_name}",
+                "operator_recipe_ids": sorted(
+                    {
+                        str(item.get("operator_recipe_id", self._operator_recipe_id(item)) or "")
+                        for item in prepared_edits
+                        if str(item.get("operator_recipe_id", self._operator_recipe_id(item)) or "")
+                    }
+                ),
+                "operator_recipe_seed_key": f"attention_guided_operator|scale{float(scale):.2f}|{recipe_name}",
+                "continuation_baseline": carrier["continuation"],
+                "continuation_candidate": edited["continuation"],
+                "entropy_delta": round(float(edited["entropy"]) - float(carrier["entropy"]), 6),
+                "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(carrier["repeat_flag"])),
+                "top1_margin_delta": round(
+                    float(edited.get("top1_margin", 0.0) or 0.0) - float(carrier.get("top1_margin", 0.0) or 0.0),
+                    6,
+                ),
+                "repetition_score_delta": round(
+                    float(edited.get("repetition_score", 0.0) or 0.0)
+                    - float(carrier.get("repetition_score", 0.0) or 0.0),
+                    6,
+                ),
+                "required_term_recall_delta": round(
+                    float(edited_score.get("required_term_recall") or 0.0)
+                    - float(carrier_score.get("required_term_recall") or 0.0),
+                    6,
+                ),
+                "required_term_span_progress_delta": round(
+                    float(edited_score.get("required_term_span_progress") or 0.0)
+                    - float(carrier_score.get("required_term_span_progress") or 0.0),
+                    6,
+                ),
+                "semantic_progress_delta": round(
+                    float(edited_score.get("semantic_progress_score") or 0.0)
+                    - float(carrier_score.get("semantic_progress_score") or 0.0),
+                    6,
+                ),
+            }
+            readout_metrics = self._first_token_target_readout_metrics(
+                carrier["first_logits"],
+                edited["first_logits"],
+                focus_terms=ownership_terms,
+            )
+            if readout_metrics:
+                result.update(readout_metrics)
+            term_readout_deltas = self._term_readout_deltas(
+                carrier["first_logits"],
+                edited["first_logits"],
+                focus_terms=ownership_terms,
+            )
+            if term_readout_deltas:
+                result["term_readout_deltas"] = dict(term_readout_deltas)
+            result["topk_token_diff"] = self._topk_token_diff(
+                carrier["first_logits"],
+                edited["first_logits"],
+                top_k=5,
+            )
+            result["candidate_fingerprint"] = self._candidate_fingerprint(
+                prepared_edits,
+                intended_bundle_key=objective_bundle_key,
+                label=f"{recipe_name}:{objective_bundle_key}",
+            )
+            result["eval_context_fingerprint"] = self._eval_context_fingerprint(
+                max_new_tokens=3,
+                top_k=8,
+                max_edits_per_step=len(prepared_edits),
+                focus_terms=ownership_terms,
+            )
+            result["actual_delta_class"] = self._classify_actual_delta_result(result)
+            site = str(attention_candidate.get("site", "") or "")
+            layer = attention_candidate.get("layer")
+            head = attention_candidate.get("head")
+            return {
+                "diagnostic_only": True,
+                "diagnostic_family": "attention_guided_operator",
+                "recipe_name": recipe_name,
+                "objective_bundle_key": objective_bundle_key,
+                "objective_term": objective_term,
+                "actuator_bundle_key": objective_bundle_key,
+                "status": "ok",
+                "actuator_class": result.get("actual_delta_class"),
+                "operator_recipe_id": result.get("operator_recipe_id"),
+                "operator_recipe_ids": result.get("operator_recipe_ids"),
+                "operator_recipe_seed_key": result.get("operator_recipe_seed_key"),
+                "target_mass_delta": result.get("target_mass_delta"),
+                "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+                "focus_rank_delta": result.get("focus_rank_delta"),
+                "rank_focus_delta": result.get("rank_focus_delta"),
+                "required_term_recall_delta": result.get("required_term_recall_delta"),
+                "required_term_span_progress_delta": result.get("required_term_span_progress_delta"),
+                "entropy_delta": result.get("entropy_delta"),
+                "top1_margin_delta": result.get("top1_margin_delta"),
+                "repeat_delta": result.get("repeat_flag_delta"),
+                "first_logit_delta_l2": round(
+                    float(torch.linalg.vector_norm(edited["first_logits"].detach().cpu().float() - carrier["first_logits"].detach().cpu().float()).item()),
+                    6,
+                ),
+                "attention_carrier_site": site,
+                "attention_carrier_layer": int(layer) if isinstance(layer, int) and not isinstance(layer, bool) else None,
+                "attention_carrier_head": int(head) if isinstance(head, int) and not isinstance(head, bool) else None,
+                "attention_carrier_scale": round(float(scale), 6),
+                "attention_hook_call_count": int(edited_stats.get("call_count", carrier_stats.get("call_count", 0)) or 0),
+                "attention_head_norm_before": round(
+                    float(edited_stats.get("max_head_norm_before", carrier_stats.get("max_head_norm_before", 0.0)) or 0.0),
+                    6,
+                ),
+                "attention_head_norm_after": round(
+                    float(edited_stats.get("max_head_norm_after", carrier_stats.get("max_head_norm_after", 0.0)) or 0.0),
+                    6,
+                ),
+                "topk_token_diff": result.get("topk_token_diff"),
+                "candidate_fingerprint": result.get("candidate_fingerprint"),
+                "eval_context_fingerprint": result.get("eval_context_fingerprint"),
+            }
+
+        def _activation_hook_name(site: str, layer: int) -> str:
+            templates = getattr(self.adapter, "HOOK_SITE_TEMPLATES", None)
+            if isinstance(templates, Mapping) and str(site) in templates:
+                return str(templates[str(site)]).format(layer=int(layer))
+            return f"blocks.{int(layer)}.hook_{str(site)}"
+
+        def _activation_source_vector(
+            *,
+            site: str,
+            layer: int,
+            source_span: Mapping[str, Any] | None,
+        ) -> tuple[torch.Tensor, dict[str, Any]] | None:
+            if not isinstance(source_span, Mapping):
+                return None
+            if getattr(self.runtime_state, "last_cache", None) is None:
+                primer_tokens = self._current_token_tensor()
+                self.runtime_state.run_with_cache(primer_tokens, return_type="logits")
+            cache = getattr(self.runtime_state, "last_cache", None) or {}
+            hook_name = _activation_hook_name(site, int(layer))
+            tensor = cache.get(hook_name)
+            if not isinstance(tensor, torch.Tensor) or tensor.ndim < 3:
+                return None
+            batch0 = tensor[0].detach()
+            seq_len = int(batch0.shape[0])
+            if seq_len <= 0:
+                return None
+            raw_start = int(source_span.get("start", 0) or 0)
+            raw_end = int(source_span.get("end", raw_start + 1) or (raw_start + 1))
+            start = max(0, min(seq_len - 1, raw_start))
+            end = max(start + 1, min(seq_len, raw_end))
+            vector = batch0[start:end].float().mean(dim=0).reshape(-1)
+            if vector.numel() <= 0:
+                return None
+            source_meta = {
+                "source_token_index": int(start),
+                "source_span_start": int(start),
+                "source_span_end": int(end),
+                "source_piece": source_span.get("text"),
+                "source_segment_kind": source_span.get("segment_kind"),
+                "source_provenance_class": source_span.get("provenance_class"),
+                "source_norm": round(float(torch.linalg.vector_norm(vector).item()), 6),
+                "source_hook_name": hook_name,
+            }
+            return vector.detach().cpu().float(), source_meta
+
+        def _run_activation_patch_operator(
+            *,
+            site: str,
+            layer: int,
+            source_span: Mapping[str, Any] | None,
+            objective_bundle_key: str,
+            objective_term: str,
+            recipe_name: str,
+            alpha: float = 0.15,
+        ) -> dict[str, Any] | None:
+            source = _activation_source_vector(site=site, layer=int(layer), source_span=source_span)
+            if source is None:
+                return None
+            source_vector, source_meta = source
+            hook_name = _activation_hook_name(site, int(layer))
+            hook_dict = getattr(self.model, "hook_dict", None)
+            if hook_dict is None or hook_name not in hook_dict:
+                return None
+            baseline = self._simulate_decode(max_new_tokens=3, top_k=8)
+            if baseline is None:
+                return None
+
+            hook_point = hook_dict[hook_name]
+            original_fwd_hooks = list(getattr(hook_point, "fwd_hooks", []))
+            alpha_value = max(0.0, min(1.0, float(alpha)))
+            hook_stats: dict[str, Any] = {
+                "call_count": 0,
+                "max_target_norm_before": 0.0,
+                "max_target_norm_after": 0.0,
+                "source_norm": float(source_meta.get("source_norm", 0.0) or 0.0),
+            }
+
+            def _patch_activation(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
+                if not isinstance(act, torch.Tensor) or act.ndim < 3:
+                    return act
+                if act.shape[-1] != source_vector.numel() or act.shape[-2] <= 0:
+                    return act
+                out = act.clone()
+                target_slice = act[:, -1, :]
+                src = source_vector.to(device=act.device, dtype=act.dtype).reshape(1, -1)
+                patched = ((1.0 - alpha_value) * target_slice) + (alpha_value * src)
+                before_norm = float(torch.linalg.vector_norm(target_slice.detach().float()).item())
+                after_norm = float(torch.linalg.vector_norm(patched.detach().float()).item())
+                hook_stats["call_count"] = int(hook_stats.get("call_count", 0) or 0) + 1
+                hook_stats["max_target_norm_before"] = max(float(hook_stats["max_target_norm_before"]), before_norm)
+                hook_stats["max_target_norm_after"] = max(float(hook_stats["max_target_norm_after"]), after_norm)
+                out[:, -1, :] = patched
+                return out
+
+            try:
+                before_len = len(getattr(hook_point, "fwd_hooks", []))
+                hook_point.add_hook(_patch_activation, dir="fwd")
+                fwd_hooks = getattr(hook_point, "fwd_hooks", [])
+                if len(fwd_hooks) <= before_len:
+                    return None
+                edited = self._simulate_decode(max_new_tokens=3, top_k=8)
+            finally:
+                if hasattr(hook_point, "fwd_hooks"):
+                    original_ids = {id(item) for item in original_fwd_hooks}
+                    for item in list(getattr(hook_point, "fwd_hooks", [])):
+                        if id(item) in original_ids:
+                            continue
+                        hook_handle = getattr(item, "hook", None)
+                        if hook_handle is not None and hasattr(hook_handle, "remove"):
+                            try:
+                                hook_handle.remove()
+                            except Exception:
+                                pass
+                    hook_point.fwd_hooks = list(original_fwd_hooks)
+            if edited is None:
+                return None
+
+            baseline_score = baseline.get("scoring", {}) if isinstance(baseline.get("scoring"), Mapping) else {}
+            edited_score = edited.get("scoring", {}) if isinstance(edited.get("scoring"), Mapping) else {}
+            result: dict[str, Any] = {
+                "status": "ok",
+                "label": f"{recipe_name}:{objective_bundle_key}",
+                "edit_count": 0,
+                "intended_bundle_key": objective_bundle_key,
+                "intended_term": objective_term,
+                "operator_recipe_id": (
+                    f"readout_escape|activation_patch|{site}|L{int(layer)}|"
+                    f"source_span_to_last|blend|a{alpha_value:.3f}"
+                ),
+                "operator_recipe_seed_key": f"activation_patch|{site}|source_span_to_last|blend",
+                "continuation_baseline": baseline["continuation"],
+                "continuation_candidate": edited["continuation"],
+                "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
+                "repeat_flag_delta": int(bool(edited["repeat_flag"])) - int(bool(baseline["repeat_flag"])),
+                "top1_margin_delta": round(
+                    float(edited.get("top1_margin", 0.0) or 0.0) - float(baseline.get("top1_margin", 0.0) or 0.0),
+                    6,
+                ),
                 "repetition_score_delta": round(
                     float(edited.get("repetition_score", 0.0) or 0.0)
                     - float(baseline.get("repetition_score", 0.0) or 0.0),
@@ -2996,17 +4494,77 @@ def run_readout_escape_replay_harness(
             )
             if readout_metrics:
                 result.update(readout_metrics)
+            term_readout_deltas = self._term_readout_deltas(
+                baseline["first_logits"],
+                edited["first_logits"],
+                focus_terms=ownership_terms,
+            )
+            if term_readout_deltas:
+                result["term_readout_deltas"] = dict(term_readout_deltas)
+            result["topk_token_diff"] = self._topk_token_diff(
+                baseline["first_logits"],
+                edited["first_logits"],
+                top_k=5,
+            )
+            logit_delta = edited["first_logits"].detach().cpu().float() - baseline["first_logits"].detach().cpu().float()
+            result["first_logit_delta_l2"] = round(float(torch.linalg.vector_norm(logit_delta).item()), 6)
             result["actual_delta_class"] = self._classify_actual_delta_result(result)
+            bundle_scores: dict[str, float] = {}
+            term_deltas = result.get("term_readout_deltas") if isinstance(result.get("term_readout_deltas"), Mapping) else {}
+            for lift_bundle_key, lift_term in bundle_terms.items():
+                metrics = term_deltas.get(str(lift_term)) if isinstance(term_deltas, Mapping) else None
+                score = float(metrics.get("lift_score", 0.0) or 0.0) if isinstance(metrics, Mapping) else 0.0
+                bundle_scores[str(lift_bundle_key)] = float(score)
+            realized_lift_bundle_key = (
+                max(bundle_scores.items(), key=lambda entry: (float(entry[1]), str(entry[0])))[0]
+                if bundle_scores
+                else objective_bundle_key
+            )
+            self_delta = float(bundle_scores.get(objective_bundle_key, 0.0) or 0.0)
+            cross_delta = max(
+                (
+                    float(score)
+                    for lift_bundle_key, score in bundle_scores.items()
+                    if str(lift_bundle_key) != objective_bundle_key
+                ),
+                default=0.0,
+            )
+            alignment_margin = round(float(self_delta - cross_delta), 6)
+            actual_delta_class = str(result.get("actual_delta_class", "") or "")
+            if actual_delta_class in {"collapse_sharpener", "harmful"}:
+                actuator_class = actual_delta_class
+            elif self_delta > 0.03 and alignment_margin > 0.01:
+                actuator_class = "self_actuator"
+            elif self_delta > 0.005 and alignment_margin < -0.01 and str(realized_lift_bundle_key) != objective_bundle_key:
+                actuator_class = "cross_bound"
+            elif cross_delta > 0.03 and str(realized_lift_bundle_key) != objective_bundle_key:
+                actuator_class = "bridge_actuator"
+            elif max(self_delta, cross_delta) <= 0.01:
+                actuator_class = "dead_actuator"
+            else:
+                actuator_class = "noisy_or_harmful"
             return {
                 "diagnostic_only": True,
-                "diagnostic_family": "attention_head_ablation",
-                "recipe_name": "zero_candidate_cache_head",
+                "diagnostic_family": "activation_patch",
+                "operator_axis": "activation_patch",
+                "recipe_name": recipe_name,
                 "objective_bundle_key": objective_bundle_key,
                 "objective_term": objective_term,
                 "actuator_bundle_key": objective_bundle_key,
                 "status": "ok",
-                "actuator_class": result.get("actual_delta_class"),
+                "actuator_class": actuator_class,
+                "actual_delta_class": actual_delta_class,
+                "realized_lift_bundle_key": str(realized_lift_bundle_key) if bundle_scores else None,
+                "realized_lift_term": str(bundle_terms.get(str(realized_lift_bundle_key), "") or "") if bundle_scores else None,
+                "self_delta": round(float(self_delta), 6),
+                "cross_delta": round(float(cross_delta), 6),
+                "alignment_margin": alignment_margin,
+                "bundle_lift_scores": {
+                    str(lift_bundle_key): round(float(score), 6)
+                    for lift_bundle_key, score in sorted(bundle_scores.items(), key=lambda entry: str(entry[0]))
+                },
                 "operator_recipe_id": result.get("operator_recipe_id"),
+                "operator_recipe_seed_key": result.get("operator_recipe_seed_key"),
                 "target_mass_delta": result.get("target_mass_delta"),
                 "target_top20_hit_delta": result.get("target_top20_hit_delta"),
                 "focus_rank_delta": result.get("focus_rank_delta"),
@@ -3016,16 +4574,29 @@ def run_readout_escape_replay_harness(
                 "entropy_delta": result.get("entropy_delta"),
                 "top1_margin_delta": result.get("top1_margin_delta"),
                 "repeat_delta": result.get("repeat_flag_delta"),
+                "first_logit_delta_l2": result.get("first_logit_delta_l2"),
+                "activation_patch_site": site,
+                "activation_patch_layer": int(layer),
+                "activation_patch_alpha": round(float(alpha_value), 6),
+                "activation_hook_call_count": int(hook_stats.get("call_count", 0) or 0),
+                "activation_source_norm": round(float(hook_stats.get("source_norm", 0.0) or 0.0), 6),
+                "activation_target_norm_before": round(float(hook_stats.get("max_target_norm_before", 0.0) or 0.0), 6),
+                "activation_target_norm_after": round(float(hook_stats.get("max_target_norm_after", 0.0) or 0.0), 6),
+                "topk_token_diff": result.get("topk_token_diff"),
                 "candidate_fingerprint": {
                     "bundle_key": objective_bundle_key,
                     "objective_bundle_key": objective_bundle_key,
                     "actuator_bundle_key": objective_bundle_key,
                     "term": objective_term,
-                    "recipe_name": "zero_candidate_cache_head",
+                    "recipe_name": recipe_name,
                     "site": site,
                     "layer": int(layer),
-                    "head": int(head),
-                    "op_kind": "attention_head_ablation",
+                    "source_token_index": source_meta.get("source_token_index"),
+                    "source_piece": source_meta.get("source_piece"),
+                    "source_segment_kind": source_meta.get("source_segment_kind"),
+                    "op_kind": "activation_patch",
+                    "which": "source_span_to_last_blend",
+                    "alpha": round(float(alpha_value), 6),
                     "edit_count": 0,
                 },
                 "eval_context_fingerprint": self._eval_context_fingerprint(
@@ -3041,6 +4612,7 @@ def run_readout_escape_replay_harness(
         for bundle_key, term in list(bundle_terms.items())[:2]:
             source_span = _best_source_span(term)
             source_selector = _source_selector_for_span(source_span)
+            non_kv_operator_candidates: list[dict[str, Any]] = []
             for diagnostic_family, recipe_name, selector, span, alpha in (
                 (
                     "resid_source_span",
@@ -3067,6 +4639,7 @@ def run_readout_escape_replay_harness(
                     source_span=span,
                     alpha=alpha,
                 )
+                non_kv_operator_candidates.append(dict(edit))
                 result = self.replay_candidate_edits_actual_delta(
                     [edit],
                     max_new_tokens=3,
@@ -3087,6 +4660,27 @@ def run_readout_escape_replay_harness(
                         objective_term=term,
                     )
                 )
+            readout_target = getattr(readout_surface, "target", None)
+            readout_layer = int(getattr(readout_target, "layer", 0) or 0)
+            if isinstance(source_span, Mapping):
+                for patch_site, patch_alpha in (
+                    ("resid_pre", 0.05),
+                    ("resid_pre", 0.15),
+                    ("resid_post", 0.05),
+                    ("resid_post", 0.15),
+                    ("mlp_out", 0.15),
+                ):
+                    patch_row = _run_activation_patch_operator(
+                        site=patch_site,
+                        layer=readout_layer,
+                        source_span=source_span,
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                        recipe_name=f"{patch_site}_source_span_to_last_blend_a{int(round(patch_alpha * 1000)):03d}",
+                        alpha=patch_alpha,
+                    )
+                    if patch_row is not None:
+                        rows.append(patch_row)
             head_candidate = next(
                 (
                     item
@@ -3096,13 +4690,72 @@ def run_readout_escape_replay_harness(
                 None,
             ) or next(iter(grouped_candidates.get(bundle_key, [])), None)
             if isinstance(head_candidate, Mapping):
-                ablation_row = _run_attention_head_ablation(
-                    head_candidate,
-                    objective_bundle_key=bundle_key,
-                    objective_term=term,
+                for scale, recipe_name in (
+                    (0.0, "head_zero_ablation"),
+                    (0.25, "head_scale_025"),
+                    (0.5, "head_scale_050"),
+                    (0.75, "head_scale_075"),
+                ):
+                    scale_row = _run_attention_head_scale(
+                        head_candidate,
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                        scale=scale,
+                        recipe_name=recipe_name,
+                    )
+                    if scale_row is not None:
+                        rows.append(scale_row)
+                v_member = next(
+                    (
+                        item
+                        for item in grouped_candidates.get(bundle_key, [])
+                        if str(item.get("site", "") or "") == "v_cache"
+                    ),
+                    None,
                 )
-                if ablation_row is not None:
-                    rows.append(ablation_row)
+                k_member = next(
+                    (
+                        item
+                        for item in grouped_candidates.get(bundle_key, [])
+                        if str(item.get("site", "") or "") == "k_cache"
+                    ),
+                    None,
+                )
+                if isinstance(v_member, Mapping):
+                    guided_v = _run_attention_guided_operator(
+                        attention_candidate=head_candidate,
+                        operator_candidates=[v_member],
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                        recipe_name="head_scale_050_plus_kv_v",
+                        scale=0.5,
+                    )
+                    if guided_v is not None:
+                        rows.append(guided_v)
+                if isinstance(v_member, Mapping) and isinstance(k_member, Mapping):
+                    guided_pair = _run_attention_guided_operator(
+                        attention_candidate=head_candidate,
+                        operator_candidates=[v_member, k_member],
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                        recipe_name="head_scale_050_plus_kv_pair",
+                        scale=0.5,
+                    )
+                    if guided_pair is not None:
+                        rows.append(guided_pair)
+                for non_kv_edit in non_kv_operator_candidates[:2]:
+                    non_kv_recipe = str(non_kv_edit.get("recipe_name", "") or non_kv_edit.get("role", "") or "")
+                    guided_non_kv = _run_attention_guided_operator(
+                        attention_candidate=head_candidate,
+                        operator_candidates=[non_kv_edit],
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                        recipe_name=f"head_scale_050_plus_{non_kv_recipe or 'non_kv_operator'}",
+                        scale=0.5,
+                    )
+                    if guided_non_kv is not None:
+                        guided_non_kv["operator_axis"] = "attention_guided_non_kv"
+                        rows.append(guided_non_kv)
 
         baseline = self._simulate_decode(max_new_tokens=1, top_k=8)
         if isinstance(baseline, Mapping) and isinstance(baseline.get("first_logits"), torch.Tensor):
@@ -3211,6 +4864,11 @@ def run_readout_escape_replay_harness(
             recommendations = replay_summary.get("bridge_plan_recommendations") if isinstance(replay_summary, Mapping) else None
             ownership_items = (
                 replay_summary.get("operator_recipe_bundle_ownership")
+                if isinstance(replay_summary, Mapping)
+                else None
+            )
+            mode_diagnostic_items = (
+                replay_summary.get("operator_recipe_mode_diagnostics")
                 if isinstance(replay_summary, Mapping)
                 else None
             )
@@ -3330,9 +4988,20 @@ def run_readout_escape_replay_harness(
                 if isinstance(recommendations, SequenceABC) and not isinstance(recommendations, (str, bytes, bytearray))
                 else [],
                 "matrix": bridge_eval_matrix,
+                "operator_recipe_mode_diagnostics": [
+                    dict(item)
+                    for item in (mode_diagnostic_items or [])
+                    if isinstance(item, Mapping)
+                ][:24]
+                if isinstance(mode_diagnostic_items, SequenceABC)
+                and not isinstance(mode_diagnostic_items, (str, bytes, bytearray))
+                else [],
                 "objective_class_counts": objective_class_counts,
                 "extra_operator_diagnostics": [dict(item) for item in extra_operator_diagnostics],
                 "extra_operator_diagnostic_count": len(extra_operator_diagnostics),
+                "attention_scale_response_diagnostics": _attention_scale_response_diagnostics(
+                    extra_operator_diagnostics
+                ),
                 "unavailable_reason": unavailable_summary.get("reason"),
                 "unavailable_objective_bundle_key": unavailable_summary.get("objective_bundle_key"),
                 "unavailable_objective_reasons": dict(unavailable_summary.get("objective_reasons", {})),
@@ -3382,6 +5051,8 @@ def run_readout_escape_replay_harness(
                     if isinstance(item, Mapping) and str(item.get("recipe_name", "") or "")
                 ],
                 "matrix": [],
+                "operator_recipe_mode_diagnostics": [],
+                "attention_scale_response_diagnostics": [],
                 "evaluations_count": 0,
                 "ownership_count": 0,
                 "recommendation_count": 0,
@@ -3712,6 +5383,16 @@ def run_readout_escape_replay_harness(
                 recipe_names = bridge_eval_summary.get("recipe_names")
                 if isinstance(recipe_names, SequenceABC) and not isinstance(recipe_names, (str, bytes, bytearray)):
                     strategy_hints["bridge_eval_recipe_names"] = [str(item) for item in recipe_names if str(item)]
+                mode_diagnostics = bridge_eval_summary.get("operator_recipe_mode_diagnostics")
+                if isinstance(mode_diagnostics, SequenceABC) and not isinstance(mode_diagnostics, (str, bytes, bytearray)):
+                    strategy_hints["bridge_eval_operator_recipe_mode_diagnostics"] = [
+                        dict(item) for item in mode_diagnostics[:24] if isinstance(item, Mapping)
+                    ]
+                attention_response = bridge_eval_summary.get("attention_scale_response_diagnostics")
+                if isinstance(attention_response, SequenceABC) and not isinstance(attention_response, (str, bytes, bytearray)):
+                    strategy_hints["bridge_eval_attention_scale_response_diagnostics"] = [
+                        dict(item) for item in attention_response[:12] if isinstance(item, Mapping)
+                    ]
                 if isinstance(recommendation_objectives, SequenceABC) and not isinstance(recommendation_objectives, (str, bytes, bytearray)):
                     strategy_hints["bridge_plan_recommendation_objectives"] = [
                         str(item) for item in recommendation_objectives if str(item)
@@ -3736,7 +5417,7 @@ def run_readout_escape_replay_harness(
                 diagnostic_ledger = bridge_eval_summary.get("diagnostic_evidence_ledger")
                 if isinstance(diagnostic_ledger, SequenceABC) and not isinstance(diagnostic_ledger, (str, bytes, bytearray)):
                     strategy_hints["diagnostic_evidence_ledger"] = [
-                        dict(item) for item in diagnostic_ledger[:24] if isinstance(item, Mapping)
+                        dict(item) for item in diagnostic_ledger[:48] if isinstance(item, Mapping)
                     ]
                 bundle_diagnostic_status = bridge_eval_summary.get("bundle_diagnostic_status")
                 if isinstance(bundle_diagnostic_status, Mapping):
@@ -3838,7 +5519,16 @@ def run_readout_escape_replay_harness(
             stats={},
             adapter=worker.adapter,
         )
-        episode = run_episode(env, worker, controller_client, ctx, logger=logger)
+        episode = run_episode(
+            env,
+            worker,
+            controller_client,
+            ctx,
+            logger=logger,
+            max_controller_diagnostic_rethink_rounds=3
+            if normalized_controller_replay_mode == "diagnostic_request"
+            else 0,
+        )
     finally:
         worker.reset = original_reset
         worker._current_answer_readout_canary = original_answer_readout_canary
@@ -4048,6 +5738,24 @@ def run_readout_escape_replay_harness(
             dict(item)
             for item in (
                 forced_state.get("bridge_eval_summary", {}).get("matrix", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if isinstance(item, Mapping)
+        ),
+        bridge_eval_operator_recipe_mode_diagnostics=tuple(
+            dict(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("operator_recipe_mode_diagnostics", ())
+                if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+                else ()
+            )
+            if isinstance(item, Mapping)
+        ),
+        bridge_eval_attention_scale_response_diagnostics=tuple(
+            dict(item)
+            for item in (
+                forced_state.get("bridge_eval_summary", {}).get("attention_scale_response_diagnostics", ())
                 if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
                 else ()
             )

@@ -364,6 +364,11 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(hints["feature_backend"], "sae_sidecar")
         self.assertEqual(hints["sae_status"], "scaffold_feature_emitter_no_saelens_runtime")
         self.assertGreaterEqual(len(hints["sae_feature_hints"]), 1)
+        self.assertEqual(hints["sae_feature_hints"][0]["operator_family_prior"], "resid_or_readout_boundary")
+        self.assertIn(
+            "activation_patch_source_to_boundary",
+            hints["sae_feature_hints"][0]["operator_family_priors"],
+        )
 
     def test_create_readout_sidecar_analyzer_supports_off_mode(self):
         self.assertIsNone(create_readout_sidecar_analyzer("off"))
@@ -782,23 +787,110 @@ class TestExamples(unittest.TestCase):
             self.assertIn("bridge_plan_unavailable_objective_reasons", payload)
             self.assertIn("bridge_eval_context_drift", payload)
             self.assertIn("bridge_eval_locked_step", payload)
+            self.assertIn("bridge_eval_operator_recipe_mode_diagnostics", payload)
+            self.assertTrue(payload["bridge_eval_operator_recipe_mode_diagnostics"])
+            first_mode_row = payload["bridge_eval_operator_recipe_mode_diagnostics"][0]
+            self.assertIn("diagnosis", first_mode_row)
+            self.assertIn("pair_interaction_delta", first_mode_row)
+            self.assertIn("modes", first_mode_row)
+            self.assertIn("bridge_eval_attention_scale_response_diagnostics", payload)
             self.assertIn("bridge_eval_extra_operator_diagnostics", payload)
             self.assertIn("bridge_eval_poststep_comparison", payload)
             self.assertIn("bridge_eval_candidate_swap_comparison", payload)
             self.assertIn("diagnostic_evidence_ledger", payload)
             self.assertIn("bundle_diagnostic_status", payload)
             self.assertGreaterEqual(payload["diagnostic_evidence_ledger_count"], 0)
+            for status in payload["bundle_diagnostic_status"].values():
+                self.assertFalse(status.get("operator_certified", False))
+                self.assertFalse(status.get("production_operator_certified", False))
+                self.assertIn("diagnostic_operator_supported", status)
+                self.assertIn("policy_candidate_ready", status)
             if payload["diagnostic_frontier_bundle_key"]:
                 self.assertIn(payload["diagnostic_frontier_bundle_key"], payload["bundle_diagnostic_status"])
                 self.assertTrue(payload["diagnostic_frontier_next_evidence"])
                 self.assertTrue(payload["diagnostic_frontier_request"])
+                self.assertIn(
+                    payload["diagnostic_frontier_request"],
+                    {
+                        "operator_diagnostic_replay",
+                        "attention_readout_carrier_probe",
+                        "attention_head_ablation_on_frontier",
+                        "readout_logit_adjacent_probe",
+                        "sae_feature_emitter_scan",
+                        "compare_extra_operator_diagnostics",
+                        "activation_patch_candidate_review",
+                        "activation_patch_runtime_support_probe",
+                        "activation_patch_promotion_gate_review",
+                        "none",
+                    },
+                )
             if payload["bridge_eval_extra_operator_diagnostics"]:
                 extra_row = payload["bridge_eval_extra_operator_diagnostics"][0]
                 self.assertTrue(extra_row["diagnostic_only"])
                 self.assertIn(
                     extra_row["diagnostic_family"],
-                    {"resid_source_span", "readout_local_boundary", "attention_head_ablation", "logit_adjacent"},
+                    {
+                        "resid_source_span",
+                        "readout_local_boundary",
+                        "attention_head_ablation",
+                        "attention_head_scale",
+                        "attention_guided_operator",
+                        "activation_patch",
+                        "logit_adjacent",
+                    },
                 )
+                attention_guided_rows = [
+                    row
+                    for row in payload["bridge_eval_extra_operator_diagnostics"]
+                    if row.get("diagnostic_family") == "attention_guided_operator"
+                ]
+                for row in attention_guided_rows:
+                    self.assertIn("attention_carrier_scale", row)
+                    self.assertIn("candidate_fingerprint", row)
+                    self.assertIn("eval_context_fingerprint", row)
+                activation_patch_rows = [
+                    row
+                    for row in payload["bridge_eval_extra_operator_diagnostics"]
+                    if row.get("diagnostic_family") == "activation_patch"
+                ]
+                for row in activation_patch_rows:
+                    self.assertIn("activation_patch_site", row)
+                    self.assertIn("activation_hook_call_count", row)
+                    self.assertIn("actual_delta_class", row)
+                    self.assertIn("self_delta", row)
+                    self.assertIn("cross_delta", row)
+                    self.assertIn("alignment_margin", row)
+                    self.assertIn("realized_lift_bundle_key", row)
+                    self.assertIn("candidate_fingerprint", row)
+                    self.assertIn("eval_context_fingerprint", row)
+            if payload["bridge_eval_attention_scale_response_diagnostics"]:
+                response_row = payload["bridge_eval_attention_scale_response_diagnostics"][0]
+                self.assertIn("response_profile", response_row)
+                self.assertIn("scale_points", response_row)
+                self.assertIn("shadow_actuator", response_row)
+                if response_row["shadow_actuator"] is not None:
+                    self.assertEqual(response_row["shadow_actuator"]["kind"], "attention_shadow_actuator")
+                    self.assertFalse(response_row["shadow_actuator"]["production_apply_allowed"])
+                    self.assertIn("counterfactual_delta", response_row["shadow_actuator"])
+                    self.assertIn("attention_shadow_actuator_class", response_row["shadow_actuator"])
+                    self.assertIn("promotable_to_certification_replay", response_row["shadow_actuator"])
+                    self.assertIn("promotion_reason", response_row["shadow_actuator"])
+                    self.assertIn("attention_shadow_actuator_class", response_row)
+                    self.assertIn("attention_shadow_promotable_to_certification_replay", response_row)
+                zero_points = [
+                    item
+                    for item in response_row["scale_points"]
+                    if abs(float(item.get("scale", 1.0) or 0.0)) <= 1e-9
+                ]
+                if zero_points and float(zero_points[0].get("head_norm_before", 0.0) or 0.0) > 0.0:
+                    partial_points = [
+                        item
+                        for item in response_row["scale_points"]
+                        if float(item.get("scale", 0.0) or 0.0) > 0.0
+                        and int(item.get("hook_call_count", 0) or 0) > 0
+                    ]
+                    for item in partial_points:
+                        self.assertGreater(float(item.get("head_norm_before", 0.0) or 0.0), 0.0)
             self.assertIsInstance(payload["bridge_eval_locked_step"], (int, type(None)))
             if payload["bridge_plan_recommendation_count"] == 0:
                 self.assertTrue(payload["bridge_plan_unavailable_reason"])
@@ -853,22 +945,143 @@ class TestExamples(unittest.TestCase):
             self.assertTrue(payload["latest_diagnostic_results"])
             latest = payload["latest_diagnostic_results"][-1]
             self.assertFalse(latest["production_apply_allowed"])
+            self.assertFalse(latest.get("operator_certified", False))
+            self.assertFalse(latest.get("production_operator_certified", False))
+            self.assertIn("diagnostic_operator_supported", latest)
+            self.assertIn("policy_candidate_ready", latest)
+            if latest["diagnostic"] == "operator_diagnostic_replay":
+                self.assertTrue(
+                    any(
+                        row.get("evidence_kind")
+                        in {
+                            "operator_mode_decomposition",
+                            "attention_guided_operator_certification",
+                            "activation_patch_certification",
+                        }
+                        for row in latest.get("evidence_rows", [])
+                    )
+                )
             self.assertIn(
                 latest["diagnostic"],
                 {
                     "operator_diagnostic_replay",
+                    "attention_readout_carrier_probe",
                     "attention_head_ablation_on_frontier",
                     "readout_logit_adjacent_probe",
                     "sae_feature_emitter_scan",
                     "compare_extra_operator_diagnostics",
+                    "activation_patch_candidate_review",
+                    "activation_patch_runtime_support_probe",
+                    "activation_patch_promotion_gate_review",
                 },
             )
+            if latest["diagnostic"] == "activation_patch_candidate_review":
+                self.assertEqual(latest.get("diagnostic_role"), "activation_patch_candidate_review")
+                self.assertFalse(latest["production_apply_allowed"])
+                if latest.get("activation_patch_candidate_review") is not None:
+                    self.assertIn("blueprint", latest["activation_patch_candidate_review"])
+                    self.assertFalse(latest["activation_patch_candidate_review"]["blueprint"]["production_apply_allowed"])
+                    self.assertIn("compile_preview_created", latest["activation_patch_candidate_review"])
+                    self.assertIn("compile_preview_blocked_reason", latest["activation_patch_candidate_review"])
+                    if latest["activation_patch_candidate_review"].get("compile_preview") is not None:
+                        self.assertTrue(latest["activation_patch_candidate_review"]["compile_preview_created"])
+                        self.assertFalse(latest["activation_patch_candidate_review"]["compile_preview"]["production_apply_allowed"])
+                        self.assertEqual(
+                            latest["activation_patch_candidate_review"]["compile_preview"]["compile_state"],
+                            "preview_only",
+                        )
+                    else:
+                        self.assertFalse(latest["activation_patch_candidate_review"]["compile_preview_created"])
+                        self.assertIsNotNone(latest["activation_patch_candidate_review"]["compile_preview_blocked_reason"])
+                self.assertIn("activation_patch_compile_preview_created", latest)
+            if latest.get("activation_patch_compile_preview_created"):
+                self.assertIn(
+                    latest["next_evidence_needed"],
+                    {
+                        "production_activation_patch_operator_support",
+                        "activation_patch_promotion_gate_review",
+                        "alternate_activation_patch_or_bridge_evidence",
+                        "production_policy_review",
+                    },
+                )
+                self.assertFalse(latest["production_apply_allowed"])
+            if latest["diagnostic"] == "activation_patch_runtime_support_probe":
+                self.assertEqual(latest.get("diagnostic_role"), "activation_patch_runtime_support_probe")
+                self.assertFalse(latest["production_apply_allowed"])
+                self.assertIn("activation_patch_runtime_support_probe", latest)
+                self.assertIn("activation_patch_diagnostic_executable_created", latest)
+                if latest.get("activation_patch_executable_shadow") is not None:
+                    self.assertEqual(
+                        latest["activation_patch_executable_shadow"]["compile_state"],
+                        "executable_shadow",
+                    )
+                    self.assertFalse(latest["activation_patch_executable_shadow"]["production_apply_allowed"])
+                    self.assertFalse(latest["activation_patch_executable_shadow"]["certified_for_apply"])
+            if latest["diagnostic"] == "activation_patch_promotion_gate_review":
+                self.assertEqual(latest.get("diagnostic_role"), "activation_patch_promotion_gate_review")
+                self.assertFalse(latest["production_apply_allowed"])
+                self.assertIn("activation_patch_promotion_gate_review", latest)
+                self.assertIn("activation_patch_promotion_gate_passed", latest)
+                if latest.get("activation_patch_production_apply_candidate") is not None:
+                    self.assertTrue(latest["policy_candidate_ready"])
+                    self.assertTrue(latest["diagnostic_operator_supported"])
+                    self.assertEqual(
+                        latest["activation_patch_production_apply_candidate"]["compile_state"],
+                        "production_apply_candidate",
+                    )
+                    self.assertFalse(latest["activation_patch_production_apply_candidate"]["production_apply_allowed"])
+                    self.assertFalse(latest["activation_patch_production_apply_candidate"]["certified_for_apply"])
+            if latest["diagnostic"] == "attention_readout_carrier_probe":
+                self.assertEqual(latest.get("diagnostic_role"), "rank_readout_carrier")
+                self.assertFalse(latest["production_apply_allowed"])
+                if latest.get("attention_shadow_actuator") is not None:
+                    self.assertFalse(latest["attention_shadow_actuator"]["production_apply_allowed"])
+                    self.assertIn("counterfactual_delta", latest["attention_shadow_actuator"])
+                    self.assertIn("attention_shadow_actuator_class", latest["attention_shadow_actuator"])
+                    self.assertIn("promotable_to_certification_replay", latest["attention_shadow_actuator"])
+                    self.assertIn("attention_shadow_actuator_class", latest)
+                    self.assertIn("attention_shadow_promotable_to_certification_replay", latest)
+            if latest.get("activation_patch_shadow_actuator") is not None:
+                self.assertFalse(latest["activation_patch_shadow_actuator"]["production_apply_allowed"])
+                self.assertIn("counterfactual_delta", latest["activation_patch_shadow_actuator"])
+                self.assertIn("activation_patch_actuator_class", latest["activation_patch_shadow_actuator"])
+                self.assertIn("activation_patch_actuator_class", latest)
+                self.assertIn("activation_patch_promotable_to_candidate", latest)
             self.assertTrue(
                 any(
                     view["diagnostic_request_count"] >= 1 and view["diagnostic_result_count"] >= 1
                     for view in payload["controller_step_views"]
                 )
             )
+            self.assertTrue(
+                any(
+                    view.get("loop_patience_count", 0) >= 1
+                    for view in payload["controller_step_views"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    "loop_patience_budget_left" in row
+                    and "next_evidence_transition" in row
+                    for view in payload["controller_step_views"]
+                    for row in view.get("loop_patience", [])
+                )
+            )
+            if latest.get("activation_patch_compile_preview_created"):
+                self.assertTrue(
+                    any(
+                        row.get("next_evidence_transition") is True
+                        and row.get("next_evidence_after")
+                        in {
+                            "production_activation_patch_operator_support",
+                            "activation_patch_runtime_operator_certification",
+                            "activation_patch_promotion_gate_review",
+                            "production_policy_review",
+                        }
+                        for view in payload["controller_step_views"]
+                        for row in view.get("loop_patience", [])
+                    )
+                )
             self.assertTrue(
                 any(
                     isinstance(view.get("controller_observation"), dict)

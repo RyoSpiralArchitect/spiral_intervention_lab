@@ -76,7 +76,9 @@ The current implementation includes:
   - `readout_reachable`
   - `head_sensitive`
   - `feature_supported`
-  - `operator_certified`
+  - `diagnostic_operator_supported`
+  - `policy_candidate_ready`
+  - `production_operator_certified`
   - `blocked_by`
   - the next diagnostic request the controller should ask for
 
@@ -111,7 +113,9 @@ The latest runs narrow this further. For the `budget` frontier in the constraine
 - `readout_reachable = true`
 - `head_sensitive = true`
 - `feature_supported = true`
-- `operator_certified = false`
+- `diagnostic_operator_supported = true/false` depending on diagnostic counterfactuals
+- `policy_candidate_ready = false` unless a quarantine executable passes the promotion gate
+- `production_operator_certified = false`
 - `blocked_by = dead_actuator / all_dead_actuator`
 
 That means the current bottleneck is not visibility. The stack can now see a plausible frontier and collect non-dead diagnostic signals, but it still lacks a certified self or bridge actuator that can safely move the worker at the answer boundary.
@@ -181,8 +185,11 @@ It collects bridge eval, operator replay, readout-local probes, attention head a
   "bundle_key": "kv_pair:budget:source_body:72:73",
   "readout_reachable": true,
   "head_sensitive": true,
+  "rank_readout_carrier": true,
   "feature_supported": true,
-  "operator_certified": false,
+  "diagnostic_operator_supported": false,
+  "policy_candidate_ready": false,
+  "production_operator_certified": false,
   "blocked_by": ["dead_actuator", "all_dead_actuator"],
   "next_evidence_needed": "certified_self_or_bridge_actuator",
   "diagnostic_request": "operator_diagnostic_replay"
@@ -193,10 +200,18 @@ This ledger gives the controller more room to reason about what evidence to requ
 
 - diagnostics may improve visibility
 - diagnostics may suggest the next measurement
+- attention diagnostics are treated as rank/readout carrier evidence, not attention-edit permission
+- attention carrier hits may appear as `attention_shadow_actuator` counterfactuals, but remain `production_apply_allowed=false`
 - diagnostics may block unsafe application
 - diagnostics do not grant production apply permission
 
 That last point is important. The current design intentionally lets the controller become more curious without letting helper modules become covert selectors.
+
+For local non-tiny worker runs, pass a local Hugging Face model directory with
+`worker_model_path` / `--worker-model-path` rather than relying on a named remote
+model. The Hugging Face cache may be offline even when network is available, so
+clone-specific model locations should stay outside the repo and be provided on
+the CLI.
 
 The replay harness now has a `diagnostic_request` controller mode for this contract. In direct-scan GPT-2 replay it produces:
 
@@ -210,6 +225,9 @@ The replay harness now has a `diagnostic_request` controller mode for this contr
     {
       "diagnostic": "operator_diagnostic_replay",
       "bundle_key": "kv_pair:budget:source_body:72:73",
+      "diagnostic_operator_supported": false,
+      "policy_candidate_ready": false,
+      "production_operator_certified": false,
       "production_apply_allowed": false,
       "blocked_by": ["dead_actuator", "all_dead_actuator"]
     }
@@ -321,13 +339,14 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --provider openai \
   --controller-model gpt-4.1-mini \
   --worker-model gpt2 \
-  --worker-model-path /absolute/path/to/hf-export \
+  --worker-model-path "$SPIRAL_WORKER_MODEL_PATH" \
   --worker-hf-offline \
   --seed 7
 ```
 
 When using `--worker-model-path`, keep `--worker-model` set to the matching
-TransformerLens-supported family name such as `gpt2`.
+TransformerLens-supported family name such as `gpt2`. If the tokenizer is stored
+separately, also pass `--worker-tokenizer-path "$SPIRAL_WORKER_TOKENIZER_PATH"`.
 
 or:
 

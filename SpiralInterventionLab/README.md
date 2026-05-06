@@ -68,7 +68,7 @@ This is a scaffold, not a full benchmark suite yet.
 - The readout-escape path now has provenance-aware candidate compilation, source-body-first priority, same-term/family dedupe, and bundle metadata.
 - Operator replay can classify recipes as `self_actuator`, `bridge_actuator`, `cross_bound`, `dead_actuator`, `collapse_sharpener`, or `noisy_or_harmful`.
 - Bridge eval and extra diagnostics now feed a `diagnostic_evidence_ledger` and `bundle_diagnostic_status` table for each frontier bundle.
-- Diagnostic-only tools include readout-local first-piece probes, attention head ablation, and a scaffolded `sae_scaffold` readout analyzer backend.
+- Diagnostic-only tools include readout-local first-piece probes, attention readout-carrier probes with shadow-actuator counterfactuals, and a scaffolded `sae_scaffold` readout analyzer backend.
 - The controller can now request bounded diagnostics through `meta.diagnostic_request`; the runtime returns `latest_diagnostic_results` / `recent_diagnostic_results` on later packets.
 - These diagnostics are evidence for the controller, not production apply permission. The controller remains the policy owner.
 
@@ -93,11 +93,18 @@ wired end to end:
 - controller requests `operator_diagnostic_replay`
 - runtime returns one diagnostic result
 - the result is visible on later controller observations
+- `diagnostic_operator_supported` records diagnostic support separately from production permission
+- `policy_candidate_ready` records whether a quarantine candidate reached policy review
 - `production_apply_allowed` remains false
 - the frontier is still blocked by `dead_actuator / all_dead_actuator`
 
 So the current win is not task-score improvement yet. It is cleaner agency:
 the controller can ask for better evidence without gaining extra apply power.
+
+For local larger-worker checks, provide the local Hugging Face export on the CLI
+with `worker_model_path` / `--worker-model-path`. Keep clone-specific model
+directories outside the repo; for example, set `SPIRAL_WORKER_MODEL_PATH` in your
+shell and pass it through the CLI instead of hardcoding an absolute path.
 
 ## Ownership rule
 
