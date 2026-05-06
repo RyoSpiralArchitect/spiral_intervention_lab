@@ -96,6 +96,14 @@ wired end to end:
 - `diagnostic_operator_supported` records diagnostic support separately from production permission
 - `policy_candidate_ready` records whether a quarantine candidate reached policy review
 - `production_apply_allowed` remains false
+- `activation_patch_production_denial_dossier` records the five reasons
+  production can remain closed after diagnostic support:
+  `ownership_not_live_certified`, `safety_not_certified`,
+  `context_equivalence_missing`, `rollback_contract_missing`, and
+  `effect_size_too_small`
+- `activation_patch_production_shadow_replay` can then emit an
+  `activation_patch_production_shadow_dossier` for same-packet shadow checks;
+  this may clear denial axes but still does not grant production apply
 - the frontier is still blocked by `dead_actuator / all_dead_actuator`
 
 So the current win is not task-score improvement yet. It is cleaner agency:

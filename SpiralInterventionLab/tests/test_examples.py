@@ -821,6 +821,7 @@ class TestExamples(unittest.TestCase):
                         "activation_patch_candidate_review",
                         "activation_patch_runtime_support_probe",
                         "activation_patch_promotion_gate_review",
+                        "activation_patch_production_shadow_replay",
                         "none",
                     },
                 )
@@ -973,6 +974,7 @@ class TestExamples(unittest.TestCase):
                     "activation_patch_candidate_review",
                     "activation_patch_runtime_support_probe",
                     "activation_patch_promotion_gate_review",
+                    "activation_patch_production_shadow_replay",
                 },
             )
             if latest["diagnostic"] == "activation_patch_candidate_review":
@@ -1000,6 +1002,7 @@ class TestExamples(unittest.TestCase):
                     {
                         "production_activation_patch_operator_support",
                         "activation_patch_promotion_gate_review",
+                        "activation_patch_production_shadow_replay",
                         "alternate_activation_patch_or_bridge_evidence",
                         "production_policy_review",
                     },
@@ -1022,6 +1025,24 @@ class TestExamples(unittest.TestCase):
                 self.assertFalse(latest["production_apply_allowed"])
                 self.assertIn("activation_patch_promotion_gate_review", latest)
                 self.assertIn("activation_patch_promotion_gate_passed", latest)
+                self.assertIn("activation_patch_production_denial_dossier", latest)
+                dossier = latest.get("activation_patch_production_denial_dossier")
+                self.assertIsInstance(dossier, dict)
+                self.assertFalse(dossier["production_apply_allowed"])
+                self.assertFalse(dossier["production_operator_certified"])
+                self.assertIn("active_reasons", dossier)
+                self.assertIn("axes", dossier)
+                self.assertEqual(
+                    set(dossier["axes"]),
+                    {
+                        "ownership_not_live_certified",
+                        "safety_not_certified",
+                        "context_equivalence_missing",
+                        "rollback_contract_missing",
+                        "effect_size_too_small",
+                    },
+                )
+                self.assertIn("production_denial_reasons", latest)
                 if latest.get("activation_patch_production_apply_candidate") is not None:
                     self.assertTrue(latest["policy_candidate_ready"])
                     self.assertTrue(latest["diagnostic_operator_supported"])
@@ -1031,6 +1052,29 @@ class TestExamples(unittest.TestCase):
                     )
                     self.assertFalse(latest["activation_patch_production_apply_candidate"]["production_apply_allowed"])
                     self.assertFalse(latest["activation_patch_production_apply_candidate"]["certified_for_apply"])
+            if latest["diagnostic"] == "activation_patch_production_shadow_replay":
+                self.assertEqual(latest.get("diagnostic_role"), "activation_patch_production_shadow_replay")
+                self.assertFalse(latest["production_apply_allowed"])
+                self.assertFalse(latest.get("production_operator_certified", False))
+                self.assertIn("activation_patch_production_shadow_replay", latest)
+                self.assertIn("activation_patch_production_shadow_dossier", latest)
+                shadow_dossier = latest.get("activation_patch_production_shadow_dossier")
+                self.assertIsInstance(shadow_dossier, dict)
+                self.assertFalse(shadow_dossier["production_apply_allowed"])
+                self.assertFalse(shadow_dossier["production_operator_certified"])
+                self.assertIn("active_reasons_after_shadow", shadow_dossier)
+                self.assertIn("axes", shadow_dossier)
+                self.assertEqual(
+                    set(shadow_dossier["axes"]),
+                    {
+                        "ownership_not_live_certified",
+                        "safety_not_certified",
+                        "context_equivalence_missing",
+                        "rollback_contract_missing",
+                        "effect_size_too_small",
+                    },
+                )
+                self.assertIn("production_denial_reasons_after_shadow", latest)
             if latest["diagnostic"] == "attention_readout_carrier_probe":
                 self.assertEqual(latest.get("diagnostic_role"), "rank_readout_carrier")
                 self.assertFalse(latest["production_apply_allowed"])
@@ -1076,6 +1120,7 @@ class TestExamples(unittest.TestCase):
                             "production_activation_patch_operator_support",
                             "activation_patch_runtime_operator_certification",
                             "activation_patch_promotion_gate_review",
+                            "production_shadow_replay",
                             "production_policy_review",
                         }
                         for view in payload["controller_step_views"]

@@ -207,6 +207,17 @@ This ledger gives the controller more room to reason about what evidence to requ
 
 That last point is important. The current design intentionally lets the controller become more curious without letting helper modules become covert selectors.
 
+When an activation-patch candidate reaches policy review, the runtime now emits
+an `activation_patch_production_denial_dossier` instead of treating diagnostic
+support as production permission. The dossier keeps five denial axes visible:
+`ownership_not_live_certified`, `safety_not_certified`,
+`context_equivalence_missing`, `rollback_contract_missing`, and
+`effect_size_too_small`.
+The follow-up `activation_patch_production_shadow_replay` diagnostic can replay
+that candidate against the current controller packet and emit an
+`activation_patch_production_shadow_dossier`, clearing any axes that are
+certified in shadow while still leaving `production_apply_allowed=false`.
+
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
 model. The Hugging Face cache may be offline even when network is available, so

@@ -452,6 +452,7 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
         "request_activation_patch_candidate_review": "activation_patch_candidate_review",
         "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
         "request_activation_patch_promotion_gate_review": "activation_patch_promotion_gate_review",
+        "request_activation_patch_production_shadow_replay": "activation_patch_production_shadow_replay",
     }.get(text)
 
 

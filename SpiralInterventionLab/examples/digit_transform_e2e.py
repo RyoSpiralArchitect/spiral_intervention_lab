@@ -1599,6 +1599,8 @@ class _FrontierReplayControllerClient:
             return "request_activation_patch_runtime_support_probe"
         if normalized == "activation_patch_promotion_gate_review":
             return "request_activation_patch_promotion_gate_review"
+        if normalized == "activation_patch_production_shadow_replay":
+            return "request_activation_patch_production_shadow_replay"
         if normalized == "compare_extra_operator_diagnostics":
             return "wait"
         return "request_operator_diagnostic"
@@ -1650,6 +1652,20 @@ class _FrontierReplayControllerClient:
             "activation_patch_production_apply_candidate": result.get(
                 "activation_patch_production_apply_candidate"
             ),
+            "activation_patch_production_shadow_replay": result.get(
+                "activation_patch_production_shadow_replay"
+            ),
+            "activation_patch_production_shadow_dossier": result.get(
+                "activation_patch_production_shadow_dossier"
+            ),
+            "activation_patch_production_shadow_replay_passed": result.get(
+                "activation_patch_production_shadow_replay_passed"
+            ),
+            "activation_patch_production_denial_dossier": result.get(
+                "activation_patch_production_denial_dossier"
+            ),
+            "production_denial_reasons": result.get("production_denial_reasons"),
+            "production_denial_reasons_after_shadow": result.get("production_denial_reasons_after_shadow"),
             "production_apply_allowed": result.get("production_apply_allowed"),
             "evidence_row_count": evidence_row_count,
         }
@@ -1701,6 +1717,29 @@ class _FrontierReplayControllerClient:
                     "status": "candidate_ready_for_policy_review",
                     "production_apply_candidate": dict(candidate),
                     "gate_passed": result.get("activation_patch_promotion_gate_passed"),
+                    "production_denial_dossier": result.get("activation_patch_production_denial_dossier"),
+                    "production_denial_reasons": result.get("production_denial_reasons"),
+                    "next_evidence_needed": result.get("next_evidence_needed"),
+                }
+        return None
+
+    @staticmethod
+    def _activation_patch_production_shadow_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            replay = result.get("activation_patch_production_shadow_replay")
+            if isinstance(replay, Mapping):
+                return dict(replay)
+            dossier = result.get("activation_patch_production_shadow_dossier")
+            if isinstance(dossier, Mapping):
+                return {
+                    "status": "shadow_passed" if result.get("activation_patch_production_shadow_replay_passed") else "blocked",
+                    "shadow_replay_passed": bool(result.get("activation_patch_production_shadow_replay_passed", False)),
+                    "production_shadow_dossier": dict(dossier),
+                    "production_denial_reasons_after_shadow": result.get(
+                        "production_denial_reasons_after_shadow"
+                    ),
                     "next_evidence_needed": result.get("next_evidence_needed"),
                 }
         return None
@@ -1808,6 +1847,9 @@ class _FrontierReplayControllerClient:
         activation_patch_preview = self._activation_patch_compile_preview_from_results(latest_result_items)
         activation_patch_runtime_support = self._activation_patch_runtime_support_from_results(latest_result_items)
         activation_patch_promotion_gate = self._activation_patch_promotion_gate_from_results(latest_result_items)
+        activation_patch_production_shadow = self._activation_patch_production_shadow_from_results(
+            latest_result_items
+        )
         activation_patch_preview_blocked_reason = self._activation_patch_compile_preview_blocked_reason_from_results(
             latest_result_items
         )
@@ -1818,6 +1860,7 @@ class _FrontierReplayControllerClient:
         )
         request_activation_patch_runtime_round = False
         request_activation_patch_promotion_round = False
+        request_activation_patch_production_shadow_round = False
         activation_patch_executable_shadow = (
             dict(activation_patch_runtime_support["executable_shadow"])
             if isinstance(activation_patch_runtime_support, Mapping)
@@ -1832,19 +1875,48 @@ class _FrontierReplayControllerClient:
         )
         if activation_patch_preview is not None:
             request_attention_shadow_round = False
-            if activation_patch_promotion_gate is not None:
+            if activation_patch_production_shadow is not None:
+                shadow_passed = bool(activation_patch_production_shadow.get("shadow_replay_passed", False))
+                next_evidence = str(
+                    activation_patch_production_shadow.get(
+                        "next_evidence_needed",
+                        "production_policy_review" if shadow_passed else "production_shadow_replay_followup",
+                    )
+                    or ("production_policy_review" if shadow_passed else "production_shadow_replay_followup")
+                )
+                why_not_apply = (
+                    "activation_patch production shadow replay passed, but production apply permission remains closed"
+                    if shadow_passed
+                    else activation_patch_production_shadow.get(
+                        "why_not_apply",
+                        "activation_patch production shadow replay remains blocked",
+                    )
+                )
+            elif activation_patch_promotion_gate is not None:
                 next_evidence = str(
                     activation_patch_promotion_gate.get("next_evidence_needed", "production_policy_review")
                     or "production_policy_review"
                 )
-                why_not_apply = (
-                    "activation patch production candidate still requires policy review and production apply permission"
-                    if activation_patch_production_candidate is not None
-                    else activation_patch_promotion_gate.get(
+                if activation_patch_production_candidate is not None:
+                    request_activation_patch_production_shadow_round = True
+                    diagnostic_name = "activation_patch_production_shadow_replay"
+                    next_evidence = "production_shadow_replay"
+                    why_not_apply = (
+                        "activation_patch production candidate needs same-packet shadow ownership and context replay"
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                    }
+                else:
+                    why_not_apply = activation_patch_promotion_gate.get(
                         "why_not_apply",
                         "activation patch promotion gate did not produce a production candidate",
                     )
-                )
             elif activation_patch_runtime_support is None:
                 request_activation_patch_runtime_round = True
                 diagnostic_name = "activation_patch_runtime_support_probe"
@@ -1914,6 +1986,7 @@ class _FrontierReplayControllerClient:
             if (
                 request_activation_patch_runtime_round
                 or request_activation_patch_promotion_round
+                or request_activation_patch_production_shadow_round
                 or request_attention_shadow_round
                 or not has_latest_results
             )
@@ -1932,7 +2005,9 @@ class _FrontierReplayControllerClient:
             "shadow_proposals": [
                 {
                     "kind": (
-                        "activation_patch_production_apply_candidate"
+                        "activation_patch_production_shadow_replay"
+                        if activation_patch_production_shadow is not None
+                        else "activation_patch_production_apply_candidate"
                         if activation_patch_production_candidate is not None
                         else "activation_patch_executable_shadow"
                         if activation_patch_executable_shadow is not None
@@ -2027,6 +2102,9 @@ class _FrontierReplayControllerClient:
                     else None,
                     "production_apply_allowed": False,
                     "reason": (
+                        "activation patch production shadow replay remains non-applying evidence"
+                        if activation_patch_production_shadow is not None
+                        else
                         "activation patch production candidate remains blocked until policy review opens production apply"
                         if activation_patch_production_candidate is not None
                         else
@@ -2061,7 +2139,27 @@ class _FrontierReplayControllerClient:
                     "runtime_support_status",
                     activation_patch_runtime_support.get("status"),
                 ) if isinstance(activation_patch_runtime_support, Mapping) else None
-                if activation_patch_production_candidate is not None:
+                if activation_patch_production_shadow is not None:
+                    shadow_dossier = activation_patch_production_shadow.get("production_shadow_dossier")
+                    if isinstance(shadow_dossier, Mapping):
+                        meta["activation_patch_production_shadow_dossier"] = dict(shadow_dossier)
+                    meta["activation_patch_production_shadow_replay_passed"] = bool(
+                        activation_patch_production_shadow.get("shadow_replay_passed", False)
+                    )
+                    meta["production_denial_reasons_after_shadow"] = list(
+                        activation_patch_production_shadow.get("production_denial_reasons_after_shadow", ())
+                    ) if isinstance(
+                        activation_patch_production_shadow.get("production_denial_reasons_after_shadow"),
+                        SequenceABC,
+                    ) and not isinstance(
+                        activation_patch_production_shadow.get("production_denial_reasons_after_shadow"),
+                        (str, bytes, bytearray),
+                    ) else []
+                    meta["hypothesis"] = "activation_patch_production_shadow_replay_reviewed"
+                    meta["micro_rationale"] = "production shadow replay updated denial axes; production apply remains closed"
+                    meta["blocked_by"] = "activation_patch_production_shadow_policy_closed"
+                    meta["controller_memory"]["blocked_by"] = "activation_patch_production_shadow_policy_closed"
+                elif activation_patch_production_candidate is not None:
                     meta["activation_patch_production_apply_candidate"] = dict(activation_patch_production_candidate)
                     meta["activation_patch_promotion_gate_passed"] = bool(
                         activation_patch_promotion_gate.get("gate_passed", False)

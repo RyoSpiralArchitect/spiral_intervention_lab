@@ -88,6 +88,7 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "request_activation_patch_candidate_review",
     "request_activation_patch_runtime_support_probe",
     "request_activation_patch_promotion_gate_review",
+    "request_activation_patch_production_shadow_replay",
     "stop",
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
@@ -101,6 +102,7 @@ _CONTROLLER_DIAGNOSTIC_NAMES = {
     "activation_patch_candidate_review",
     "activation_patch_runtime_support_probe",
     "activation_patch_promotion_gate_review",
+    "activation_patch_production_shadow_replay",
 }
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
@@ -334,6 +336,8 @@ def _normalize_controller_diagnostic_name(value: Any) -> str | None:
         return "activation_patch_runtime_support_probe"
     if text == "request_activation_patch_promotion_gate_review":
         return "activation_patch_promotion_gate_review"
+    if text == "request_activation_patch_production_shadow_replay":
+        return "activation_patch_production_shadow_replay"
     if text in _CONTROLLER_DIAGNOSTIC_NAMES:
         return text
     return None
@@ -7830,6 +7834,18 @@ class HookedTransformerWorkerRuntime:
             "collapse_sharpener",
             "harmful",
         }
+        effect_thresholds = {
+            "target_mass_delta_min": 0.0001,
+            "self_delta_min": 0.02,
+            "focus_rank_delta_min": 5.0,
+            "target_top20_hit_delta_min": 1.0,
+        }
+        effect_size_certified = bool(
+            target_mass_delta >= effect_thresholds["target_mass_delta_min"]
+            or target_top20_delta >= effect_thresholds["target_top20_hit_delta_min"]
+            or self_delta >= effect_thresholds["self_delta_min"]
+            or focus_rank_delta >= effect_thresholds["focus_rank_delta_min"]
+        )
         gate_checks.update(
             {
                 "owned_self_actuator": actuator_class == "self_actuator",
@@ -7872,6 +7888,107 @@ class HookedTransformerWorkerRuntime:
                         "policy_owner": "controller",
                     }
                 )
+        live_ownership_diagnostic_supported = bool(
+            gate_checks.get("owned_self_actuator", False)
+            and gate_checks.get("actual_delta_target_lift", False)
+            and gate_checks.get("alignment_non_negative", False)
+        )
+        rollback_shadow_contract_present = bool(
+            isinstance(executable_shadow, Mapping)
+            and executable_shadow.get("ttl_steps") is not None
+            and executable_shadow.get("norm_clip") is not None
+            and executable_shadow.get("patch_mode") not in (None, "")
+        )
+        production_denial_axes = {
+            "ownership_not_live_certified": {
+                "active": True,
+                "status": (
+                    "diagnostic_owned_lift_seen_but_live_shadow_missing"
+                    if live_ownership_diagnostic_supported
+                    else "diagnostic_ownership_not_established"
+                ),
+                "diagnostic_supported": bool(live_ownership_diagnostic_supported),
+                "evidence": {
+                    "actuator_class": actuator_class or None,
+                    "actual_delta_class": actual_delta_class or None,
+                    "self_delta": round(float(self_delta), 6),
+                    "alignment_margin": round(float(alignment_margin), 6),
+                },
+                "next_evidence_needed": "production_shadow_live_ownership_replay",
+            },
+            "safety_not_certified": {
+                "active": True,
+                "status": (
+                    "diagnostic_no_collapse_veto_but_live_safety_shadow_missing"
+                    if no_collapse_veto
+                    else "collapse_or_harm_veto_seen"
+                ),
+                "diagnostic_supported": bool(no_collapse_veto),
+                "evidence": {
+                    "actuator_class": actuator_class or None,
+                    "actual_delta_class": actual_delta_class or None,
+                    "no_collapse_or_harm_veto": bool(no_collapse_veto),
+                },
+                "next_evidence_needed": "production_shadow_safety_replay",
+            },
+            "context_equivalence_missing": {
+                "active": True,
+                "status": "diagnostic_context_not_proven_equivalent_to_live_apply_packet",
+                "diagnostic_supported": False,
+                "evidence": {
+                    "runtime_support_status": runtime_probe.get("runtime_support_status"),
+                    "execution_mode": runtime_probe.get("execution_mode"),
+                },
+                "next_evidence_needed": "production_packet_context_equivalence_check",
+            },
+            "rollback_contract_missing": {
+                "active": True,
+                "status": (
+                    "shadow_ttl_norm_present_but_production_guardrail_contract_unvalidated"
+                    if rollback_shadow_contract_present
+                    else "ttl_norm_or_patch_contract_missing"
+                ),
+                "diagnostic_supported": bool(rollback_shadow_contract_present),
+                "evidence": {
+                    "ttl_steps": executable_shadow.get("ttl_steps") if isinstance(executable_shadow, Mapping) else None,
+                    "norm_clip": executable_shadow.get("norm_clip") if isinstance(executable_shadow, Mapping) else None,
+                    "patch_mode": executable_shadow.get("patch_mode") if isinstance(executable_shadow, Mapping) else None,
+                },
+                "next_evidence_needed": "production_rollback_guardrail_contract",
+            },
+            "effect_size_too_small": {
+                "active": not bool(effect_size_certified),
+                "status": "effect_size_threshold_satisfied" if effect_size_certified else "effect_size_below_threshold",
+                "diagnostic_supported": bool(effect_size_certified),
+                "thresholds": effect_thresholds,
+                "evidence": {
+                    "target_mass_delta": round(float(target_mass_delta), 6),
+                    "target_top20_hit_delta": round(float(target_top20_delta), 6),
+                    "focus_rank_delta": round(float(focus_rank_delta), 6),
+                    "self_delta": round(float(self_delta), 6),
+                },
+                "next_evidence_needed": None
+                if effect_size_certified
+                else "larger_readout_effect_without_safety_regression",
+            },
+        }
+        production_denial_reasons = [
+            axis for axis, payload in production_denial_axes.items() if bool(payload.get("active", False))
+        ]
+        production_denial_dossier = {
+            "kind": "activation_patch_production_denial_dossier",
+            "policy_owner": "controller",
+            "candidate_ready_for_policy_review": bool(production_apply_candidate is not None),
+            "production_apply_allowed": False,
+            "production_operator_certified": False,
+            "gate_passed": bool(gate_passed),
+            "active_reasons": list(production_denial_reasons),
+            "axes": production_denial_axes,
+            "reason_text": (
+                "diagnostic support exists, but production apply remains closed by "
+                + ", ".join(production_denial_reasons[:5])
+            ),
+        }
         return {
             "kind": "activation_patch_promotion_gate_review",
             "status": "candidate_ready_for_policy_review" if gate_passed else "blocked",
@@ -7883,6 +8000,8 @@ class HookedTransformerWorkerRuntime:
             "runtime_supported_shadow_candidate": bool(runtime_probe.get("runtime_supported_shadow_candidate", False)),
             "certified_runtime_operator": certified_runtime_operator,
             "production_apply_candidate": production_apply_candidate,
+            "production_denial_dossier": production_denial_dossier,
+            "production_denial_reasons": production_denial_reasons,
             "counterfactual_delta": counterfactual_delta,
             "production_apply_allowed": False,
             "certified_for_apply": False,
@@ -7891,6 +8010,247 @@ class HookedTransformerWorkerRuntime:
                 "activation patch is a production apply candidate, but policy review and production apply permission remain closed"
                 if gate_passed
                 else "activation patch promotion gate blocked: " + ",".join(missing_checks[:4])
+            ),
+        }
+
+    def _activation_patch_production_shadow_replay(
+        self,
+        bundle_status: Mapping[str, Any],
+        *,
+        request: Mapping[str, Any],
+        packet_context: Mapping[str, Any],
+        promotion_gate_review: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        promotion = (
+            dict(promotion_gate_review)
+            if isinstance(promotion_gate_review, Mapping)
+            else self._activation_patch_promotion_gate_review(bundle_status)
+        )
+        if not isinstance(promotion, Mapping):
+            return None
+        candidate = promotion.get("production_apply_candidate")
+        dossier = promotion.get("production_denial_dossier")
+        if not isinstance(candidate, Mapping) or not isinstance(dossier, Mapping):
+            return {
+                "kind": "activation_patch_production_shadow_replay",
+                "status": "blocked",
+                "shadow_replay_passed": False,
+                "blocked_reason": "production_candidate_or_denial_dossier_missing",
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+                "production_operator_certified": False,
+                "next_evidence_needed": "activation_patch_promotion_gate_review",
+                "why_not_apply": "production shadow replay requires a promotion-gate candidate and denial dossier",
+            }
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return default
+
+        def _axis_payload(axis: str) -> dict[str, Any]:
+            axes = dossier.get("axes")
+            if isinstance(axes, Mapping) and isinstance(axes.get(axis), Mapping):
+                return dict(axes[axis])
+            return {}
+
+        objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+        actuator_key = str(request.get("step_actuator_bundle_key") or objective_key)
+        candidate_objective = str(candidate.get("objective_bundle_key") or "")
+        candidate_actuator = str(candidate.get("actuator_bundle_key") or candidate_objective)
+        packet_strategy_hints = (
+            packet_context.get("strategy_hints")
+            if isinstance(packet_context.get("strategy_hints"), Mapping)
+            else {}
+        )
+        packet_frontier_key = str(
+            packet_strategy_hints.get("diagnostic_frontier_bundle_key")
+            or packet_strategy_hints.get("gate_report_frontier_bundle_key")
+            or packet_strategy_hints.get("selected_bundle_key")
+            or ""
+        )
+        telemetry = packet_context.get("telemetry") if isinstance(packet_context.get("telemetry"), Mapping) else {}
+        counterfactual_delta = (
+            dict(promotion.get("counterfactual_delta", {}))
+            if isinstance(promotion.get("counterfactual_delta"), Mapping)
+            else {}
+        )
+        gate_checks = dict(promotion.get("gate_checks", {})) if isinstance(promotion.get("gate_checks"), Mapping) else {}
+        target_mass_delta = _as_float(counterfactual_delta.get("target_mass_delta"), 0.0)
+        target_top20_delta = _as_float(counterfactual_delta.get("target_top20_hit_delta"), 0.0)
+        focus_rank_delta = _as_float(counterfactual_delta.get("focus_rank_delta"), 0.0)
+        self_delta = _as_float(counterfactual_delta.get("self_delta"), 0.0)
+        alignment_margin = _as_float(counterfactual_delta.get("alignment_margin"), 0.0)
+        active_reasons_before = (
+            list(dossier.get("active_reasons", ()))
+            if isinstance(dossier.get("active_reasons"), SequenceABC)
+            and not isinstance(dossier.get("active_reasons"), (str, bytes, bytearray))
+            else []
+        )
+        context_equivalence_certified = bool(
+            candidate_objective
+            and candidate_objective == objective_key
+            and candidate_actuator == actuator_key
+            and (not packet_frontier_key or packet_frontier_key == objective_key)
+            and packet_context
+        )
+        ownership_shadow_certified = bool(
+            gate_checks.get("owned_self_actuator", False)
+            and gate_checks.get("actual_delta_target_lift", False)
+            and gate_checks.get("alignment_non_negative", False)
+            and self_delta > 0.0
+        )
+        safety_shadow_certified = bool(
+            gate_checks.get("no_collapse_or_harm_veto", False)
+            and candidate.get("actuator_class") not in {"collapse_sharpener", "harmful"}
+            and candidate.get("actual_delta_class") not in {"collapse_sharpener", "harmful"}
+        )
+        rollback_contract_certified = bool(
+            candidate.get("ttl_steps") is not None
+            and candidate.get("norm_clip") is not None
+            and candidate.get("patch_mode") not in (None, "")
+            and candidate.get("compile_state") == "production_apply_candidate"
+        )
+        effect_axis = _axis_payload("effect_size_too_small")
+        effect_size_certified = bool(effect_axis.get("diagnostic_supported", False)) or bool(
+            target_mass_delta > 0.0
+            or target_top20_delta > 0.0
+            or focus_rank_delta > 0.0
+            or self_delta > 0.0
+        )
+        post_axes = {
+            "ownership_not_live_certified": {
+                **_axis_payload("ownership_not_live_certified"),
+                "active": not ownership_shadow_certified,
+                "status": "production_shadow_ownership_certified"
+                if ownership_shadow_certified
+                else "production_shadow_ownership_failed",
+                "shadow_supported": bool(ownership_shadow_certified),
+                "evidence": {
+                    "self_delta": round(float(self_delta), 6),
+                    "alignment_margin": round(float(alignment_margin), 6),
+                    "candidate_objective_bundle_key": candidate_objective or None,
+                    "candidate_actuator_bundle_key": candidate_actuator or None,
+                },
+                "next_evidence_needed": None
+                if ownership_shadow_certified
+                else "stronger_live_ownership_shadow_replay",
+            },
+            "safety_not_certified": {
+                **_axis_payload("safety_not_certified"),
+                "active": not safety_shadow_certified,
+                "status": "production_shadow_safety_certified"
+                if safety_shadow_certified
+                else "production_shadow_safety_failed",
+                "shadow_supported": bool(safety_shadow_certified),
+                "evidence": {
+                    "actuator_class": candidate.get("actuator_class"),
+                    "actual_delta_class": candidate.get("actual_delta_class"),
+                    "no_collapse_or_harm_veto": bool(gate_checks.get("no_collapse_or_harm_veto", False)),
+                },
+                "next_evidence_needed": None if safety_shadow_certified else "safer_shadow_candidate_or_veto",
+            },
+            "context_equivalence_missing": {
+                **_axis_payload("context_equivalence_missing"),
+                "active": not context_equivalence_certified,
+                "status": "production_shadow_context_equivalent"
+                if context_equivalence_certified
+                else "production_shadow_context_mismatch",
+                "shadow_supported": bool(context_equivalence_certified),
+                "evidence": {
+                    "request_objective_bundle_key": objective_key or None,
+                    "request_step_actuator_bundle_key": actuator_key or None,
+                    "candidate_objective_bundle_key": candidate_objective or None,
+                    "candidate_actuator_bundle_key": candidate_actuator or None,
+                    "packet_frontier_bundle_key": packet_frontier_key or None,
+                    "recorded_step": telemetry.get("step"),
+                },
+                "next_evidence_needed": None
+                if context_equivalence_certified
+                else "same_packet_candidate_context_replay",
+            },
+            "rollback_contract_missing": {
+                **_axis_payload("rollback_contract_missing"),
+                "active": not rollback_contract_certified,
+                "status": "production_shadow_rollback_contract_certified"
+                if rollback_contract_certified
+                else "production_shadow_rollback_contract_missing",
+                "shadow_supported": bool(rollback_contract_certified),
+                "evidence": {
+                    "ttl_steps": candidate.get("ttl_steps"),
+                    "norm_clip": candidate.get("norm_clip"),
+                    "patch_mode": candidate.get("patch_mode"),
+                    "compile_state": candidate.get("compile_state"),
+                },
+                "next_evidence_needed": None
+                if rollback_contract_certified
+                else "production_rollback_guardrail_contract",
+            },
+            "effect_size_too_small": {
+                **effect_axis,
+                "active": not effect_size_certified,
+                "status": "production_shadow_effect_size_certified"
+                if effect_size_certified
+                else "production_shadow_effect_size_too_small",
+                "shadow_supported": bool(effect_size_certified),
+                "evidence": {
+                    "target_mass_delta": round(float(target_mass_delta), 6),
+                    "target_top20_hit_delta": round(float(target_top20_delta), 6),
+                    "focus_rank_delta": round(float(focus_rank_delta), 6),
+                    "self_delta": round(float(self_delta), 6),
+                },
+                "next_evidence_needed": None
+                if effect_size_certified
+                else "larger_readout_effect_without_safety_regression",
+            },
+        }
+        active_reasons_after = [
+            axis for axis, payload in post_axes.items() if bool(payload.get("active", False))
+        ]
+        shadow_replay_passed = not active_reasons_after
+        shadow_dossier = {
+            "kind": "activation_patch_production_shadow_dossier",
+            "policy_owner": "controller",
+            "shadow_replay_scope": "current_controller_packet",
+            "shadow_replay_passed": bool(shadow_replay_passed),
+            "candidate_ready_for_policy_review": True,
+            "production_apply_allowed": False,
+            "production_operator_certified": False,
+            "active_reasons_before_shadow": list(active_reasons_before),
+            "active_reasons_after_shadow": list(active_reasons_after),
+            "axes": post_axes,
+            "reason_text": (
+                "production shadow replay cleared denial axes; production policy remains closed"
+                if shadow_replay_passed
+                else "production shadow replay still blocked by " + ", ".join(active_reasons_after[:5])
+            ),
+        }
+        return {
+            "kind": "activation_patch_production_shadow_replay",
+            "status": "shadow_passed" if shadow_replay_passed else "blocked",
+            "shadow_replay_passed": bool(shadow_replay_passed),
+            "source_promotion_gate_passed": bool(promotion.get("gate_passed", False)),
+            "production_candidate": dict(candidate),
+            "production_shadow_dossier": shadow_dossier,
+            "production_denial_reasons_before_shadow": list(active_reasons_before),
+            "production_denial_reasons_after_shadow": list(active_reasons_after),
+            "context_equivalence_certified": bool(context_equivalence_certified),
+            "ownership_shadow_certified": bool(ownership_shadow_certified),
+            "safety_shadow_certified": bool(safety_shadow_certified),
+            "rollback_contract_certified": bool(rollback_contract_certified),
+            "effect_size_certified": bool(effect_size_certified),
+            "counterfactual_delta": counterfactual_delta,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "production_operator_certified": False,
+            "next_evidence_needed": "production_policy_review"
+            if shadow_replay_passed
+            else "production_shadow_replay_followup",
+            "why_not_apply": (
+                "production shadow replay passed, but production apply permission remains closed"
+                if shadow_replay_passed
+                else "production shadow replay blocked: " + ",".join(active_reasons_after[:4])
             ),
         }
 
@@ -7961,6 +8321,9 @@ class HookedTransformerWorkerRuntime:
             "activation_patch_promotion_gate_review": {
                 "activation_patch_certification",
             },
+            "activation_patch_production_shadow_replay": {
+                "activation_patch_certification",
+            },
         }
         evidence_kinds = evidence_kinds_by_request.get(diagnostic_name)
         matching_rows = [
@@ -7986,6 +8349,7 @@ class HookedTransformerWorkerRuntime:
             "activation_patch_candidate_review",
             "activation_patch_runtime_support_probe",
             "activation_patch_promotion_gate_review",
+            "activation_patch_production_shadow_replay",
         }:
             # Surface the highest-value operator evidence first.  In particular,
             # attention-guided certification answers "did the carrier convert
@@ -8063,7 +8427,20 @@ class HookedTransformerWorkerRuntime:
         )
         activation_patch_promotion_gate_review = (
             self._activation_patch_promotion_gate_review(bundle_status)
-            if diagnostic_name == "activation_patch_promotion_gate_review"
+            if diagnostic_name in {
+                "activation_patch_promotion_gate_review",
+                "activation_patch_production_shadow_replay",
+            }
+            else None
+        )
+        activation_patch_production_shadow_replay = (
+            self._activation_patch_production_shadow_replay(
+                bundle_status,
+                request=request,
+                packet_context=packet_context,
+                promotion_gate_review=activation_patch_promotion_gate_review,
+            )
+            if diagnostic_name == "activation_patch_production_shadow_replay"
             else None
         )
         activation_patch_review_next_evidence = None
@@ -8083,6 +8460,11 @@ class HookedTransformerWorkerRuntime:
             if isinstance(activation_patch_promotion_gate_review, Mapping)
             else None
         )
+        activation_patch_production_shadow_next_evidence = (
+            activation_patch_production_shadow_replay.get("next_evidence_needed")
+            if isinstance(activation_patch_production_shadow_replay, Mapping)
+            else None
+        )
         activation_patch_policy_candidate_ready = bool(
             isinstance(activation_patch_promotion_gate_review, Mapping)
             and isinstance(activation_patch_promotion_gate_review.get("production_apply_candidate"), Mapping)
@@ -8095,11 +8477,16 @@ class HookedTransformerWorkerRuntime:
             isinstance(activation_patch_promotion_gate_review, Mapping)
             and activation_patch_promotion_gate_review.get("gate_passed")
         )
+        activation_patch_production_shadow_supported = bool(
+            isinstance(activation_patch_production_shadow_replay, Mapping)
+            and activation_patch_production_shadow_replay.get("shadow_replay_passed")
+        )
         diagnostic_operator_supported = bool(
             bundle_status.get("diagnostic_operator_supported", False)
             or bundle_status.get("operator_certified", False)
             or activation_patch_runtime_shadow_supported
             or activation_patch_promotion_supported
+            or activation_patch_production_shadow_supported
         )
         policy_candidate_ready = bool(
             bundle_status.get("policy_candidate_ready", False)
@@ -8127,6 +8514,8 @@ class HookedTransformerWorkerRuntime:
                 if diagnostic_name == "activation_patch_runtime_support_probe"
                 else activation_patch_promotion_next_evidence
                 if diagnostic_name == "activation_patch_promotion_gate_review"
+                else activation_patch_production_shadow_next_evidence
+                if diagnostic_name == "activation_patch_production_shadow_replay"
                 else activation_patch_review_next_evidence
             )
             or request.get("next_evidence_needed")
@@ -8205,6 +8594,46 @@ class HookedTransformerWorkerRuntime:
                 and isinstance(activation_patch_promotion_gate_review.get("production_apply_candidate"), Mapping)
                 else None
             ),
+            "activation_patch_production_shadow_replay": activation_patch_production_shadow_replay,
+            "activation_patch_production_shadow_dossier": (
+                dict(activation_patch_production_shadow_replay["production_shadow_dossier"])
+                if isinstance(activation_patch_production_shadow_replay, Mapping)
+                and isinstance(activation_patch_production_shadow_replay.get("production_shadow_dossier"), Mapping)
+                else None
+            ),
+            "activation_patch_production_shadow_replay_passed": bool(
+                isinstance(activation_patch_production_shadow_replay, Mapping)
+                and activation_patch_production_shadow_replay.get("shadow_replay_passed")
+            ),
+            "production_denial_reasons_after_shadow": (
+                list(activation_patch_production_shadow_replay.get("production_denial_reasons_after_shadow", ()))
+                if isinstance(activation_patch_production_shadow_replay, Mapping)
+                and isinstance(
+                    activation_patch_production_shadow_replay.get("production_denial_reasons_after_shadow"),
+                    SequenceABC,
+                )
+                and not isinstance(
+                    activation_patch_production_shadow_replay.get("production_denial_reasons_after_shadow"),
+                    (str, bytes, bytearray),
+                )
+                else []
+            ),
+            "activation_patch_production_denial_dossier": (
+                dict(activation_patch_promotion_gate_review["production_denial_dossier"])
+                if isinstance(activation_patch_promotion_gate_review, Mapping)
+                and isinstance(activation_patch_promotion_gate_review.get("production_denial_dossier"), Mapping)
+                else None
+            ),
+            "production_denial_reasons": (
+                list(activation_patch_promotion_gate_review.get("production_denial_reasons", ()))
+                if isinstance(activation_patch_promotion_gate_review, Mapping)
+                and isinstance(activation_patch_promotion_gate_review.get("production_denial_reasons"), SequenceABC)
+                and not isinstance(
+                    activation_patch_promotion_gate_review.get("production_denial_reasons"),
+                    (str, bytes, bytearray),
+                )
+                else []
+            ),
             "attention_guided_operator_checked": attention_guided_checked,
             "attention_guided_operator_status": bundle_status.get("attention_guided_operator_status"),
             "attention_guided_operator_blocked_count": int(
@@ -8262,6 +8691,20 @@ class HookedTransformerWorkerRuntime:
                 "activation_patch_promotion_gate_passed": bool(
                     isinstance(activation_patch_promotion_gate_review, Mapping)
                     and activation_patch_promotion_gate_review.get("gate_passed")
+                ),
+                "activation_patch_production_shadow_replay_passed": bool(
+                    isinstance(activation_patch_production_shadow_replay, Mapping)
+                    and activation_patch_production_shadow_replay.get("shadow_replay_passed")
+                ),
+                "production_denial_reasons": (
+                    list(activation_patch_promotion_gate_review.get("production_denial_reasons", ()))
+                    if isinstance(activation_patch_promotion_gate_review, Mapping)
+                    and isinstance(activation_patch_promotion_gate_review.get("production_denial_reasons"), SequenceABC)
+                    and not isinstance(
+                        activation_patch_promotion_gate_review.get("production_denial_reasons"),
+                        (str, bytes, bytearray),
+                    )
+                    else []
                 ),
                 "diagnostic_operator_supported": diagnostic_operator_supported,
                 "policy_candidate_ready": policy_candidate_ready,
@@ -8345,6 +8788,10 @@ class HookedTransformerWorkerRuntime:
             result["production_apply_allowed"] = False
         elif diagnostic_name == "activation_patch_promotion_gate_review":
             result["diagnostic_role"] = "activation_patch_promotion_gate_review"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+        elif diagnostic_name == "activation_patch_production_shadow_replay":
+            result["diagnostic_role"] = "activation_patch_production_shadow_replay"
             result["certified_for_apply"] = False
             result["production_apply_allowed"] = False
         elif diagnostic_name in {"attention_head_ablation_on_frontier", "attention_readout_carrier_probe"}:
