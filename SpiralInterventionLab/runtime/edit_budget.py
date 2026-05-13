@@ -6,6 +6,7 @@ import torch
 
 MAIN_EDIT_BUDGET_POOL = "main"
 LOOP_RESCUE_EDIT_BUDGET_POOL = "loop_rescue"
+PRODUCTION_TRIAL_EDIT_BUDGET_POOL = "production_trial"
 
 
 OP_COST_FACTORS: dict[str, float] = {
@@ -123,7 +124,15 @@ def classify_edit_budget_pool(
     surface: Any | None = None,
     command_meta: Mapping[str, Any] | None = None,
 ) -> str:
-    del command_meta
+    edit_meta = _as_mapping(_field(edit, "meta")) or {}
+    apply_kind = str(
+        edit_meta.get("apply_kind")
+        or (command_meta or {}).get("apply_kind")
+        or ""
+    ).strip().lower()
+    if apply_kind == "production_trial":
+        return PRODUCTION_TRIAL_EDIT_BUDGET_POOL
+
     if not _packet_is_looping(packet):
         return MAIN_EDIT_BUDGET_POOL
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 from .compiler import StepContext, compile_command
-from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
+from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL, PRODUCTION_TRIAL_EDIT_BUDGET_POOL
 from .policy import budget_violation_reason, command_budget_usage
 
 
@@ -233,9 +233,13 @@ def _guarded_noop_command(
         "edits": [],
         "rollback_ids": [],
     }
-    meta = _command_meta(command) or {}
+    meta = dict(_command_meta(command) or {})
     controller_memory = meta.get("controller_memory")
     normalized_memory = dict(controller_memory) if isinstance(controller_memory, Mapping) else {}
+    blocked_apply_kind = meta.pop("apply_kind", None)
+    if blocked_apply_kind not in (None, ""):
+        meta.setdefault("blocked_apply_kind", blocked_apply_kind)
+        normalized_memory.setdefault("blocked_apply_kind", blocked_apply_kind)
     if noop_reason is not None:
         meta.setdefault("noop_reason", noop_reason)
         normalized_memory.setdefault("noop_reason", noop_reason)
@@ -292,6 +296,7 @@ def _guard_exhausted_apply_command(
         usage = {
             MAIN_EDIT_BUDGET_POOL: {"edit_count": 1.0},
             LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0},
+            PRODUCTION_TRIAL_EDIT_BUDGET_POOL: {"edit_count": 0.0},
         }
     loop_rescue_edits_left_this_run = budget.get("loop_rescue_edits_left_this_run")
     try:
@@ -302,6 +307,17 @@ def _guard_exhausted_apply_command(
         int(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) == 0
         and int(usage.get(LOOP_RESCUE_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) > 0
         and loop_rescue_edits_left_this_run > 0
+    ):
+        return command, None
+    production_trial_edits_left_this_run = budget.get("production_trial_edits_left_this_run")
+    try:
+        production_trial_edits_left_this_run = int(production_trial_edits_left_this_run)
+    except Exception:
+        production_trial_edits_left_this_run = 0
+    if (
+        int(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) == 0
+        and int(usage.get(PRODUCTION_TRIAL_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) > 0
+        and production_trial_edits_left_this_run > 0
     ):
         return command, None
     guarded_command = _guarded_noop_command(
@@ -353,6 +369,9 @@ def _guard_budget_violating_apply_command(
         "requested_main_alpha": float(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0),
         "requested_loop_rescue_alpha": float(
             usage.get(LOOP_RESCUE_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0
+        ),
+        "requested_production_trial_alpha": float(
+            usage.get(PRODUCTION_TRIAL_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0
         ),
     }
 
@@ -453,6 +472,7 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
         "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
         "request_activation_patch_promotion_gate_review": "activation_patch_promotion_gate_review",
         "request_activation_patch_production_shadow_replay": "activation_patch_production_shadow_replay",
+        "request_activation_patch_production_trial_gate_review": "activation_patch_production_trial_gate_review",
     }.get(text)
 
 
@@ -514,10 +534,16 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
 
 
 def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
+    candidate = request.get("activation_patch_shadow_actuator") or request.get("alternate_trial_candidate")
+    candidate_recipe_id = (
+        candidate.get("operator_recipe_id")
+        if isinstance(candidate, Mapping)
+        else request.get("operator_recipe_id")
+    )
     return "|".join(
         str(request.get(key, "") or "")
         for key in ("diagnostic", "bundle_key", "objective_bundle_key")
-    )
+    ) + "|" + str(candidate_recipe_id or "")
 
 
 def _diagnostic_requests_next_evidence(requests: Sequence[Mapping[str, Any]]) -> str | None:
@@ -889,6 +915,48 @@ def _diagnostic_evidence_context(strategy_hints: Mapping[str, Any]) -> dict[str,
     }
 
 
+def _production_trial_evidence_context(packet: Mapping[str, Any], meta: Mapping[str, Any]) -> dict[str, Any]:
+    summary = packet.get("recent_effect_summary")
+    if not isinstance(summary, Mapping):
+        summary = {}
+    raw_ledger = summary.get("production_trial_outcome_ledger")
+    ledger = [
+        dict(item)
+        for item in raw_ledger[-8:]
+        if isinstance(item, Mapping)
+    ] if isinstance(raw_ledger, Sequence) and not isinstance(raw_ledger, (str, bytes, bytearray)) else []
+    raw_counts = summary.get("production_trial_outcome_counts")
+    counts: dict[str, int] = {}
+    if isinstance(raw_counts, Mapping):
+        for key, value in raw_counts.items():
+            try:
+                counts[str(key)] = int(value)
+            except Exception:
+                continue
+    return {
+        "production_trial_outcome_counts": counts,
+        "production_trial_outcome_ledger": ledger,
+        "recent_production_trial_veto_surface_family_keys": list(
+            summary.get("recent_production_trial_veto_surface_family_keys", ())
+        )
+        if isinstance(summary.get("recent_production_trial_veto_surface_family_keys"), Sequence)
+        and not isinstance(summary.get("recent_production_trial_veto_surface_family_keys"), (str, bytes, bytearray))
+        else [],
+        "recent_production_trial_veto_operator_recipe_ids": list(
+            summary.get("recent_production_trial_veto_operator_recipe_ids", ())
+        )
+        if isinstance(summary.get("recent_production_trial_veto_operator_recipe_ids"), Sequence)
+        and not isinstance(summary.get("recent_production_trial_veto_operator_recipe_ids"), (str, bytes, bytearray))
+        else [],
+        "controller_production_trial_outcome": dict(meta["production_trial_outcome"])
+        if isinstance(meta.get("production_trial_outcome"), Mapping)
+        else None,
+        "controller_production_trial_followup": dict(meta["production_trial_followup"])
+        if isinstance(meta.get("production_trial_followup"), Mapping)
+        else None,
+    }
+
+
 def _visible_no_safe_actuator_guidance(
     *,
     strategy_hints: Mapping[str, Any],
@@ -986,6 +1054,8 @@ def _visible_no_safe_actuator_guidance(
             "request_activation_patch_candidate_review",
             "request_activation_patch_runtime_support_probe",
             "request_activation_patch_promotion_gate_review",
+            "request_activation_patch_production_shadow_replay",
+            "request_activation_patch_production_trial_gate_review",
             "noop_until_certified",
         ],
     }
@@ -1032,13 +1102,16 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         controller_step_actuator_bundle_key = str(controller_selected_bundle_key)
     controller_shadow_proposals = _normalized_shadow_proposals(meta)
     controller_why_not_apply = _optional_meta_text(meta, "why_not_apply")
-    controller_apply_kind = _optional_meta_text(meta, "apply_kind")
+    raw_controller_apply_kind = _optional_meta_text(meta, "apply_kind")
+    controller_apply_kind = raw_controller_apply_kind if _command_decision(command) == "apply" else None
     production_apply_allowed = meta.get("production_apply_allowed")
     certified_for_apply = meta.get("certified_for_apply")
     operator_recipe_id = _optional_meta_text(meta, "operator_recipe_id")
     controller_selection_source = "controller_apply"
     if _command_decision(command) == "apply" and controller_apply_kind == "diagnostic_probe":
         controller_selection_source = "forced_diagnostic_apply"
+    elif _command_decision(command) == "apply" and controller_apply_kind == "production_trial":
+        controller_selection_source = "production_trial_apply"
     elif controller_selected_bundle_key is None:
         controller_selection_source = "controller_noop" if _command_decision(command) == "noop" else "controller_unresolved"
     elif controller_selected_bundle_key == helper_frontier_bundle_key:
@@ -1083,6 +1156,7 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         controller_shadow_proposals=controller_shadow_proposals,
     )
     diagnostic_context = _diagnostic_evidence_context(strategy_hints)
+    production_trial_context = _production_trial_evidence_context(packet, meta)
     if (
         controller_why_not_apply is None
         and no_safe_guidance
@@ -1171,6 +1245,7 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         "controller_rejected_signals": controller_rejected_signals,
         "controller_selection_source": controller_selection_source,
         **diagnostic_context,
+        **production_trial_context,
         **no_safe_guidance,
     }
 
@@ -1532,8 +1607,23 @@ def run_episode(
 
         worker_runtime.observe_recent_effects()
         _log_effect_trace(logger, step=step_count, worker_runtime=worker_runtime)
-        worker_runtime.tick_ttl()
-        worker_runtime.cleanup_expired()
+        production_trial_apply_executed = (
+            _command_decision(command) == "apply"
+            and _optional_meta_text(_command_meta(command) or {}, "apply_kind") == "production_trial"
+            and bool(compiled_edits)
+        )
+        if production_trial_apply_executed:
+            if logger is not None:
+                logger.log(
+                    {
+                        "event": "production_trial_ttl_deferred",
+                        "step": step_count,
+                        "reason": "trial edit must survive one generated token before ttl tick",
+                    }
+                )
+        else:
+            worker_runtime.tick_ttl()
+            worker_runtime.cleanup_expired()
         step_count += 1
 
     output = worker_runtime.final_text()

@@ -104,10 +104,49 @@ wired end to end:
 - `activation_patch_production_shadow_replay` can then emit an
   `activation_patch_production_shadow_dossier` for same-packet shadow checks;
   this may clear denial axes but still does not grant production apply
+- `activation_patch_production_trial_gate_review` can review a cleared shadow
+  dossier and emit a bounded `activation_patch_production_trial_dossier`; this
+  is trial-only evidence with `ttl_steps=1`, rollback/norm limits, and a separate
+  trial budget, not production apply permission
+- a controller may spend that contract as `apply_kind="production_trial"` once;
+  the trial edit survives one generated token, records a `controller_effect`,
+  and still keeps `production_apply_allowed=false`
+- bounded trial effects are summarized in `production_trial_outcome_ledger`;
+  harmful/regressing/collapse-sharpener outcomes veto the tested recipe family,
+  neutral outcomes request alternate/confirm evidence, and helpful outcomes
+  require confirmation replay before production policy review. Ledger rows also
+  carry `promotion_ladder_stage` for the next alternate-candidate pass
+- after a harmful/regressing production trial, the diagnostic-request replay can
+  now request `compare_extra_operator_diagnostics`, extract an alternate
+  activation-patch recipe that is not the failed `operator_recipe_id`, and pass
+  that alternate shadow through `activation_patch_candidate_review` and
+  `activation_patch_runtime_support_probe`
 - the frontier is still blocked by `dead_actuator / all_dead_actuator`
 
 So the current win is not task-score improvement yet. It is cleaner agency:
 the controller can ask for better evidence without gaining extra apply power.
+
+In local GPT-2 direct-scan replay, the current ladder reaches:
+
+```text
+activation_patch_candidate_review
+-> activation_patch_runtime_support_probe
+-> activation_patch_promotion_gate_review
+-> activation_patch_production_shadow_replay
+-> activation_patch_production_trial_gate_review
+-> compare_extra_operator_diagnostics
+-> activation_patch_candidate_review
+-> activation_patch_runtime_support_probe
+```
+
+The second candidate/replay pair is the important new step: it preserves the
+trial failure as a veto and carries a lower-alpha alternate recipe forward
+instead of quietly restarting the stale failed recipe.
+
+The next useful observation is whether that alternate recipe can complete the
+same ladder as the failed trial: promotion review, production shadow replay,
+trial gate review, and outcome comparison. If it cannot, the failure should stay
+recipe-local rather than becoming a broad family ban.
 
 For local larger-worker checks, provide the local Hugging Face export on the CLI
 with `worker_model_path` / `--worker-model-path`. Keep clone-specific model
@@ -134,6 +173,12 @@ The next phase keeps the control contract stable while improving the evidence:
 - keep operator certification under controller ownership
 - freeze selector/gate behavior unless a log contract is broken
 - search for a `budget` self-actuator recipe
+- use failed production trials as recipe-specific vetoes and alternate-candidate
+  search triggers
+- carry alternate activation-patch candidates through candidate review and
+  runtime support before considering any further trial
+- compare lower-alpha alternates against the failed trial outcome before
+  treating diagnostic support as policy readiness
 - continue ownership-first recipe sweeps
 - promote bridge plans only once a safe bridge actuator is certified
 - expand SAE-style analysis only as a feature emitter, not as a second policy owner

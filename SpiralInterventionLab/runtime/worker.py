@@ -12,7 +12,7 @@ import torch
 from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
-from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL
+from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL, PRODUCTION_TRIAL_EDIT_BUDGET_POOL
 from .effects import build_edit_effect, summarize_effects
 from .policy import GlobalBudget, HarnessPolicy
 from .schema import SurfaceInfo
@@ -89,6 +89,7 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "request_activation_patch_runtime_support_probe",
     "request_activation_patch_promotion_gate_review",
     "request_activation_patch_production_shadow_replay",
+    "request_activation_patch_production_trial_gate_review",
     "stop",
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
@@ -103,6 +104,7 @@ _CONTROLLER_DIAGNOSTIC_NAMES = {
     "activation_patch_runtime_support_probe",
     "activation_patch_promotion_gate_review",
     "activation_patch_production_shadow_replay",
+    "activation_patch_production_trial_gate_review",
 }
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
@@ -338,6 +340,8 @@ def _normalize_controller_diagnostic_name(value: Any) -> str | None:
         return "activation_patch_promotion_gate_review"
     if text == "request_activation_patch_production_shadow_replay":
         return "activation_patch_production_shadow_replay"
+    if text == "request_activation_patch_production_trial_gate_review":
+        return "activation_patch_production_trial_gate_review"
     if text in _CONTROLLER_DIAGNOSTIC_NAMES:
         return text
     return None
@@ -367,10 +371,15 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
         ("step_actuator_bundle_key", 160),
         ("next_evidence_needed", 96),
         ("focus_term", 80),
+        ("operator_recipe_id", 160),
     ):
         text = _clean_controller_memory_text(value.get(key), limit=limit)
         if text is not None:
             normalized[key] = text
+    for key in ("activation_patch_shadow_actuator", "alternate_trial_candidate", "production_trial_outcome"):
+        item = value.get(key)
+        if isinstance(item, Mapping):
+            normalized[key] = dict(item)
     return normalized
 
 
@@ -425,6 +434,9 @@ class HookedTransformerWorkerRuntime:
         max_loop_rescue_edits_per_run: int = 0,
         max_loop_rescue_alpha: float = 0.0,
         max_loop_rescue_edit_cost: float | None = None,
+        max_production_trial_edits_per_run: int = 1,
+        max_production_trial_alpha: float = 0.15,
+        max_production_trial_edit_cost: float | None = None,
         max_active_patch_slots: int = 1,
         generated_tail_chars: int = 80,
         recent_token_count: int = 6,
@@ -442,8 +454,8 @@ class HookedTransformerWorkerRuntime:
         observer_check_window: int = 4,
         max_tool_calls_per_run: int = 6,
         tool_result_window: int = 6,
-        max_diagnostic_calls_per_run: int = 6,
-        diagnostic_result_window: int = 6,
+        max_diagnostic_calls_per_run: int = 8,
+        diagnostic_result_window: int = 8,
         readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
         readout_analyzer_rerank_mode: str = "apply",
     ) -> None:
@@ -469,6 +481,13 @@ class HookedTransformerWorkerRuntime:
         self.max_loop_rescue_alpha = max(0.0, float(max_loop_rescue_alpha))
         self.max_loop_rescue_edit_cost = float(
             max_loop_rescue_edit_cost if max_loop_rescue_edit_cost is not None else self.max_loop_rescue_alpha
+        )
+        self.max_production_trial_edits_per_run = max(0, int(max_production_trial_edits_per_run))
+        self.max_production_trial_alpha = max(0.0, float(max_production_trial_alpha))
+        self.max_production_trial_edit_cost = float(
+            max_production_trial_edit_cost
+            if max_production_trial_edit_cost is not None
+            else self.max_production_trial_alpha
         )
         self.max_active_patch_slots = max_active_patch_slots
         self.generated_tail_chars = generated_tail_chars
@@ -541,6 +560,8 @@ class HookedTransformerWorkerRuntime:
         self._spent_budget_cost: dict[str, float] = {}
         self._spent_loop_rescue_alpha: dict[str, float] = {}
         self._spent_loop_rescue_cost: dict[str, float] = {}
+        self._spent_production_trial_alpha: dict[str, float] = {}
+        self._spent_production_trial_cost: dict[str, float] = {}
         self._last_packet: dict[str, Any] | None = None
         self._no_progress_steps = 0
         self._latest_readout_sidecar_capture: ReadoutSidecarCapture | None = None
@@ -1252,6 +1273,7 @@ class HookedTransformerWorkerRuntime:
                 objective_bundle_key=pending.get("objective_bundle_key"),
                 step_actuator_bundle_key=pending.get("step_actuator_bundle_key"),
                 apply_kind=pending.get("apply_kind"),
+                production_trial_allowed=pending.get("production_trial_allowed"),
                 production_apply_allowed=pending.get("production_apply_allowed"),
                 production_policy_would_apply=pending.get("production_policy_would_apply"),
                 certified_for_apply=pending.get("certified_for_apply"),
@@ -1275,6 +1297,9 @@ class HookedTransformerWorkerRuntime:
             if budget_pool == LOOP_RESCUE_EDIT_BUDGET_POOL:
                 self._spent_loop_rescue_alpha.setdefault(budget_key, float(active["alpha"]))
                 self._spent_loop_rescue_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
+            elif budget_pool == PRODUCTION_TRIAL_EDIT_BUDGET_POOL:
+                self._spent_production_trial_alpha.setdefault(budget_key, float(active["alpha"]))
+                self._spent_production_trial_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
             else:
                 self._spent_budget_alpha.setdefault(budget_key, float(active["alpha"]))
                 self._spent_budget_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
@@ -1296,6 +1321,7 @@ class HookedTransformerWorkerRuntime:
                     "objective_bundle_key": active.get("objective_bundle_key"),
                     "step_actuator_bundle_key": active.get("step_actuator_bundle_key"),
                     "apply_kind": active.get("apply_kind"),
+                    "production_trial_allowed": active.get("production_trial_allowed"),
                     "production_apply_allowed": active.get("production_apply_allowed"),
                     "production_policy_would_apply": active.get("production_policy_would_apply"),
                     "certified_for_apply": active.get("certified_for_apply"),
@@ -1388,6 +1414,8 @@ class HookedTransformerWorkerRuntime:
         self._spent_budget_cost = {}
         self._spent_loop_rescue_alpha = {}
         self._spent_loop_rescue_cost = {}
+        self._spent_production_trial_alpha = {}
+        self._spent_production_trial_cost = {}
         self._last_packet = None
         self._no_progress_steps = 0
         self._latest_readout_sidecar_capture = None
@@ -7605,6 +7633,7 @@ class HookedTransformerWorkerRuntime:
             "kind": "activation_patch_candidate_blueprint",
             "objective_bundle_key": shadow.get("objective_bundle_key"),
             "actuator_bundle_key": shadow.get("actuator_bundle_key"),
+            "objective_term": shadow.get("objective_term"),
             "recipe_name": shadow.get("recipe_name"),
             "operator_recipe_id": shadow.get("operator_recipe_id"),
             "site": shadow.get("activation_patch_site"),
@@ -7626,6 +7655,7 @@ class HookedTransformerWorkerRuntime:
                 "kind": "activation_patch_compile_preview",
                 "objective_bundle_key": shadow.get("objective_bundle_key"),
                 "actuator_bundle_key": shadow.get("actuator_bundle_key"),
+                "objective_term": shadow.get("objective_term"),
                 "recipe_name": shadow.get("recipe_name"),
                 "operator_recipe_id": shadow.get("operator_recipe_id"),
                 "site": shadow.get("activation_patch_site"),
@@ -7753,6 +7783,7 @@ class HookedTransformerWorkerRuntime:
             "diagnostic_only": True,
             "objective_bundle_key": preview.get("objective_bundle_key"),
             "actuator_bundle_key": preview.get("actuator_bundle_key"),
+            "objective_term": preview.get("objective_term"),
             "recipe_name": preview.get("recipe_name"),
             "operator_recipe_id": preview.get("operator_recipe_id"),
             "site": preview.get("site"),
@@ -8254,6 +8285,362 @@ class HookedTransformerWorkerRuntime:
             ),
         }
 
+    def _activation_patch_trial_edit_from_candidate(
+        self,
+        candidate: Mapping[str, Any],
+        *,
+        trial_contract: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        try:
+            layer = int(candidate.get("layer", 0) or 0)
+        except Exception:
+            return None
+        site = str(candidate.get("site", "resid_pre") or "resid_pre")
+        if site not in {"resid_pre", "resid_post", "mlp_out"}:
+            site = "resid_pre"
+        surface_id = None
+        selected_surface = None
+        fallback_surface = None
+        for surface in self.surface_catalog:
+            target = surface.target
+            if getattr(target, "kind", None) != "activation":
+                continue
+            if int(getattr(target, "layer", -1)) != layer:
+                continue
+            token = getattr(target, "token", None)
+            if token is None or str(getattr(token, "mode", "")) != "last":
+                continue
+            if fallback_surface is None:
+                fallback_surface = surface
+            if str(getattr(target, "site", "")) == site:
+                surface_id = str(surface.surface_id)
+                selected_surface = surface
+                break
+        if surface_id is None and fallback_surface is not None:
+            surface_id = str(fallback_surface.surface_id)
+            selected_surface = fallback_surface
+        if not surface_id:
+            return None
+
+        objective_term = str(candidate.get("objective_term") or "")
+        objective_bundle_key = str(candidate.get("objective_bundle_key") or "")
+        if not objective_term and objective_bundle_key:
+            parts = objective_bundle_key.split(":")
+            if len(parts) >= 2:
+                objective_term = parts[1]
+
+        span: dict[str, Any] | None = None
+        if objective_term:
+            spans = self._prompt_term_spans(objective_term, max_spans=4)
+            source_body_spans = [
+                item for item in spans if str(item.get("provenance_class", "")) == "source_body"
+            ]
+            if source_body_spans:
+                span = dict(source_body_spans[0])
+            elif spans:
+                span = dict(spans[0])
+        if span is None and objective_bundle_key:
+            parts = objective_bundle_key.split(":")
+            try:
+                start = int(parts[-2])
+                end = int(parts[-1])
+                if end > start:
+                    span = {
+                        "start": start,
+                        "end": end,
+                        "provenance_class": "source_body",
+                        "text": objective_term,
+                    }
+            except Exception:
+                span = None
+        if span is None:
+            return None
+        start = int(span.get("start", 0) or 0)
+        end = int(span.get("end", start + 1) or (start + 1))
+        if end <= start:
+            return None
+
+        try:
+            alpha = max(0.0, min(float(candidate.get("alpha", 0.0) or 0.0), float(trial_contract.get("max_alpha", 0.15))))
+        except Exception:
+            alpha = 0.0
+        if alpha <= 0.0:
+            return None
+        try:
+            norm_clip = max(1e-8, min(float(trial_contract.get("norm_clip", 1.0) or 1.0), 1.0))
+        except Exception:
+            norm_clip = 1.0
+        surface_caps = getattr(selected_surface, "caps", None)
+        norm_cap = getattr(surface_caps, "norm_clip", None)
+        if norm_cap is not None:
+            try:
+                norm_clip = min(norm_clip, float(norm_cap))
+            except Exception:
+                pass
+        alpha_cap = getattr(surface_caps, "max_alpha", None)
+        if alpha_cap is not None:
+            try:
+                alpha = min(alpha, float(alpha_cap))
+            except Exception:
+                pass
+        step_cap = getattr(surface_caps, "step_size", None)
+        try:
+            step_size = alpha if step_cap is None else min(alpha, float(step_cap))
+        except Exception:
+            step_size = alpha
+        if alpha <= 0.0 or step_size <= 0.0:
+            return None
+
+        edit_id = f"production_trial_{self._steps}_{surface_id}"
+        return {
+            "id": edit_id,
+            "target": {"surface_id": surface_id},
+            "source": {
+                "dtype": "vector",
+                "expr": {
+                    "fn": "clip_norm",
+                    "max_norm": norm_clip,
+                    "arg": {
+                        "fn": "normalize",
+                        "arg": {
+                            "ref": {
+                                "scope": "runtime",
+                                "worker": self.worker_id,
+                                "tensor": "hidden",
+                                "layer": layer,
+                                "token": {"mode": "span", "start": start, "end": end, "pool": "mean"},
+                            }
+                        },
+                    },
+                },
+            },
+            "op": {"kind": "resid_add", "alpha": alpha},
+            "budget": {
+                "ttl_steps": 1,
+                "norm_clip": norm_clip,
+                "step_size": step_size,
+                "revertible": True,
+            },
+            "meta": {
+                "apply_kind": "production_trial",
+                "production_trial_allowed": True,
+                "production_apply_allowed": False,
+                "production_policy_would_apply": False,
+                "certified_for_apply": False,
+                "hypothesis": "activation_patch_production_trial",
+                "expected_effect": "bounded_trial_target_lift_without_collapse",
+                "objective_bundle_key": objective_bundle_key or None,
+                "step_actuator_bundle_key": str(candidate.get("actuator_bundle_key") or objective_bundle_key or "") or None,
+                "bundle_key": objective_bundle_key or None,
+                "operator_recipe_id": candidate.get("operator_recipe_id"),
+                "surface_family_key": f"activation_patch_trial:{surface_id}",
+                "production_trial_contract": dict(trial_contract),
+            },
+        }
+
+    def _activation_patch_production_trial_gate_review(
+        self,
+        bundle_status: Mapping[str, Any],
+        *,
+        request: Mapping[str, Any],
+        packet_context: Mapping[str, Any],
+        production_shadow_replay: Mapping[str, Any] | None = None,
+        promotion_gate_review: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        shadow = (
+            dict(production_shadow_replay)
+            if isinstance(production_shadow_replay, Mapping)
+            else self._activation_patch_production_shadow_replay(
+                bundle_status,
+                request=request,
+                packet_context=packet_context,
+                promotion_gate_review=promotion_gate_review,
+            )
+        )
+        if not isinstance(shadow, Mapping):
+            return None
+        candidate = shadow.get("production_candidate")
+        shadow_dossier = shadow.get("production_shadow_dossier")
+        if not isinstance(candidate, Mapping) or not isinstance(shadow_dossier, Mapping):
+            return {
+                "kind": "activation_patch_production_trial_gate_review",
+                "status": "blocked",
+                "production_trial_allowed": False,
+                "production_trial_candidate": None,
+                "production_trial_contract": None,
+                "production_trial_blocked_reasons": ["production_shadow_candidate_missing"],
+                "production_shadow_replay_passed": bool(shadow.get("shadow_replay_passed", False)),
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+                "production_operator_certified": False,
+                "next_evidence_needed": "activation_patch_production_shadow_replay",
+                "why_not_apply": "production trial gate requires a same-packet shadow candidate",
+            }
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_sequence(value: Any) -> list[str]:
+            if not isinstance(value, SequenceABC) or isinstance(value, (str, bytes, bytearray)):
+                return []
+            return [str(item) for item in value if str(item)]
+
+        def _has_recent(summary: Mapping[str, Any], key: str, value: Any) -> bool:
+            text = str(value or "")
+            return bool(text and text in {str(item) for item in _as_sequence(summary.get(key))})
+
+        shadow_passed = bool(shadow.get("shadow_replay_passed", False))
+        active_after_shadow = _as_sequence(shadow.get("production_denial_reasons_after_shadow"))
+        alpha = _as_float(candidate.get("alpha"), 0.0)
+        max_alpha = 0.15
+        ttl_steps = int(candidate.get("ttl_steps", 1) or 1)
+        norm_clip = _as_float(candidate.get("norm_clip"), 1.0)
+        objective_key = str(candidate.get("objective_bundle_key") or request.get("objective_bundle_key") or "")
+        actuator_key = str(candidate.get("actuator_bundle_key") or objective_key)
+        surface_family_key = str(candidate.get("surface_family_key") or candidate.get("operator_recipe_id") or "")
+        operator_recipe_id = str(candidate.get("operator_recipe_id") or "")
+        recent_summary = (
+            packet_context.get("recent_effect_summary")
+            if isinstance(packet_context.get("recent_effect_summary"), Mapping)
+            else {}
+        )
+        recent_harmful = bool(
+            _has_recent(recent_summary, "recent_harmful_surface_family_keys", surface_family_key)
+            or _has_recent(recent_summary, "recent_collapse_sharpener_surface_family_keys", surface_family_key)
+            or _has_recent(recent_summary, "recent_harmful_operator_recipe_ids", operator_recipe_id)
+            or _has_recent(recent_summary, "recent_collapse_sharpener_operator_recipe_ids", operator_recipe_id)
+            or _has_recent(recent_summary, "recent_harmful_bundle_keys", objective_key)
+            or _has_recent(recent_summary, "recent_collapse_sharpener_bundle_keys", objective_key)
+        )
+        rollback_contract_verified = bool(
+            ttl_steps == 1
+            and norm_clip <= 1.0
+            and candidate.get("patch_mode") not in (None, "")
+            and candidate.get("compile_state") == "production_apply_candidate"
+        )
+        request_is_explicit = (
+            str(request.get("diagnostic", "") or "") == "activation_patch_production_trial_gate_review"
+        )
+        trial_budget_available = True
+        context_still_shadow_equivalent = bool(shadow.get("context_equivalence_certified", False))
+        trial_contract = {
+            "kind": "activation_patch_production_trial_contract",
+            "trial_scope": "single_step_shadow_promoted_trial",
+            "ttl_steps": 1,
+            "norm_clip": min(float(norm_clip), 1.0),
+            "alpha": min(float(alpha), max_alpha),
+            "max_alpha": max_alpha,
+            "revertible": True,
+            "separate_trial_budget": True,
+            "controller_policy_explicit": bool(request_is_explicit),
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "production_operator_certified": False,
+        }
+        gate_checks = {
+            "shadow_replay_passed": bool(shadow_passed),
+            "no_active_denial_reasons_after_shadow": not active_after_shadow,
+            "context_still_shadow_equivalent": bool(context_still_shadow_equivalent),
+            "rollback_contract_verified": bool(rollback_contract_verified),
+            "trial_alpha_within_limit": bool(alpha <= max_alpha),
+            "trial_ttl_within_limit": bool(ttl_steps == 1),
+            "trial_norm_clip_within_limit": bool(norm_clip <= 1.0),
+            "no_recent_harmful_family": not recent_harmful,
+            "trial_budget_available": bool(trial_budget_available),
+            "controller_policy_explicit": bool(request_is_explicit),
+        }
+        trial_edit = self._activation_patch_trial_edit_from_candidate(candidate, trial_contract=trial_contract)
+        gate_checks["trial_edit_compilable"] = trial_edit is not None
+        blocked_reason_map = {
+            "shadow_replay_passed": "shadow_replay_not_passed",
+            "no_active_denial_reasons_after_shadow": "production_denial_reasons_active",
+            "context_still_shadow_equivalent": "context_drift",
+            "rollback_contract_verified": "rollback_contract_unverified",
+            "trial_alpha_within_limit": "trial_alpha_too_high",
+            "trial_ttl_within_limit": "trial_ttl_too_long",
+            "trial_norm_clip_within_limit": "trial_norm_clip_too_high",
+            "no_recent_harmful_family": "recent_harmful_family",
+            "trial_budget_available": "trial_budget_exhausted",
+            "controller_policy_explicit": "controller_policy_not_explicit",
+            "trial_edit_compilable": "trial_edit_compile_preview_missing",
+        }
+        trial_blocked_reasons = [
+            blocked_reason_map[key] for key, ok in gate_checks.items() if not ok
+        ]
+        production_trial_allowed = not trial_blocked_reasons
+        trial_candidate = None
+        if production_trial_allowed:
+            trial_candidate = dict(candidate)
+            trial_candidate.update(
+                {
+                    "kind": "activation_patch_production_trial_candidate",
+                    "compile_state": "production_trial_candidate",
+                    "candidate_state": "trial_gate_ready",
+                    "apply_kind": "production_trial",
+                    "production_trial_allowed": True,
+                    "production_trial_contract": trial_contract,
+                    "trial_edit": dict(trial_edit),
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                    "production_operator_certified": False,
+                }
+            )
+        trial_dossier = {
+            "kind": "activation_patch_production_trial_dossier",
+            "policy_owner": "controller",
+            "trial_scope": "single_step_shadow_promoted_trial",
+            "production_trial_allowed": bool(production_trial_allowed),
+            "production_apply_allowed": False,
+            "production_operator_certified": False,
+            "production_shadow_replay_passed": bool(shadow_passed),
+            "production_denial_reasons_after_shadow": list(active_after_shadow),
+            "trial_blocked_reasons": list(trial_blocked_reasons),
+            "gate_checks": gate_checks,
+            "contract": trial_contract,
+            "candidate_fingerprint": {
+                "objective_bundle_key": objective_key or None,
+                "actuator_bundle_key": actuator_key or None,
+                "operator_recipe_id": operator_recipe_id or None,
+                "surface_family_key": surface_family_key or None,
+                "site": candidate.get("site"),
+                "layer": candidate.get("layer"),
+                "alpha": round(float(alpha), 6),
+                "ttl_steps": ttl_steps,
+                "norm_clip": round(float(norm_clip), 6),
+            },
+            "reason_text": (
+                "shadow replay passed and a bounded production trial contract is available; production apply remains closed"
+                if production_trial_allowed
+                else "production trial gate blocked by " + ", ".join(trial_blocked_reasons[:5])
+            ),
+        }
+        return {
+            "kind": "activation_patch_production_trial_gate_review",
+            "status": "trial_ready" if production_trial_allowed else "blocked",
+            "production_trial_allowed": bool(production_trial_allowed),
+            "production_trial_candidate": trial_candidate,
+            "production_trial_contract": trial_contract,
+            "production_trial_dossier": trial_dossier,
+            "production_trial_blocked_reasons": list(trial_blocked_reasons),
+            "production_shadow_replay": shadow,
+            "production_shadow_replay_passed": bool(shadow_passed),
+            "production_denial_reasons_after_shadow": list(active_after_shadow),
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "production_operator_certified": False,
+            "next_evidence_needed": "bounded_production_trial"
+            if production_trial_allowed
+            else "production_trial_gate_followup",
+            "why_not_apply": (
+                "production trial is allowed only as a bounded trial; production apply remains closed"
+                if production_trial_allowed
+                else "production trial gate blocked: " + ",".join(trial_blocked_reasons[:4])
+            ),
+        }
+
     def _execute_controller_diagnostic_request(
         self,
         request: Mapping[str, Any],
@@ -8282,6 +8669,22 @@ class HookedTransformerWorkerRuntime:
         )
         if not bundle_status and isinstance(strategy_hints.get("diagnostic_frontier_status"), Mapping):
             bundle_status = dict(strategy_hints["diagnostic_frontier_status"])
+        request_shadow = request.get("activation_patch_shadow_actuator") or request.get("alternate_trial_candidate")
+        if isinstance(request_shadow, Mapping):
+            bundle_status = dict(bundle_status)
+            bundle_status["activation_patch_shadow_actuator"] = dict(request_shadow)
+            actuator_class = str(request_shadow.get("activation_patch_actuator_class", "") or "")
+            if actuator_class:
+                bundle_status["activation_patch_actuator_class"] = actuator_class
+            bundle_status["activation_patch_promotable_to_candidate"] = bool(
+                request_shadow.get("promotable_to_candidate_compiler", False)
+            )
+            bundle_status["activation_patch_promotion_reason"] = (
+                request_shadow.get("promotion_reason")
+                or "alternate_after_failed_production_trial"
+            )
+            bundle_status["activation_patch_status"] = "supportive"
+            bundle_status["diagnostic_operator_supported"] = True
         ledger_raw = strategy_hints.get("diagnostic_evidence_ledger")
         ledger_rows = [
             dict(item)
@@ -8324,6 +8727,9 @@ class HookedTransformerWorkerRuntime:
             "activation_patch_production_shadow_replay": {
                 "activation_patch_certification",
             },
+            "activation_patch_production_trial_gate_review": {
+                "activation_patch_certification",
+            },
         }
         evidence_kinds = evidence_kinds_by_request.get(diagnostic_name)
         matching_rows = [
@@ -8350,6 +8756,7 @@ class HookedTransformerWorkerRuntime:
             "activation_patch_runtime_support_probe",
             "activation_patch_promotion_gate_review",
             "activation_patch_production_shadow_replay",
+            "activation_patch_production_trial_gate_review",
         }:
             # Surface the highest-value operator evidence first.  In particular,
             # attention-guided certification answers "did the carrier convert
@@ -8430,6 +8837,7 @@ class HookedTransformerWorkerRuntime:
             if diagnostic_name in {
                 "activation_patch_promotion_gate_review",
                 "activation_patch_production_shadow_replay",
+                "activation_patch_production_trial_gate_review",
             }
             else None
         )
@@ -8440,7 +8848,21 @@ class HookedTransformerWorkerRuntime:
                 packet_context=packet_context,
                 promotion_gate_review=activation_patch_promotion_gate_review,
             )
-            if diagnostic_name == "activation_patch_production_shadow_replay"
+            if diagnostic_name in {
+                "activation_patch_production_shadow_replay",
+                "activation_patch_production_trial_gate_review",
+            }
+            else None
+        )
+        activation_patch_production_trial_gate_review = (
+            self._activation_patch_production_trial_gate_review(
+                bundle_status,
+                request=request,
+                packet_context=packet_context,
+                production_shadow_replay=activation_patch_production_shadow_replay,
+                promotion_gate_review=activation_patch_promotion_gate_review,
+            )
+            if diagnostic_name == "activation_patch_production_trial_gate_review"
             else None
         )
         activation_patch_review_next_evidence = None
@@ -8463,6 +8885,11 @@ class HookedTransformerWorkerRuntime:
         activation_patch_production_shadow_next_evidence = (
             activation_patch_production_shadow_replay.get("next_evidence_needed")
             if isinstance(activation_patch_production_shadow_replay, Mapping)
+            else None
+        )
+        activation_patch_production_trial_next_evidence = (
+            activation_patch_production_trial_gate_review.get("next_evidence_needed")
+            if isinstance(activation_patch_production_trial_gate_review, Mapping)
             else None
         )
         activation_patch_policy_candidate_ready = bool(
@@ -8516,6 +8943,8 @@ class HookedTransformerWorkerRuntime:
                 if diagnostic_name == "activation_patch_promotion_gate_review"
                 else activation_patch_production_shadow_next_evidence
                 if diagnostic_name == "activation_patch_production_shadow_replay"
+                else activation_patch_production_trial_next_evidence
+                if diagnostic_name == "activation_patch_production_trial_gate_review"
                 else activation_patch_review_next_evidence
             )
             or request.get("next_evidence_needed")
@@ -8618,6 +9047,42 @@ class HookedTransformerWorkerRuntime:
                 )
                 else []
             ),
+            "activation_patch_production_trial_gate_review": activation_patch_production_trial_gate_review,
+            "activation_patch_production_trial_dossier": (
+                dict(activation_patch_production_trial_gate_review["production_trial_dossier"])
+                if isinstance(activation_patch_production_trial_gate_review, Mapping)
+                and isinstance(activation_patch_production_trial_gate_review.get("production_trial_dossier"), Mapping)
+                else None
+            ),
+            "activation_patch_production_trial_candidate": (
+                dict(activation_patch_production_trial_gate_review["production_trial_candidate"])
+                if isinstance(activation_patch_production_trial_gate_review, Mapping)
+                and isinstance(activation_patch_production_trial_gate_review.get("production_trial_candidate"), Mapping)
+                else None
+            ),
+            "activation_patch_production_trial_contract": (
+                dict(activation_patch_production_trial_gate_review["production_trial_contract"])
+                if isinstance(activation_patch_production_trial_gate_review, Mapping)
+                and isinstance(activation_patch_production_trial_gate_review.get("production_trial_contract"), Mapping)
+                else None
+            ),
+            "production_trial_allowed": bool(
+                isinstance(activation_patch_production_trial_gate_review, Mapping)
+                and activation_patch_production_trial_gate_review.get("production_trial_allowed")
+            ),
+            "production_trial_blocked_reasons": (
+                list(activation_patch_production_trial_gate_review.get("production_trial_blocked_reasons", ()))
+                if isinstance(activation_patch_production_trial_gate_review, Mapping)
+                and isinstance(
+                    activation_patch_production_trial_gate_review.get("production_trial_blocked_reasons"),
+                    SequenceABC,
+                )
+                and not isinstance(
+                    activation_patch_production_trial_gate_review.get("production_trial_blocked_reasons"),
+                    (str, bytes, bytearray),
+                )
+                else []
+            ),
             "activation_patch_production_denial_dossier": (
                 dict(activation_patch_promotion_gate_review["production_denial_dossier"])
                 if isinstance(activation_patch_promotion_gate_review, Mapping)
@@ -8695,6 +9160,23 @@ class HookedTransformerWorkerRuntime:
                 "activation_patch_production_shadow_replay_passed": bool(
                     isinstance(activation_patch_production_shadow_replay, Mapping)
                     and activation_patch_production_shadow_replay.get("shadow_replay_passed")
+                ),
+                "activation_patch_production_trial_allowed": bool(
+                    isinstance(activation_patch_production_trial_gate_review, Mapping)
+                    and activation_patch_production_trial_gate_review.get("production_trial_allowed")
+                ),
+                "production_trial_blocked_reasons": (
+                    list(activation_patch_production_trial_gate_review.get("production_trial_blocked_reasons", ()))
+                    if isinstance(activation_patch_production_trial_gate_review, Mapping)
+                    and isinstance(
+                        activation_patch_production_trial_gate_review.get("production_trial_blocked_reasons"),
+                        SequenceABC,
+                    )
+                    and not isinstance(
+                        activation_patch_production_trial_gate_review.get("production_trial_blocked_reasons"),
+                        (str, bytes, bytearray),
+                    )
+                    else []
                 ),
                 "production_denial_reasons": (
                     list(activation_patch_promotion_gate_review.get("production_denial_reasons", ()))
@@ -8794,6 +9276,11 @@ class HookedTransformerWorkerRuntime:
             result["diagnostic_role"] = "activation_patch_production_shadow_replay"
             result["certified_for_apply"] = False
             result["production_apply_allowed"] = False
+        elif diagnostic_name == "activation_patch_production_trial_gate_review":
+            result["diagnostic_role"] = "activation_patch_production_trial_gate_review"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+            result["production_operator_certified"] = False
         elif diagnostic_name in {"attention_head_ablation_on_frontier", "attention_readout_carrier_probe"}:
             result["head_sensitive"] = bool(bundle_status.get("head_sensitive", False))
             result["rank_readout_carrier"] = bool(bundle_status.get("rank_readout_carrier", False))
@@ -10671,6 +11158,9 @@ class HookedTransformerWorkerRuntime:
             if metadata.get("step_actuator_bundle_key") is None
             else str(metadata.get("step_actuator_bundle_key")),
             "apply_kind": None if metadata.get("apply_kind") is None else str(metadata.get("apply_kind")),
+            "production_trial_allowed": None
+            if metadata.get("production_trial_allowed") is None
+            else bool(metadata.get("production_trial_allowed")),
             "production_apply_allowed": None
             if metadata.get("production_apply_allowed") is None
             else bool(metadata.get("production_apply_allowed")),
@@ -10912,6 +11402,8 @@ class HookedTransformerWorkerRuntime:
         spent_edit_cost = sum(self._spent_budget_cost.values())
         spent_loop_rescue_alpha = sum(self._spent_loop_rescue_alpha.values())
         spent_loop_rescue_edit_cost = sum(self._spent_loop_rescue_cost.values())
+        spent_production_trial_alpha = sum(self._spent_production_trial_alpha.values())
+        spent_production_trial_edit_cost = sum(self._spent_production_trial_cost.values())
         return {
             "edits_left_this_step": self.max_edits_per_step,
             "edits_left_this_run": max(0, self.max_edits_per_run - len(self._spent_budget_alpha)),
@@ -10925,6 +11417,18 @@ class HookedTransformerWorkerRuntime:
             "loop_rescue_edit_cost_left_total": max(
                 0.0,
                 self.max_loop_rescue_edit_cost - spent_loop_rescue_edit_cost,
+            ),
+            "production_trial_edits_left_this_run": max(
+                0,
+                self.max_production_trial_edits_per_run - len(self._spent_production_trial_alpha),
+            ),
+            "production_trial_alpha_left_total": max(
+                0.0,
+                self.max_production_trial_alpha - spent_production_trial_alpha,
+            ),
+            "production_trial_edit_cost_left_total": max(
+                0.0,
+                self.max_production_trial_edit_cost - spent_production_trial_edit_cost,
             ),
             "active_patch_slots_left": max(0, self.max_active_patch_slots - active_patch_slots),
             "rollbackable_ids": [str(edit["edit_id"]) for edit in active_edits if bool(edit.get("revertible", True))],

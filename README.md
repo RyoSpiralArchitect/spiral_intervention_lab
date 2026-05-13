@@ -217,6 +217,68 @@ The follow-up `activation_patch_production_shadow_replay` diagnostic can replay
 that candidate against the current controller packet and emit an
 `activation_patch_production_shadow_dossier`, clearing any axes that are
 certified in shadow while still leaving `production_apply_allowed=false`.
+If the shadow replay clears those axes, `activation_patch_production_trial_gate_review`
+may then emit an `activation_patch_production_trial_dossier` and a bounded
+`activation_patch_production_trial_candidate`. This is only a trial contract:
+`ttl_steps=1`, rollback/norm limits remain explicit, the trial uses a separate
+budget, and `production_apply_allowed` / `production_operator_certified` remain
+false. When the controller spends that contract, it must do so as
+`meta.apply_kind="production_trial"`: the edit consumes the separate
+production-trial budget, survives one generated token for measurement, emits a
+`controller_effect` with `apply_kind="production_trial"`, and still does not
+grant production apply permission.
+Those effects now feed a `production_trial_outcome_ledger` in
+`recent_effect_summary`. The ledger records `trial_effect_class` plus the
+objective bundle, step actuator bundle, operator recipe, and surface family that
+were tested. The controller folds that ledger back into the next decision:
+harmful/regressing/collapse-sharpener trials veto the tested recipe family and
+request alternate operator evidence, neutral trials request an alternate/confirm
+comparison, and helpful trials still require confirmation replay before any
+production policy review. Each row also carries a `promotion_ladder_stage`
+(`trial_blocked_needs_alternate_operator`,
+`trial_neutral_needs_alternate_candidate`, or
+`trial_supported_needs_confirmation_replay`) so later alternate-candidate
+generation can read one stable contract instead of reinterpreting raw deltas.
+
+The newest direct-scan replay closes the first alternate-recipe loop after a
+failed production trial:
+
+1. a bounded production trial is allowed only as `apply_kind="production_trial"`
+2. the effect returns `trial_effect_class="regressing"` / `verdict="harmful"`
+3. the controller requests `compare_extra_operator_diagnostics`
+4. the old tested recipe is vetoed by `operator_recipe_id` / surface family
+5. the controller extracts a different activation-patch evidence row as an
+   `alternate_trial_candidate`
+6. that alternate candidate is reviewed through
+   `activation_patch_candidate_review`
+7. the same alternate shadow is carried into
+   `activation_patch_runtime_support_probe`, instead of falling back to the
+   stale failed recipe
+
+In the current local GPT-2 direct-scan replay, this produces the sequence:
+
+```text
+activation_patch_candidate_review
+-> activation_patch_runtime_support_probe
+-> activation_patch_promotion_gate_review
+-> activation_patch_production_shadow_replay
+-> activation_patch_production_trial_gate_review
+-> compare_extra_operator_diagnostics
+-> activation_patch_candidate_review
+-> activation_patch_runtime_support_probe
+```
+
+The important observation is not yet task success. It is control-plane progress:
+after an unsafe `a0.150` trial, the loop can now preserve the failure evidence,
+select a lower-alpha alternate recipe such as `a0.050`, and keep that alternate
+identity attached through candidate review and runtime-support probing.
+
+This reframes the next experiment. The immediate question is no longer whether
+the controller can ask for another diagnostic; it can. The question is whether a
+failed trial can create a clean recipe-local veto, whether the lower-alpha
+alternate survives the same review/support/shadow ladder, and whether any
+alternate produces a bounded effect that is less collapse-sharpening than the
+failed high-alpha trial.
 
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
@@ -224,7 +286,7 @@ model. The Hugging Face cache may be offline even when network is available, so
 clone-specific model locations should stay outside the repo and be provided on
 the CLI.
 
-The replay harness now has a `diagnostic_request` controller mode for this contract. In direct-scan GPT-2 replay it produces:
+The replay harness now has a `diagnostic_request` controller mode for this contract. Early direct-scan GPT-2 replay produced:
 
 ```json
 {
@@ -275,16 +337,22 @@ The next steps are now fairly concrete:
    Operator replay is now powerful enough to shape the agenda, so it must remain an auditable evidence source rather than an implicit policy layer.
 2. Keep selector and gate mostly frozen while operator quality is the active workstream.
    The main measurement axis is now operator certification and ownership, not candidate churn.
-3. Search for a `budget` self-actuator recipe.
-   Current real-packet replay shows that several recipes move something, but the lift is often stolen by `send`.
-4. Continue ownership-first operator sweeps.
+3. Treat production-trial failure as structured evidence.
+   A harmful or regressing trial should create an explicit recipe veto and an alternate-candidate search, not a retry of the same ladder.
+4. Search for a `budget` self-actuator recipe.
+   Current real-packet replay shows that several recipes move something, but the lift is often weak, stolen by `send`, or unsafe at production-trial strength.
+5. Continue ownership-first operator sweeps.
    Current promising directions are:
    - more local positive seeds such as `exact_term_token`, fused seeds, and centered local windows
    - contrastive recipes such as `minus_stealer` and `orthogonal_stealer`
    - recipe-level certification keyed by operator recipe rather than broad family alone
-5. If no `budget` self-actuator appears, promote an explicit bridge plan.
+6. Use alternate activation-patch candidates as a bounded ladder.
+   The current loop can now descend from a failed high-alpha recipe to a lower-alpha alternate recipe while preserving controller ownership.
+   The next run should follow that alternate through promotion review, shadow
+   replay, and trial comparison without reusing the failed recipe identity.
+7. If no `budget` self-actuator appears, promote an explicit bridge plan.
    In that branch the controller would treat `budget` as the objective term and a certified `send` bridge as the readout-escape actuator, rather than pretending the lift already belongs to `budget`.
-6. Expand the readout analyzer backend carefully.
+8. Expand the readout analyzer backend carefully.
    SAELens can move from scaffold to real backend only if it stays a feature emitter that returns small, auditable hints rather than becoming a runtime dependency or hidden generator.
 
 ## Design Guardrails

@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from importlib.util import find_spec
@@ -22,6 +23,7 @@ from SpiralInterventionLab.examples import (
     run_digit_transform_sweep,
 )
 from SpiralInterventionLab.examples.digit_transform_e2e import (
+    _FrontierReplayControllerClient,
     _build_parser,
     _configure_torch_default_device_for_worker,
     _focused_bridge_eval_recipe_specs,
@@ -822,6 +824,7 @@ class TestExamples(unittest.TestCase):
                         "activation_patch_runtime_support_probe",
                         "activation_patch_promotion_gate_review",
                         "activation_patch_production_shadow_replay",
+                        "activation_patch_production_trial_gate_review",
                         "none",
                     },
                 )
@@ -975,6 +978,7 @@ class TestExamples(unittest.TestCase):
                     "activation_patch_runtime_support_probe",
                     "activation_patch_promotion_gate_review",
                     "activation_patch_production_shadow_replay",
+                    "activation_patch_production_trial_gate_review",
                 },
             )
             if latest["diagnostic"] == "activation_patch_candidate_review":
@@ -1003,8 +1007,12 @@ class TestExamples(unittest.TestCase):
                         "production_activation_patch_operator_support",
                         "activation_patch_promotion_gate_review",
                         "activation_patch_production_shadow_replay",
+                        "activation_patch_production_trial_gate_review",
                         "alternate_activation_patch_or_bridge_evidence",
                         "production_policy_review",
+                        "production_trial_gate_review",
+                        "bounded_production_trial",
+                        "production_trial_gate_followup",
                     },
                 )
                 self.assertFalse(latest["production_apply_allowed"])
@@ -1075,6 +1083,42 @@ class TestExamples(unittest.TestCase):
                     },
                 )
                 self.assertIn("production_denial_reasons_after_shadow", latest)
+            if latest["diagnostic"] == "activation_patch_production_trial_gate_review":
+                self.assertEqual(latest.get("diagnostic_role"), "activation_patch_production_trial_gate_review")
+                self.assertFalse(latest["production_apply_allowed"])
+                self.assertFalse(latest.get("production_operator_certified", False))
+                self.assertFalse(latest.get("operator_certified", False))
+                self.assertIn("activation_patch_production_trial_gate_review", latest)
+                self.assertIn("activation_patch_production_trial_dossier", latest)
+                self.assertIn("production_trial_allowed", latest)
+                self.assertIn("production_trial_blocked_reasons", latest)
+                trial_dossier = latest.get("activation_patch_production_trial_dossier")
+                self.assertIsInstance(trial_dossier, dict)
+                self.assertFalse(trial_dossier["production_apply_allowed"])
+                self.assertFalse(trial_dossier["production_operator_certified"])
+                self.assertIn("trial_blocked_reasons", trial_dossier)
+                self.assertIn("contract", trial_dossier)
+                trial_contract = latest.get("activation_patch_production_trial_contract")
+                if trial_contract is not None:
+                    self.assertEqual(trial_contract["ttl_steps"], 1)
+                    self.assertLessEqual(float(trial_contract["norm_clip"]), 1.0)
+                    self.assertLessEqual(float(trial_contract["max_alpha"]), 0.15)
+                    self.assertTrue(trial_contract["revertible"])
+                    self.assertTrue(trial_contract["separate_trial_budget"])
+                    self.assertFalse(trial_contract["production_apply_allowed"])
+                    self.assertFalse(trial_contract["certified_for_apply"])
+                if latest.get("production_trial_allowed"):
+                    self.assertIn("activation_patch_production_trial_candidate", latest)
+                    trial_candidate = latest.get("activation_patch_production_trial_candidate")
+                    self.assertIsInstance(trial_candidate, dict)
+                    self.assertEqual(trial_candidate["compile_state"], "production_trial_candidate")
+                    self.assertEqual(trial_candidate["apply_kind"], "production_trial")
+                    self.assertFalse(trial_candidate["production_apply_allowed"])
+                    self.assertFalse(trial_candidate["certified_for_apply"])
+                    self.assertIn("trial_edit", trial_candidate)
+                    self.assertEqual(trial_candidate["trial_edit"]["meta"]["apply_kind"], "production_trial")
+                    self.assertFalse(trial_candidate["trial_edit"]["meta"]["production_apply_allowed"])
+                    self.assertFalse(trial_candidate["trial_edit"]["meta"]["certified_for_apply"])
             if latest["diagnostic"] == "attention_readout_carrier_probe":
                 self.assertEqual(latest.get("diagnostic_role"), "rank_readout_carrier")
                 self.assertFalse(latest["production_apply_allowed"])
@@ -1122,6 +1166,9 @@ class TestExamples(unittest.TestCase):
                             "activation_patch_promotion_gate_review",
                             "production_shadow_replay",
                             "production_policy_review",
+                            "production_trial_gate_review",
+                            "bounded_production_trial",
+                            "production_trial_gate_followup",
                         }
                         for view in payload["controller_step_views"]
                         for row in view.get("loop_patience", [])
@@ -1136,6 +1183,270 @@ class TestExamples(unittest.TestCase):
             )
             self.assertTrue(Path(tmpdir, "readout_escape_replay.jsonl").exists())
             self.assertTrue(Path(tmpdir, "readout_escape_replay_summary.json").exists())
+            with Path(tmpdir, "readout_escape_replay.jsonl").open() as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            trial_apply_rows = [
+                row
+                for row in rows
+                if row.get("event") == "controller_selection"
+                and row.get("controller_selection_source") == "production_trial_apply"
+            ]
+            if latest["diagnostic"] == "activation_patch_production_trial_gate_review" and latest.get(
+                "production_trial_allowed"
+            ):
+                self.assertTrue(trial_apply_rows)
+                trial_apply_row = trial_apply_rows[0]
+                self.assertEqual(trial_apply_row["controller_apply_kind"], "production_trial")
+                self.assertFalse(trial_apply_row["production_apply_allowed"])
+                self.assertFalse(trial_apply_row["certified_for_apply"])
+                self.assertTrue(
+                    any(row.get("event") == "production_trial_ttl_deferred" for row in rows)
+                )
+                trial_effect_rows = [
+                    row
+                    for row in rows
+                    if row.get("event") == "controller_effect"
+                    and row.get("apply_kind") == "production_trial"
+                ]
+                for row in trial_effect_rows:
+                    self.assertFalse(row["production_apply_allowed"])
+                    self.assertFalse(row["certified_for_apply"])
+
+    def test_frontier_replay_consumes_production_trial_followup_before_runtime_probe(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        recipe = "readout_escape|activation_patch|resid_post|L6|source_span_to_last|blend|a0.150"
+        compile_preview = {
+            "bundle_key": objective,
+            "objective_bundle_key": objective,
+            "actuator_bundle_key": objective,
+            "recipe_name": "activation_patch_source_span_to_last",
+            "operator_recipe_id": recipe,
+            "compile_state": "preview_only",
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": recipe,
+            "surface_family_key": "activation_patch_trial:s_resid_pre_l6_last",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "unknown",
+        }
+        base_packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+        }
+
+        pre_followup_packet = {
+            **base_packet,
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "activation_patch_production_trial_gate_review",
+                    "objective_bundle_key": objective,
+                    "activation_patch_compile_preview": compile_preview,
+                    "production_apply_allowed": False,
+                }
+            ],
+        }
+        pre_command = controller._diagnostic_request_command(
+            packet=pre_followup_packet,
+            strategy_hints=pre_followup_packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+        self.assertEqual(pre_command["decision"], "noop")
+        self.assertEqual(pre_command["meta"]["next_action"], "request_compare_extra_operator_diagnostics")
+        self.assertEqual(pre_command["meta"]["diagnostic_request"]["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(
+            pre_command["meta"]["next_evidence_needed"],
+            "alternate_operator_recipe_after_trial",
+        )
+
+        post_followup_packet = {
+            **base_packet,
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "activation_patch_compile_preview": compile_preview,
+                    "evidence_rows": [
+                        {
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "blocked",
+                            "operator_recipe_id": recipe,
+                        }
+                    ],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": False,
+                    "policy_candidate_ready": False,
+                }
+            ],
+        }
+        post_command = controller._diagnostic_request_command(
+            packet=post_followup_packet,
+            strategy_hints=post_followup_packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+        meta = post_command["meta"]
+        self.assertEqual(post_command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "noop")
+        self.assertEqual(meta["next_evidence_needed"], "alternate_trial_candidate_generator")
+        self.assertNotIn("diagnostic_request", meta)
+        self.assertTrue(meta["production_trial_followup_consumed"])
+        self.assertTrue(meta["activation_patch_pipeline_suppressed_by_production_trial_outcome"])
+        self.assertEqual(
+            meta["blocked_by"],
+            "production_trial_alternate_evidence_pending_candidate_generator",
+        )
+        self.assertIn("production_trial_alternate_evidence", meta)
+
+    def test_frontier_replay_generates_alternate_trial_candidate_from_compare_evidence(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        failed_recipe = "readout_escape|activation_patch|resid_post|L6|source_span_to_last|blend|a0.150"
+        alternate_recipe = "readout_escape|activation_patch|resid_pre|L6|source_span_to_last|blend|a0.050"
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": failed_recipe,
+            "surface_family_key": "activation_patch_trial:s_resid_post_l6_last",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "unknown",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "evidence_rows": [
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_pre_source_span_to_last_blend_a050",
+                            "operator_recipe_id": alternate_recipe,
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.05,
+                            "target_mass_delta": 0.0002,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 8,
+                            "self_delta": 0.6,
+                            "cross_delta": 0.2,
+                            "alignment_margin": 0.4,
+                            "realized_lift_bundle_key": objective,
+                            "realized_lift_term": "budget",
+                        },
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_post_source_span_to_last_blend_a150",
+                            "operator_recipe_id": failed_recipe,
+                            "activation_patch_site": "resid_post",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.15,
+                            "target_mass_delta": 0.001,
+                            "focus_rank_delta": 20,
+                            "self_delta": 1.0,
+                            "alignment_margin": 0.8,
+                        },
+                    ],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": True,
+                    "policy_candidate_ready": False,
+                }
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        alternate = request["activation_patch_shadow_actuator"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "request_activation_patch_candidate_review")
+        self.assertEqual(meta["next_evidence_needed"], "alternate_activation_patch_candidate_review")
+        self.assertEqual(request["diagnostic"], "activation_patch_candidate_review")
+        self.assertEqual(alternate["operator_recipe_id"], alternate_recipe)
+        self.assertNotEqual(alternate["operator_recipe_id"], failed_recipe)
+        self.assertEqual(meta["blocked_by"], "production_trial_alternate_candidate_shadow_review")
+        self.assertEqual(meta["production_trial_alternate_candidate"]["operator_recipe_id"], alternate_recipe)
+
+        alternate_review_packet = {
+            **packet,
+            "latest_diagnostic_results": [
+                packet["latest_diagnostic_results"][0],
+                {
+                    "diagnostic": "activation_patch_candidate_review",
+                    "objective_bundle_key": objective,
+                    "activation_patch_compile_preview": {
+                        "kind": "activation_patch_compile_preview",
+                        "objective_bundle_key": objective,
+                        "actuator_bundle_key": objective,
+                        "objective_term": "budget",
+                        "recipe_name": "resid_pre_source_span_to_last_blend_a050",
+                        "operator_recipe_id": alternate_recipe,
+                        "site": "resid_pre",
+                        "layer": 6,
+                        "alpha": 0.05,
+                        "source": "source_body_span",
+                        "target": "answer_boundary_last",
+                        "patch_mode": "blend",
+                        "compile_state": "preview_only",
+                        "actual_delta_class": "target_lift",
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                    },
+                    "production_apply_allowed": False,
+                },
+            ],
+        }
+        runtime_command = controller._diagnostic_request_command(
+            packet=alternate_review_packet,
+            strategy_hints=alternate_review_packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+        runtime_meta = runtime_command["meta"]
+        runtime_request = runtime_meta["diagnostic_request"]
+        self.assertEqual(runtime_meta["next_action"], "request_activation_patch_runtime_support_probe")
+        self.assertEqual(runtime_request["diagnostic"], "activation_patch_runtime_support_probe")
+        self.assertEqual(
+            runtime_request["activation_patch_shadow_actuator"]["operator_recipe_id"],
+            alternate_recipe,
+        )
 
     def test_focused_bridge_eval_recipe_specs_stay_small_and_ownership_oriented(self):
         recipe_names = [item["recipe_name"] for item in _focused_bridge_eval_recipe_specs()]

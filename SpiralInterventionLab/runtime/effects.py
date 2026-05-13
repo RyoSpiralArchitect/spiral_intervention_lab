@@ -223,6 +223,46 @@ def classify_actuator_effect(
     return "unknown"
 
 
+def classify_production_trial_outcome(effect: Mapping[str, Any]) -> str:
+    """Compress a bounded production trial effect into controller-facing policy evidence."""
+    actuator_class = str(effect.get("actuator_class", "unknown") or "unknown")
+    signal_profile = str(effect.get("signal_profile", "flat") or "flat")
+    verdict = str(effect.get("verdict", "unknown") or "unknown")
+    if actuator_class == "collapse_sharpener":
+        return "collapse_sharpener"
+    if signal_profile == "regressing":
+        return "regressing"
+    if verdict in {"helpful", "neutral", "harmful"}:
+        return verdict
+    return "unknown"
+
+
+def production_trial_policy_stage(trial_effect_class: str) -> dict[str, str]:
+    if trial_effect_class in {"harmful", "regressing", "collapse_sharpener"}:
+        return {
+            "promotion_ladder_stage": "trial_blocked_needs_alternate_operator",
+            "recommended_next_evidence": "alternate_operator_recipe_after_trial",
+            "recommended_next_action": "request_compare_extra_operator_diagnostics",
+        }
+    if trial_effect_class == "neutral":
+        return {
+            "promotion_ladder_stage": "trial_neutral_needs_alternate_candidate",
+            "recommended_next_evidence": "confirm_or_alternate_trial_candidate",
+            "recommended_next_action": "request_compare_extra_operator_diagnostics",
+        }
+    if trial_effect_class == "helpful":
+        return {
+            "promotion_ladder_stage": "trial_supported_needs_confirmation_replay",
+            "recommended_next_evidence": "production_trial_confirmation_replay",
+            "recommended_next_action": "request_activation_patch_production_shadow_replay",
+        }
+    return {
+        "promotion_ladder_stage": "trial_unknown_needs_followup",
+        "recommended_next_evidence": "production_trial_effect_followup",
+        "recommended_next_action": "request_compare_extra_operator_diagnostics",
+    }
+
+
 def build_edit_effect(
     *,
     edit_id: str,
@@ -243,6 +283,7 @@ def build_edit_effect(
     objective_bundle_key: str | None = None,
     step_actuator_bundle_key: str | None = None,
     apply_kind: str | None = None,
+    production_trial_allowed: bool | None = None,
     production_apply_allowed: bool | None = None,
     production_policy_would_apply: bool | None = None,
     certified_for_apply: bool | None = None,
@@ -285,12 +326,16 @@ def build_edit_effect(
         effect["step_actuator_bundle_key"] = str(step_actuator_bundle_key)
     if apply_kind is not None:
         effect["apply_kind"] = str(apply_kind)
+    if production_trial_allowed is not None:
+        effect["production_trial_allowed"] = bool(production_trial_allowed)
     if production_apply_allowed is not None:
         effect["production_apply_allowed"] = bool(production_apply_allowed)
     if production_policy_would_apply is not None:
         effect["production_policy_would_apply"] = bool(production_policy_would_apply)
     if certified_for_apply is not None:
         effect["certified_for_apply"] = bool(certified_for_apply)
+    if str(effect.get("apply_kind", "") or "") == "production_trial":
+        effect["trial_effect_class"] = classify_production_trial_outcome(effect)
     return effect
 
 
@@ -304,6 +349,12 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     recent_collapse_sharpener_operator_recipe_ids: list[str] = []
     recent_harmful_bundle_keys: list[str] = []
     recent_collapse_sharpener_bundle_keys: list[str] = []
+    production_trial_outcome_counts: dict[str, int] = {}
+    production_trial_outcome_ledger: list[dict[str, Any]] = []
+    recent_production_trial_veto_surface_family_keys: list[str] = []
+    recent_production_trial_veto_operator_recipe_ids: list[str] = []
+    recent_production_trial_veto_bundle_keys: list[str] = []
+    recent_production_trial_confirm_operator_recipe_ids: list[str] = []
 
     def _append_unique(items: list[str], value: Any) -> None:
         text = str(value or "").strip()
@@ -379,6 +430,8 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "objective_bundle_key": effect.get("objective_bundle_key"),
                 "step_actuator_bundle_key": effect.get("step_actuator_bundle_key"),
                 "apply_kind": effect.get("apply_kind"),
+                "trial_effect_class": effect.get("trial_effect_class"),
+                "production_trial_allowed": effect.get("production_trial_allowed"),
                 "production_apply_allowed": effect.get("production_apply_allowed"),
                 "certified_for_apply": effect.get("certified_for_apply"),
                 "hypothesis": effect.get("hypothesis"),
@@ -431,6 +484,49 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             _append_unique(recent_collapse_sharpener_surface_family_keys, effect.get("surface_family_key"))
             _append_unique(recent_collapse_sharpener_operator_recipe_ids, effect.get("operator_recipe_id"))
             _append_unique(recent_collapse_sharpener_bundle_keys, effect.get("bundle_key"))
+        if str(effect.get("apply_kind", "") or "") == "production_trial":
+            trial_effect_class = str(effect.get("trial_effect_class", "") or "") or classify_production_trial_outcome(effect)
+            production_trial_outcome_counts[trial_effect_class] = (
+                int(production_trial_outcome_counts.get(trial_effect_class, 0) or 0) + 1
+            )
+            trial_delta = effect.get("delta", {})
+            trial_row = {
+                "edit_id": effect.get("edit_id"),
+                "apply_kind": "production_trial",
+                "surface_id": effect.get("surface_id"),
+                "surface_family_key": effect.get("surface_family_key"),
+                "operator_recipe_id": effect.get("operator_recipe_id"),
+                "operator_recipe_seed_key": effect.get("operator_recipe_seed_key"),
+                "bundle_key": effect.get("bundle_key"),
+                "objective_bundle_key": effect.get("objective_bundle_key"),
+                "step_actuator_bundle_key": effect.get("step_actuator_bundle_key"),
+                "trial_effect_class": trial_effect_class,
+                "verdict": verdict,
+                "actuator_class": actuator_class,
+                "signal_profile": str(effect.get("signal_profile", "flat") or "flat"),
+            }
+            trial_row.update(production_trial_policy_stage(trial_effect_class))
+            if isinstance(trial_delta, Mapping):
+                for key in (
+                    "partial_score",
+                    "semantic_progress_score",
+                    "required_term_recall",
+                    "required_term_span_progress",
+                    "progress_score",
+                    "repetition_score",
+                    "repeat_flag",
+                    "entropy",
+                    "top1_margin",
+                    "task_violation_count",
+                ):
+                    trial_row[f"{key}_delta"] = float(trial_delta.get(key, 0.0) or 0.0)
+            production_trial_outcome_ledger.append(trial_row)
+            if trial_effect_class in {"harmful", "regressing", "collapse_sharpener"}:
+                _append_unique(recent_production_trial_veto_surface_family_keys, effect.get("surface_family_key"))
+                _append_unique(recent_production_trial_veto_operator_recipe_ids, effect.get("operator_recipe_id"))
+                _append_unique(recent_production_trial_veto_bundle_keys, effect.get("bundle_key"))
+            elif trial_effect_class == "helpful":
+                _append_unique(recent_production_trial_confirm_operator_recipe_ids, effect.get("operator_recipe_id"))
 
     hypothesis_stats: list[dict[str, Any]] = []
     for hypothesis, stats in grouped.items():
@@ -473,4 +569,15 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "recent_collapse_sharpener_operator_recipe_ids": recent_collapse_sharpener_operator_recipe_ids[-8:],
         "recent_harmful_bundle_keys": recent_harmful_bundle_keys[-8:],
         "recent_collapse_sharpener_bundle_keys": recent_collapse_sharpener_bundle_keys[-8:],
+        "production_trial_outcome_counts": dict(production_trial_outcome_counts),
+        "production_trial_outcome_ledger": production_trial_outcome_ledger[-8:],
+        "production_trial_policy_ladder_latest": (
+            production_trial_outcome_ledger[-1].get("promotion_ladder_stage")
+            if production_trial_outcome_ledger
+            else None
+        ),
+        "recent_production_trial_veto_surface_family_keys": recent_production_trial_veto_surface_family_keys[-8:],
+        "recent_production_trial_veto_operator_recipe_ids": recent_production_trial_veto_operator_recipe_ids[-8:],
+        "recent_production_trial_veto_bundle_keys": recent_production_trial_veto_bundle_keys[-8:],
+        "recent_production_trial_confirm_operator_recipe_ids": recent_production_trial_confirm_operator_recipe_ids[-8:],
     }

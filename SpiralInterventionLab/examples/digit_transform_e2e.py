@@ -1601,8 +1601,10 @@ class _FrontierReplayControllerClient:
             return "request_activation_patch_promotion_gate_review"
         if normalized == "activation_patch_production_shadow_replay":
             return "request_activation_patch_production_shadow_replay"
+        if normalized == "activation_patch_production_trial_gate_review":
+            return "request_activation_patch_production_trial_gate_review"
         if normalized == "compare_extra_operator_diagnostics":
-            return "wait"
+            return "request_compare_extra_operator_diagnostics"
         return "request_operator_diagnostic"
 
     @staticmethod
@@ -1661,6 +1663,20 @@ class _FrontierReplayControllerClient:
             "activation_patch_production_shadow_replay_passed": result.get(
                 "activation_patch_production_shadow_replay_passed"
             ),
+            "activation_patch_production_trial_gate_review": result.get(
+                "activation_patch_production_trial_gate_review"
+            ),
+            "activation_patch_production_trial_dossier": result.get(
+                "activation_patch_production_trial_dossier"
+            ),
+            "activation_patch_production_trial_candidate": result.get(
+                "activation_patch_production_trial_candidate"
+            ),
+            "activation_patch_production_trial_contract": result.get(
+                "activation_patch_production_trial_contract"
+            ),
+            "production_trial_allowed": result.get("production_trial_allowed"),
+            "production_trial_blocked_reasons": result.get("production_trial_blocked_reasons"),
             "activation_patch_production_denial_dossier": result.get(
                 "activation_patch_production_denial_dossier"
             ),
@@ -1672,7 +1688,7 @@ class _FrontierReplayControllerClient:
 
     @staticmethod
     def _activation_patch_compile_preview_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
-        for result in results:
+        for result in reversed(list(results)):
             if not isinstance(result, Mapping):
                 continue
             preview = result.get("activation_patch_compile_preview")
@@ -1743,6 +1759,412 @@ class _FrontierReplayControllerClient:
                     "next_evidence_needed": result.get("next_evidence_needed"),
                 }
         return None
+
+    @staticmethod
+    def _activation_patch_production_trial_gate_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            review = result.get("activation_patch_production_trial_gate_review")
+            if isinstance(review, Mapping):
+                return dict(review)
+            dossier = result.get("activation_patch_production_trial_dossier")
+            if isinstance(dossier, Mapping):
+                return {
+                    "status": "trial_ready" if result.get("production_trial_allowed") else "blocked",
+                    "production_trial_allowed": bool(result.get("production_trial_allowed", False)),
+                    "production_trial_dossier": dict(dossier),
+                    "production_trial_candidate": result.get("activation_patch_production_trial_candidate"),
+                    "production_trial_contract": result.get("activation_patch_production_trial_contract"),
+                    "production_trial_blocked_reasons": result.get("production_trial_blocked_reasons"),
+                    "next_evidence_needed": result.get("next_evidence_needed"),
+                    "why_not_apply": result.get("why_not_apply"),
+                }
+        return None
+
+    def _recent_production_trial_effect_seen(
+        self,
+        packet: Mapping[str, Any],
+        *,
+        objective_bundle_key: str,
+        operator_recipe_id: Any,
+    ) -> bool:
+        return self._production_trial_outcome_from_packet(
+            packet,
+            objective_bundle_key=objective_bundle_key,
+            operator_recipe_id=operator_recipe_id,
+        ) is not None
+
+    @staticmethod
+    def _production_trial_outcome_from_packet(
+        packet: Mapping[str, Any],
+        *,
+        objective_bundle_key: str,
+        operator_recipe_id: Any,
+    ) -> dict[str, Any] | None:
+        summary = packet.get("recent_effect_summary")
+        if not isinstance(summary, Mapping):
+            return None
+        raw_items = summary.get("production_trial_outcome_ledger")
+        latest = summary.get("latest_effects")
+        items: list[Any] = []
+        if isinstance(raw_items, SequenceABC) and not isinstance(raw_items, (str, bytes, bytearray)):
+            items.extend(raw_items)
+        if isinstance(latest, SequenceABC) and not isinstance(latest, (str, bytes, bytearray)):
+            items.extend(latest)
+        recipe_text = str(operator_recipe_id or "")
+        for effect in reversed(items):
+            if not isinstance(effect, Mapping):
+                continue
+            if str(effect.get("apply_kind", "") or "") != "production_trial":
+                continue
+            effect_objective = str(effect.get("objective_bundle_key") or effect.get("bundle_key") or "")
+            effect_recipe = str(effect.get("operator_recipe_id") or "")
+            if objective_bundle_key and effect_objective and effect_objective != objective_bundle_key:
+                continue
+            if recipe_text and effect_recipe and effect_recipe != recipe_text:
+                continue
+            return dict(effect)
+        return None
+
+    @staticmethod
+    def _production_trial_followup_from_outcome(outcome: Mapping[str, Any]) -> dict[str, str]:
+        trial_class = str(outcome.get("trial_effect_class") or outcome.get("verdict") or "unknown")
+        actuator_class = str(outcome.get("actuator_class", "unknown") or "unknown")
+        surface_family = str(outcome.get("surface_family_key", "") or "")
+        if trial_class in {"harmful", "regressing", "collapse_sharpener"}:
+            return {
+                "next_evidence_needed": "alternate_operator_recipe_after_trial",
+                "next_action": "request_compare_extra_operator_diagnostics",
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "blocked_by": f"production_trial_{trial_class}",
+                "promotion_ladder_stage": "trial_blocked_needs_alternate_operator",
+                "alternate_trial_candidate_plan": "compare_extra_operator_diagnostics",
+                "why_not_apply": (
+                    f"bounded production_trial returned {trial_class}/{actuator_class}; "
+                    f"veto this recipe family"
+                    + (f" on {surface_family}" if surface_family else "")
+                    + " and request alternate operator evidence"
+                ),
+            }
+        if trial_class == "neutral":
+            return {
+                "next_evidence_needed": "confirm_or_alternate_trial_candidate",
+                "next_action": "request_compare_extra_operator_diagnostics",
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "blocked_by": "production_trial_neutral",
+                "promotion_ladder_stage": "trial_neutral_needs_alternate_candidate",
+                "alternate_trial_candidate_plan": "compare_extra_operator_diagnostics",
+                "why_not_apply": "bounded production_trial was neutral; keep production closed and compare alternate operator recipes",
+            }
+        if trial_class == "helpful":
+            return {
+                "next_evidence_needed": "production_trial_confirmation_replay",
+                "next_action": "request_activation_patch_production_shadow_replay",
+                "diagnostic": "activation_patch_production_shadow_replay",
+                "blocked_by": "production_trial_needs_confirmation",
+                "promotion_ladder_stage": "trial_supported_needs_confirmation_replay",
+                "alternate_trial_candidate_plan": "confirm_same_trial_before_promotion",
+                "why_not_apply": "bounded production_trial was helpful; require confirmation replay before any production policy review",
+            }
+        return {
+            "next_evidence_needed": "production_trial_effect_followup",
+            "next_action": "request_compare_extra_operator_diagnostics",
+            "diagnostic": "compare_extra_operator_diagnostics",
+            "blocked_by": "production_trial_unknown",
+            "promotion_ladder_stage": "trial_unknown_needs_followup",
+            "alternate_trial_candidate_plan": "compare_extra_operator_diagnostics",
+            "why_not_apply": "bounded production_trial outcome was unknown; keep production closed and request alternate evidence",
+        }
+
+    @staticmethod
+    def _diagnostic_seen_in_results(results: Sequence[Any], diagnostic_name: str) -> bool:
+        expected = str(diagnostic_name or "")
+        if not expected:
+            return False
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") == expected:
+                return True
+        return False
+
+    @staticmethod
+    def _production_trial_alternate_evidence_from_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+    ) -> dict[str, Any] | None:
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
+                continue
+            result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+            if objective_bundle_key and result_objective and result_objective != objective_bundle_key:
+                continue
+            summary = result.get("diagnostic_summary")
+            evidence_rows = result.get("evidence_rows")
+            return {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "objective_bundle_key": result_objective or objective_bundle_key,
+                "status": result.get("status"),
+                "next_evidence_needed": result.get("next_evidence_needed"),
+                "diagnostic_operator_supported": result.get("diagnostic_operator_supported"),
+                "policy_candidate_ready": result.get("policy_candidate_ready"),
+                "production_apply_allowed": bool(result.get("production_apply_allowed", False)),
+                "evidence_row_count": (
+                    len(evidence_rows)
+                    if isinstance(evidence_rows, SequenceABC)
+                    and not isinstance(evidence_rows, (str, bytes, bytearray))
+                    else result.get("evidence_row_count")
+                ),
+                "diagnostic_summary": dict(summary) if isinstance(summary, Mapping) else None,
+            }
+        return None
+
+    @staticmethod
+    def _alternate_trial_candidate_from_compare_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+        blocked_operator_recipe_id: Any,
+    ) -> dict[str, Any] | None:
+        blocked_recipe = str(blocked_operator_recipe_id or "")
+        candidates: list[tuple[tuple[float, ...], dict[str, Any]]] = []
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                return int(value)
+            except Exception:
+                return default
+
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
+                continue
+            rows = result.get("evidence_rows")
+            if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
+                continue
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                if str(row.get("evidence_kind", "") or "") != "activation_patch_certification":
+                    continue
+                row_objective = str(row.get("bundle_key") or result.get("objective_bundle_key") or "")
+                if objective_bundle_key and row_objective and row_objective != objective_bundle_key:
+                    continue
+                recipe_id = str(row.get("operator_recipe_id") or "")
+                if blocked_recipe and recipe_id == blocked_recipe:
+                    continue
+                actuator_class = str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                actual_delta_class = str(row.get("actual_delta_class") or "")
+                if actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "cross_bound"}:
+                    continue
+                if actuator_class != "self_actuator":
+                    continue
+                target_mass_delta = _as_float(row.get("target_mass_delta"))
+                target_top20_delta = _as_int(row.get("target_top20_hit_delta"))
+                focus_rank_delta = _as_int(row.get("focus_rank_delta"))
+                self_delta = _as_float(row.get("self_delta"))
+                cross_delta = _as_float(row.get("cross_delta"))
+                alignment_margin = _as_float(row.get("alignment_margin"))
+                if actual_delta_class not in {"target_lift", "self_actuator"} and max(
+                    target_mass_delta,
+                    float(target_top20_delta),
+                    float(focus_rank_delta),
+                    self_delta,
+                ) <= 0.0:
+                    continue
+                alpha = _as_float(row.get("activation_patch_alpha"), 0.0)
+                candidate = {
+                    "kind": "activation_patch_shadow_actuator",
+                    "decision": "shadow",
+                    "objective_bundle_key": objective_bundle_key or row_objective or None,
+                    "actuator_bundle_key": str(row.get("actuator_bundle_key") or objective_bundle_key or row_objective or "") or None,
+                    "objective_term": row.get("realized_lift_term") or row.get("objective_term"),
+                    "recipe_name": row.get("recipe_name"),
+                    "operator_recipe_id": recipe_id or None,
+                    "activation_patch_site": row.get("activation_patch_site"),
+                    "activation_patch_layer": row.get("activation_patch_layer"),
+                    "activation_patch_alpha": alpha,
+                    "activation_patch_actuator_class": actuator_class,
+                    "actual_delta_class": actual_delta_class or None,
+                    "realized_lift_bundle_key": row.get("realized_lift_bundle_key"),
+                    "realized_lift_term": row.get("realized_lift_term"),
+                    "counterfactual_delta": {
+                        "target_mass_delta": round(float(target_mass_delta), 6),
+                        "target_top20_hit_delta": int(target_top20_delta),
+                        "focus_rank_delta": int(focus_rank_delta),
+                        "self_delta": round(float(self_delta), 6),
+                        "cross_delta": round(float(cross_delta), 6),
+                        "alignment_margin": round(float(alignment_margin), 6),
+                    },
+                    "promotable_to_candidate_compiler": True,
+                    "promotion_reason": "alternate_after_failed_production_trial",
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                }
+                score = (
+                    1.0 if actual_delta_class == "target_lift" else 0.0,
+                    self_delta,
+                    alignment_margin,
+                    float(focus_rank_delta) * 0.01,
+                    target_mass_delta * 1000.0,
+                    float(target_top20_delta) * 0.1,
+                    -alpha,
+                )
+                candidates.append((score, candidate))
+        if not candidates:
+            return None
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return candidates[0][1]
+
+    @staticmethod
+    def _activation_patch_shadow_from_preview_results(
+        results: Sequence[Any],
+        *,
+        preview: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        recipe_id = str(preview.get("operator_recipe_id") or "")
+        if not recipe_id:
+            return None
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            review = result.get("activation_patch_candidate_review")
+            if not isinstance(review, Mapping):
+                continue
+            review_preview = review.get("compile_preview")
+            if not isinstance(review_preview, Mapping):
+                continue
+            if str(review_preview.get("operator_recipe_id") or "") != recipe_id:
+                continue
+            return {
+                "kind": "activation_patch_shadow_actuator",
+                "decision": "shadow",
+                "objective_bundle_key": preview.get("objective_bundle_key"),
+                "actuator_bundle_key": preview.get("actuator_bundle_key") or preview.get("objective_bundle_key"),
+                "objective_term": preview.get("objective_term"),
+                "recipe_name": preview.get("recipe_name"),
+                "operator_recipe_id": recipe_id,
+                "activation_patch_site": preview.get("site"),
+                "activation_patch_layer": preview.get("layer"),
+                "activation_patch_alpha": preview.get("alpha"),
+                "activation_patch_actuator_class": review.get("actuator_class") or "self_actuator",
+                "actual_delta_class": review.get("actual_delta_class"),
+                "counterfactual_delta": dict(review.get("counterfactual_delta", {}))
+                if isinstance(review.get("counterfactual_delta"), Mapping)
+                else {},
+                "promotable_to_candidate_compiler": bool(
+                    review.get("promotable_to_candidate_compiler", True)
+                ),
+                "promotion_reason": review.get("promotion_reason") or "alternate_candidate_review_preview",
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+            }
+        return {
+            "kind": "activation_patch_shadow_actuator",
+            "decision": "shadow",
+            "objective_bundle_key": preview.get("objective_bundle_key"),
+            "actuator_bundle_key": preview.get("actuator_bundle_key") or preview.get("objective_bundle_key"),
+            "objective_term": preview.get("objective_term"),
+            "recipe_name": preview.get("recipe_name"),
+            "operator_recipe_id": recipe_id,
+            "activation_patch_site": preview.get("site"),
+            "activation_patch_layer": preview.get("layer"),
+            "activation_patch_alpha": preview.get("alpha"),
+            "activation_patch_actuator_class": preview.get("actuator_class") or "self_actuator",
+            "actual_delta_class": preview.get("actual_delta_class"),
+            "counterfactual_delta": {},
+            "promotable_to_candidate_compiler": True,
+            "promotion_reason": "alternate_preview_fallback",
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+
+    def _production_trial_apply_command(
+        self,
+        *,
+        packet: Mapping[str, Any],
+        objective_bundle_key: str,
+        step_actuator_bundle_key: str,
+        trial_gate: Mapping[str, Any],
+    ) -> dict[str, Any] | None:
+        if not bool(trial_gate.get("production_trial_allowed", False)):
+            return None
+        trial_candidate = trial_gate.get("production_trial_candidate")
+        if not isinstance(trial_candidate, Mapping):
+            return None
+        trial_edit = trial_candidate.get("trial_edit")
+        if not isinstance(trial_edit, Mapping):
+            return None
+        budget = packet.get("budget")
+        if isinstance(budget, Mapping):
+            try:
+                trial_edits_left = int(budget.get("production_trial_edits_left_this_run", 0) or 0)
+            except Exception:
+                trial_edits_left = 0
+            if trial_edits_left <= 0:
+                return None
+        operator_recipe_id = trial_candidate.get("operator_recipe_id")
+        if self._recent_production_trial_effect_seen(
+            packet,
+            objective_bundle_key=objective_bundle_key,
+            operator_recipe_id=operator_recipe_id,
+        ):
+            return None
+        edit = dict(trial_edit)
+        edit_meta = dict(edit.get("meta", {})) if isinstance(edit.get("meta"), Mapping) else {}
+        edit_meta.update(
+            {
+                "apply_kind": "production_trial",
+                "production_trial_allowed": True,
+                "production_apply_allowed": False,
+                "production_policy_would_apply": False,
+                "certified_for_apply": False,
+                "objective_bundle_key": objective_bundle_key,
+                "step_actuator_bundle_key": step_actuator_bundle_key,
+                "bundle_key": objective_bundle_key,
+            }
+        )
+        edit["meta"] = edit_meta
+        return {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [edit],
+            "meta": {
+                "apply_kind": "production_trial",
+                "hypothesis": "activation_patch_production_trial_apply",
+                "micro_rationale": "Run one bounded production trial; production apply remains closed.",
+                "objective_bundle_key": objective_bundle_key,
+                "step_actuator_bundle_key": step_actuator_bundle_key,
+                "operator_recipe_id": operator_recipe_id,
+                "surface_family_key": edit_meta.get("surface_family_key"),
+                "production_trial_allowed": True,
+                "production_apply_allowed": False,
+                "production_policy_would_apply": False,
+                "certified_for_apply": False,
+                "why_not_apply": "this is a bounded production_trial apply, not production apply permission",
+                "next_evidence_needed": "production_trial_effect",
+                "next_action": "noop",
+                "activation_patch_production_trial_candidate": dict(trial_candidate),
+                "activation_patch_production_trial_contract": trial_candidate.get("production_trial_contract"),
+                "controller_memory": {
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "next_evidence_needed": "production_trial_effect",
+                    "next_action": "noop",
+                },
+            },
+        }
 
     @staticmethod
     def _activation_patch_compile_preview_blocked_reason_from_results(results: Sequence[Any]) -> str | None:
@@ -1850,6 +2272,9 @@ class _FrontierReplayControllerClient:
         activation_patch_production_shadow = self._activation_patch_production_shadow_from_results(
             latest_result_items
         )
+        activation_patch_production_trial_gate = self._activation_patch_production_trial_gate_from_results(
+            latest_result_items
+        )
         activation_patch_preview_blocked_reason = self._activation_patch_compile_preview_blocked_reason_from_results(
             latest_result_items
         )
@@ -1861,6 +2286,29 @@ class _FrontierReplayControllerClient:
         request_activation_patch_runtime_round = False
         request_activation_patch_promotion_round = False
         request_activation_patch_production_shadow_round = False
+        request_activation_patch_production_trial_round = False
+        request_production_trial_followup_round = False
+        production_trial_outcome: dict[str, Any] | None = self._production_trial_outcome_from_packet(
+            packet,
+            objective_bundle_key=objective_bundle_key,
+            operator_recipe_id=None,
+        )
+        production_trial_followup: dict[str, str] | None = (
+            self._production_trial_followup_from_outcome(production_trial_outcome)
+            if isinstance(production_trial_outcome, Mapping)
+            else None
+        )
+        production_trial_alternate_evidence = self._production_trial_alternate_evidence_from_results(
+            latest_result_items,
+            objective_bundle_key=objective_bundle_key,
+        )
+        production_trial_alternate_candidate: dict[str, Any] | None = None
+        production_trial_blocked_recipe_id = (
+            production_trial_outcome.get("operator_recipe_id")
+            if isinstance(production_trial_outcome, Mapping)
+            else None
+        )
+        production_trial_outcome_holds_activation_patch_pipeline = False
         activation_patch_executable_shadow = (
             dict(activation_patch_runtime_support["executable_shadow"])
             if isinstance(activation_patch_runtime_support, Mapping)
@@ -1873,25 +2321,160 @@ class _FrontierReplayControllerClient:
             and isinstance(activation_patch_promotion_gate.get("production_apply_candidate"), Mapping)
             else None
         )
-        if activation_patch_preview is not None:
+        activation_patch_preview_recipe_id = (
+            activation_patch_preview.get("operator_recipe_id")
+            if isinstance(activation_patch_preview, Mapping)
+            else None
+        )
+        activation_patch_preview_is_alternate_after_trial = bool(
+            production_trial_outcome is not None
+            and activation_patch_preview_recipe_id not in (None, "")
+            and str(activation_patch_preview_recipe_id) != str(production_trial_blocked_recipe_id or "")
+        )
+        if production_trial_outcome is not None and production_trial_followup is not None:
+            followup_diagnostic = production_trial_followup.get("diagnostic", "compare_extra_operator_diagnostics")
+            followup_seen = self._diagnostic_seen_in_results(latest_result_items, followup_diagnostic)
+            production_trial_alternate_candidate = self._alternate_trial_candidate_from_compare_results(
+                latest_result_items,
+                objective_bundle_key=objective_bundle_key,
+                blocked_operator_recipe_id=production_trial_blocked_recipe_id,
+            )
+            production_trial_outcome_holds_activation_patch_pipeline = not activation_patch_preview_is_alternate_after_trial
+            if not followup_seen:
+                request_attention_shadow_round = False
+                request_production_trial_followup_round = True
+                diagnostic_name = followup_diagnostic
+                next_evidence = production_trial_followup["next_evidence_needed"]
+                why_not_apply = production_trial_followup["why_not_apply"]
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "operator_recipe_id": production_trial_outcome.get("operator_recipe_id"),
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                    "production_trial_outcome": dict(production_trial_outcome),
+                }
+            elif (
+                production_trial_alternate_candidate is not None
+                and not activation_patch_preview_is_alternate_after_trial
+            ):
+                request_attention_shadow_round = False
+                request_production_trial_followup_round = True
+                diagnostic_name = "activation_patch_candidate_review"
+                next_evidence = "alternate_activation_patch_candidate_review"
+                why_not_apply = (
+                    "production trial followup found an alternate activation-patch recipe; "
+                    "review it as shadow-only before any runtime support probe"
+                )
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "activation_patch_shadow_actuator": dict(production_trial_alternate_candidate),
+                    "alternate_trial_candidate": dict(production_trial_alternate_candidate),
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                    "production_trial_outcome": dict(production_trial_outcome),
+                }
+            else:
+                next_evidence = "alternate_trial_candidate_generator"
+                why_not_apply = (
+                    "production trial followup evidence was received; hold the old activation_patch "
+                    "runtime-support loop until an alternate operator candidate consumes it"
+                )
+        if activation_patch_preview is not None and not production_trial_outcome_holds_activation_patch_pipeline:
             request_attention_shadow_round = False
             if activation_patch_production_shadow is not None:
                 shadow_passed = bool(activation_patch_production_shadow.get("shadow_replay_passed", False))
-                next_evidence = str(
-                    activation_patch_production_shadow.get(
-                        "next_evidence_needed",
-                        "production_policy_review" if shadow_passed else "production_shadow_replay_followup",
+                if shadow_passed and activation_patch_production_trial_gate is None:
+                    request_activation_patch_production_trial_round = True
+                    diagnostic_name = "activation_patch_production_trial_gate_review"
+                    next_evidence = "production_trial_gate_review"
+                    why_not_apply = (
+                        "activation_patch production shadow passed; review bounded trial contract without opening production apply"
                     )
-                    or ("production_policy_review" if shadow_passed else "production_shadow_replay_followup")
-                )
-                why_not_apply = (
-                    "activation_patch production shadow replay passed, but production apply permission remains closed"
-                    if shadow_passed
-                    else activation_patch_production_shadow.get(
-                        "why_not_apply",
-                        "activation_patch production shadow replay remains blocked",
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                    }
+                elif activation_patch_production_trial_gate is not None:
+                    trial_allowed = bool(activation_patch_production_trial_gate.get("production_trial_allowed", False))
+                    trial_candidate = activation_patch_production_trial_gate.get("production_trial_candidate")
+                    trial_operator_recipe_id = (
+                        trial_candidate.get("operator_recipe_id")
+                        if isinstance(trial_candidate, Mapping)
+                        else None
                     )
-                )
+                    trial_outcome = self._production_trial_outcome_from_packet(
+                        packet,
+                        objective_bundle_key=objective_bundle_key,
+                        operator_recipe_id=trial_operator_recipe_id,
+                    )
+                    production_trial_outcome = dict(trial_outcome) if isinstance(trial_outcome, Mapping) else None
+                    trial_apply_command = self._production_trial_apply_command(
+                        packet=packet,
+                        objective_bundle_key=objective_bundle_key,
+                        step_actuator_bundle_key=step_actuator_bundle_key,
+                        trial_gate=activation_patch_production_trial_gate,
+                    )
+                    if trial_apply_command is not None:
+                        return trial_apply_command
+                    if trial_outcome is not None:
+                        followup = self._production_trial_followup_from_outcome(trial_outcome)
+                        production_trial_followup = dict(followup)
+                        request_production_trial_followup_round = True
+                        diagnostic_name = followup["diagnostic"]
+                        next_evidence = followup["next_evidence_needed"]
+                        why_not_apply = followup["why_not_apply"]
+                        diagnostic_request = {
+                            "diagnostic": diagnostic_name,
+                            "bundle_key": objective_bundle_key,
+                            "objective_bundle_key": objective_bundle_key,
+                            "step_actuator_bundle_key": step_actuator_bundle_key,
+                            "operator_recipe_id": trial_operator_recipe_id,
+                            "next_evidence_needed": next_evidence,
+                            "reason": why_not_apply,
+                            "production_trial_outcome": dict(trial_outcome),
+                        }
+                    else:
+                        next_evidence = str(
+                            activation_patch_production_trial_gate.get(
+                                "next_evidence_needed",
+                                "bounded_production_trial" if trial_allowed else "production_trial_gate_followup",
+                            )
+                            or ("bounded_production_trial" if trial_allowed else "production_trial_gate_followup")
+                        )
+                        why_not_apply = (
+                            "activation_patch production trial gate is ready only for a bounded trial; production apply remains closed"
+                            if trial_allowed
+                            else activation_patch_production_trial_gate.get(
+                                "why_not_apply",
+                                "activation_patch production trial gate remains blocked",
+                            )
+                        )
+                else:
+                    next_evidence = str(
+                        activation_patch_production_shadow.get(
+                            "next_evidence_needed",
+                            "production_policy_review" if shadow_passed else "production_shadow_replay_followup",
+                        )
+                        or ("production_policy_review" if shadow_passed else "production_shadow_replay_followup")
+                    )
+                    why_not_apply = (
+                        "activation_patch production shadow replay passed, but production apply permission remains closed"
+                        if shadow_passed
+                        else activation_patch_production_shadow.get(
+                            "why_not_apply",
+                            "activation_patch production shadow replay remains blocked",
+                        )
+                    )
             elif activation_patch_promotion_gate is not None:
                 next_evidence = str(
                     activation_patch_promotion_gate.get("next_evidence_needed", "production_policy_review")
@@ -1924,6 +2507,17 @@ class _FrontierReplayControllerClient:
                 why_not_apply = (
                     "activation_patch_compile_preview needs quarantine executable support before any promotion gate"
                 )
+                alternate_runtime_shadow = (
+                    production_trial_alternate_candidate
+                    if production_trial_alternate_candidate is not None
+                    else self._activation_patch_shadow_from_preview_results(
+                        latest_result_items,
+                        preview=activation_patch_preview,
+                    )
+                    if activation_patch_preview_is_alternate_after_trial
+                    and isinstance(activation_patch_preview, Mapping)
+                    else None
+                )
                 diagnostic_request = {
                     "diagnostic": diagnostic_name,
                     "bundle_key": objective_bundle_key,
@@ -1932,6 +2526,13 @@ class _FrontierReplayControllerClient:
                     "next_evidence_needed": next_evidence,
                     "reason": why_not_apply,
                 }
+                if (
+                    activation_patch_preview_is_alternate_after_trial
+                    and alternate_runtime_shadow is not None
+                ):
+                    diagnostic_request["activation_patch_shadow_actuator"] = dict(alternate_runtime_shadow)
+                    diagnostic_request["alternate_trial_candidate"] = dict(alternate_runtime_shadow)
+                    production_trial_alternate_candidate = dict(alternate_runtime_shadow)
             elif activation_patch_promotion_gate is None and bool(
                 activation_patch_runtime_support.get("runtime_supported_shadow_candidate", False)
             ):
@@ -1987,6 +2588,8 @@ class _FrontierReplayControllerClient:
                 request_activation_patch_runtime_round
                 or request_activation_patch_promotion_round
                 or request_activation_patch_production_shadow_round
+                or request_activation_patch_production_trial_round
+                or request_production_trial_followup_round
                 or request_attention_shadow_round
                 or not has_latest_results
             )
@@ -2006,7 +2609,9 @@ class _FrontierReplayControllerClient:
                 {
                     "kind": (
                         "activation_patch_production_shadow_replay"
-                        if activation_patch_production_shadow is not None
+                        if activation_patch_production_shadow is not None and activation_patch_production_trial_gate is None
+                        else "activation_patch_production_trial_gate_review"
+                        if activation_patch_production_trial_gate is not None
                         else "activation_patch_production_apply_candidate"
                         if activation_patch_production_candidate is not None
                         else "activation_patch_executable_shadow"
@@ -2102,8 +2707,13 @@ class _FrontierReplayControllerClient:
                     else None,
                     "production_apply_allowed": False,
                     "reason": (
+                        "production trial followup evidence is being consumed before restarting activation_patch probes"
+                        if production_trial_outcome_holds_activation_patch_pipeline
+                        else
                         "activation patch production shadow replay remains non-applying evidence"
-                        if activation_patch_production_shadow is not None
+                        if activation_patch_production_shadow is not None and activation_patch_production_trial_gate is None
+                        else "activation patch production trial gate is bounded-trial evidence, not production apply"
+                        if activation_patch_production_trial_gate is not None
                         else
                         "activation patch production candidate remains blocked until policy review opens production apply"
                         if activation_patch_production_candidate is not None
@@ -2129,9 +2739,45 @@ class _FrontierReplayControllerClient:
                 "next_action": next_action,
             },
         }
+        if production_trial_outcome is not None:
+            meta["production_trial_outcome"] = dict(production_trial_outcome)
+            meta["activation_patch_production_trial_effect_class"] = str(
+                production_trial_outcome.get("trial_effect_class", "unknown") or "unknown"
+            )
+            if production_trial_followup is not None:
+                meta["production_trial_followup"] = dict(production_trial_followup)
+                meta["blocked_by"] = production_trial_followup.get(
+                    "blocked_by",
+                    meta.get("blocked_by", "activation_patch_production_trial_outcome"),
+                )
+                meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+            if production_trial_alternate_evidence is not None:
+                meta["production_trial_alternate_evidence"] = dict(production_trial_alternate_evidence)
+                meta["production_trial_followup_consumed"] = True
+                meta["blocked_by"] = "production_trial_alternate_evidence_pending_candidate_generator"
+                meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+                meta["controller_memory"]["production_trial_followup_consumed"] = True
+            if production_trial_alternate_candidate is not None:
+                meta["production_trial_alternate_candidate"] = dict(production_trial_alternate_candidate)
+                meta["controller_memory"]["production_trial_alternate_candidate_recipe_id"] = (
+                    production_trial_alternate_candidate.get("operator_recipe_id")
+                )
+                if request_production_trial_followup_round and diagnostic_name == "activation_patch_candidate_review":
+                    meta["blocked_by"] = "production_trial_alternate_candidate_shadow_review"
+                    meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+            meta["activation_patch_pipeline_suppressed_by_production_trial_outcome"] = bool(
+                production_trial_outcome_holds_activation_patch_pipeline
+            )
+            meta["hypothesis"] = "activation_patch_production_trial_outcome_reviewed"
+            meta["micro_rationale"] = (
+                "production trial outcome was folded back into the next diagnostic decision; production apply remains closed"
+            )
         if attention_shadow is not None and activation_patch_preview is None:
             meta["attention_shadow_actuator"] = dict(attention_shadow)
-        if activation_patch_preview is not None:
+        if activation_patch_preview is not None and production_trial_outcome_holds_activation_patch_pipeline:
+            meta["activation_patch_compile_preview"] = dict(activation_patch_preview)
+            meta["activation_patch_pipeline_suppressed_by_production_trial_outcome"] = True
+        elif activation_patch_preview is not None:
             meta["activation_patch_compile_preview"] = dict(activation_patch_preview)
             if activation_patch_executable_shadow is not None:
                 meta["activation_patch_executable_shadow"] = dict(activation_patch_executable_shadow)
@@ -2155,10 +2801,39 @@ class _FrontierReplayControllerClient:
                         activation_patch_production_shadow.get("production_denial_reasons_after_shadow"),
                         (str, bytes, bytearray),
                     ) else []
-                    meta["hypothesis"] = "activation_patch_production_shadow_replay_reviewed"
-                    meta["micro_rationale"] = "production shadow replay updated denial axes; production apply remains closed"
-                    meta["blocked_by"] = "activation_patch_production_shadow_policy_closed"
-                    meta["controller_memory"]["blocked_by"] = "activation_patch_production_shadow_policy_closed"
+                    if activation_patch_production_trial_gate is not None:
+                        trial_dossier = activation_patch_production_trial_gate.get("production_trial_dossier")
+                        trial_candidate = activation_patch_production_trial_gate.get("production_trial_candidate")
+                        trial_contract = activation_patch_production_trial_gate.get("production_trial_contract")
+                        if isinstance(trial_dossier, Mapping):
+                            meta["activation_patch_production_trial_dossier"] = dict(trial_dossier)
+                        if isinstance(trial_candidate, Mapping):
+                            meta["activation_patch_production_trial_candidate"] = dict(trial_candidate)
+                        if isinstance(trial_contract, Mapping):
+                            meta["activation_patch_production_trial_contract"] = dict(trial_contract)
+                        meta["production_trial_allowed"] = bool(
+                            activation_patch_production_trial_gate.get("production_trial_allowed", False)
+                        )
+                        meta["production_trial_blocked_reasons"] = list(
+                            activation_patch_production_trial_gate.get("production_trial_blocked_reasons", ())
+                        ) if isinstance(
+                            activation_patch_production_trial_gate.get("production_trial_blocked_reasons"),
+                            SequenceABC,
+                        ) and not isinstance(
+                            activation_patch_production_trial_gate.get("production_trial_blocked_reasons"),
+                            (str, bytes, bytearray),
+                        ) else []
+                        meta["hypothesis"] = "activation_patch_production_trial_gate_reviewed"
+                        meta["micro_rationale"] = (
+                            "production trial gate reviewed bounded trial contract; production apply remains closed"
+                        )
+                        meta["blocked_by"] = "activation_patch_production_trial_only"
+                        meta["controller_memory"]["blocked_by"] = "activation_patch_production_trial_only"
+                    else:
+                        meta["hypothesis"] = "activation_patch_production_shadow_replay_reviewed"
+                        meta["micro_rationale"] = "production shadow replay updated denial axes; production apply remains closed"
+                        meta["blocked_by"] = "activation_patch_production_shadow_policy_closed"
+                        meta["controller_memory"]["blocked_by"] = "activation_patch_production_shadow_policy_closed"
                 elif activation_patch_production_candidate is not None:
                     meta["activation_patch_production_apply_candidate"] = dict(activation_patch_production_candidate)
                     meta["activation_patch_promotion_gate_passed"] = bool(
@@ -2181,7 +2856,15 @@ class _FrontierReplayControllerClient:
         elif activation_patch_preview_blocked_reason is not None:
             meta["blocked_by"] = activation_patch_preview_blocked_reason
             meta["controller_memory"]["blocked_by"] = activation_patch_preview_blocked_reason
-        if has_latest_results and not request_attention_shadow_round:
+        request_round_open = bool(
+            request_activation_patch_runtime_round
+            or request_activation_patch_promotion_round
+            or request_activation_patch_production_shadow_round
+            or request_activation_patch_production_trial_round
+            or request_production_trial_followup_round
+            or request_attention_shadow_round
+        )
+        if has_latest_results and not request_round_open:
             meta["observed_outcome"] = "diagnostic_result_received"
             meta["latest_diagnostic_result_count"] = len(latest_results)
         else:
@@ -2190,6 +2873,39 @@ class _FrontierReplayControllerClient:
             if request_attention_shadow_round:
                 meta["observed_outcome"] = "operator_diagnostic_blocked_attention_shadow_round_requested"
                 meta["latest_diagnostic_result_count"] = len(latest_results)
+        if production_trial_outcome is not None:
+            meta["production_trial_outcome"] = dict(production_trial_outcome)
+            meta["activation_patch_production_trial_effect_class"] = str(
+                production_trial_outcome.get("trial_effect_class", "unknown") or "unknown"
+            )
+            if production_trial_followup is not None:
+                meta["production_trial_followup"] = dict(production_trial_followup)
+                meta["blocked_by"] = production_trial_followup.get(
+                    "blocked_by",
+                    meta.get("blocked_by", "activation_patch_production_trial_outcome"),
+                )
+                meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+            if production_trial_alternate_evidence is not None:
+                meta["production_trial_alternate_evidence"] = dict(production_trial_alternate_evidence)
+                meta["production_trial_followup_consumed"] = True
+                meta["blocked_by"] = "production_trial_alternate_evidence_pending_candidate_generator"
+                meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+                meta["controller_memory"]["production_trial_followup_consumed"] = True
+            if production_trial_alternate_candidate is not None:
+                meta["production_trial_alternate_candidate"] = dict(production_trial_alternate_candidate)
+                meta["controller_memory"]["production_trial_alternate_candidate_recipe_id"] = (
+                    production_trial_alternate_candidate.get("operator_recipe_id")
+                )
+                if request_production_trial_followup_round and diagnostic_name == "activation_patch_candidate_review":
+                    meta["blocked_by"] = "production_trial_alternate_candidate_shadow_review"
+                    meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+            meta["activation_patch_pipeline_suppressed_by_production_trial_outcome"] = bool(
+                production_trial_outcome_holds_activation_patch_pipeline
+            )
+            meta["hypothesis"] = "activation_patch_production_trial_outcome_reviewed"
+            meta["micro_rationale"] = (
+                "production trial outcome was folded back into the next diagnostic decision; production apply remains closed"
+            )
         return {"version": "0.1", "decision": "noop", "meta": meta}
 
     def invoke(self, packet: dict[str, Any]) -> dict[str, Any]:

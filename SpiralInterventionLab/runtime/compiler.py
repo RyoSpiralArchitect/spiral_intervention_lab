@@ -250,6 +250,8 @@ def _registration_metadata(
         "objective_bundle_key",
         "step_actuator_bundle_key",
         "apply_kind",
+        "production_trial_allowed",
+        "production_trial_contract",
         "production_apply_allowed",
         "production_policy_would_apply",
         "certified_for_apply",

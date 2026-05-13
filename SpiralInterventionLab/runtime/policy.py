@@ -6,6 +6,7 @@ from typing import Any, Iterable, Mapping
 from .edit_budget import (
     LOOP_RESCUE_EDIT_BUDGET_POOL,
     MAIN_EDIT_BUDGET_POOL,
+    PRODUCTION_TRIAL_EDIT_BUDGET_POOL,
     classify_edit_budget_pool,
     estimate_edit_cost,
 )
@@ -47,6 +48,9 @@ class GlobalBudget:
     max_loop_rescue_edits_per_run: int = 4
     max_loop_rescue_total_alpha: float = 0.24
     max_loop_rescue_total_edit_cost: float = 0.24
+    max_production_trial_edits_per_run: int = 1
+    max_production_trial_total_alpha: float = 0.15
+    max_production_trial_total_edit_cost: float = 0.15
     max_rank_per_edit: int = 1
 
 
@@ -238,6 +242,7 @@ def command_budget_usage(
     usage = {
         MAIN_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
         LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
+        PRODUCTION_TRIAL_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
     }
     for edit in cmd.edits:
         surface = _resolve_surface(pkt, edit.target)
@@ -284,6 +289,13 @@ def budget_violation_reason(
         return "command exceeds packet.loop_rescue_edits_left_this_run"
     if usage[LOOP_RESCUE_EDIT_BUDGET_POOL]["edit_count"] > pol.global_budget.max_loop_rescue_edits_per_run:
         return "command exceeds policy.max_loop_rescue_edits_per_run"
+    production_trial_budget = getattr(pkt.budget, "production_trial_edits_left_this_run", 0)
+    production_trial_alpha_left = getattr(pkt.budget, "production_trial_alpha_left_total", 0.0)
+    production_trial_cost_left = getattr(pkt.budget, "production_trial_edit_cost_left_total", 0.0)
+    if usage[PRODUCTION_TRIAL_EDIT_BUDGET_POOL]["edit_count"] > production_trial_budget:
+        return "command exceeds packet.production_trial_edits_left_this_run"
+    if usage[PRODUCTION_TRIAL_EDIT_BUDGET_POOL]["edit_count"] > pol.global_budget.max_production_trial_edits_per_run:
+        return "command exceeds policy.max_production_trial_edits_per_run"
 
     main_alpha = float(usage[MAIN_EDIT_BUDGET_POOL]["alpha"])
     main_edit_cost = float(usage[MAIN_EDIT_BUDGET_POOL]["edit_cost"])
@@ -306,5 +318,16 @@ def budget_violation_reason(
         return "command exceeds packet loop_rescue edit cost budget"
     if rescue_edit_cost > pol.global_budget.max_loop_rescue_total_edit_cost:
         return "command exceeds policy loop_rescue total edit cost budget"
+
+    trial_alpha = float(usage[PRODUCTION_TRIAL_EDIT_BUDGET_POOL]["alpha"])
+    trial_edit_cost = float(usage[PRODUCTION_TRIAL_EDIT_BUDGET_POOL]["edit_cost"])
+    if trial_alpha > production_trial_alpha_left:
+        return "command exceeds packet production_trial alpha budget"
+    if trial_alpha > pol.global_budget.max_production_trial_total_alpha:
+        return "command exceeds policy production_trial total alpha budget"
+    if trial_edit_cost > production_trial_cost_left:
+        return "command exceeds packet production_trial edit cost budget"
+    if trial_edit_cost > pol.global_budget.max_production_trial_total_edit_cost:
+        return "command exceeds policy production_trial total edit cost budget"
 
     return None

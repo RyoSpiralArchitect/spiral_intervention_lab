@@ -1205,6 +1205,67 @@ class TestLoopAndEffects(unittest.TestCase):
         self.assertIn("recipe:budget:span_mean", summary["recent_collapse_sharpener_operator_recipe_ids"])
         self.assertEqual(summary["latest_effects"][0]["actuator_class"], "collapse_sharpener")
 
+    def test_production_trial_effect_summary_records_outcome_ledger_and_veto_keys(self):
+        effect = build_edit_effect(
+            edit_id="trial_1",
+            surface_id="s_resid_pre_l6_last",
+            observed_window_steps=1,
+            before={
+                "entropy": 2.5,
+                "top1_margin": 0.01,
+                "repetition_score": 0.0,
+                "repeat_flag": 0.0,
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "partial_score": 0.0,
+                "semantic_progress_score": 0.0,
+                "progress_score": 0.0,
+            },
+            after={
+                "entropy": 2.2,
+                "top1_margin": 0.04,
+                "repetition_score": 0.5,
+                "repeat_flag": 1.0,
+                "required_term_recall": 0.0,
+                "required_term_span_progress": 0.0,
+                "partial_score": 0.0,
+                "semantic_progress_score": 0.0,
+                "progress_score": 0.0,
+            },
+            surface_family_key="activation_patch_trial:s_resid_pre_l6_last",
+            operator_recipe_id="activation_patch:budget:trial",
+            bundle_key="kv_pair:budget:source_body:72:73",
+            objective_bundle_key="kv_pair:budget:source_body:72:73",
+            step_actuator_bundle_key="kv_pair:budget:source_body:72:73",
+            apply_kind="production_trial",
+            production_trial_allowed=True,
+            production_apply_allowed=False,
+            certified_for_apply=False,
+        )
+
+        self.assertEqual(effect["trial_effect_class"], "collapse_sharpener")
+        summary = summarize_effects([effect])
+        self.assertEqual(summary["production_trial_outcome_counts"]["collapse_sharpener"], 1)
+        self.assertEqual(summary["latest_effects"][0]["trial_effect_class"], "collapse_sharpener")
+        self.assertEqual(summary["production_trial_outcome_ledger"][0]["apply_kind"], "production_trial")
+        self.assertEqual(summary["production_trial_outcome_ledger"][0]["trial_effect_class"], "collapse_sharpener")
+        self.assertEqual(
+            summary["production_trial_outcome_ledger"][0]["promotion_ladder_stage"],
+            "trial_blocked_needs_alternate_operator",
+        )
+        self.assertEqual(
+            summary["production_trial_policy_ladder_latest"],
+            "trial_blocked_needs_alternate_operator",
+        )
+        self.assertIn(
+            "activation_patch_trial:s_resid_pre_l6_last",
+            summary["recent_production_trial_veto_surface_family_keys"],
+        )
+        self.assertIn(
+            "activation_patch:budget:trial",
+            summary["recent_production_trial_veto_operator_recipe_ids"],
+        )
+
     def test_build_edit_effect_marks_loop_relief_without_coverage_as_stabilizing_only(self):
         effect = build_edit_effect(
             edit_id="e_stabilize",
