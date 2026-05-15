@@ -7,6 +7,7 @@ from .edit_budget import (
     LOOP_RESCUE_EDIT_BUDGET_POOL,
     MAIN_EDIT_BUDGET_POOL,
     PRODUCTION_TRIAL_EDIT_BUDGET_POOL,
+    PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
     classify_edit_budget_pool,
     estimate_edit_cost,
 )
@@ -51,6 +52,9 @@ class GlobalBudget:
     max_production_trial_edits_per_run: int = 1
     max_production_trial_total_alpha: float = 0.15
     max_production_trial_total_edit_cost: float = 0.15
+    max_production_trial_followup_edits_per_run: int = 1
+    max_production_trial_followup_total_alpha: float = 0.05
+    max_production_trial_followup_total_edit_cost: float = 0.05
     max_rank_per_edit: int = 1
 
 
@@ -125,11 +129,17 @@ def _walk_source_exprs(source: Source) -> Iterable[Mapping[str, Any]]:
             yield source.v
 
 
-def _validate_expr_budget(source: Source, policy: HarnessPolicy) -> None:
+def _validate_expr_budget(
+    source: Source,
+    policy: HarnessPolicy,
+    *,
+    max_expr_depth: int | None = None,
+) -> None:
+    expr_depth_limit = policy.max_expr_depth if max_expr_depth is None else int(max_expr_depth)
     for expr in _walk_source_exprs(source):
         for depth, node in _iter_expr_nodes(expr):
-            if depth > policy.max_expr_depth:
-                raise PolicyViolation(f"expression exceeds max depth {policy.max_expr_depth}")
+            if depth > expr_depth_limit:
+                raise PolicyViolation(f"expression exceeds max depth {expr_depth_limit}")
             if node.get("fn") in {"add", "sub", "mean"} and len(node.get("args", [])) > policy.max_expr_args:
                 raise PolicyViolation(f"expression exceeds max arg count {policy.max_expr_args}")
 
@@ -225,7 +235,21 @@ def validate_command_against_packet(
             if edit.op.which == "kv" and edit.source.dtype != "cache_pair":
                 raise PolicyViolation(f"edit '{edit.id}' requires cache_pair source for kv_mix which='kv'")
 
-        _validate_expr_budget(edit.source, pol)
+        edit_meta = edit.meta if isinstance(getattr(edit, "meta", None), Mapping) else {}
+        apply_kind = str(
+            edit_meta.get("apply_kind")
+            or cmd.meta.get("apply_kind")
+            or ""
+        ).strip().lower()
+        production_trial_budget_class = str(
+            edit_meta.get("production_trial_budget_class")
+            or cmd.meta.get("production_trial_budget_class")
+            or ""
+        ).strip().lower()
+        expr_depth_limit = pol.max_expr_depth
+        if apply_kind == "production_trial" and production_trial_budget_class == "alternate_followup":
+            expr_depth_limit = max(expr_depth_limit, 8)
+        _validate_expr_budget(edit.source, pol, max_expr_depth=expr_depth_limit)
         _validate_trace_access(edit.source, pkt)
     if rank_patch_count > pkt.budget.active_patch_slots_left:
         raise PolicyViolation("command exceeds packet active_patch_slots_left")
@@ -243,6 +267,11 @@ def command_budget_usage(
         MAIN_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
         LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
         PRODUCTION_TRIAL_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
+        PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL: {
+            "edit_count": 0.0,
+            "alpha": 0.0,
+            "edit_cost": 0.0,
+        },
     }
     for edit in cmd.edits:
         surface = _resolve_surface(pkt, edit.target)
@@ -276,6 +305,10 @@ def budget_violation_reason(
         return None
 
     usage = usage or command_budget_usage(cmd, pkt, policy=pol)
+    usage.setdefault(
+        PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
+        {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
+    )
 
     if len(cmd.edits) > pkt.budget.edits_left_this_step:
         return "command exceeds packet.edits_left_this_step"
@@ -292,10 +325,28 @@ def budget_violation_reason(
     production_trial_budget = getattr(pkt.budget, "production_trial_edits_left_this_run", 0)
     production_trial_alpha_left = getattr(pkt.budget, "production_trial_alpha_left_total", 0.0)
     production_trial_cost_left = getattr(pkt.budget, "production_trial_edit_cost_left_total", 0.0)
+    production_trial_followup_budget = getattr(pkt.budget, "production_trial_followup_edits_left_this_run", 0)
+    production_trial_followup_alpha_left = getattr(
+        pkt.budget,
+        "production_trial_followup_alpha_left_total",
+        0.0,
+    )
+    production_trial_followup_cost_left = getattr(
+        pkt.budget,
+        "production_trial_followup_edit_cost_left_total",
+        0.0,
+    )
     if usage[PRODUCTION_TRIAL_EDIT_BUDGET_POOL]["edit_count"] > production_trial_budget:
         return "command exceeds packet.production_trial_edits_left_this_run"
     if usage[PRODUCTION_TRIAL_EDIT_BUDGET_POOL]["edit_count"] > pol.global_budget.max_production_trial_edits_per_run:
         return "command exceeds policy.max_production_trial_edits_per_run"
+    if usage[PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL]["edit_count"] > production_trial_followup_budget:
+        return "command exceeds packet.production_trial_followup_edits_left_this_run"
+    if (
+        usage[PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL]["edit_count"]
+        > pol.global_budget.max_production_trial_followup_edits_per_run
+    ):
+        return "command exceeds policy.max_production_trial_followup_edits_per_run"
 
     main_alpha = float(usage[MAIN_EDIT_BUDGET_POOL]["alpha"])
     main_edit_cost = float(usage[MAIN_EDIT_BUDGET_POOL]["edit_cost"])
@@ -329,5 +380,16 @@ def budget_violation_reason(
         return "command exceeds packet production_trial edit cost budget"
     if trial_edit_cost > pol.global_budget.max_production_trial_total_edit_cost:
         return "command exceeds policy production_trial total edit cost budget"
+
+    trial_followup_alpha = float(usage[PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL]["alpha"])
+    trial_followup_edit_cost = float(usage[PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL]["edit_cost"])
+    if trial_followup_alpha > production_trial_followup_alpha_left:
+        return "command exceeds packet production_trial_followup alpha budget"
+    if trial_followup_alpha > pol.global_budget.max_production_trial_followup_total_alpha:
+        return "command exceeds policy production_trial_followup total alpha budget"
+    if trial_followup_edit_cost > production_trial_followup_cost_left:
+        return "command exceeds packet production_trial_followup edit cost budget"
+    if trial_followup_edit_cost > pol.global_budget.max_production_trial_followup_total_edit_cost:
+        return "command exceeds policy production_trial_followup total edit cost budget"
 
     return None

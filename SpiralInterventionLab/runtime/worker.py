@@ -12,7 +12,12 @@ import torch
 from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
-from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL, PRODUCTION_TRIAL_EDIT_BUDGET_POOL
+from .edit_budget import (
+    LOOP_RESCUE_EDIT_BUDGET_POOL,
+    MAIN_EDIT_BUDGET_POOL,
+    PRODUCTION_TRIAL_EDIT_BUDGET_POOL,
+    PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
+)
 from .effects import build_edit_effect, summarize_effects
 from .policy import GlobalBudget, HarnessPolicy
 from .schema import SurfaceInfo
@@ -437,6 +442,9 @@ class HookedTransformerWorkerRuntime:
         max_production_trial_edits_per_run: int = 1,
         max_production_trial_alpha: float = 0.15,
         max_production_trial_edit_cost: float | None = None,
+        max_production_trial_followup_edits_per_run: int = 1,
+        max_production_trial_followup_alpha: float = 0.05,
+        max_production_trial_followup_edit_cost: float | None = None,
         max_active_patch_slots: int = 1,
         generated_tail_chars: int = 80,
         recent_token_count: int = 6,
@@ -488,6 +496,16 @@ class HookedTransformerWorkerRuntime:
             max_production_trial_edit_cost
             if max_production_trial_edit_cost is not None
             else self.max_production_trial_alpha
+        )
+        self.max_production_trial_followup_edits_per_run = max(
+            0,
+            int(max_production_trial_followup_edits_per_run),
+        )
+        self.max_production_trial_followup_alpha = max(0.0, float(max_production_trial_followup_alpha))
+        self.max_production_trial_followup_edit_cost = float(
+            max_production_trial_followup_edit_cost
+            if max_production_trial_followup_edit_cost is not None
+            else self.max_production_trial_followup_alpha
         )
         self.max_active_patch_slots = max_active_patch_slots
         self.generated_tail_chars = generated_tail_chars
@@ -562,6 +580,8 @@ class HookedTransformerWorkerRuntime:
         self._spent_loop_rescue_cost: dict[str, float] = {}
         self._spent_production_trial_alpha: dict[str, float] = {}
         self._spent_production_trial_cost: dict[str, float] = {}
+        self._spent_production_trial_followup_alpha: dict[str, float] = {}
+        self._spent_production_trial_followup_cost: dict[str, float] = {}
         self._last_packet: dict[str, Any] | None = None
         self._no_progress_steps = 0
         self._latest_readout_sidecar_capture: ReadoutSidecarCapture | None = None
@@ -1274,9 +1294,17 @@ class HookedTransformerWorkerRuntime:
                 step_actuator_bundle_key=pending.get("step_actuator_bundle_key"),
                 apply_kind=pending.get("apply_kind"),
                 production_trial_allowed=pending.get("production_trial_allowed"),
+                production_trial_budget_class=pending.get("production_trial_budget_class"),
+                production_trial_followup_allowed=pending.get("production_trial_followup_allowed"),
                 production_apply_allowed=pending.get("production_apply_allowed"),
                 production_policy_would_apply=pending.get("production_policy_would_apply"),
                 certified_for_apply=pending.get("certified_for_apply"),
+                source_localization=pending.get("source_localization"),
+                patch_mode=pending.get("patch_mode"),
+                contrast_mode=pending.get("contrast_mode"),
+                contrast_scale=pending.get("contrast_scale"),
+                stealer_bundle_key=pending.get("stealer_bundle_key"),
+                stealer_term=pending.get("stealer_term"),
             )
             for pending in self._pending_effects
         ]
@@ -1300,6 +1328,12 @@ class HookedTransformerWorkerRuntime:
             elif budget_pool == PRODUCTION_TRIAL_EDIT_BUDGET_POOL:
                 self._spent_production_trial_alpha.setdefault(budget_key, float(active["alpha"]))
                 self._spent_production_trial_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
+            elif budget_pool == PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL:
+                self._spent_production_trial_followup_alpha.setdefault(budget_key, float(active["alpha"]))
+                self._spent_production_trial_followup_cost.setdefault(
+                    budget_key,
+                    float(active.get("edit_cost", 0.0) or 0.0),
+                )
             else:
                 self._spent_budget_alpha.setdefault(budget_key, float(active["alpha"]))
                 self._spent_budget_cost.setdefault(budget_key, float(active.get("edit_cost", 0.0) or 0.0))
@@ -1322,9 +1356,17 @@ class HookedTransformerWorkerRuntime:
                     "step_actuator_bundle_key": active.get("step_actuator_bundle_key"),
                     "apply_kind": active.get("apply_kind"),
                     "production_trial_allowed": active.get("production_trial_allowed"),
+                    "production_trial_budget_class": active.get("production_trial_budget_class"),
+                    "production_trial_followup_allowed": active.get("production_trial_followup_allowed"),
                     "production_apply_allowed": active.get("production_apply_allowed"),
                     "production_policy_would_apply": active.get("production_policy_would_apply"),
                     "certified_for_apply": active.get("certified_for_apply"),
+                    "source_localization": active.get("source_localization"),
+                    "patch_mode": active.get("patch_mode"),
+                    "contrast_mode": active.get("contrast_mode"),
+                    "contrast_scale": active.get("contrast_scale"),
+                    "stealer_bundle_key": active.get("stealer_bundle_key"),
+                    "stealer_term": active.get("stealer_term"),
                 }
             )
 
@@ -1416,6 +1458,8 @@ class HookedTransformerWorkerRuntime:
         self._spent_loop_rescue_cost = {}
         self._spent_production_trial_alpha = {}
         self._spent_production_trial_cost = {}
+        self._spent_production_trial_followup_alpha = {}
+        self._spent_production_trial_followup_cost = {}
         self._last_packet = None
         self._no_progress_steps = 0
         self._latest_readout_sidecar_capture = None
@@ -7639,9 +7683,16 @@ class HookedTransformerWorkerRuntime:
             "site": shadow.get("activation_patch_site"),
             "layer": shadow.get("activation_patch_layer"),
             "alpha": shadow.get("activation_patch_alpha"),
+            "source_localization": shadow.get("activation_patch_source_localization") or "source_span_mean",
+            "patch_mode": shadow.get("activation_patch_patch_mode") or "blend",
+            "base_localization": shadow.get("activation_patch_base_localization"),
+            "contrast_mode": shadow.get("activation_patch_contrast_mode"),
+            "contrast_scale": shadow.get("activation_patch_contrast_scale"),
+            "stealer_bundle_key": shadow.get("activation_patch_stealer_bundle_key"),
+            "stealer_term": shadow.get("activation_patch_stealer_term"),
+            "promotion_reason": shadow.get("promotion_reason"),
             "source": "source_body_span",
             "target": "answer_boundary_last",
-            "patch_mode": "blend",
             "compile_state": "shadow_blueprint_only",
             "required_runtime_support": "activation_patch_blend_operator",
             "production_apply_allowed": False,
@@ -7661,9 +7712,16 @@ class HookedTransformerWorkerRuntime:
                 "site": shadow.get("activation_patch_site"),
                 "layer": shadow.get("activation_patch_layer"),
                 "alpha": shadow.get("activation_patch_alpha"),
+                "source_localization": shadow.get("activation_patch_source_localization") or "source_span_mean",
+                "patch_mode": shadow.get("activation_patch_patch_mode") or "blend",
+                "base_localization": shadow.get("activation_patch_base_localization"),
+                "contrast_mode": shadow.get("activation_patch_contrast_mode"),
+                "contrast_scale": shadow.get("activation_patch_contrast_scale"),
+                "stealer_bundle_key": shadow.get("activation_patch_stealer_bundle_key"),
+                "stealer_term": shadow.get("activation_patch_stealer_term"),
+                "promotion_reason": shadow.get("promotion_reason"),
                 "source": "source_body_span",
                 "target": "answer_boundary_last",
-                "patch_mode": "blend",
                 "ownership_gate": "self_actuator",
                 "compile_state": "preview_only",
                 "actual_delta_class": actual_delta_class or None,
@@ -7789,9 +7847,16 @@ class HookedTransformerWorkerRuntime:
             "site": preview.get("site"),
             "layer": preview.get("layer"),
             "alpha": round(float(alpha_value), 6),
+            "source_localization": preview.get("source_localization", "source_span_mean"),
             "source": preview.get("source", "source_body_span"),
             "target": preview.get("target", "answer_boundary_last"),
             "patch_mode": preview.get("patch_mode", "blend"),
+            "base_localization": preview.get("base_localization"),
+            "contrast_mode": preview.get("contrast_mode"),
+            "contrast_scale": preview.get("contrast_scale"),
+            "stealer_bundle_key": preview.get("stealer_bundle_key"),
+            "stealer_term": preview.get("stealer_term"),
+            "promotion_reason": preview.get("promotion_reason"),
             "ttl_steps": 1,
             "norm_clip": 1.0,
             "counterfactual_delta": counterfactual_delta,
@@ -8360,6 +8425,124 @@ class HookedTransformerWorkerRuntime:
         if end <= start:
             return None
 
+        source_localization = str(candidate.get("source_localization") or "source_span_mean")
+        patch_mode = str(candidate.get("patch_mode") or "blend")
+
+        def _hidden_ref_expr(token_selector: Mapping[str, Any]) -> dict[str, Any]:
+            return {
+                "ref": {
+                    "scope": "runtime",
+                    "worker": self.worker_id,
+                    "tensor": "hidden",
+                    "layer": layer,
+                    "token": dict(token_selector),
+                }
+            }
+
+        def _parse_activation_source_localization(raw_localization: str) -> tuple[str, str, float]:
+            normalized = str(raw_localization or "source_span_mean")
+            if normalized.endswith("_minus_stealer_l025"):
+                return normalized[: -len("_minus_stealer_l025")], "minus_stealer", 0.25
+            if normalized.endswith("_minus_stealer_l050"):
+                return normalized[: -len("_minus_stealer_l050")], "minus_stealer", 0.50
+            if normalized.endswith("_orthogonal_stealer"):
+                return normalized[: -len("_orthogonal_stealer")], "orthogonal_stealer", 1.0
+            return normalized, "none", 0.0
+
+        def _source_expr_for_span(
+            span_mapping: Mapping[str, Any],
+            *,
+            base_localization: str,
+        ) -> dict[str, Any] | None:
+            span_start = int(span_mapping.get("start", 0) or 0)
+            span_end = int(span_mapping.get("end", span_start + 1) or (span_start + 1))
+            if span_end <= span_start:
+                return None
+            if base_localization == "source_term_token":
+                span_records = self._prompt_records_for_span(span_start, span_end)
+                if span_records:
+                    best_record = max(
+                        span_records,
+                        key=lambda record: self._content_piece_score(str(record.get("piece", ""))),
+                    )
+                    token_position = int(best_record.get("position", span_start) or span_start)
+                else:
+                    token_position = span_start
+                return _hidden_ref_expr({"mode": "index", "value": token_position})
+            if base_localization == "source_centered_pm1":
+                window_positions = self._prompt_window_positions(span_start, span_end, padding=1)
+                positive_terms = []
+                neighbor_terms = []
+                for position in window_positions:
+                    ref_expr = _hidden_ref_expr({"mode": "index", "value": int(position)})
+                    if span_start <= int(position) < span_end:
+                        positive_terms.append((ref_expr, 1.0))
+                    else:
+                        neighbor_terms.append((ref_expr, 1.0))
+                positive_expr = (
+                    self._expr_weighted_mean(positive_terms)
+                    if positive_terms
+                    else _hidden_ref_expr({"mode": "span", "start": span_start, "end": span_end, "pool": "mean"})
+                )
+                if neighbor_terms:
+                    neighbor_expr = self._expr_weighted_mean(neighbor_terms)
+                    return {"fn": "sub", "args": [positive_expr, neighbor_expr]}
+                return positive_expr
+            return _hidden_ref_expr({"mode": "span", "start": span_start, "end": span_end, "pool": "mean"})
+
+        requested_source_localization = source_localization
+        base_localization, contrast_mode, contrast_scale = _parse_activation_source_localization(
+            requested_source_localization
+        )
+        if base_localization not in {"source_term_token", "source_centered_pm1", "source_span_mean"}:
+            base_localization = "source_span_mean"
+            requested_source_localization = "source_span_mean"
+            contrast_mode = "none"
+            contrast_scale = 0.0
+        source_localization = requested_source_localization
+        source_expr = _source_expr_for_span(span, base_localization=base_localization)
+        if source_expr is None:
+            return None
+        if contrast_mode != "none":
+            stealer_term = str(
+                candidate.get("stealer_term")
+                or candidate.get("activation_patch_stealer_term")
+                or ""
+            )
+            stealer_bundle_key = str(
+                candidate.get("stealer_bundle_key")
+                or candidate.get("activation_patch_stealer_bundle_key")
+                or ""
+            )
+            if not stealer_term and stealer_bundle_key:
+                parts = stealer_bundle_key.split(":")
+                if len(parts) >= 2:
+                    stealer_term = parts[1]
+            stealer_span: dict[str, Any] | None = None
+            if stealer_term:
+                stealer_spans = self._prompt_term_spans(stealer_term, max_spans=4)
+                source_body_stealer_spans = [
+                    item for item in stealer_spans if str(item.get("provenance_class", "")) == "source_body"
+                ]
+                if source_body_stealer_spans:
+                    stealer_span = dict(source_body_stealer_spans[0])
+                elif stealer_spans:
+                    stealer_span = dict(stealer_spans[0])
+            if stealer_span is None:
+                return None
+            stealer_expr = _source_expr_for_span(stealer_span, base_localization=base_localization)
+            if stealer_expr is None:
+                return None
+            if contrast_mode == "orthogonal_stealer":
+                source_expr = {"fn": "project_orthogonal", "arg": source_expr, "basis": stealer_expr}
+            else:
+                stealer_term_expr = (
+                    stealer_expr
+                    if abs(float(contrast_scale) - 1.0) <= 1e-8
+                    else {"fn": "scale", "by": float(contrast_scale), "arg": stealer_expr}
+                )
+                source_expr = {"fn": "sub", "args": [source_expr, stealer_term_expr]}
+
         try:
             alpha = max(0.0, min(float(candidate.get("alpha", 0.0) or 0.0), float(trial_contract.get("max_alpha", 0.15))))
         except Exception:
@@ -8402,15 +8585,7 @@ class HookedTransformerWorkerRuntime:
                     "max_norm": norm_clip,
                     "arg": {
                         "fn": "normalize",
-                        "arg": {
-                            "ref": {
-                                "scope": "runtime",
-                                "worker": self.worker_id,
-                                "tensor": "hidden",
-                                "layer": layer,
-                                "token": {"mode": "span", "start": start, "end": end, "pool": "mean"},
-                            }
-                        },
+                        "arg": source_expr,
                     },
                 },
             },
@@ -8424,6 +8599,10 @@ class HookedTransformerWorkerRuntime:
             "meta": {
                 "apply_kind": "production_trial",
                 "production_trial_allowed": True,
+                "production_trial_budget_class": trial_contract.get("trial_budget_class") or "primary",
+                "production_trial_followup_allowed": bool(
+                    trial_contract.get("production_trial_followup_allowed", False)
+                ),
                 "production_apply_allowed": False,
                 "production_policy_would_apply": False,
                 "certified_for_apply": False,
@@ -8434,6 +8613,16 @@ class HookedTransformerWorkerRuntime:
                 "bundle_key": objective_bundle_key or None,
                 "operator_recipe_id": candidate.get("operator_recipe_id"),
                 "surface_family_key": f"activation_patch_trial:{surface_id}",
+                "source_localization": source_localization,
+                "patch_mode": patch_mode,
+                "base_localization": base_localization,
+                "contrast_mode": contrast_mode,
+                "contrast_scale": round(float(contrast_scale), 6),
+                "stealer_bundle_key": candidate.get("stealer_bundle_key")
+                or candidate.get("activation_patch_stealer_bundle_key"),
+                "stealer_term": candidate.get("stealer_term") or candidate.get("activation_patch_stealer_term"),
+                "promotion_reason": trial_contract.get("promotion_reason") or candidate.get("promotion_reason"),
+                "latest_failed_operator_recipe_id": trial_contract.get("latest_failed_operator_recipe_id"),
                 "production_trial_contract": dict(trial_contract),
             },
         }
@@ -8507,13 +8696,79 @@ class HookedTransformerWorkerRuntime:
             if isinstance(packet_context.get("recent_effect_summary"), Mapping)
             else {}
         )
-        recent_harmful = bool(
+        trial_outcome_items: list[Mapping[str, Any]] = []
+        raw_trial_ledger = recent_summary.get("production_trial_outcome_ledger")
+        if isinstance(raw_trial_ledger, SequenceABC) and not isinstance(raw_trial_ledger, (str, bytes, bytearray)):
+            trial_outcome_items.extend(item for item in raw_trial_ledger if isinstance(item, Mapping))
+        raw_latest_effects = recent_summary.get("latest_effects")
+        if isinstance(raw_latest_effects, SequenceABC) and not isinstance(raw_latest_effects, (str, bytes, bytearray)):
+            trial_outcome_items.extend(
+                item
+                for item in raw_latest_effects
+                if isinstance(item, Mapping) and str(item.get("apply_kind", "") or "") == "production_trial"
+            )
+        latest_trial_outcome: Mapping[str, Any] | None = None
+        for item in reversed(trial_outcome_items):
+            item_objective = str(item.get("objective_bundle_key") or item.get("bundle_key") or "")
+            if objective_key and item_objective and item_objective != objective_key:
+                continue
+            latest_trial_outcome = item
+            break
+        latest_trial_recipe_id = (
+            str(latest_trial_outcome.get("operator_recipe_id") or "")
+            if isinstance(latest_trial_outcome, Mapping)
+            else ""
+        )
+        latest_trial_class = (
+            str(
+                latest_trial_outcome.get("trial_effect_class")
+                or latest_trial_outcome.get("verdict")
+                or latest_trial_outcome.get("actuator_class")
+                or ""
+            )
+            if isinstance(latest_trial_outcome, Mapping)
+            else ""
+        )
+        latest_trial_blocked = latest_trial_class in {"harmful", "regressing", "collapse_sharpener", "neutral"}
+        promotion_reason = str(
+            candidate.get("promotion_reason")
+            or bundle_status.get("activation_patch_promotion_reason")
+            or request.get("promotion_reason")
+            or ""
+        )
+        alternate_followup_candidate = bool(
+            latest_trial_blocked
+            and operator_recipe_id
+            and latest_trial_recipe_id
+            and operator_recipe_id != latest_trial_recipe_id
+            and (
+                promotion_reason == "alternate_after_failed_production_trial"
+                or str(request.get("diagnostic", "") or "") == "activation_patch_production_trial_gate_review"
+            )
+        )
+        recent_recipe_harmful = bool(
+            _has_recent(recent_summary, "recent_harmful_operator_recipe_ids", operator_recipe_id)
+            or _has_recent(recent_summary, "recent_collapse_sharpener_operator_recipe_ids", operator_recipe_id)
+            or _has_recent(recent_summary, "recent_production_trial_veto_operator_recipe_ids", operator_recipe_id)
+        )
+        recent_surface_harmful = bool(
             _has_recent(recent_summary, "recent_harmful_surface_family_keys", surface_family_key)
             or _has_recent(recent_summary, "recent_collapse_sharpener_surface_family_keys", surface_family_key)
-            or _has_recent(recent_summary, "recent_harmful_operator_recipe_ids", operator_recipe_id)
-            or _has_recent(recent_summary, "recent_collapse_sharpener_operator_recipe_ids", operator_recipe_id)
-            or _has_recent(recent_summary, "recent_harmful_bundle_keys", objective_key)
+            or _has_recent(recent_summary, "recent_production_trial_veto_surface_family_keys", surface_family_key)
+        )
+        recent_bundle_harmful = bool(
+            _has_recent(recent_summary, "recent_harmful_bundle_keys", objective_key)
             or _has_recent(recent_summary, "recent_collapse_sharpener_bundle_keys", objective_key)
+            or _has_recent(recent_summary, "recent_production_trial_veto_bundle_keys", objective_key)
+        )
+        recent_harmful = bool(
+            recent_recipe_harmful
+            or (recent_surface_harmful and not alternate_followup_candidate)
+            or (
+                recent_bundle_harmful
+                and not alternate_followup_candidate
+                and not (operator_recipe_id or surface_family_key)
+            )
         )
         rollback_contract_verified = bool(
             ttl_steps == 1
@@ -8524,7 +8779,44 @@ class HookedTransformerWorkerRuntime:
         request_is_explicit = (
             str(request.get("diagnostic", "") or "") == "activation_patch_production_trial_gate_review"
         )
-        trial_budget_available = True
+        budget = packet_context.get("budget") if isinstance(packet_context.get("budget"), Mapping) else {}
+        trial_budget_class = "alternate_followup" if alternate_followup_candidate else "primary"
+        edit_budget_key = (
+            "production_trial_followup_edits_left_this_run"
+            if trial_budget_class == "alternate_followup"
+            else "production_trial_edits_left_this_run"
+        )
+        alpha_budget_key = (
+            "production_trial_followup_alpha_left_total"
+            if trial_budget_class == "alternate_followup"
+            else "production_trial_alpha_left_total"
+        )
+        cost_budget_key = (
+            "production_trial_followup_edit_cost_left_total"
+            if trial_budget_class == "alternate_followup"
+            else "production_trial_edit_cost_left_total"
+        )
+        try:
+            trial_edit_budget_available = int(budget.get(edit_budget_key, 1) or 0) > 0
+        except Exception:
+            trial_edit_budget_available = True
+        try:
+            trial_alpha_budget_available = (
+                float(budget.get(alpha_budget_key, alpha) or 0.0) + 1e-12
+            ) >= float(alpha)
+        except Exception:
+            trial_alpha_budget_available = True
+        try:
+            trial_cost_budget_available = (
+                float(budget.get(cost_budget_key, alpha) or 0.0) + 1e-12
+            ) >= float(alpha)
+        except Exception:
+            trial_cost_budget_available = True
+        trial_budget_available = bool(
+            trial_edit_budget_available
+            and trial_alpha_budget_available
+            and trial_cost_budget_available
+        )
         context_still_shadow_equivalent = bool(shadow.get("context_equivalence_certified", False))
         trial_contract = {
             "kind": "activation_patch_production_trial_contract",
@@ -8536,6 +8828,11 @@ class HookedTransformerWorkerRuntime:
             "revertible": True,
             "separate_trial_budget": True,
             "controller_policy_explicit": bool(request_is_explicit),
+            "trial_budget_class": trial_budget_class,
+            "production_trial_followup_allowed": bool(alternate_followup_candidate),
+            "latest_failed_operator_recipe_id": latest_trial_recipe_id or None,
+            "latest_failed_trial_effect_class": latest_trial_class or None,
+            "promotion_reason": promotion_reason or None,
             "production_apply_allowed": False,
             "certified_for_apply": False,
             "production_operator_certified": False,
@@ -8549,6 +8846,9 @@ class HookedTransformerWorkerRuntime:
             "trial_ttl_within_limit": bool(ttl_steps == 1),
             "trial_norm_clip_within_limit": bool(norm_clip <= 1.0),
             "no_recent_harmful_family": not recent_harmful,
+            "trial_edit_budget_available": bool(trial_edit_budget_available),
+            "trial_alpha_budget_available": bool(trial_alpha_budget_available),
+            "trial_cost_budget_available": bool(trial_cost_budget_available),
             "trial_budget_available": bool(trial_budget_available),
             "controller_policy_explicit": bool(request_is_explicit),
         }
@@ -8563,6 +8863,9 @@ class HookedTransformerWorkerRuntime:
             "trial_ttl_within_limit": "trial_ttl_too_long",
             "trial_norm_clip_within_limit": "trial_norm_clip_too_high",
             "no_recent_harmful_family": "recent_harmful_family",
+            "trial_edit_budget_available": "trial_edit_budget_exhausted",
+            "trial_alpha_budget_available": "trial_alpha_budget_exhausted",
+            "trial_cost_budget_available": "trial_cost_budget_exhausted",
             "trial_budget_available": "trial_budget_exhausted",
             "controller_policy_explicit": "controller_policy_not_explicit",
             "trial_edit_compilable": "trial_edit_compile_preview_missing",
@@ -8580,6 +8883,8 @@ class HookedTransformerWorkerRuntime:
                     "compile_state": "production_trial_candidate",
                     "candidate_state": "trial_gate_ready",
                     "apply_kind": "production_trial",
+                    "production_trial_budget_class": trial_budget_class,
+                    "production_trial_followup_allowed": bool(alternate_followup_candidate),
                     "production_trial_allowed": True,
                     "production_trial_contract": trial_contract,
                     "trial_edit": dict(trial_edit),
@@ -8600,6 +8905,13 @@ class HookedTransformerWorkerRuntime:
             "trial_blocked_reasons": list(trial_blocked_reasons),
             "gate_checks": gate_checks,
             "contract": trial_contract,
+            "trial_budget_class": trial_budget_class,
+            "production_trial_followup_allowed": bool(alternate_followup_candidate),
+            "latest_failed_operator_recipe_id": latest_trial_recipe_id or None,
+            "latest_failed_trial_effect_class": latest_trial_class or None,
+            "recent_harmful_surface_relaxed_for_followup": bool(
+                alternate_followup_candidate and recent_surface_harmful and not recent_recipe_harmful
+            ),
             "candidate_fingerprint": {
                 "objective_bundle_key": objective_key or None,
                 "actuator_bundle_key": actuator_key or None,
@@ -8608,6 +8920,13 @@ class HookedTransformerWorkerRuntime:
                 "site": candidate.get("site"),
                 "layer": candidate.get("layer"),
                 "alpha": round(float(alpha), 6),
+                "source_localization": candidate.get("source_localization"),
+                "patch_mode": candidate.get("patch_mode"),
+                "base_localization": candidate.get("base_localization"),
+                "contrast_mode": candidate.get("contrast_mode"),
+                "contrast_scale": candidate.get("contrast_scale"),
+                "stealer_bundle_key": candidate.get("stealer_bundle_key"),
+                "stealer_term": candidate.get("stealer_term"),
                 "ttl_steps": ttl_steps,
                 "norm_clip": round(float(norm_clip), 6),
             },
@@ -8623,6 +8942,8 @@ class HookedTransformerWorkerRuntime:
             "production_trial_allowed": bool(production_trial_allowed),
             "production_trial_candidate": trial_candidate,
             "production_trial_contract": trial_contract,
+            "production_trial_budget_class": trial_budget_class,
+            "production_trial_followup_allowed": bool(alternate_followup_candidate),
             "production_trial_dossier": trial_dossier,
             "production_trial_blocked_reasons": list(trial_blocked_reasons),
             "production_shadow_replay": shadow,
@@ -9193,6 +9514,43 @@ class HookedTransformerWorkerRuntime:
                 "production_operator_certified": False,
                 "carrier_to_actuator_status": carrier_to_actuator_status or None,
             },
+            "activation_patch_candidate_pool": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "status",
+                        "actuator_class",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "focus_rank_delta",
+                        "activation_patch_site",
+                        "activation_patch_layer",
+                        "activation_patch_alpha",
+                        "activation_patch_source_localization",
+                        "activation_patch_patch_mode",
+                        "activation_patch_base_localization",
+                        "activation_patch_contrast_mode",
+                        "activation_patch_contrast_scale",
+                        "activation_patch_stealer_bundle_key",
+                        "activation_patch_stealer_term",
+                        "activation_source_norm",
+                        "actual_delta_class",
+                        "realized_lift_bundle_key",
+                        "realized_lift_term",
+                        "self_delta",
+                        "cross_delta",
+                        "alignment_margin",
+                        "bundle_lift_scores",
+                        "counterfactual_delta",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in activation_patch_rows[:16]
+            ],
             "evidence_rows": [
                 {
                     key: row.get(key)
@@ -9228,6 +9586,13 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_site",
                         "activation_patch_layer",
                         "activation_patch_alpha",
+                        "activation_patch_source_localization",
+                        "activation_patch_patch_mode",
+                        "activation_patch_base_localization",
+                        "activation_patch_contrast_mode",
+                        "activation_patch_contrast_scale",
+                        "activation_patch_stealer_bundle_key",
+                        "activation_patch_stealer_term",
                         "activation_source_norm",
                         "activation_target_norm_before",
                         "activation_target_norm_after",
@@ -11150,6 +11515,18 @@ class HookedTransformerWorkerRuntime:
             "operator_recipe_seed_key": None
             if metadata.get("operator_recipe_seed_key") is None
             else str(metadata.get("operator_recipe_seed_key")),
+            "source_localization": None
+            if metadata.get("source_localization") is None
+            else str(metadata.get("source_localization")),
+            "patch_mode": None if metadata.get("patch_mode") is None else str(metadata.get("patch_mode")),
+            "contrast_mode": None if metadata.get("contrast_mode") is None else str(metadata.get("contrast_mode")),
+            "contrast_scale": None
+            if metadata.get("contrast_scale") is None
+            else float(metadata.get("contrast_scale")),
+            "stealer_bundle_key": None
+            if metadata.get("stealer_bundle_key") is None
+            else str(metadata.get("stealer_bundle_key")),
+            "stealer_term": None if metadata.get("stealer_term") is None else str(metadata.get("stealer_term")),
             "bundle_key": None if metadata.get("bundle_key") is None else str(metadata.get("bundle_key")),
             "objective_bundle_key": None
             if metadata.get("objective_bundle_key") is None
@@ -11161,6 +11538,12 @@ class HookedTransformerWorkerRuntime:
             "production_trial_allowed": None
             if metadata.get("production_trial_allowed") is None
             else bool(metadata.get("production_trial_allowed")),
+            "production_trial_budget_class": None
+            if metadata.get("production_trial_budget_class") is None
+            else str(metadata.get("production_trial_budget_class")),
+            "production_trial_followup_allowed": None
+            if metadata.get("production_trial_followup_allowed") is None
+            else bool(metadata.get("production_trial_followup_allowed")),
             "production_apply_allowed": None
             if metadata.get("production_apply_allowed") is None
             else bool(metadata.get("production_apply_allowed")),
@@ -11404,6 +11787,8 @@ class HookedTransformerWorkerRuntime:
         spent_loop_rescue_edit_cost = sum(self._spent_loop_rescue_cost.values())
         spent_production_trial_alpha = sum(self._spent_production_trial_alpha.values())
         spent_production_trial_edit_cost = sum(self._spent_production_trial_cost.values())
+        spent_production_trial_followup_alpha = sum(self._spent_production_trial_followup_alpha.values())
+        spent_production_trial_followup_edit_cost = sum(self._spent_production_trial_followup_cost.values())
         return {
             "edits_left_this_step": self.max_edits_per_step,
             "edits_left_this_run": max(0, self.max_edits_per_run - len(self._spent_budget_alpha)),
@@ -11429,6 +11814,19 @@ class HookedTransformerWorkerRuntime:
             "production_trial_edit_cost_left_total": max(
                 0.0,
                 self.max_production_trial_edit_cost - spent_production_trial_edit_cost,
+            ),
+            "production_trial_followup_edits_left_this_run": max(
+                0,
+                self.max_production_trial_followup_edits_per_run
+                - len(self._spent_production_trial_followup_alpha),
+            ),
+            "production_trial_followup_alpha_left_total": max(
+                0.0,
+                self.max_production_trial_followup_alpha - spent_production_trial_followup_alpha,
+            ),
+            "production_trial_followup_edit_cost_left_total": max(
+                0.0,
+                self.max_production_trial_followup_edit_cost - spent_production_trial_followup_edit_cost,
             ),
             "active_patch_slots_left": max(0, self.max_active_patch_slots - active_patch_slots),
             "rollbackable_ids": [str(edit["edit_id"]) for edit in active_edits if bool(edit.get("revertible", True))],

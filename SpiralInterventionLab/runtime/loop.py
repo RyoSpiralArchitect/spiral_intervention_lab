@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 from .compiler import StepContext, compile_command
-from .edit_budget import LOOP_RESCUE_EDIT_BUDGET_POOL, MAIN_EDIT_BUDGET_POOL, PRODUCTION_TRIAL_EDIT_BUDGET_POOL
+from .edit_budget import (
+    LOOP_RESCUE_EDIT_BUDGET_POOL,
+    MAIN_EDIT_BUDGET_POOL,
+    PRODUCTION_TRIAL_EDIT_BUDGET_POOL,
+    PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
+)
 from .policy import budget_violation_reason, command_budget_usage
 
 
@@ -297,6 +302,7 @@ def _guard_exhausted_apply_command(
             MAIN_EDIT_BUDGET_POOL: {"edit_count": 1.0},
             LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0},
             PRODUCTION_TRIAL_EDIT_BUDGET_POOL: {"edit_count": 0.0},
+            PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL: {"edit_count": 0.0},
         }
     loop_rescue_edits_left_this_run = budget.get("loop_rescue_edits_left_this_run")
     try:
@@ -318,6 +324,17 @@ def _guard_exhausted_apply_command(
         int(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) == 0
         and int(usage.get(PRODUCTION_TRIAL_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) > 0
         and production_trial_edits_left_this_run > 0
+    ):
+        return command, None
+    production_trial_followup_edits_left_this_run = budget.get("production_trial_followup_edits_left_this_run")
+    try:
+        production_trial_followup_edits_left_this_run = int(production_trial_followup_edits_left_this_run)
+    except Exception:
+        production_trial_followup_edits_left_this_run = 0
+    if (
+        int(usage.get(MAIN_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) == 0
+        and int(usage.get(PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL, {}).get("edit_count", 0.0) or 0.0) > 0
+        and production_trial_followup_edits_left_this_run > 0
     ):
         return command, None
     guarded_command = _guarded_noop_command(
@@ -372,6 +389,9 @@ def _guard_budget_violating_apply_command(
         ),
         "requested_production_trial_alpha": float(
             usage.get(PRODUCTION_TRIAL_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0
+        ),
+        "requested_production_trial_followup_alpha": float(
+            usage.get(PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL, {}).get("alpha", 0.0) or 0.0
         ),
     }
 
@@ -1104,6 +1124,8 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
     controller_why_not_apply = _optional_meta_text(meta, "why_not_apply")
     raw_controller_apply_kind = _optional_meta_text(meta, "apply_kind")
     controller_apply_kind = raw_controller_apply_kind if _command_decision(command) == "apply" else None
+    controller_production_trial_budget_class = _optional_meta_text(meta, "production_trial_budget_class")
+    controller_production_trial_followup_allowed = meta.get("production_trial_followup_allowed")
     production_apply_allowed = meta.get("production_apply_allowed")
     certified_for_apply = meta.get("certified_for_apply")
     operator_recipe_id = _optional_meta_text(meta, "operator_recipe_id")
@@ -1238,6 +1260,10 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         "controller_shadow_proposals": controller_shadow_proposals,
         "controller_shadow_proposal_count": len(controller_shadow_proposals),
         "controller_apply_kind": controller_apply_kind,
+        "controller_production_trial_budget_class": controller_production_trial_budget_class,
+        "controller_production_trial_followup_allowed": None
+        if controller_production_trial_followup_allowed is None
+        else bool(controller_production_trial_followup_allowed),
         "production_apply_allowed": None if production_apply_allowed is None else bool(production_apply_allowed),
         "certified_for_apply": None if certified_for_apply is None else bool(certified_for_apply),
         "controller_why_not_apply": controller_why_not_apply,

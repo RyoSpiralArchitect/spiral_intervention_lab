@@ -280,6 +280,74 @@ alternate survives the same review/support/shadow ladder, and whether any
 alternate produces a bounded effect that is less collapse-sharpening than the
 failed high-alpha trial.
 
+The first full ladder observation is now negative but useful. With a diagnostic
+trial budget widened only inside the replay harness, the lower-alpha alternate
+keeps its `operator_recipe_id` through:
+
+```text
+activation_patch_candidate_review(a0.050)
+-> activation_patch_runtime_support_probe(a0.050)
+-> activation_patch_promotion_gate_review(a0.050)
+-> activation_patch_production_shadow_replay(a0.050)
+-> activation_patch_production_trial_gate_review(a0.050)
+-> production_trial(a0.050)
+```
+
+The outcome is still `trial_effect_class="regressing"` / `verdict="harmful"`.
+So alpha reduction alone did not turn this activation-patch recipe into a safe
+operator. The value of the run is that the result is now comparable: both
+`a0.150` and `a0.050` fail inside the same controller-owned trial ladder, rather
+than being mixed with stale candidate identity or broad-family vetoes.
+
+The next recipe-family shift is also negative. When the alternate selector is
+forced to prefer a different activation-patch family over a lower-alpha copy of
+the failed family, the ladder chooses `resid_pre|source_span_to_last|blend|a0.050`
+instead of `resid_post|source_span_to_last|blend|a0.050`. That candidate also
+reaches bounded `production_trial`, and it also returns `regressing/harmful`.
+This suggests the current failure is not just over-strong `resid_post`; the
+`source_span_to_last|blend` activation-patch recipe itself is suspect.
+
+The next source-localization pass keeps that contract but changes the structural
+recipe family. Activation-patch diagnostics now include a compact pool for
+`source_term_token_to_last`, `source_centered_pm1_to_last`, and a small span
+baseline instead of hiding those rows behind the truncated `evidence_rows`
+view. The controller-side compiler now prefers source-local evidence over broad
+span evidence when the ownership score ties, and the first local GPT-2 replay
+moves the initial ladder to
+`resid_pre|source_term_token_to_last|blend|a0.050`. That bounded trial is still
+`regressing/harmful`, but this is a better negative result: the source-local
+recipe reached the same controller-owned trial path instead of being lost in
+diagnostic compression.
+
+The latest contrastive source-local pass keeps the same production-trial
+guardrail and changes the follow-up selector. Diagnostics now emit
+`source_term_token_minus_stealer_l025`,
+`source_centered_pm1_minus_stealer_l025`, and
+`source_term_token_orthogonal_stealer` rows with explicit `contrast_mode`,
+`contrast_scale`, and `stealer_term` fields. After the first
+`source_term_token_to_last` bounded trial regresses, the alternate selector now
+uses ownership-first scoring and nominates
+`resid_pre|source_centered_pm1_minus_stealer_l025_to_last|blend|a0.050`
+(`self_delta=5.057`, `alignment_margin=3.992` in the local GPT-2 replay).
+Production apply remains closed; the value is that the controller can now move
+from a failed source-local recipe to a contrastive source-local recipe without
+turning the analyzer or gate into a policy owner.
+
+The follow-up trial path is now first-class instead of being simulated by
+widening the primary trial budget. After the first
+`source_term_token_to_last` production trial returns `regressing/harmful`, the
+runtime exposes a separate `production_trial_followup` budget. The alternate
+contrastive recipe then reaches a second bounded trial as
+`production_trial_budget_class="alternate_followup"` with
+`production_trial_followup_allowed=true`. In the local GPT-2 direct-scan replay,
+that second trial preserves
+`resid_pre|source_centered_pm1_minus_stealer_l025_to_last|blend|a0.050` and
+returns `trial_effect_class="neutral"` / `signal_profile="flat"`. This is not
+task success yet, but it is a cleaner operator-quality comparison: the
+controller can now distinguish "primary source-local trial regressed" from
+"contrastive follow-up was bounded but neutral" without opening production
+apply.
+
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
 model. The Hugging Face cache may be offline even when network is available, so

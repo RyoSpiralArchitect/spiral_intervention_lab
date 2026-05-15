@@ -148,6 +148,49 @@ same ladder as the failed trial: promotion review, production shadow replay,
 trial gate review, and outcome comparison. If it cannot, the failure should stay
 recipe-local rather than becoming a broad family ban.
 
+The newest local GPT-2 replay completes that observation. With an explicitly
+widened replay-only trial budget, `a0.050` keeps its recipe identity through
+promotion review, production shadow replay, trial gate review, and a bounded
+production trial. It still returns `trial_effect_class="regressing"` /
+`verdict="harmful"`. The result is a negative operator-quality finding, not a
+control-plane failure: lower alpha alone does not make this activation-patch
+recipe safe, but the ladder can now compare failed recipes without stale
+candidate identity.
+
+The follow-up recipe-family shift is also negative. The alternate selector can
+now prefer a different family, choosing
+`resid_pre|source_span_to_last|blend|a0.050` instead of another failed-family
+`resid_post` variant. That candidate also reaches bounded trial and also returns
+`regressing/harmful`, which points suspicion at the current
+`source_span_to_last|blend` recipe rather than only at alpha or `resid_post`.
+
+The next pass changes source localization instead of only site or alpha.
+Activation-patch diagnostics now carry a compact candidate pool so
+`source_term_token_to_last` and `source_centered_pm1_to_last` are not lost behind
+truncated evidence rows. A local GPT-2 replay then moves the initial ladder to
+`resid_pre|source_term_token_to_last|blend|a0.050`; that bounded trial is still
+`regressing/harmful`, but the negative result is now recipe-local and comparable.
+
+The follow-up source-local contrastive pass now preserves `contrast_mode`,
+`contrast_scale`, and `stealer_term` through the diagnostic ledger. In a local
+GPT-2 replay, the first bounded trial still regresses on
+`source_term_token_to_last`, but the post-trial alternate selector switches to
+`resid_pre|source_centered_pm1_minus_stealer_l025_to_last|blend|a0.050`
+(`self_delta=5.057`, `alignment_margin=3.992`). This is still not production
+permission; it is a cleaner controller-owned recipe ladder after a harmful
+trial.
+
+That ladder now has a real second-trial budget rather than a replay-only
+budget widening. A local GPT-2 direct-scan replay spends the first bounded trial
+as `production_trial_budget_class="primary"` on
+`source_term_token_to_last`, observes `regressing/harmful`, then spends one
+separate `production_trial_budget_class="alternate_followup"` trial on
+`source_centered_pm1_minus_stealer_l025_to_last`. The follow-up effect is
+`trial_effect_class="neutral"` / `signal_profile="flat"`, with production apply
+still closed. This is not a solved actuator, but it proves the controller can
+run a recipe-local post-harmful alternate trial without treating the alternate
+as production permission.
+
 For local larger-worker checks, provide the local Hugging Face export on the CLI
 with `worker_model_path` / `--worker-model-path`. Keep clone-specific model
 directories outside the repo; for example, set `SPIRAL_WORKER_MODEL_PATH` in your
