@@ -284,9 +284,17 @@ def build_edit_effect(
     step_actuator_bundle_key: str | None = None,
     apply_kind: str | None = None,
     production_trial_allowed: bool | None = None,
+    production_trial_budget_class: str | None = None,
+    production_trial_followup_allowed: bool | None = None,
     production_apply_allowed: bool | None = None,
     production_policy_would_apply: bool | None = None,
     certified_for_apply: bool | None = None,
+    source_localization: str | None = None,
+    patch_mode: str | None = None,
+    contrast_mode: str | None = None,
+    contrast_scale: float | None = None,
+    stealer_bundle_key: str | None = None,
+    stealer_term: str | None = None,
 ) -> dict[str, Any]:
     delta = compute_metric_delta(before, after)
     effect = {
@@ -328,12 +336,28 @@ def build_edit_effect(
         effect["apply_kind"] = str(apply_kind)
     if production_trial_allowed is not None:
         effect["production_trial_allowed"] = bool(production_trial_allowed)
+    if production_trial_budget_class is not None:
+        effect["production_trial_budget_class"] = str(production_trial_budget_class)
+    if production_trial_followup_allowed is not None:
+        effect["production_trial_followup_allowed"] = bool(production_trial_followup_allowed)
     if production_apply_allowed is not None:
         effect["production_apply_allowed"] = bool(production_apply_allowed)
     if production_policy_would_apply is not None:
         effect["production_policy_would_apply"] = bool(production_policy_would_apply)
     if certified_for_apply is not None:
         effect["certified_for_apply"] = bool(certified_for_apply)
+    if source_localization is not None:
+        effect["source_localization"] = str(source_localization)
+    if patch_mode is not None:
+        effect["patch_mode"] = str(patch_mode)
+    if contrast_mode is not None:
+        effect["contrast_mode"] = str(contrast_mode)
+    if contrast_scale is not None:
+        effect["contrast_scale"] = float(contrast_scale)
+    if stealer_bundle_key is not None:
+        effect["stealer_bundle_key"] = str(stealer_bundle_key)
+    if stealer_term is not None:
+        effect["stealer_term"] = str(stealer_term)
     if str(effect.get("apply_kind", "") or "") == "production_trial":
         effect["trial_effect_class"] = classify_production_trial_outcome(effect)
     return effect
@@ -432,6 +456,8 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "apply_kind": effect.get("apply_kind"),
                 "trial_effect_class": effect.get("trial_effect_class"),
                 "production_trial_allowed": effect.get("production_trial_allowed"),
+                "production_trial_budget_class": effect.get("production_trial_budget_class"),
+                "production_trial_followup_allowed": effect.get("production_trial_followup_allowed"),
                 "production_apply_allowed": effect.get("production_apply_allowed"),
                 "certified_for_apply": effect.get("certified_for_apply"),
                 "hypothesis": effect.get("hypothesis"),
@@ -493,6 +519,8 @@ def summarize_effects(effects: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             trial_row = {
                 "edit_id": effect.get("edit_id"),
                 "apply_kind": "production_trial",
+                "production_trial_budget_class": effect.get("production_trial_budget_class"),
+                "production_trial_followup_allowed": effect.get("production_trial_followup_allowed"),
                 "surface_id": effect.get("surface_id"),
                 "surface_family_key": effect.get("surface_family_key"),
                 "operator_recipe_id": effect.get("operator_recipe_id"),

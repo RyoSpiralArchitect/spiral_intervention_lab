@@ -251,10 +251,21 @@ def _registration_metadata(
         "step_actuator_bundle_key",
         "apply_kind",
         "production_trial_allowed",
+        "production_trial_budget_class",
+        "production_trial_followup_allowed",
         "production_trial_contract",
+        "promotion_reason",
+        "latest_failed_operator_recipe_id",
         "production_apply_allowed",
         "production_policy_would_apply",
         "certified_for_apply",
+        "source_localization",
+        "patch_mode",
+        "base_localization",
+        "contrast_mode",
+        "contrast_scale",
+        "stealer_bundle_key",
+        "stealer_term",
     )
     for key in passthrough_fields:
         if key in edit_meta and edit_meta.get(key) is not None:

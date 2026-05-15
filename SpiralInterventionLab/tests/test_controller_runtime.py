@@ -9,11 +9,21 @@ from SpiralInterventionLab.runtime.adapter import BoundSurface, HookedTransforme
 from SpiralInterventionLab.runtime.baselines import activation_only_policy, run_b0, run_b1, run_c1, run_minimal_baseline_suite
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.compiler import StepContext, compile_command
-from SpiralInterventionLab.runtime.edit_budget import prepare_direction
+from SpiralInterventionLab.runtime.edit_budget import (
+    PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
+    prepare_direction,
+)
 from SpiralInterventionLab.runtime.effects import build_edit_effect, summarize_effects
 from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
-from SpiralInterventionLab.runtime.policy import GlobalBudget, HarnessPolicy, PolicyViolation, validate_command_against_packet
+from SpiralInterventionLab.runtime.policy import (
+    GlobalBudget,
+    HarnessPolicy,
+    PolicyViolation,
+    budget_violation_reason,
+    command_budget_usage,
+    validate_command_against_packet,
+)
 from SpiralInterventionLab.runtime.rank1_bridge import HybridRank1VectorBridge, Rank1Geometry
 from SpiralInterventionLab.runtime.sidecar import (
     ReadoutSidecarCapture,
@@ -237,6 +247,26 @@ def _loop_rescue_command(*, alpha: float = 0.06, step_size: float = 0.06, edit_i
             }
         ],
     }
+
+
+def _production_trial_followup_command():
+    command = _loop_rescue_command(alpha=0.05, step_size=0.05, edit_id="e_trial_followup")
+    command["meta"] = {
+        "hypothesis": "activation_patch_production_trial_apply",
+        "apply_kind": "production_trial",
+        "production_trial_budget_class": "alternate_followup",
+    }
+    command["edits"][0]["meta"].update(
+        {
+            "apply_kind": "production_trial",
+            "production_trial_budget_class": "alternate_followup",
+            "production_trial_followup_allowed": True,
+            "production_trial_allowed": True,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+    )
+    return command
 
 
 def _resid_command_with_memory():
@@ -628,6 +658,46 @@ class TestSchemaAndPolicy(unittest.TestCase):
         packet["budget"]["loop_rescue_edit_cost_left_total"] = 0.12
 
         validate_command_against_packet(_loop_rescue_command(), packet)
+
+    def test_policy_accounts_production_trial_followup_separately(self):
+        packet = _make_packet()
+        packet["budget"].update(
+            {
+                "edits_left_this_run": 0,
+                "alpha_left_total": 0.0,
+                "edit_cost_left_total": 0.0,
+                "production_trial_edits_left_this_run": 0,
+                "production_trial_alpha_left_total": 0.0,
+                "production_trial_edit_cost_left_total": 0.0,
+                "production_trial_followup_edits_left_this_run": 1,
+                "production_trial_followup_alpha_left_total": 0.05,
+                "production_trial_followup_edit_cost_left_total": 0.05,
+            }
+        )
+        command = _production_trial_followup_command()
+        deep_expr = {
+            "ref": {
+                "scope": "runtime",
+                "worker": "os_0",
+                "tensor": "hidden",
+                "layer": 11,
+                "token": {"mode": "last"},
+            }
+        }
+        for _ in range(8):
+            deep_expr = {"fn": "scale", "by": 1.0, "arg": deep_expr}
+        command["edits"][0]["source"]["expr"] = deep_expr
+
+        usage = command_budget_usage(command, packet)
+        self.assertEqual(usage[PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL]["edit_count"], 1.0)
+        self.assertIsNone(budget_violation_reason(command, packet, usage=usage))
+        validate_command_against_packet(command, packet)
+
+        packet["budget"]["production_trial_followup_edits_left_this_run"] = 0
+        self.assertEqual(
+            budget_violation_reason(command, packet),
+            "command exceeds packet.production_trial_followup_edits_left_this_run",
+        )
 
 
 class TestCompiler(unittest.TestCase):
@@ -1239,6 +1309,8 @@ class TestLoopAndEffects(unittest.TestCase):
             step_actuator_bundle_key="kv_pair:budget:source_body:72:73",
             apply_kind="production_trial",
             production_trial_allowed=True,
+            production_trial_budget_class="alternate_followup",
+            production_trial_followup_allowed=True,
             production_apply_allowed=False,
             certified_for_apply=False,
         )
@@ -1247,7 +1319,12 @@ class TestLoopAndEffects(unittest.TestCase):
         summary = summarize_effects([effect])
         self.assertEqual(summary["production_trial_outcome_counts"]["collapse_sharpener"], 1)
         self.assertEqual(summary["latest_effects"][0]["trial_effect_class"], "collapse_sharpener")
+        self.assertEqual(summary["latest_effects"][0]["production_trial_budget_class"], "alternate_followup")
         self.assertEqual(summary["production_trial_outcome_ledger"][0]["apply_kind"], "production_trial")
+        self.assertEqual(
+            summary["production_trial_outcome_ledger"][0]["production_trial_budget_class"],
+            "alternate_followup",
+        )
         self.assertEqual(summary["production_trial_outcome_ledger"][0]["trial_effect_class"], "collapse_sharpener")
         self.assertEqual(
             summary["production_trial_outcome_ledger"][0]["promotion_ladder_stage"],

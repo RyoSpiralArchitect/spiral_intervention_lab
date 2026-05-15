@@ -224,6 +224,14 @@ def build_hooked_transformer_worker_runtime(
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
+    max_production_trial_edits_per_run: int = 1,
+    max_production_trial_alpha: float = 0.15,
+    max_production_trial_edit_cost: float | None = None,
+    max_production_trial_followup_edits_per_run: int = 1,
+    max_production_trial_followup_alpha: float = 0.05,
+    max_production_trial_followup_edit_cost: float | None = None,
+    max_diagnostic_calls_per_run: int = 8,
+    diagnostic_result_window: int = 8,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
     readout_analyzer_rerank_mode: str = "apply",
 ) -> HookedTransformerWorkerRuntime:
@@ -271,6 +279,14 @@ def build_hooked_transformer_worker_runtime(
         max_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
         max_loop_rescue_alpha=worker_loop_rescue_total_alpha,
         max_loop_rescue_edit_cost=worker_loop_rescue_total_edit_cost,
+        max_production_trial_edits_per_run=max_production_trial_edits_per_run,
+        max_production_trial_alpha=max_production_trial_alpha,
+        max_production_trial_edit_cost=max_production_trial_edit_cost,
+        max_production_trial_followup_edits_per_run=max_production_trial_followup_edits_per_run,
+        max_production_trial_followup_alpha=max_production_trial_followup_alpha,
+        max_production_trial_followup_edit_cost=max_production_trial_followup_edit_cost,
+        max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
+        diagnostic_result_window=diagnostic_result_window,
         allowed_token_ids=allowed_token_ids,
         readout_sidecar_analyzer=readout_sidecar_analyzer,
         readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
@@ -1248,6 +1264,13 @@ def _diagnostic_evidence_ledger(
                         "activation_patch_site": item.get("activation_patch_site"),
                         "activation_patch_layer": item.get("activation_patch_layer"),
                         "activation_patch_alpha": item.get("activation_patch_alpha"),
+                        "activation_patch_source_localization": item.get("activation_patch_source_localization"),
+                        "activation_patch_patch_mode": item.get("activation_patch_patch_mode"),
+                        "activation_patch_base_localization": item.get("activation_patch_base_localization"),
+                        "activation_patch_contrast_mode": item.get("activation_patch_contrast_mode"),
+                        "activation_patch_contrast_scale": item.get("activation_patch_contrast_scale"),
+                        "activation_patch_stealer_bundle_key": item.get("activation_patch_stealer_bundle_key"),
+                        "activation_patch_stealer_term": item.get("activation_patch_stealer_term"),
                         "activation_patch_actuator_class": actuator_class,
                         "actual_delta_class": item.get("actual_delta_class"),
                         "realized_lift_bundle_key": item.get("realized_lift_bundle_key"),
@@ -1264,9 +1287,26 @@ def _diagnostic_evidence_ledger(
                         if isinstance(existing_shadow, Mapping)
                         else {}
                     )
+                    def _activation_source_specificity(value: Any) -> int:
+                        text = str(value or "")
+                        if text.startswith("source_term_token"):
+                            return 2
+                        if text.startswith("source_centered_pm1"):
+                            return 1
+                        return 0
+
+                    source_specificity = _activation_source_specificity(
+                        item.get("activation_patch_source_localization")
+                    )
+                    existing_source_specificity = (
+                        _activation_source_specificity(existing_shadow.get("activation_patch_source_localization"))
+                        if isinstance(existing_shadow, Mapping)
+                        else 0
+                    )
                     shadow_rank = (
                         2 if actuator_class == "self_actuator" else 1,
                         1 if str(item.get("actual_delta_class", "") or "") == "target_lift" else 0,
+                        source_specificity,
                         float(delta.get("self_delta", 0.0) or 0.0)
                         if actuator_class == "self_actuator"
                         else float(delta.get("cross_delta", 0.0) or 0.0),
@@ -1277,11 +1317,12 @@ def _diagnostic_evidence_ledger(
                         if str(existing_shadow.get("activation_patch_actuator_class", "") or "") == "self_actuator"
                         else 1,
                         1 if str(existing_shadow.get("actual_delta_class", "") or "") == "target_lift" else 0,
+                        existing_source_specificity,
                         _as_float(existing_delta.get("self_delta", 0.0))
                         if str(existing_shadow.get("activation_patch_actuator_class", "") or "") == "self_actuator"
                         else _as_float(existing_delta.get("cross_delta", 0.0)),
                         _as_float(existing_delta.get("alignment_margin", 0.0)),
-                    ) if isinstance(existing_shadow, Mapping) else (-1, -1, -1.0, -10.0)
+                    ) if isinstance(existing_shadow, Mapping) else (-1, -1, -1, -1.0, -10.0)
                     if (
                         not isinstance(existing_shadow, Mapping)
                         or shadow_rank > existing_rank
@@ -1332,6 +1373,13 @@ def _diagnostic_evidence_ledger(
                 "activation_patch_site",
                 "activation_patch_layer",
                 "activation_patch_alpha",
+                "activation_patch_source_localization",
+                "activation_patch_patch_mode",
+                "activation_patch_base_localization",
+                "activation_patch_contrast_mode",
+                "activation_patch_contrast_scale",
+                "activation_patch_stealer_bundle_key",
+                "activation_patch_stealer_term",
                 "activation_source_norm",
                 "activation_target_norm_before",
                 "activation_target_norm_after",
@@ -1701,7 +1749,7 @@ class _FrontierReplayControllerClient:
 
     @staticmethod
     def _activation_patch_runtime_support_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
-        for result in results:
+        for result in reversed(list(results)):
             if not isinstance(result, Mapping):
                 continue
             probe = result.get("activation_patch_runtime_support_probe")
@@ -1721,7 +1769,7 @@ class _FrontierReplayControllerClient:
 
     @staticmethod
     def _activation_patch_promotion_gate_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
-        for result in results:
+        for result in reversed(list(results)):
             if not isinstance(result, Mapping):
                 continue
             review = result.get("activation_patch_promotion_gate_review")
@@ -1741,7 +1789,7 @@ class _FrontierReplayControllerClient:
 
     @staticmethod
     def _activation_patch_production_shadow_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
-        for result in results:
+        for result in reversed(list(results)):
             if not isinstance(result, Mapping):
                 continue
             replay = result.get("activation_patch_production_shadow_replay")
@@ -1762,7 +1810,7 @@ class _FrontierReplayControllerClient:
 
     @staticmethod
     def _activation_patch_production_trial_gate_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
-        for result in results:
+        for result in reversed(list(results)):
             if not isinstance(result, Mapping):
                 continue
             review = result.get("activation_patch_production_trial_gate_review")
@@ -1776,6 +1824,8 @@ class _FrontierReplayControllerClient:
                     "production_trial_dossier": dict(dossier),
                     "production_trial_candidate": result.get("activation_patch_production_trial_candidate"),
                     "production_trial_contract": result.get("activation_patch_production_trial_contract"),
+                    "production_trial_budget_class": result.get("production_trial_budget_class"),
+                    "production_trial_followup_allowed": result.get("production_trial_followup_allowed"),
                     "production_trial_blocked_reasons": result.get("production_trial_blocked_reasons"),
                     "next_evidence_needed": result.get("next_evidence_needed"),
                     "why_not_apply": result.get("why_not_apply"),
@@ -1931,6 +1981,30 @@ class _FrontierReplayControllerClient:
         blocked_operator_recipe_id: Any,
     ) -> dict[str, Any] | None:
         blocked_recipe = str(blocked_operator_recipe_id or "")
+        def _recipe_family(recipe_id: Any) -> str:
+            parts = [part for part in str(recipe_id or "").split("|") if part]
+            if parts and parts[-1].startswith("a"):
+                try:
+                    float(parts[-1][1:])
+                    parts = parts[:-1]
+                except Exception:
+                    pass
+            return "|".join(parts)
+
+        def _recipe_structural_family(recipe_id: Any) -> str:
+            parts = [part for part in str(recipe_id or "").split("|") if part]
+            if parts and parts[-1].startswith("a"):
+                try:
+                    float(parts[-1][1:])
+                    parts = parts[:-1]
+                except Exception:
+                    pass
+            if len(parts) >= 6 and parts[1] == "activation_patch":
+                return "|".join([parts[0], parts[1], *parts[4:]])
+            return "|".join(parts)
+
+        blocked_recipe_family = _recipe_family(blocked_recipe)
+        blocked_structural_family = _recipe_structural_family(blocked_recipe)
         candidates: list[tuple[tuple[float, ...], dict[str, Any]]] = []
 
         def _as_float(value: Any, default: float = 0.0) -> float:
@@ -1950,7 +2024,9 @@ class _FrontierReplayControllerClient:
                 continue
             if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
                 continue
-            rows = result.get("evidence_rows")
+            rows = result.get("activation_patch_candidate_pool")
+            if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
+                rows = result.get("evidence_rows")
             if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
                 continue
             for row in rows:
@@ -1964,6 +2040,16 @@ class _FrontierReplayControllerClient:
                 recipe_id = str(row.get("operator_recipe_id") or "")
                 if blocked_recipe and recipe_id == blocked_recipe:
                     continue
+                recipe_family = _recipe_family(recipe_id)
+                same_failed_family = bool(
+                    blocked_recipe_family and recipe_family and recipe_family == blocked_recipe_family
+                )
+                structural_family = _recipe_structural_family(recipe_id)
+                same_failed_structural_family = bool(
+                    blocked_structural_family
+                    and structural_family
+                    and structural_family == blocked_structural_family
+                )
                 actuator_class = str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
                 actual_delta_class = str(row.get("actual_delta_class") or "")
                 if actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "cross_bound"}:
@@ -1995,6 +2081,13 @@ class _FrontierReplayControllerClient:
                     "activation_patch_site": row.get("activation_patch_site"),
                     "activation_patch_layer": row.get("activation_patch_layer"),
                     "activation_patch_alpha": alpha,
+                    "activation_patch_source_localization": row.get("activation_patch_source_localization"),
+                    "activation_patch_patch_mode": row.get("activation_patch_patch_mode"),
+                    "activation_patch_base_localization": row.get("activation_patch_base_localization"),
+                    "activation_patch_contrast_mode": row.get("activation_patch_contrast_mode"),
+                    "activation_patch_contrast_scale": row.get("activation_patch_contrast_scale"),
+                    "activation_patch_stealer_bundle_key": row.get("activation_patch_stealer_bundle_key"),
+                    "activation_patch_stealer_term": row.get("activation_patch_stealer_term"),
                     "activation_patch_actuator_class": actuator_class,
                     "actual_delta_class": actual_delta_class or None,
                     "realized_lift_bundle_key": row.get("realized_lift_bundle_key"),
@@ -2011,11 +2104,19 @@ class _FrontierReplayControllerClient:
                     "promotion_reason": "alternate_after_failed_production_trial",
                     "production_apply_allowed": False,
                     "certified_for_apply": False,
+                    "operator_recipe_family_key": recipe_family or None,
+                    "blocked_recipe_family_key": blocked_recipe_family or None,
+                    "same_failed_recipe_family": bool(same_failed_family),
+                    "operator_recipe_structural_family_key": structural_family or None,
+                    "blocked_recipe_structural_family_key": blocked_structural_family or None,
+                    "same_failed_recipe_structural_family": bool(same_failed_structural_family),
                 }
                 score = (
+                    0.0 if same_failed_structural_family else 1.0,
+                    0.0 if same_failed_family else 1.0,
                     1.0 if actual_delta_class == "target_lift" else 0.0,
-                    self_delta,
                     alignment_margin,
+                    self_delta,
                     float(focus_rank_delta) * 0.01,
                     target_mass_delta * 1000.0,
                     float(target_top20_delta) * 0.1,
@@ -2058,6 +2159,13 @@ class _FrontierReplayControllerClient:
                 "activation_patch_site": preview.get("site"),
                 "activation_patch_layer": preview.get("layer"),
                 "activation_patch_alpha": preview.get("alpha"),
+                "activation_patch_source_localization": preview.get("source_localization"),
+                "activation_patch_patch_mode": preview.get("patch_mode"),
+                "activation_patch_base_localization": preview.get("base_localization"),
+                "activation_patch_contrast_mode": preview.get("contrast_mode"),
+                "activation_patch_contrast_scale": preview.get("contrast_scale"),
+                "activation_patch_stealer_bundle_key": preview.get("stealer_bundle_key"),
+                "activation_patch_stealer_term": preview.get("stealer_term"),
                 "activation_patch_actuator_class": review.get("actuator_class") or "self_actuator",
                 "actual_delta_class": review.get("actual_delta_class"),
                 "counterfactual_delta": dict(review.get("counterfactual_delta", {}))
@@ -2081,6 +2189,13 @@ class _FrontierReplayControllerClient:
             "activation_patch_site": preview.get("site"),
             "activation_patch_layer": preview.get("layer"),
             "activation_patch_alpha": preview.get("alpha"),
+            "activation_patch_source_localization": preview.get("source_localization"),
+            "activation_patch_patch_mode": preview.get("patch_mode"),
+            "activation_patch_base_localization": preview.get("base_localization"),
+            "activation_patch_contrast_mode": preview.get("contrast_mode"),
+            "activation_patch_contrast_scale": preview.get("contrast_scale"),
+            "activation_patch_stealer_bundle_key": preview.get("stealer_bundle_key"),
+            "activation_patch_stealer_term": preview.get("stealer_term"),
             "activation_patch_actuator_class": preview.get("actuator_class") or "self_actuator",
             "actual_delta_class": preview.get("actual_delta_class"),
             "counterfactual_delta": {},
@@ -2106,10 +2221,24 @@ class _FrontierReplayControllerClient:
         trial_edit = trial_candidate.get("trial_edit")
         if not isinstance(trial_edit, Mapping):
             return None
+        trial_budget_class = str(
+            trial_gate.get("production_trial_budget_class")
+            or trial_candidate.get("production_trial_budget_class")
+            or "primary"
+        )
+        trial_budget_class = "alternate_followup" if trial_budget_class == "alternate_followup" else "primary"
         budget = packet.get("budget")
         if isinstance(budget, Mapping):
             try:
-                trial_edits_left = int(budget.get("production_trial_edits_left_this_run", 0) or 0)
+                trial_edits_left = int(
+                    budget.get(
+                        "production_trial_followup_edits_left_this_run"
+                        if trial_budget_class == "alternate_followup"
+                        else "production_trial_edits_left_this_run",
+                        0,
+                    )
+                    or 0
+                )
             except Exception:
                 trial_edits_left = 0
             if trial_edits_left <= 0:
@@ -2126,6 +2255,8 @@ class _FrontierReplayControllerClient:
         edit_meta.update(
             {
                 "apply_kind": "production_trial",
+                "production_trial_budget_class": trial_budget_class,
+                "production_trial_followup_allowed": trial_budget_class == "alternate_followup",
                 "production_trial_allowed": True,
                 "production_apply_allowed": False,
                 "production_policy_would_apply": False,
@@ -2147,6 +2278,8 @@ class _FrontierReplayControllerClient:
                 "objective_bundle_key": objective_bundle_key,
                 "step_actuator_bundle_key": step_actuator_bundle_key,
                 "operator_recipe_id": operator_recipe_id,
+                "production_trial_budget_class": trial_budget_class,
+                "production_trial_followup_allowed": trial_budget_class == "alternate_followup",
                 "surface_family_key": edit_meta.get("surface_family_key"),
                 "production_trial_allowed": True,
                 "production_apply_allowed": False,
@@ -2162,6 +2295,8 @@ class _FrontierReplayControllerClient:
                     "step_actuator_bundle_key": step_actuator_bundle_key,
                     "next_evidence_needed": "production_trial_effect",
                     "next_action": "noop",
+                    "production_trial_budget_class": trial_budget_class,
+                    "production_trial_followup_allowed": trial_budget_class == "alternate_followup",
                 },
             },
         }
@@ -2385,6 +2520,15 @@ class _FrontierReplayControllerClient:
                     "production trial followup evidence was received; hold the old activation_patch "
                     "runtime-support loop until an alternate operator candidate consumes it"
                 )
+        activation_patch_request_shadow: dict[str, Any] | None = None
+        if isinstance(activation_patch_preview, Mapping):
+            if production_trial_alternate_candidate is not None and activation_patch_preview_is_alternate_after_trial:
+                activation_patch_request_shadow = dict(production_trial_alternate_candidate)
+            else:
+                activation_patch_request_shadow = self._activation_patch_shadow_from_preview_results(
+                    latest_result_items,
+                    preview=activation_patch_preview,
+                )
         if activation_patch_preview is not None and not production_trial_outcome_holds_activation_patch_pipeline:
             request_attention_shadow_round = False
             if activation_patch_production_shadow is not None:
@@ -2404,6 +2548,14 @@ class _FrontierReplayControllerClient:
                         "next_evidence_needed": next_evidence,
                         "reason": why_not_apply,
                     }
+                    if activation_patch_request_shadow is not None:
+                        diagnostic_request["activation_patch_shadow_actuator"] = dict(
+                            activation_patch_request_shadow
+                        )
+                        if activation_patch_preview_is_alternate_after_trial:
+                            diagnostic_request["alternate_trial_candidate"] = dict(
+                                activation_patch_request_shadow
+                            )
                 elif activation_patch_production_trial_gate is not None:
                     trial_allowed = bool(activation_patch_production_trial_gate.get("production_trial_allowed", False))
                     trial_candidate = activation_patch_production_trial_gate.get("production_trial_candidate")
@@ -2495,6 +2647,14 @@ class _FrontierReplayControllerClient:
                         "next_evidence_needed": next_evidence,
                         "reason": why_not_apply,
                     }
+                    if activation_patch_request_shadow is not None:
+                        diagnostic_request["activation_patch_shadow_actuator"] = dict(
+                            activation_patch_request_shadow
+                        )
+                        if activation_patch_preview_is_alternate_after_trial:
+                            diagnostic_request["alternate_trial_candidate"] = dict(
+                                activation_patch_request_shadow
+                            )
                 else:
                     why_not_apply = activation_patch_promotion_gate.get(
                         "why_not_apply",
@@ -2526,6 +2686,14 @@ class _FrontierReplayControllerClient:
                     "next_evidence_needed": next_evidence,
                     "reason": why_not_apply,
                 }
+                if activation_patch_request_shadow is not None:
+                    diagnostic_request["activation_patch_shadow_actuator"] = dict(
+                        activation_patch_request_shadow
+                    )
+                    if activation_patch_preview_is_alternate_after_trial:
+                        diagnostic_request["alternate_trial_candidate"] = dict(
+                            activation_patch_request_shadow
+                        )
                 if (
                     activation_patch_preview_is_alternate_after_trial
                     and alternate_runtime_shadow is not None
@@ -2550,6 +2718,14 @@ class _FrontierReplayControllerClient:
                     "next_evidence_needed": next_evidence,
                     "reason": why_not_apply,
                 }
+                if activation_patch_request_shadow is not None:
+                    diagnostic_request["activation_patch_shadow_actuator"] = dict(
+                        activation_patch_request_shadow
+                    )
+                    if activation_patch_preview_is_alternate_after_trial:
+                        diagnostic_request["alternate_trial_candidate"] = dict(
+                            activation_patch_request_shadow
+                        )
             else:
                 next_evidence = str(
                     (
@@ -4006,6 +4182,15 @@ def run_readout_escape_replay_harness(
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
     max_generated_tokens: int = 4,
+    max_production_trial_edits_per_run: int = 1,
+    max_production_trial_alpha: float = 0.15,
+    max_production_trial_edit_cost: float | None = None,
+    max_production_trial_followup_edits_per_run: int = 1,
+    max_production_trial_followup_alpha: float = 0.05,
+    max_production_trial_followup_edit_cost: float | None = None,
+    max_diagnostic_calls_per_run: int = 12,
+    diagnostic_result_window: int = 12,
+    max_controller_diagnostic_rethink_rounds: int = 4,
 ) -> ReadoutEscapeReplayHarnessResult:
     normalized_packet_mode = str(packet_mode).strip().lower().replace("-", "_")
     if normalized_packet_mode not in {"forced_frontier", "directscan", "fixed_candidate"}:
@@ -4041,6 +4226,14 @@ def run_readout_escape_replay_harness(
         worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
         worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
         worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
+        max_production_trial_edits_per_run=max_production_trial_edits_per_run,
+        max_production_trial_alpha=max_production_trial_alpha,
+        max_production_trial_edit_cost=max_production_trial_edit_cost,
+        max_production_trial_followup_edits_per_run=max_production_trial_followup_edits_per_run,
+        max_production_trial_followup_alpha=max_production_trial_followup_alpha,
+        max_production_trial_followup_edit_cost=max_production_trial_followup_edit_cost,
+        max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
+        diagnostic_result_window=diagnostic_result_window,
         readout_sidecar_analyzer=readout_sidecar_analyzer,
         readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
     )
@@ -5153,6 +5346,10 @@ def run_readout_escape_replay_harness(
             site: str,
             layer: int,
             source_span: Mapping[str, Any] | None,
+            stealer_span: Mapping[str, Any] | None = None,
+            stealer_bundle_key: str | None = None,
+            stealer_term: str | None = None,
+            source_localization: str = "source_span_mean",
         ) -> tuple[torch.Tensor, dict[str, Any]] | None:
             if not isinstance(source_span, Mapping):
                 return None
@@ -5168,23 +5365,112 @@ def run_readout_escape_replay_harness(
             seq_len = int(batch0.shape[0])
             if seq_len <= 0:
                 return None
-            raw_start = int(source_span.get("start", 0) or 0)
-            raw_end = int(source_span.get("end", raw_start + 1) or (raw_start + 1))
-            start = max(0, min(seq_len - 1, raw_start))
-            end = max(start + 1, min(seq_len, raw_end))
-            vector = batch0[start:end].float().mean(dim=0).reshape(-1)
+
+            def _parse_source_localization(raw_localization: str) -> tuple[str, str, float]:
+                normalized = str(raw_localization or "source_span_mean")
+                if normalized.endswith("_minus_stealer_l025"):
+                    return normalized[: -len("_minus_stealer_l025")], "minus_stealer", 0.25
+                if normalized.endswith("_minus_stealer_l050"):
+                    return normalized[: -len("_minus_stealer_l050")], "minus_stealer", 0.50
+                if normalized.endswith("_orthogonal_stealer"):
+                    return normalized[: -len("_orthogonal_stealer")], "orthogonal_stealer", 1.0
+                return normalized, "none", 0.0
+
+            def _base_source_vector_for_span(
+                span: Mapping[str, Any],
+                *,
+                base_localization: str,
+            ) -> tuple[torch.Tensor, dict[str, Any]] | None:
+                raw_start = int(span.get("start", 0) or 0)
+                raw_end = int(span.get("end", raw_start + 1) or (raw_start + 1))
+                start = max(0, min(seq_len - 1, raw_start))
+                end = max(start + 1, min(seq_len, raw_end))
+                localization = str(base_localization or "source_span_mean")
+                span_records = self._prompt_records_for_span(start, end)
+                if localization == "source_term_token" and span_records:
+                    best_record = max(
+                        span_records,
+                        key=lambda record: self._content_piece_score(str(record.get("piece", ""))),
+                    )
+                    token_position = max(0, min(seq_len - 1, int(best_record.get("position", start) or start)))
+                    vector = batch0[token_position].float().reshape(-1)
+                    positions = [int(token_position)]
+                elif localization == "source_centered_pm1":
+                    window_start = max(0, start - 1)
+                    window_end = min(seq_len, end + 1)
+                    positive = batch0[start:end].float().mean(dim=0)
+                    neighbor_chunks = []
+                    if window_start < start:
+                        neighbor_chunks.append(batch0[window_start:start].float())
+                    if end < window_end:
+                        neighbor_chunks.append(batch0[end:window_end].float())
+                    if neighbor_chunks:
+                        neighbor = torch.cat(neighbor_chunks, dim=0).mean(dim=0)
+                        vector = (positive - neighbor).reshape(-1)
+                    else:
+                        vector = positive.reshape(-1)
+                    positions = list(range(window_start, window_end))
+                else:
+                    localization = "source_span_mean"
+                    vector = batch0[start:end].float().mean(dim=0).reshape(-1)
+                    positions = list(range(start, end))
+                return vector, {
+                    "source_token_index": int(start),
+                    "source_span_start": int(start),
+                    "source_span_end": int(end),
+                    "source_piece": span.get("text"),
+                    "source_segment_kind": span.get("segment_kind"),
+                    "source_provenance_class": span.get("provenance_class"),
+                    "source_localization": localization,
+                    "source_positions": positions,
+                }
+
+            requested_localization = str(source_localization or "source_span_mean")
+            base_localization, contrast_mode, contrast_scale = _parse_source_localization(requested_localization)
+            base_source = _base_source_vector_for_span(source_span, base_localization=base_localization)
+            if base_source is None:
+                return None
+            vector, source_meta = base_source
+            source_positions = list(source_meta.get("source_positions", []))
+            if contrast_mode != "none":
+                if not isinstance(stealer_span, Mapping):
+                    return None
+                stealer_source = _base_source_vector_for_span(stealer_span, base_localization=base_localization)
+                if stealer_source is None:
+                    return None
+                stealer_vector, stealer_meta = stealer_source
+                source_positions = list(
+                    dict.fromkeys(source_positions + list(stealer_meta.get("source_positions", [])))
+                )
+                if contrast_mode == "orthogonal_stealer":
+                    basis = stealer_vector.float().reshape(-1)
+                    denom = float(torch.dot(basis, basis).item())
+                    if denom > 1e-8:
+                        vector = vector.float().reshape(-1) - (torch.dot(vector.float().reshape(-1), basis) / denom) * basis
+                    else:
+                        vector = vector.float().reshape(-1)
+                else:
+                    vector = vector.float().reshape(-1) - (float(contrast_scale) * stealer_vector.float().reshape(-1))
+                source_meta["stealer_source_token_index"] = stealer_meta.get("source_token_index")
+                source_meta["stealer_source_span_start"] = stealer_meta.get("source_span_start")
+                source_meta["stealer_source_span_end"] = stealer_meta.get("source_span_end")
+                source_meta["stealer_source_piece"] = stealer_meta.get("source_piece")
+                source_meta["stealer_source_segment_kind"] = stealer_meta.get("source_segment_kind")
+                source_meta["stealer_source_provenance_class"] = stealer_meta.get("source_provenance_class")
+            else:
+                vector = vector.float().reshape(-1)
+            localization = requested_localization
             if vector.numel() <= 0:
                 return None
-            source_meta = {
-                "source_token_index": int(start),
-                "source_span_start": int(start),
-                "source_span_end": int(end),
-                "source_piece": source_span.get("text"),
-                "source_segment_kind": source_span.get("segment_kind"),
-                "source_provenance_class": source_span.get("provenance_class"),
-                "source_norm": round(float(torch.linalg.vector_norm(vector).item()), 6),
-                "source_hook_name": hook_name,
-            }
+            source_meta["source_localization"] = localization
+            source_meta["source_base_localization"] = base_localization
+            source_meta["source_contrast_mode"] = contrast_mode
+            source_meta["source_contrast_scale"] = round(float(contrast_scale), 6)
+            source_meta["source_positions"] = source_positions
+            source_meta["source_norm"] = round(float(torch.linalg.vector_norm(vector).item()), 6)
+            source_meta["source_hook_name"] = hook_name
+            source_meta["stealer_bundle_key"] = stealer_bundle_key
+            source_meta["stealer_term"] = stealer_term
             return vector.detach().cpu().float(), source_meta
 
         def _run_activation_patch_operator(
@@ -5195,9 +5481,22 @@ def run_readout_escape_replay_harness(
             objective_bundle_key: str,
             objective_term: str,
             recipe_name: str,
+            stealer_span: Mapping[str, Any] | None = None,
+            stealer_bundle_key: str | None = None,
+            stealer_term: str | None = None,
+            source_localization: str = "source_span_mean",
+            patch_mode: str = "blend",
             alpha: float = 0.15,
         ) -> dict[str, Any] | None:
-            source = _activation_source_vector(site=site, layer=int(layer), source_span=source_span)
+            source = _activation_source_vector(
+                site=site,
+                layer=int(layer),
+                source_span=source_span,
+                stealer_span=stealer_span,
+                stealer_bundle_key=stealer_bundle_key,
+                stealer_term=stealer_term,
+                source_localization=source_localization,
+            )
             if source is None:
                 return None
             source_vector, source_meta = source
@@ -5227,7 +5526,15 @@ def run_readout_escape_replay_harness(
                 out = act.clone()
                 target_slice = act[:, -1, :]
                 src = source_vector.to(device=act.device, dtype=act.dtype).reshape(1, -1)
-                patched = ((1.0 - alpha_value) * target_slice) + (alpha_value * src)
+                if patch_mode == "add_norm":
+                    src_norm = torch.linalg.vector_norm(src.detach().float(), dim=-1, keepdim=True).to(
+                        device=act.device,
+                        dtype=act.dtype,
+                    )
+                    src_unit = src / torch.clamp(src_norm, min=1e-8)
+                    patched = target_slice + (alpha_value * src_unit)
+                else:
+                    patched = ((1.0 - alpha_value) * target_slice) + (alpha_value * src)
                 before_norm = float(torch.linalg.vector_norm(target_slice.detach().float()).item())
                 after_norm = float(torch.linalg.vector_norm(patched.detach().float()).item())
                 hook_stats["call_count"] = int(hook_stats.get("call_count", 0) or 0) + 1
@@ -5261,6 +5568,11 @@ def run_readout_escape_replay_harness(
 
             baseline_score = baseline.get("scoring", {}) if isinstance(baseline.get("scoring"), Mapping) else {}
             edited_score = edited.get("scoring", {}) if isinstance(edited.get("scoring"), Mapping) else {}
+            recipe_segment = (
+                "source_span_to_last"
+                if source_localization == "source_span_mean"
+                else f"{source_localization}_to_last"
+            )
             result: dict[str, Any] = {
                 "status": "ok",
                 "label": f"{recipe_name}:{objective_bundle_key}",
@@ -5269,9 +5581,9 @@ def run_readout_escape_replay_harness(
                 "intended_term": objective_term,
                 "operator_recipe_id": (
                     f"readout_escape|activation_patch|{site}|L{int(layer)}|"
-                    f"source_span_to_last|blend|a{alpha_value:.3f}"
+                    f"{recipe_segment}|{patch_mode}|a{alpha_value:.3f}"
                 ),
-                "operator_recipe_seed_key": f"activation_patch|{site}|source_span_to_last|blend",
+                "operator_recipe_seed_key": f"activation_patch|{site}|{recipe_segment}|{patch_mode}",
                 "continuation_baseline": baseline["continuation"],
                 "continuation_candidate": edited["continuation"],
                 "entropy_delta": round(float(edited["entropy"]) - float(baseline["entropy"]), 6),
@@ -5392,6 +5704,13 @@ def run_readout_escape_replay_harness(
                 "activation_patch_site": site,
                 "activation_patch_layer": int(layer),
                 "activation_patch_alpha": round(float(alpha_value), 6),
+                "activation_patch_source_localization": source_localization,
+                "activation_patch_patch_mode": patch_mode,
+                "activation_patch_base_localization": source_meta.get("source_base_localization"),
+                "activation_patch_contrast_mode": source_meta.get("source_contrast_mode"),
+                "activation_patch_contrast_scale": source_meta.get("source_contrast_scale"),
+                "activation_patch_stealer_bundle_key": stealer_bundle_key,
+                "activation_patch_stealer_term": stealer_term,
                 "activation_hook_call_count": int(hook_stats.get("call_count", 0) or 0),
                 "activation_source_norm": round(float(hook_stats.get("source_norm", 0.0) or 0.0), 6),
                 "activation_target_norm_before": round(float(hook_stats.get("max_target_norm_before", 0.0) or 0.0), 6),
@@ -5408,8 +5727,16 @@ def run_readout_escape_replay_harness(
                     "source_token_index": source_meta.get("source_token_index"),
                     "source_piece": source_meta.get("source_piece"),
                     "source_segment_kind": source_meta.get("source_segment_kind"),
+                    "source_localization": source_localization,
+                    "base_localization": source_meta.get("source_base_localization"),
+                    "contrast_mode": source_meta.get("source_contrast_mode"),
+                    "contrast_scale": source_meta.get("source_contrast_scale"),
+                    "stealer_bundle_key": stealer_bundle_key,
+                    "stealer_term": stealer_term,
+                    "stealer_source_token_index": source_meta.get("stealer_source_token_index"),
+                    "stealer_source_piece": source_meta.get("stealer_source_piece"),
                     "op_kind": "activation_patch",
-                    "which": "source_span_to_last_blend",
+                    "which": f"{source_localization}_to_last_{patch_mode}",
                     "alpha": round(float(alpha_value), 6),
                     "edit_count": 0,
                 },
@@ -5426,6 +5753,18 @@ def run_readout_escape_replay_harness(
         for bundle_key, term in list(bundle_terms.items())[:2]:
             source_span = _best_source_span(term)
             source_selector = _source_selector_for_span(source_span)
+            stealer_bundle_key: str | None = None
+            stealer_term: str | None = None
+            stealer_span: dict[str, Any] | None = None
+            for other_bundle_key, other_term in bundle_terms.items():
+                if str(other_bundle_key) == str(bundle_key):
+                    continue
+                other_span = _best_source_span(str(other_term))
+                if isinstance(other_span, Mapping):
+                    stealer_bundle_key = str(other_bundle_key)
+                    stealer_term = str(other_term)
+                    stealer_span = dict(other_span)
+                    break
             non_kv_operator_candidates: list[dict[str, Any]] = []
             for diagnostic_family, recipe_name, selector, span, alpha in (
                 (
@@ -5477,20 +5816,32 @@ def run_readout_escape_replay_harness(
             readout_target = getattr(readout_surface, "target", None)
             readout_layer = int(getattr(readout_target, "layer", 0) or 0)
             if isinstance(source_span, Mapping):
-                for patch_site, patch_alpha in (
-                    ("resid_pre", 0.05),
-                    ("resid_pre", 0.15),
-                    ("resid_post", 0.05),
-                    ("resid_post", 0.15),
-                    ("mlp_out", 0.15),
+                for patch_site, patch_alpha, source_localization, patch_mode in (
+                    ("resid_pre", 0.05, "source_term_token", "blend"),
+                    ("resid_pre", 0.05, "source_term_token_minus_stealer_l025", "blend"),
+                    ("resid_pre", 0.05, "source_centered_pm1", "blend"),
+                    ("resid_pre", 0.05, "source_centered_pm1_minus_stealer_l025", "blend"),
+                    ("resid_pre", 0.05, "source_term_token_orthogonal_stealer", "blend"),
+                    ("resid_pre", 0.05, "source_span_mean", "add_norm"),
+                    ("resid_pre", 0.05, "source_span_mean", "blend"),
                 ):
+                    if "stealer" in source_localization and not isinstance(stealer_span, Mapping):
+                        continue
                     patch_row = _run_activation_patch_operator(
                         site=patch_site,
                         layer=readout_layer,
                         source_span=source_span,
                         objective_bundle_key=bundle_key,
                         objective_term=term,
-                        recipe_name=f"{patch_site}_source_span_to_last_blend_a{int(round(patch_alpha * 1000)):03d}",
+                        recipe_name=(
+                            f"{patch_site}_{source_localization}_to_last_{patch_mode}"
+                            f"_a{int(round(patch_alpha * 1000)):03d}"
+                        ),
+                        stealer_span=stealer_span,
+                        stealer_bundle_key=stealer_bundle_key,
+                        stealer_term=stealer_term,
+                        source_localization=source_localization,
+                        patch_mode=patch_mode,
                         alpha=patch_alpha,
                     )
                     if patch_row is not None:
@@ -6339,7 +6690,7 @@ def run_readout_escape_replay_harness(
             controller_client,
             ctx,
             logger=logger,
-            max_controller_diagnostic_rethink_rounds=3
+            max_controller_diagnostic_rethink_rounds=max_controller_diagnostic_rethink_rounds
             if normalized_controller_replay_mode == "diagnostic_request"
             else 0,
         )

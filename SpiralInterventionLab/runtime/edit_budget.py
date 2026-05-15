@@ -7,6 +7,7 @@ import torch
 MAIN_EDIT_BUDGET_POOL = "main"
 LOOP_RESCUE_EDIT_BUDGET_POOL = "loop_rescue"
 PRODUCTION_TRIAL_EDIT_BUDGET_POOL = "production_trial"
+PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL = "production_trial_followup"
 
 
 OP_COST_FACTORS: dict[str, float] = {
@@ -131,6 +132,13 @@ def classify_edit_budget_pool(
         or ""
     ).strip().lower()
     if apply_kind == "production_trial":
+        trial_budget_class = str(
+            edit_meta.get("production_trial_budget_class")
+            or (command_meta or {}).get("production_trial_budget_class")
+            or ""
+        ).strip().lower()
+        if trial_budget_class in {"alternate_followup", "followup", "production_trial_followup"}:
+            return PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL
         return PRODUCTION_TRIAL_EDIT_BUDGET_POOL
 
     if not _packet_is_looping(packet):

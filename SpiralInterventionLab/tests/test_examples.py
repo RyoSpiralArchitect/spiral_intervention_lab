@@ -1315,8 +1315,14 @@ class TestExamples(unittest.TestCase):
     def test_frontier_replay_generates_alternate_trial_candidate_from_compare_evidence(self):
         controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
         objective = "kv_pair:budget:source_body:72:73"
+        stealer = "kv_pair:send:source_body:70:71"
         failed_recipe = "readout_escape|activation_patch|resid_post|L6|source_span_to_last|blend|a0.150"
-        alternate_recipe = "readout_escape|activation_patch|resid_pre|L6|source_span_to_last|blend|a0.050"
+        site_shift_recipe = "readout_escape|activation_patch|resid_pre|L6|source_span_to_last|blend|a0.050"
+        source_local_recipe = "readout_escape|activation_patch|resid_pre|L6|source_centered_pm1_to_last|blend|a0.050"
+        alternate_recipe = (
+            "readout_escape|activation_patch|resid_pre|L6|"
+            "source_term_token_minus_stealer_l025_to_last|blend|a0.050"
+        )
         trial_outcome = {
             "apply_kind": "production_trial",
             "objective_bundle_key": objective,
@@ -1348,17 +1354,86 @@ class TestExamples(unittest.TestCase):
                             "status": "supportive",
                             "actuator_class": "self_actuator",
                             "actual_delta_class": "target_lift",
-                            "recipe_name": "resid_pre_source_span_to_last_blend_a050",
+                            "recipe_name": "resid_pre_source_term_token_minus_stealer_l025_to_last_blend_a050",
                             "operator_recipe_id": alternate_recipe,
                             "activation_patch_site": "resid_pre",
                             "activation_patch_layer": 6,
                             "activation_patch_alpha": 0.05,
+                            "activation_patch_source_localization": "source_term_token_minus_stealer_l025",
+                            "activation_patch_patch_mode": "blend",
+                            "activation_patch_base_localization": "source_term_token",
+                            "activation_patch_contrast_mode": "minus_stealer",
+                            "activation_patch_contrast_scale": 0.25,
+                            "activation_patch_stealer_bundle_key": stealer,
+                            "activation_patch_stealer_term": "send",
+                            "target_mass_delta": 0.0003,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 10,
+                            "self_delta": 0.8,
+                            "cross_delta": 0.1,
+                            "alignment_margin": 0.7,
+                            "realized_lift_bundle_key": objective,
+                            "realized_lift_term": "budget",
+                        },
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_pre_source_centered_pm1_to_last_blend_a050",
+                            "operator_recipe_id": source_local_recipe,
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.05,
+                            "activation_patch_source_localization": "source_centered_pm1",
+                            "activation_patch_patch_mode": "blend",
                             "target_mass_delta": 0.0002,
                             "target_top20_hit_delta": 0,
                             "focus_rank_delta": 8,
                             "self_delta": 0.6,
                             "cross_delta": 0.2,
                             "alignment_margin": 0.4,
+                            "realized_lift_bundle_key": objective,
+                            "realized_lift_term": "budget",
+                        },
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_pre_source_span_to_last_blend_a050",
+                            "operator_recipe_id": site_shift_recipe,
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.05,
+                            "activation_patch_source_localization": "source_span_mean",
+                            "activation_patch_patch_mode": "blend",
+                            "target_mass_delta": 0.003,
+                            "focus_rank_delta": 45,
+                            "self_delta": 1.4,
+                            "alignment_margin": 1.0,
+                            "realized_lift_bundle_key": objective,
+                            "realized_lift_term": "budget",
+                        },
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_post_source_span_to_last_blend_a050",
+                            "operator_recipe_id": failed_recipe.replace("a0.150", "a0.050"),
+                            "activation_patch_site": "resid_post",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.05,
+                            "activation_patch_source_localization": "source_span_mean",
+                            "activation_patch_patch_mode": "blend",
+                            "target_mass_delta": 0.002,
+                            "focus_rank_delta": 40,
+                            "self_delta": 1.2,
+                            "alignment_margin": 0.9,
                             "realized_lift_bundle_key": objective,
                             "realized_lift_term": "budget",
                         },
@@ -1403,6 +1478,14 @@ class TestExamples(unittest.TestCase):
         self.assertNotEqual(alternate["operator_recipe_id"], failed_recipe)
         self.assertEqual(meta["blocked_by"], "production_trial_alternate_candidate_shadow_review")
         self.assertEqual(meta["production_trial_alternate_candidate"]["operator_recipe_id"], alternate_recipe)
+        self.assertFalse(meta["production_trial_alternate_candidate"]["same_failed_recipe_family"])
+        self.assertFalse(meta["production_trial_alternate_candidate"]["same_failed_recipe_structural_family"])
+        self.assertEqual(
+            alternate["activation_patch_source_localization"],
+            "source_term_token_minus_stealer_l025",
+        )
+        self.assertEqual(alternate["activation_patch_stealer_bundle_key"], stealer)
+        self.assertEqual(alternate["activation_patch_stealer_term"], "send")
 
         alternate_review_packet = {
             **packet,
@@ -1416,11 +1499,17 @@ class TestExamples(unittest.TestCase):
                         "objective_bundle_key": objective,
                         "actuator_bundle_key": objective,
                         "objective_term": "budget",
-                        "recipe_name": "resid_pre_source_span_to_last_blend_a050",
+                        "recipe_name": "resid_pre_source_term_token_minus_stealer_l025_to_last_blend_a050",
                         "operator_recipe_id": alternate_recipe,
                         "site": "resid_pre",
                         "layer": 6,
                         "alpha": 0.05,
+                        "source_localization": "source_term_token_minus_stealer_l025",
+                        "base_localization": "source_term_token",
+                        "contrast_mode": "minus_stealer",
+                        "contrast_scale": 0.25,
+                        "stealer_bundle_key": stealer,
+                        "stealer_term": "send",
                         "source": "source_body_span",
                         "target": "answer_boundary_last",
                         "patch_mode": "blend",
@@ -1445,6 +1534,81 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(runtime_request["diagnostic"], "activation_patch_runtime_support_probe")
         self.assertEqual(
             runtime_request["activation_patch_shadow_actuator"]["operator_recipe_id"],
+            alternate_recipe,
+        )
+        self.assertEqual(
+            runtime_request["activation_patch_shadow_actuator"]["activation_patch_stealer_bundle_key"],
+            stealer,
+        )
+
+        latest_promotion = controller._activation_patch_promotion_gate_from_results(
+            [
+                {
+                    "diagnostic": "activation_patch_promotion_gate_review",
+                    "activation_patch_promotion_gate_review": {
+                        "production_apply_candidate": {
+                            "operator_recipe_id": failed_recipe,
+                        }
+                    },
+                },
+                {
+                    "diagnostic": "activation_patch_promotion_gate_review",
+                    "activation_patch_promotion_gate_review": {
+                        "production_apply_candidate": {
+                            "operator_recipe_id": alternate_recipe,
+                        }
+                    },
+                },
+            ]
+        )
+        self.assertEqual(
+            latest_promotion["production_apply_candidate"]["operator_recipe_id"],
+            alternate_recipe,
+        )
+
+        alternate_runtime_packet = {
+            **packet,
+            "latest_diagnostic_results": [
+                alternate_review_packet["latest_diagnostic_results"][1],
+                {
+                    "diagnostic": "activation_patch_runtime_support_probe",
+                    "objective_bundle_key": objective,
+                    "activation_patch_runtime_support_probe": {
+                        "runtime_supported_shadow_candidate": True,
+                        "executable_shadow": {
+                            "operator_recipe_id": alternate_recipe,
+                            "objective_bundle_key": objective,
+                            "actuator_bundle_key": objective,
+                            "objective_term": "budget",
+                            "recipe_name": "resid_pre_source_term_token_minus_stealer_l025_to_last_blend_a050",
+                            "site": "resid_pre",
+                            "layer": 6,
+                            "alpha": 0.05,
+                            "source_localization": "source_term_token_minus_stealer_l025",
+                            "base_localization": "source_term_token",
+                            "contrast_mode": "minus_stealer",
+                            "contrast_scale": 0.25,
+                            "stealer_bundle_key": stealer,
+                            "stealer_term": "send",
+                            "compile_state": "executable_shadow",
+                            "production_apply_allowed": False,
+                            "certified_for_apply": False,
+                        },
+                    },
+                    "production_apply_allowed": False,
+                },
+            ],
+        }
+        promotion_command = controller._diagnostic_request_command(
+            packet=alternate_runtime_packet,
+            strategy_hints=alternate_runtime_packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+        promotion_request = promotion_command["meta"]["diagnostic_request"]
+        self.assertEqual(promotion_request["diagnostic"], "activation_patch_promotion_gate_review")
+        self.assertEqual(
+            promotion_request["activation_patch_shadow_actuator"]["operator_recipe_id"],
             alternate_recipe,
         )
 

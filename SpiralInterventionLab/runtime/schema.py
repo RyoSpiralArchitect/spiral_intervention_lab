@@ -693,6 +693,9 @@ class BudgetState:
     production_trial_edits_left_this_run: int = 0
     production_trial_alpha_left_total: float = 0.0
     production_trial_edit_cost_left_total: float = 0.0
+    production_trial_followup_edits_left_this_run: int = 0
+    production_trial_followup_alpha_left_total: float = 0.0
+    production_trial_followup_edit_cost_left_total: float = 0.0
 
     @classmethod
     def from_dict(cls, value: Any) -> "BudgetState":
@@ -730,6 +733,21 @@ class BudgetState:
             production_trial_edit_cost_left_total=_optional_float(
                 data.get("production_trial_edit_cost_left_total"),
                 "budget.production_trial_edit_cost_left_total",
+            )
+            or 0.0,
+            production_trial_followup_edits_left_this_run=_optional_int(
+                data.get("production_trial_followup_edits_left_this_run"),
+                "budget.production_trial_followup_edits_left_this_run",
+            )
+            or 0,
+            production_trial_followup_alpha_left_total=_optional_float(
+                data.get("production_trial_followup_alpha_left_total"),
+                "budget.production_trial_followup_alpha_left_total",
+            )
+            or 0.0,
+            production_trial_followup_edit_cost_left_total=_optional_float(
+                data.get("production_trial_followup_edit_cost_left_total"),
+                "budget.production_trial_followup_edit_cost_left_total",
             )
             or 0.0,
             active_patch_slots_left=_require_int(
