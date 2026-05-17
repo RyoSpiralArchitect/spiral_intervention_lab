@@ -246,9 +246,10 @@ def production_trial_policy_stage(trial_effect_class: str) -> dict[str, str]:
         }
     if trial_effect_class == "neutral":
         return {
-            "promotion_ladder_stage": "trial_neutral_needs_alternate_candidate",
-            "recommended_next_evidence": "confirm_or_alternate_trial_candidate",
+            "promotion_ladder_stage": "trial_neutral_needs_confirmation_replay",
+            "recommended_next_evidence": "neutral_followup_confirmation_replay",
             "recommended_next_action": "request_compare_extra_operator_diagnostics",
+            "neutral_followup_neighborhood": "contrastive_source_local",
         }
     if trial_effect_class == "helpful":
         return {

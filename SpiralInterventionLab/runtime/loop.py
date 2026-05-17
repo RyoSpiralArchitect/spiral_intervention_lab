@@ -488,6 +488,7 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
         "request_sae_feature_scan": "sae_feature_emitter_scan",
         "request_compare_extra_operator_diagnostics": "compare_extra_operator_diagnostics",
         "request_non_kv_operator_search": "compare_extra_operator_diagnostics",
+        "request_cross_bundle_bridge_search": "cross_bundle_bridge_search",
         "request_activation_patch_candidate_review": "activation_patch_candidate_review",
         "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
         "request_activation_patch_promotion_gate_review": "activation_patch_promotion_gate_review",
@@ -545,6 +546,14 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
             or strategy_hints.get("diagnostic_frontier_next_evidence"),
         )
         row.setdefault("reason", meta.get("why_not_apply") or strategy_hints.get("diagnostic_frontier_reason_text"))
+        if meta.get("operator_recipe_expansion_mode") not in (None, ""):
+            row.setdefault("operator_recipe_expansion_mode", meta.get("operator_recipe_expansion_mode"))
+        if bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False)) or (
+            str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+        ):
+            row.setdefault("post_bridge_exhaustion_recipe_expansion_requested", True)
+        if isinstance(meta.get("cross_bundle_bridge_search_state"), Mapping):
+            row.setdefault("cross_bundle_bridge_search_state", dict(meta["cross_bundle_bridge_search_state"]))
         dedupe_key = "|".join(str(row.get(key, "") or "") for key in ("diagnostic", "bundle_key", "objective_bundle_key"))
         if dedupe_key in seen:
             continue
@@ -562,7 +571,13 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
     )
     return "|".join(
         str(request.get(key, "") or "")
-        for key in ("diagnostic", "bundle_key", "objective_bundle_key")
+        for key in (
+            "diagnostic",
+            "bundle_key",
+            "objective_bundle_key",
+            "next_evidence_needed",
+            "operator_recipe_expansion_mode",
+        )
     ) + "|" + str(candidate_recipe_id or "")
 
 
@@ -1039,6 +1054,7 @@ def _visible_no_safe_actuator_guidance(
         extra_count_int = 0
     if extra_count_int > 0:
         diagnostic_options.append("compare_extra_operator_diagnostics")
+        diagnostic_options.append("cross_bundle_bridge_search")
     diagnostic_context = _diagnostic_evidence_context(strategy_hints)
     frontier_next_evidence = diagnostic_context.get("diagnostic_frontier_next_evidence")
     frontier_request = diagnostic_context.get("diagnostic_frontier_request")
@@ -1071,6 +1087,7 @@ def _visible_no_safe_actuator_guidance(
             "request_sae_feature_scan",
             "request_compare_extra_operator_diagnostics",
             "request_non_kv_operator_search",
+            "request_cross_bundle_bridge_search",
             "request_activation_patch_candidate_review",
             "request_activation_patch_runtime_support_probe",
             "request_activation_patch_promotion_gate_review",
@@ -1106,9 +1123,15 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         if isinstance(analyzer_sae_feature_hints, Sequence) and not isinstance(analyzer_sae_feature_hints, (str, bytes, bytearray))
         else 0
     )
-    bridge_plan_objective_bundle_key = strategy_hints.get("bridge_plan_objective_bundle_key")
-    bridge_plan_actuator_bundle_key = strategy_hints.get("bridge_plan_actuator_bundle_key")
-    bridge_plan_reason = strategy_hints.get("bridge_plan_reason")
+    bridge_plan_objective_bundle_key = (
+        meta.get("bridge_plan_objective_bundle_key")
+        or strategy_hints.get("bridge_plan_objective_bundle_key")
+    )
+    bridge_plan_actuator_bundle_key = (
+        meta.get("bridge_plan_actuator_bundle_key")
+        or strategy_hints.get("bridge_plan_actuator_bundle_key")
+    )
+    bridge_plan_reason = meta.get("bridge_plan_reason") or strategy_hints.get("bridge_plan_reason")
     bridge_plan_unavailable_reason = strategy_hints.get("bridge_plan_unavailable_reason")
     bridge_plan_unavailable_objective_bundle_key = strategy_hints.get("bridge_plan_unavailable_objective_bundle_key")
     bridge_plan_unavailable_objective_reasons = strategy_hints.get("bridge_plan_unavailable_objective_reasons")

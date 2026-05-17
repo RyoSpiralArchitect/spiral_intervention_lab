@@ -348,6 +348,27 @@ controller can now distinguish "primary source-local trial regressed" from
 "contrastive follow-up was bounded but neutral" without opening production
 apply.
 
+The latest direct-scan GPT-2 replay splits rank/readout carrier evidence from a
+true target actuator. A recipe can now be classified as `self_rank_carrier`
+when it moves the intended bundle's rank/readout signal but does not improve
+target mass or target top-20 hits. Such candidates stay diagnostic-only and do
+not enter `production_trial`. With that split in place, the replay follows the
+safer sequence:
+
+```text
+activation_patch_candidate_review
+-> compare_extra_operator_diagnostics
+-> cross_bundle_bridge_search
+-> compare_extra_operator_diagnostics(post_bridge_exhaustion)
+```
+
+The current post-bridge expansion finds `self_rank_carrier: 3` and
+`wrong_direction: 9`, but no `self_target_actuator`. The best observed carrier
+family is `resid_pre|source_term_token|blend`, and the next evidence request is
+`convert_rank_carrier_to_target:resid_pre|source_term_token|blend`. This keeps
+the result honest: `budget` can be moved in rank space, but production apply is
+still closed until that movement becomes target-owned mass/top20 lift.
+
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
 model. The Hugging Face cache may be offline even when network is available, so
@@ -407,20 +428,22 @@ The next steps are now fairly concrete:
    The main measurement axis is now operator certification and ownership, not candidate churn.
 3. Treat production-trial failure as structured evidence.
    A harmful or regressing trial should create an explicit recipe veto and an alternate-candidate search, not a retry of the same ladder.
-4. Search for a `budget` self-actuator recipe.
-   Current real-packet replay shows that several recipes move something, but the lift is often weak, stolen by `send`, or unsafe at production-trial strength.
-5. Continue ownership-first operator sweeps.
+4. Convert rank carriers into target actuators.
+   Current replay can find `self_rank_carrier` recipes for `budget`, but not yet `self_target_actuator` recipes with target mass/top20 lift.
+5. Search for a `budget` self-actuator recipe.
+   Current real-packet replay shows that several recipes move something, but the lift is often rank-only, stolen by `send`, or unsafe at production-trial strength.
+6. Continue ownership-first operator sweeps.
    Current promising directions are:
    - more local positive seeds such as `exact_term_token`, fused seeds, and centered local windows
    - contrastive recipes such as `minus_stealer` and `orthogonal_stealer`
    - recipe-level certification keyed by operator recipe rather than broad family alone
-6. Use alternate activation-patch candidates as a bounded ladder.
+7. Use alternate activation-patch candidates as a bounded ladder.
    The current loop can now descend from a failed high-alpha recipe to a lower-alpha alternate recipe while preserving controller ownership.
    The next run should follow that alternate through promotion review, shadow
    replay, and trial comparison without reusing the failed recipe identity.
-7. If no `budget` self-actuator appears, promote an explicit bridge plan.
+8. If no `budget` self-actuator appears, promote an explicit bridge plan.
    In that branch the controller would treat `budget` as the objective term and a certified `send` bridge as the readout-escape actuator, rather than pretending the lift already belongs to `budget`.
-8. Expand the readout analyzer backend carefully.
+9. Expand the readout analyzer backend carefully.
    SAELens can move from scaffold to real backend only if it stays a feature emitter that returns small, auditable hints rather than becoming a runtime dependency or hidden generator.
 
 ## Design Guardrails

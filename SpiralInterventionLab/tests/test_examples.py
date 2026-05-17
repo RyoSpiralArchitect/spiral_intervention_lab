@@ -26,6 +26,7 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     _FrontierReplayControllerClient,
     _build_parser,
     _configure_torch_default_device_for_worker,
+    _effective_diagnostic_frontier_summary,
     _focused_bridge_eval_recipe_specs,
     _infer_tlens_model_ref,
     _resolve_worker_device,
@@ -36,6 +37,7 @@ from SpiralInterventionLab.runtime.sidecar import (
     ReadoutSidecarSiteCapture,
     normalize_readout_sidecar_hints,
 )
+from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime
 from SpiralInterventionLab.tasks import (
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
@@ -820,6 +822,7 @@ class TestExamples(unittest.TestCase):
                         "readout_logit_adjacent_probe",
                         "sae_feature_emitter_scan",
                         "compare_extra_operator_diagnostics",
+                        "cross_bundle_bridge_search",
                         "activation_patch_candidate_review",
                         "activation_patch_runtime_support_probe",
                         "activation_patch_promotion_gate_review",
@@ -974,6 +977,7 @@ class TestExamples(unittest.TestCase):
                     "readout_logit_adjacent_probe",
                     "sae_feature_emitter_scan",
                     "compare_extra_operator_diagnostics",
+                    "cross_bundle_bridge_search",
                     "activation_patch_candidate_review",
                     "activation_patch_runtime_support_probe",
                     "activation_patch_promotion_gate_review",
@@ -1312,6 +1316,62 @@ class TestExamples(unittest.TestCase):
         )
         self.assertIn("production_trial_alternate_evidence", meta)
 
+    def test_frontier_replay_neutral_trial_requests_confirmation_neighborhood(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        recipe = "readout_escape|activation_patch|resid_pre|L6|source_centered_pm1_to_last|blend|a0.050"
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": recipe,
+            "surface_family_key": "activation_patch_trial:s_resid_pre_l6_last",
+            "trial_effect_class": "neutral",
+            "verdict": "neutral",
+            "actuator_class": "unknown",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "activation_patch_production_trial_gate_review",
+                    "objective_bundle_key": objective,
+                    "production_apply_allowed": False,
+                }
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "request_compare_extra_operator_diagnostics")
+        self.assertEqual(meta["next_evidence_needed"], "neutral_followup_confirmation_replay")
+        self.assertEqual(meta["blocked_by"], "production_trial_neutral_followup_confirmation")
+        self.assertEqual(meta["neutral_followup_neighborhood"], "contrastive_source_local")
+        self.assertTrue(meta["production_trial_neutral_followup_confirmation_requested"])
+        self.assertEqual(request["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(request["trial_followup_mode"], "confirmation_neighborhood")
+        self.assertEqual(request["neutral_followup_neighborhood"], "contrastive_source_local")
+        self.assertEqual(
+            meta["controller_memory"]["neutral_followup_neighborhood"],
+            "contrastive_source_local",
+        )
+
     def test_frontier_replay_generates_alternate_trial_candidate_from_compare_evidence(self):
         controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
         objective = "kv_pair:budget:source_body:72:73"
@@ -1612,6 +1672,802 @@ class TestExamples(unittest.TestCase):
             alternate_recipe,
         )
 
+    def test_frontier_replay_surfaces_bridge_alternate_after_failed_trial(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        stealer = "kv_pair:send:source_body:70:71"
+        failed_recipe = (
+            "readout_escape|activation_patch|resid_pre|L2|"
+            "source_term_token_minus_stealer_l050_to_last|blend|a0.050"
+        )
+        bridge_recipe = (
+            "readout_escape|activation_patch|resid_pre|L2|"
+            "source_term_token_minus_stealer_l025_to_last|blend|a0.050"
+        )
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": failed_recipe,
+            "surface_family_key": "activation_patch_trial:s_resid_pre_l2_last",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "dead_actuator",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "activation_patch_candidate_pool": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "actuator_bundle_key": stealer,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "bridge_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_pre_source_term_token_minus_stealer_l025_to_last_blend_a050",
+                            "operator_recipe_id": bridge_recipe,
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 2,
+                            "activation_patch_alpha": 0.05,
+                            "activation_patch_source_localization": "source_term_token_minus_stealer_l025",
+                            "activation_patch_patch_mode": "blend",
+                            "activation_patch_base_localization": "source_term_token",
+                            "activation_patch_contrast_mode": "minus_stealer",
+                            "activation_patch_contrast_scale": 0.25,
+                            "activation_patch_stealer_bundle_key": stealer,
+                            "activation_patch_stealer_term": "send",
+                            "target_mass_delta": 0.0002,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 3,
+                            "self_delta": 2.73,
+                            "cross_delta": 2.74,
+                            "alignment_margin": -0.01,
+                            "objective_term": "budget",
+                            "realized_lift_bundle_key": objective,
+                            "realized_lift_term": "budget",
+                        }
+                    ],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": True,
+                    "policy_candidate_ready": False,
+                }
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        alternate = request["alternate_trial_candidate"]
+        self.assertEqual(request["diagnostic"], "activation_patch_candidate_review")
+        self.assertEqual(request["step_actuator_bundle_key"], stealer)
+        self.assertEqual(meta["step_actuator_bundle_key"], stealer)
+        self.assertEqual(meta["next_evidence_needed"], "bridge_plan_dual_layer_shadow_review")
+        self.assertEqual(meta["blocked_by"], "production_trial_alternate_candidate_shadow_review")
+        self.assertTrue(meta["bridge_plan_available"])
+        self.assertEqual(meta["bridge_plan_objective_bundle_key"], objective)
+        self.assertEqual(meta["bridge_plan_actuator_bundle_key"], stealer)
+        self.assertEqual(alternate["activation_patch_actuator_class"], "bridge_actuator")
+        self.assertEqual(alternate["objective_bundle_key"], objective)
+        self.assertEqual(alternate["actuator_bundle_key"], stealer)
+        self.assertFalse(alternate["promotable_to_candidate_compiler"])
+        self.assertTrue(alternate["requires_bridge_plan"])
+        self.assertEqual(alternate["alternate_candidate_mode"], "bridge_actuator_shadow_review")
+        self.assertFalse(alternate["production_apply_allowed"])
+
+    def test_frontier_replay_rejects_wrong_direction_bridge_alternate_after_failed_trial(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        stealer = "kv_pair:send:source_body:70:71"
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": "failed_recipe",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "dead_actuator",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "activation_patch_candidate_pool": [
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "bridge_actuator",
+                            "actual_delta_class": "target_lift",
+                            "operator_recipe_id": "budget_recipe_that_lifts_send",
+                            "realized_lift_bundle_key": stealer,
+                            "realized_lift_term": "send",
+                            "self_delta": 0.01,
+                            "cross_delta": 0.04,
+                            "alignment_margin": -0.03,
+                        }
+                    ],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": True,
+                    "policy_candidate_ready": False,
+                }
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        self.assertEqual(command["decision"], "noop")
+        request = meta["diagnostic_request"]
+        self.assertEqual(meta["next_action"], "request_cross_bundle_bridge_search")
+        self.assertEqual(meta["next_evidence_needed"], "direction_correct_bridge_plan_search")
+        self.assertEqual(request["diagnostic"], "cross_bundle_bridge_search")
+        self.assertEqual(request["production_trial_alternate_evidence"]["alternate_candidate_absent_reason"], "wrong_direction_bridge_only")
+        self.assertNotIn("production_trial_alternate_candidate", meta)
+        self.assertNotIn("bridge_plan_available", meta)
+
+    def test_frontier_replay_consumes_cross_bundle_bridge_search_shadow(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        actuator = "kv_pair:send:source_body:70:71"
+        bridge_recipe = (
+            "readout_escape|activation_patch|resid_pre|L2|"
+            "send_term_token_to_last|blend|a0.050"
+        )
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": "failed_recipe",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "dead_actuator",
+        }
+        shadow = {
+            "kind": "activation_patch_shadow_actuator",
+            "decision": "shadow",
+            "objective_bundle_key": objective,
+            "actuator_bundle_key": actuator,
+            "objective_term": "budget",
+            "recipe_name": "resid_pre_send_term_token_to_last_blend_a050",
+            "operator_recipe_id": bridge_recipe,
+            "activation_patch_site": "resid_pre",
+            "activation_patch_layer": 2,
+            "activation_patch_alpha": 0.05,
+            "activation_patch_source_localization": "source_term_token",
+            "activation_patch_patch_mode": "blend",
+            "activation_patch_actuator_class": "bridge_actuator",
+            "actual_delta_class": "target_lift",
+            "realized_lift_bundle_key": objective,
+            "realized_lift_term": "budget",
+            "counterfactual_delta": {
+                "target_mass_delta": 0.0002,
+                "focus_rank_delta": 4,
+                "self_delta": 0.01,
+                "cross_delta": 0.04,
+                "alignment_margin": -0.03,
+            },
+            "promotable_to_candidate_compiler": False,
+            "promotion_reason": "cross_bundle_bridge_search_direction_correct",
+            "requires_bridge_plan": True,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "activation_patch_candidate_pool": [
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "bridge_actuator",
+                            "actual_delta_class": "target_lift",
+                            "operator_recipe_id": "budget_recipe_that_lifts_send",
+                            "realized_lift_bundle_key": actuator,
+                            "self_delta": 0.01,
+                            "cross_delta": 0.04,
+                            "alignment_margin": -0.03,
+                        }
+                    ],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": True,
+                    "policy_candidate_ready": False,
+                },
+                {
+                    "diagnostic": "cross_bundle_bridge_search",
+                    "objective_bundle_key": objective,
+                    "bridge_plan_shadow_actuator": shadow,
+                    "cross_bundle_bridge_summary": {
+                        "objective_bundle_key": objective,
+                        "eligible_bridge_candidate_count": 1,
+                        "status": "bridge_found",
+                    },
+                    "production_apply_allowed": False,
+                },
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        alternate = request["alternate_trial_candidate"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "request_activation_patch_candidate_review")
+        self.assertEqual(meta["next_evidence_needed"], "bridge_plan_dual_layer_shadow_review")
+        self.assertEqual(request["diagnostic"], "activation_patch_candidate_review")
+        self.assertEqual(request["step_actuator_bundle_key"], actuator)
+        self.assertEqual(alternate["operator_recipe_id"], bridge_recipe)
+        self.assertEqual(alternate["objective_bundle_key"], objective)
+        self.assertEqual(alternate["actuator_bundle_key"], actuator)
+        self.assertTrue(meta["bridge_plan_available"])
+        self.assertEqual(meta["bridge_plan_actuator_bundle_key"], actuator)
+        self.assertFalse(alternate["production_apply_allowed"])
+
+    def test_frontier_replay_requests_recipe_expansion_after_bridge_search_exhausted(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        actuator = "kv_pair:send:source_body:70:71"
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": "failed_recipe",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "dead_actuator",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "activation_patch_candidate_pool": [
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "bridge_actuator",
+                            "operator_recipe_id": "budget_recipe_that_lifts_send",
+                            "realized_lift_bundle_key": actuator,
+                            "self_delta": 0.01,
+                            "cross_delta": 0.04,
+                        }
+                    ],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": True,
+                    "policy_candidate_ready": False,
+                },
+                {
+                    "diagnostic": "cross_bundle_bridge_search",
+                    "objective_bundle_key": objective,
+                    "status": "no_direction_correct_bridge",
+                    "cross_bundle_bridge_summary": {
+                        "objective_bundle_key": objective,
+                        "matrix_row_count": 9,
+                        "eligible_bridge_candidate_count": 0,
+                        "direction_correct_bridge_count": 0,
+                        "wrong_direction_bridge_count": 8,
+                        "status": "no_direction_correct_bridge",
+                    },
+                    "production_apply_allowed": False,
+                },
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "request_compare_extra_operator_diagnostics")
+        self.assertEqual(meta["next_evidence_needed"], "post_bridge_exhaustion_recipe_expansion")
+        self.assertTrue(meta["cross_bundle_bridge_search_exhausted"])
+        self.assertEqual(meta["operator_recipe_expansion_mode"], "post_bridge_exhaustion")
+        self.assertEqual(meta["blocked_by"], "cross_bundle_bridge_search_exhausted")
+        self.assertEqual(request["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(request["operator_recipe_expansion_mode"], "post_bridge_exhaustion")
+        self.assertTrue(request["post_bridge_exhaustion_recipe_expansion_requested"])
+        self.assertEqual(
+            request["cross_bundle_bridge_search_state"]["status"],
+            "no_direction_correct_bridge",
+        )
+
+    def test_frontier_replay_does_not_repeat_recipe_expansion_after_bridge_search_exhausted(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": "failed_recipe",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "dead_actuator",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "cross_bundle_bridge_search",
+                    "objective_bundle_key": objective,
+                    "status": "no_direction_correct_bridge",
+                    "cross_bundle_bridge_summary": {
+                        "objective_bundle_key": objective,
+                        "matrix_row_count": 9,
+                        "eligible_bridge_candidate_count": 0,
+                        "direction_correct_bridge_count": 0,
+                        "wrong_direction_bridge_count": 8,
+                        "status": "no_direction_correct_bridge",
+                    },
+                    "production_apply_allowed": False,
+                },
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe_expansion_requested": True,
+                    "activation_patch_candidate_pool": [],
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": False,
+                    "policy_candidate_ready": False,
+                },
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "noop")
+        self.assertNotIn("diagnostic_request", meta)
+        self.assertTrue(meta["cross_bundle_bridge_search_exhausted"])
+        self.assertTrue(meta["operator_recipe_expansion_consumed"])
+        self.assertEqual(meta["blocked_by"], "operator_recipe_expansion_exhausted")
+        self.assertEqual(meta["next_evidence_needed"], "operator_recipe_expansion_exhausted")
+
+    def test_effective_diagnostic_frontier_prefers_post_bridge_exhaustion_loop_state(self):
+        objective = "kv_pair:budget:source_body:72:73"
+        effective = _effective_diagnostic_frontier_summary(
+            bridge_eval_summary={
+                "diagnostic_frontier_bundle_key": objective,
+                "diagnostic_frontier_request": "activation_patch_candidate_review",
+                "diagnostic_frontier_next_evidence": "activation_patch_candidate_compiler_review",
+                "diagnostic_frontier_reason_text": "old static frontier request",
+            },
+            recent_diagnostic_results=[
+                {
+                    "diagnostic": "cross_bundle_bridge_search",
+                    "objective_bundle_key": objective,
+                    "status": "no_direction_correct_bridge",
+                    "cross_bundle_bridge_summary": {
+                        "objective_bundle_key": objective,
+                        "matrix_row_count": 9,
+                        "eligible_bridge_candidate_count": 0,
+                        "direction_correct_bridge_count": 0,
+                        "status": "no_direction_correct_bridge",
+                    },
+                },
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe_expansion_requested": True,
+                },
+            ],
+            diagnostic_request_events=[],
+        )
+
+        self.assertEqual(effective["bundle_key"], objective)
+        self.assertEqual(effective["request"], "compare_extra_operator_diagnostics")
+        self.assertEqual(effective["next_evidence"], "post_bridge_exhaustion_recipe_expansion_observed")
+        self.assertEqual(effective["state_source"], "diagnostic_loop_result")
+        self.assertEqual(effective["loop_state"], "post_bridge_exhaustion_recipe_expansion_observed")
+        self.assertTrue(effective["cross_bundle_bridge_search_exhausted"])
+        self.assertTrue(effective["post_bridge_exhaustion_recipe_expansion_observed"])
+
+    def test_worker_cross_bundle_bridge_search_builds_direction_correct_shadow(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        actuator = "kv_pair:send:source_body:70:71"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "cross_bundle_bridge_search",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "next_evidence_needed": "direction_correct_bridge_plan_search",
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "bridge_actuator",
+                            "actual_delta_class": "target_lift",
+                            "operator_recipe_id": "budget_recipe_that_lifts_send",
+                            "realized_lift_bundle_key": actuator,
+                            "realized_lift_term": "send",
+                            "self_delta": 0.01,
+                            "cross_delta": 0.04,
+                            "alignment_margin": -0.03,
+                        },
+                        {
+                            "bundle_key": actuator,
+                            "intended_bundle_key": actuator,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "cross_bound",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "resid_pre_send_term_token_to_last_blend_a050",
+                            "operator_recipe_id": "send_recipe_that_lifts_budget",
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 2,
+                            "activation_patch_alpha": 0.05,
+                            "activation_patch_source_localization": "source_term_token",
+                            "activation_patch_patch_mode": "blend",
+                            "realized_lift_bundle_key": objective,
+                            "realized_lift_term": "budget",
+                            "target_mass_delta": 0.0002,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 4,
+                            "self_delta": 0.01,
+                            "cross_delta": 0.04,
+                            "alignment_margin": -0.03,
+                        },
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["diagnostic"], "cross_bundle_bridge_search")
+        self.assertEqual(result["diagnostic_role"], "cross_bundle_bridge_search")
+        self.assertEqual(result["status"], "bridge_found")
+        self.assertFalse(result["production_apply_allowed"])
+        summary = result["cross_bundle_bridge_summary"]
+        self.assertEqual(summary["eligible_bridge_candidate_count"], 1)
+        self.assertEqual(summary["wrong_direction_bridge_count"], 1)
+        shadow = result["bridge_plan_shadow_actuator"]
+        self.assertEqual(shadow["objective_bundle_key"], objective)
+        self.assertEqual(shadow["actuator_bundle_key"], actuator)
+        self.assertTrue(shadow["requires_bridge_plan"])
+        self.assertFalse(shadow["production_apply_allowed"])
+
+    def test_worker_post_bridge_recipe_expansion_summarizes_failure_modes(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        stealer = "kv_pair:send:source_body:70:71"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                "post_bridge_exhaustion_recipe_expansion_requested": True,
+                "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "blocked",
+                            "actuator_class": "cross_bound",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_resid_pre_term_to_last_blend_a030",
+                            "operator_recipe_id": "recipe_wrong_direction",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 2,
+                            "activation_patch_alpha": 0.03,
+                            "activation_patch_source_localization": "source_term_token",
+                            "activation_patch_patch_mode": "blend",
+                            "realized_lift_bundle_key": stealer,
+                            "self_delta": 0.002,
+                            "cross_delta": 0.04,
+                            "alignment_margin": -0.038,
+                            "target_mass_delta": 0.00001,
+                            "focus_rank_delta": 0,
+                        },
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "observed",
+                            "actuator_class": "noisy_or_harmful",
+                            "actual_delta_class": "neutral",
+                            "recipe_name": "post_bridge_mlp_out_centered_to_last_blend_a030",
+                            "operator_recipe_id": "recipe_weak_nonharmful",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "mlp_out",
+                            "activation_patch_layer": 2,
+                            "activation_patch_alpha": 0.03,
+                            "activation_patch_source_localization": "source_centered_pm1",
+                            "activation_patch_patch_mode": "blend",
+                            "realized_lift_bundle_key": objective,
+                            "self_delta": 0.012,
+                            "cross_delta": 0.004,
+                            "alignment_margin": 0.008,
+                            "target_mass_delta": 0.0,
+                            "focus_rank_delta": 0,
+                            "repeat_delta": 0,
+                        },
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "blocked",
+                            "actuator_class": "collapse_sharpener",
+                            "actual_delta_class": "collapse_sharpener",
+                            "recipe_name": "post_bridge_resid_post_span_to_last_blend_a030",
+                            "operator_recipe_id": "recipe_collapse",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "resid_post",
+                            "activation_patch_layer": 2,
+                            "activation_patch_alpha": 0.03,
+                            "activation_patch_source_localization": "source_span_mean",
+                            "activation_patch_patch_mode": "blend",
+                            "self_delta": 0.0,
+                            "cross_delta": 0.0,
+                            "alignment_margin": 0.0,
+                            "target_mass_delta": -0.0001,
+                            "focus_rank_delta": -2,
+                            "repeat_delta": 1,
+                            "entropy_delta": -0.04,
+                            "top1_margin_delta": 0.01,
+                        },
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["diagnostic_role"], "operator_recipe_expansion_view")
+        self.assertEqual(result["operator_recipe_expansion_mode"], "post_bridge_exhaustion")
+        summary = result["operator_recipe_expansion_summary"]
+        self.assertEqual(summary["matrix_row_count"], 3)
+        self.assertEqual(summary["dedicated_recipe_row_count"], 3)
+        self.assertEqual(summary["best_nonharmful_operator_recipe_id"], "recipe_weak_nonharmful")
+        self.assertEqual(summary["best_nonharmful_recipe_family"], "mlp_out|source_centered_pm1|blend")
+        self.assertEqual(summary["recommended_next_family"], "deepen:mlp_out|source_centered_pm1|blend")
+        self.assertFalse(summary["production_apply_allowed"])
+        failure_counts = summary["failure_mode_counts"]
+        self.assertEqual(failure_counts["wrong_direction"], 1)
+        self.assertEqual(failure_counts["weak_nonharmful"], 1)
+        self.assertEqual(failure_counts["collapse_sharpener"], 1)
+        matrix = result["operator_recipe_expansion_matrix"]
+        self.assertEqual(matrix[0]["operator_recipe_id"], "recipe_weak_nonharmful")
+        self.assertEqual(matrix[0]["failure_mode"], "weak_nonharmful")
+
+    def test_worker_post_bridge_recipe_expansion_splits_rank_carrier_from_target_actuator(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                "post_bridge_exhaustion_recipe_expansion_requested": True,
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_resid_pre_term_to_last_blend_a030",
+                            "operator_recipe_id": "recipe_rank_carrier",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "resid_pre",
+                            "activation_patch_layer": 2,
+                            "activation_patch_alpha": 0.03,
+                            "activation_patch_source_localization": "source_term_token",
+                            "activation_patch_patch_mode": "blend",
+                            "realized_lift_bundle_key": objective,
+                            "self_delta": 1.46,
+                            "cross_delta": 1.44,
+                            "alignment_margin": 0.02,
+                            "target_mass_delta": 0.0,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 6,
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        summary = result["operator_recipe_expansion_summary"]
+        self.assertEqual(summary["status"], "rank_carrier_family_found")
+        self.assertEqual(summary["failure_mode_counts"]["self_rank_carrier"], 1)
+        self.assertEqual(summary["best_rank_carrier_recipe_family"], "resid_pre|source_term_token|blend")
+        self.assertEqual(summary["recommended_next_family"], "convert_rank_carrier_to_target:resid_pre|source_term_token|blend")
+        self.assertFalse(summary["production_apply_allowed"])
+        matrix = result["operator_recipe_expansion_matrix"]
+        self.assertEqual(matrix[0]["failure_mode"], "self_rank_carrier")
+
+    def test_activation_patch_candidate_review_blocks_rank_carrier_only_shadow(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        bundle_status = {
+            "activation_patch_shadow_actuator": {
+                "activation_patch_actuator_class": "self_actuator",
+                "promotable_to_candidate_compiler": True,
+                "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+                "actuator_bundle_key": "kv_pair:budget:source_body:72:73",
+                "recipe_name": "resid_pre_source_term_token_minus_stealer_l050_to_last_blend_a050",
+                "operator_recipe_id": "rank_carrier_recipe",
+                "activation_patch_site": "resid_pre",
+                "activation_patch_layer": 2,
+                "activation_patch_alpha": 0.05,
+                "activation_patch_source_localization": "source_term_token_minus_stealer_l050",
+                "activation_patch_patch_mode": "blend",
+                "actual_delta_class": "target_lift",
+                "counterfactual_delta": {
+                    "target_mass_delta": -0.000002,
+                    "target_top20_hit_delta": 0,
+                    "focus_rank_delta": 304,
+                    "self_delta": 3.21,
+                    "cross_delta": 3.04,
+                    "alignment_margin": 0.17,
+                },
+            }
+        }
+
+        result = runtime._activation_patch_candidate_review(bundle_status)
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertFalse(result["compile_preview_created"])
+        self.assertEqual(result["compile_preview_blocked_reason"], "rank_carrier_not_target_actuator")
+        self.assertTrue(result["rank_carrier_only"])
+        self.assertFalse(result["target_readout_effect_certified"])
+        self.assertFalse(result["target_promotable_to_candidate_compiler"])
+
+    def test_frontier_replay_requests_compare_after_rank_carrier_block(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "activation_patch_candidate_review",
+                    "objective_bundle_key": objective,
+                    "bundle_key": objective,
+                    "activation_patch_compile_preview_created": False,
+                    "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+                    "activation_patch_effect_role": "self_rank_carrier",
+                    "activation_patch_promotable_to_candidate": False,
+                    "diagnostic_operator_supported": False,
+                    "policy_candidate_ready": False,
+                    "production_apply_allowed": False,
+                }
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "request_compare_extra_operator_diagnostics")
+        self.assertEqual(meta["next_evidence_needed"], "rank_carrier_to_target_conversion")
+        self.assertEqual(request["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(request["activation_patch_compile_preview_blocked_reason"], "rank_carrier_not_target_actuator")
+
     def test_focused_bridge_eval_recipe_specs_stay_small_and_ownership_oriented(self):
         recipe_names = [item["recipe_name"] for item in _focused_bridge_eval_recipe_specs()]
 
@@ -1625,6 +2481,8 @@ class TestExamples(unittest.TestCase):
                 "term_centered_pm1_v060_k020",
                 "term_centered_pm1_v025_k045",
                 "term_centered_pm1_minus_stealer_l025",
+                "term_token_minus_stealer_l050",
+                "term_centered_pm1_minus_stealer_l050",
                 "term_centered_pm1_orthogonal_stealer",
             ],
         )

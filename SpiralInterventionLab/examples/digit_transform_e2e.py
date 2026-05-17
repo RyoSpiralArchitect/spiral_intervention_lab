@@ -578,6 +578,172 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
     return tuple(views)
 
 
+def _effective_diagnostic_frontier_summary(
+    *,
+    bridge_eval_summary: Mapping[str, Any] | None,
+    recent_diagnostic_results: Sequence[Mapping[str, Any]],
+    diagnostic_request_events: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    summary = bridge_eval_summary if isinstance(bridge_eval_summary, Mapping) else {}
+    bundle_key = (
+        None
+        if summary.get("diagnostic_frontier_bundle_key") in (None, "")
+        else str(summary.get("diagnostic_frontier_bundle_key"))
+    )
+    request = (
+        None
+        if summary.get("diagnostic_frontier_request") in (None, "")
+        else str(summary.get("diagnostic_frontier_request"))
+    )
+    next_evidence = (
+        None
+        if summary.get("diagnostic_frontier_next_evidence") in (None, "")
+        else str(summary.get("diagnostic_frontier_next_evidence"))
+    )
+    reason = (
+        None
+        if summary.get("diagnostic_frontier_reason_text") in (None, "")
+        else str(summary.get("diagnostic_frontier_reason_text"))
+    )
+    effective: dict[str, Any] = {
+        "bundle_key": bundle_key,
+        "request": request,
+        "next_evidence": next_evidence,
+        "reason_text": reason,
+        "state_source": "bridge_eval_summary",
+        "loop_state": None,
+        "cross_bundle_bridge_search_exhausted": False,
+        "post_bridge_exhaustion_recipe_expansion_observed": False,
+    }
+
+    cross_status: Mapping[str, Any] | None = None
+    for result in reversed(list(recent_diagnostic_results)):
+        if not isinstance(result, Mapping):
+            continue
+        if str(result.get("diagnostic", "") or "") != "cross_bundle_bridge_search":
+            continue
+        result_summary = result.get("cross_bundle_bridge_summary")
+        if not isinstance(result_summary, Mapping):
+            search = result.get("cross_bundle_bridge_search")
+            if isinstance(search, Mapping):
+                result_summary = search.get("summary")
+        result_summary_map = dict(result_summary) if isinstance(result_summary, Mapping) else {}
+        status = str(result.get("status") or result_summary_map.get("status") or "")
+        try:
+            matrix_count = int(result_summary_map.get("matrix_row_count", 0) or 0)
+        except Exception:
+            matrix_count = 0
+        try:
+            eligible_count = int(result_summary_map.get("eligible_bridge_candidate_count", 0) or 0)
+        except Exception:
+            eligible_count = 0
+        try:
+            direction_count = int(result_summary_map.get("direction_correct_bridge_count", 0) or 0)
+        except Exception:
+            direction_count = 0
+        exhausted = bool(
+            status == "no_direction_correct_bridge"
+            or (matrix_count > 0 and eligible_count == 0 and direction_count == 0)
+        )
+        if exhausted:
+            cross_status = {
+                "objective_bundle_key": result_summary_map.get("objective_bundle_key")
+                or result.get("objective_bundle_key")
+                or result.get("bundle_key")
+                or bundle_key,
+                "status": status or "no_direction_correct_bridge",
+                "matrix_row_count": matrix_count,
+                "eligible_bridge_candidate_count": eligible_count,
+                "direction_correct_bridge_count": direction_count,
+            }
+            break
+
+    expansion_result: Mapping[str, Any] | None = None
+    for result in reversed(list(recent_diagnostic_results)):
+        if not isinstance(result, Mapping):
+            continue
+        if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
+            continue
+        if str(result.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion" or bool(
+            result.get("post_bridge_exhaustion_recipe_expansion_requested", False)
+        ):
+            expansion_result = result
+            break
+
+    expansion_request: Mapping[str, Any] | None = None
+    for event in reversed(list(diagnostic_request_events)):
+        if not isinstance(event, Mapping):
+            continue
+        if str(event.get("diagnostic", event.get("diagnostic_request", "")) or "") != "compare_extra_operator_diagnostics":
+            continue
+        if str(event.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion" or bool(
+            event.get("post_bridge_exhaustion_recipe_expansion_requested", False)
+        ):
+            expansion_request = event
+            break
+
+    if expansion_result is not None:
+        objective_key = (
+            expansion_result.get("objective_bundle_key")
+            or expansion_result.get("bundle_key")
+            or (cross_status.get("objective_bundle_key") if isinstance(cross_status, Mapping) else None)
+            or bundle_key
+        )
+        effective.update(
+            {
+                "bundle_key": None if objective_key in (None, "") else str(objective_key),
+                "request": "compare_extra_operator_diagnostics",
+                "next_evidence": "post_bridge_exhaustion_recipe_expansion_observed",
+                "reason_text": (
+                    "cross-bundle bridge search found no direction-correct actuator; "
+                    "post-bridge operator recipe expansion was observed and production apply remains closed"
+                ),
+                "state_source": "diagnostic_loop_result",
+                "loop_state": "post_bridge_exhaustion_recipe_expansion_observed",
+                "cross_bundle_bridge_search_exhausted": True,
+                "post_bridge_exhaustion_recipe_expansion_observed": True,
+            }
+        )
+    elif expansion_request is not None:
+        objective_key = (
+            expansion_request.get("objective_bundle_key")
+            or expansion_request.get("bundle_key")
+            or (cross_status.get("objective_bundle_key") if isinstance(cross_status, Mapping) else None)
+            or bundle_key
+        )
+        effective.update(
+            {
+                "bundle_key": None if objective_key in (None, "") else str(objective_key),
+                "request": "compare_extra_operator_diagnostics",
+                "next_evidence": "post_bridge_exhaustion_recipe_expansion",
+                "reason_text": str(
+                    expansion_request.get("reason")
+                    or "cross-bundle bridge search was exhausted; request post-bridge operator recipe expansion"
+                ),
+                "state_source": "diagnostic_loop_request",
+                "loop_state": "post_bridge_exhaustion_recipe_expansion_requested",
+                "cross_bundle_bridge_search_exhausted": True,
+            }
+        )
+    elif cross_status is not None:
+        objective_key = cross_status.get("objective_bundle_key") or bundle_key
+        effective.update(
+            {
+                "bundle_key": None if objective_key in (None, "") else str(objective_key),
+                "request": "compare_extra_operator_diagnostics",
+                "next_evidence": "post_bridge_exhaustion_recipe_expansion",
+                "reason_text": (
+                    "cross-bundle bridge search found no direction-correct actuator; "
+                    "expanded operator recipes should be compared before reopening candidate review"
+                ),
+                "state_source": "diagnostic_loop_result",
+                "loop_state": "cross_bundle_bridge_search_exhausted",
+                "cross_bundle_bridge_search_exhausted": True,
+            }
+        )
+    return effective
+
+
 def _bridge_eval_rows_have_context_drift(rows: Sequence[Mapping[str, Any]]) -> bool:
     usable_rows = [row for row in rows if isinstance(row, Mapping)]
     if not usable_rows:
@@ -956,6 +1122,22 @@ def _diagnostic_evidence_ledger(
                 "activation_patch_actuator_class": None,
                 "activation_patch_promotable_to_candidate": False,
                 "activation_patch_promotion_reason": None,
+                "contrastive_neighborhood_status": {
+                    "checked": False,
+                    "recipe_count": 0,
+                    "supportive_count": 0,
+                    "blocked_count": 0,
+                    "mode_counts": {},
+                    "status": "not_checked",
+                    "best_recipe_name": None,
+                    "best_operator_recipe_id": None,
+                    "best_actuator_class": None,
+                    "best_alignment_margin": None,
+                    "best_self_delta": None,
+                    "best_cross_delta": None,
+                    "best_target_mass_delta": None,
+                    "best_focus_rank_delta": None,
+                },
                 "carrier_to_actuator_status": None,
                 "blocked_by": [],
                 "evidence_count": 0,
@@ -1187,6 +1369,10 @@ def _diagnostic_evidence_ledger(
                 continue
             diagnostic_family = str(item.get("diagnostic_family", "") or "")
             actuator_class = str(item.get("actuator_class", "") or "")
+            post_bridge_expansion_recipe = bool(
+                item.get("post_bridge_exhaustion_recipe", False)
+                or str(item.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+            )
             target_mass_delta = _as_float(item.get("target_mass_delta", 0.0))
             target_top20_hit_delta = _as_int(item.get("target_top20_hit_delta", 0))
             focus_rank_delta = _as_int(item.get("focus_rank_delta", 0))
@@ -1232,25 +1418,56 @@ def _diagnostic_evidence_ledger(
                     _append_unique(bundle_status["blocked_by"], "attention_guided_operator_blocked")
             elif diagnostic_family == "activation_patch":
                 evidence_kind = "activation_patch_certification"
-                bundle_status["activation_patch_checked"] = True
-                bundle_status["activation_patch_recipe_count"] = int(
-                    bundle_status.get("activation_patch_recipe_count", 0) or 0
-                ) + 1
-                if actuator_class in {"self_actuator", "bridge_actuator"}:
-                    evidence_status = "supportive"
-                    bundle_status["activation_patch_status"] = "supportive"
-                    bundle_status["diagnostic_operator_supported"] = True
+                if post_bridge_expansion_recipe:
+                    evidence_status = "observed"
+                else:
+                    bundle_status["activation_patch_checked"] = True
+                    bundle_status["activation_patch_recipe_count"] = int(
+                        bundle_status.get("activation_patch_recipe_count", 0) or 0
+                    ) + 1
+                if not post_bridge_expansion_recipe and actuator_class in {"self_actuator", "bridge_actuator"}:
+                    direct_target_effect = bool(target_mass_delta > 0.00002 or target_top20_hit_delta > 0)
+                    self_delta = _as_float(item.get("self_delta", 0.0))
+                    cross_delta = _as_float(item.get("cross_delta", 0.0))
+                    rank_carrier_only = bool(
+                        actuator_class == "self_actuator"
+                        and not direct_target_effect
+                        and (focus_rank_delta > 0 or self_delta >= 0.02)
+                    )
+                    effect_role = (
+                        "self_target_actuator"
+                        if actuator_class == "self_actuator" and direct_target_effect
+                        else "self_rank_carrier"
+                        if rank_carrier_only
+                        else "bridge_target_actuator"
+                        if actuator_class == "bridge_actuator" and direct_target_effect
+                        else "bridge_rank_carrier"
+                        if actuator_class == "bridge_actuator" and (focus_rank_delta > 0 or cross_delta >= 0.02)
+                        else "weak_nonharmful"
+                    )
+                    evidence_status = "supportive" if direct_target_effect else "observed"
+                    bundle_status["activation_patch_status"] = (
+                        "supportive" if direct_target_effect else "rank_carrier_only"
+                    )
+                    if direct_target_effect:
+                        bundle_status["diagnostic_operator_supported"] = True
+                    elif rank_carrier_only:
+                        bundle_status["rank_readout_carrier"] = True
+                        bundle_status["carrier_to_actuator_status"] = "rank_carrier_needs_target_conversion"
+                        _append_unique(bundle_status["blocked_by"], "rank_carrier_not_target_actuator")
                     delta = {
                         "target_mass_delta": round(float(target_mass_delta), 6),
                         "target_top20_hit_delta": int(target_top20_hit_delta),
                         "focus_rank_delta": int(focus_rank_delta),
-                        "self_delta": round(_as_float(item.get("self_delta", 0.0)), 6),
-                        "cross_delta": round(_as_float(item.get("cross_delta", 0.0)), 6),
+                        "self_delta": round(self_delta, 6),
+                        "cross_delta": round(cross_delta, 6),
                         "alignment_margin": round(_as_float(item.get("alignment_margin", 0.0)), 6),
                     }
                     promotion_reason = (
                         "owned_activation_patch_self_actuator"
-                        if actuator_class == "self_actuator"
+                        if actuator_class == "self_actuator" and direct_target_effect
+                        else "rank_carrier_needs_target_conversion"
+                        if rank_carrier_only
                         else "activation_patch_bridge_requires_dual_layer_plan"
                     )
                     activation_shadow_actuator = {
@@ -1276,7 +1493,12 @@ def _diagnostic_evidence_ledger(
                         "realized_lift_bundle_key": item.get("realized_lift_bundle_key"),
                         "realized_lift_term": item.get("realized_lift_term"),
                         "counterfactual_delta": delta,
-                        "promotable_to_candidate_compiler": bool(actuator_class == "self_actuator"),
+                        "activation_patch_effect_role": effect_role,
+                        "rank_carrier_only": bool(rank_carrier_only),
+                        "target_readout_effect_certified": bool(direct_target_effect),
+                        "promotable_to_candidate_compiler": bool(
+                            actuator_class == "self_actuator" and direct_target_effect
+                        ),
                         "promotion_reason": promotion_reason,
                         "production_apply_allowed": False,
                         "certified_for_apply": False,
@@ -1333,7 +1555,9 @@ def _diagnostic_evidence_ledger(
                             activation_shadow_actuator["promotable_to_candidate_compiler"]
                         )
                         bundle_status["activation_patch_promotion_reason"] = promotion_reason
-                elif actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "cross_bound"}:
+                        bundle_status["activation_patch_effect_role"] = effect_role
+                        bundle_status["activation_patch_rank_carrier_only"] = bool(rank_carrier_only)
+                elif not post_bridge_expansion_recipe and actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "cross_bound"}:
                     evidence_status = "blocked"
                     bundle_status["activation_patch_status"] = "blocked"
                     bundle_status["activation_patch_blocked_count"] = int(
@@ -1383,6 +1607,8 @@ def _diagnostic_evidence_ledger(
                 "activation_source_norm",
                 "activation_target_norm_before",
                 "activation_target_norm_after",
+                "operator_recipe_expansion_mode",
+                "post_bridge_exhaustion_recipe",
                 "actual_delta_class",
                 "realized_lift_bundle_key",
                 "realized_lift_term",
@@ -1390,9 +1616,20 @@ def _diagnostic_evidence_ledger(
                 "cross_delta",
                 "alignment_margin",
                 "bundle_lift_scores",
+                "activation_patch_effect_role",
+                "rank_carrier_only",
+                "target_readout_effect_certified",
             ):
                 if item.get(activation_key) not in (None, ""):
                     ledger[-1][activation_key] = item.get(activation_key)
+            if activation_shadow_actuator is not None:
+                ledger[-1]["activation_patch_effect_role"] = activation_shadow_actuator.get(
+                    "activation_patch_effect_role"
+                )
+                ledger[-1]["rank_carrier_only"] = bool(activation_shadow_actuator.get("rank_carrier_only", False))
+                ledger[-1]["target_readout_effect_certified"] = bool(
+                    activation_shadow_actuator.get("target_readout_effect_certified", False)
+                )
 
     analyzer_hints = strategy_hints.get("readout_analyzer_hints")
     if not isinstance(analyzer_hints, Mapping):
@@ -1451,6 +1688,58 @@ def _diagnostic_evidence_ledger(
             reason = str(raw_reason or "")
             if bundle_key and reason:
                 _append_unique(_status_for(bundle_key)["blocked_by"], reason)
+
+    contrastive_rows_by_bundle: dict[str, list[Mapping[str, Any]]] = {}
+    for row in ledger:
+        if str(row.get("evidence_kind", "") or "") != "activation_patch_certification":
+            continue
+        if str(row.get("activation_patch_contrast_mode", "") or "") not in {
+            "minus_stealer",
+            "orthogonal_stealer",
+        } and "stealer" not in str(row.get("activation_patch_source_localization", "") or ""):
+            continue
+        bundle_key = str(row.get("bundle_key", "") or "")
+        if bundle_key:
+            contrastive_rows_by_bundle.setdefault(bundle_key, []).append(row)
+
+    for bundle_key, rows in contrastive_rows_by_bundle.items():
+        mode_counts: dict[str, int] = {}
+        for row in rows:
+            mode = str(row.get("activation_patch_contrast_mode", "") or "none")
+            mode_counts[mode] = int(mode_counts.get(mode, 0)) + 1
+
+        def _contrastive_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+            status_text = str(row.get("status", "") or "")
+            actuator_class = str(row.get("actuator_class", "") or "")
+            return (
+                1.0 if status_text in {"supportive", "certified"} else 0.0,
+                1.0 if actuator_class == "self_actuator" else 0.0,
+                0.5 if actuator_class == "bridge_actuator" else 0.0,
+                _as_float(row.get("alignment_margin", 0.0)),
+                _as_float(row.get("self_delta", 0.0)),
+                _as_float(row.get("target_mass_delta", 0.0)),
+                float(_as_int(row.get("focus_rank_delta", 0))),
+            )
+
+        best = max(rows, key=_contrastive_rank)
+        supportive = sum(1 for row in rows if str(row.get("status", "") or "") in {"supportive", "certified"})
+        blocked = sum(1 for row in rows if str(row.get("status", "") or "") == "blocked")
+        _status_for(bundle_key)["contrastive_neighborhood_status"] = {
+            "checked": True,
+            "recipe_count": len(rows),
+            "supportive_count": int(supportive),
+            "blocked_count": int(blocked),
+            "mode_counts": dict(mode_counts),
+            "status": "supportive" if supportive > 0 else "blocked" if blocked > 0 else "observed",
+            "best_recipe_name": best.get("recipe_name"),
+            "best_operator_recipe_id": best.get("operator_recipe_id"),
+            "best_actuator_class": best.get("actuator_class"),
+            "best_alignment_margin": round(_as_float(best.get("alignment_margin")), 6),
+            "best_self_delta": round(_as_float(best.get("self_delta")), 6),
+            "best_cross_delta": round(_as_float(best.get("cross_delta")), 6),
+            "best_target_mass_delta": round(_as_float(best.get("target_mass_delta")), 6),
+            "best_focus_rank_delta": _as_int(best.get("focus_rank_delta")),
+        }
 
     def _finalize(bundle_key: str, bundle_status: dict[str, Any]) -> None:
         diagnostic_operator_supported = bool(bundle_status.get("diagnostic_operator_supported", False))
@@ -1653,6 +1942,8 @@ class _FrontierReplayControllerClient:
             return "request_activation_patch_production_trial_gate_review"
         if normalized == "compare_extra_operator_diagnostics":
             return "request_compare_extra_operator_diagnostics"
+        if normalized == "cross_bundle_bridge_search":
+            return "request_cross_bundle_bridge_search"
         return "request_operator_diagnostic"
 
     @staticmethod
@@ -1669,6 +1960,10 @@ class _FrontierReplayControllerClient:
             "objective_bundle_key": result.get("objective_bundle_key"),
             "step_actuator_bundle_key": result.get("step_actuator_bundle_key"),
             "next_evidence_needed": result.get("next_evidence_needed"),
+            "operator_recipe_expansion_mode": result.get("operator_recipe_expansion_mode"),
+            "post_bridge_exhaustion_recipe_expansion_requested": result.get(
+                "post_bridge_exhaustion_recipe_expansion_requested"
+            ),
             "blocked_by": list(result.get("blocked_by", ()))
             if isinstance(result.get("blocked_by"), SequenceABC)
             and not isinstance(result.get("blocked_by"), (str, bytes, bytearray))
@@ -1690,6 +1985,15 @@ class _FrontierReplayControllerClient:
                 "activation_patch_compile_preview_blocked_reason"
             ),
             "activation_patch_compile_preview": result.get("activation_patch_compile_preview"),
+            "bridge_plan_shadow_actuator": result.get("bridge_plan_shadow_actuator"),
+            "bridge_plan_reason": result.get("bridge_plan_reason"),
+            "cross_bundle_bridge_summary": result.get("cross_bundle_bridge_summary"),
+            "cross_bundle_bridge_matrix": result.get("cross_bundle_bridge_matrix"),
+            "operator_recipe_expansion_summary": result.get("operator_recipe_expansion_summary"),
+            "operator_recipe_expansion_matrix": result.get("operator_recipe_expansion_matrix"),
+            "operator_recipe_expansion_family_mode_counts": result.get(
+                "operator_recipe_expansion_family_mode_counts"
+            ),
             "activation_patch_runtime_support_status": result.get("activation_patch_runtime_support_status"),
             "activation_patch_diagnostic_executable_created": result.get(
                 "activation_patch_diagnostic_executable_created"
@@ -1899,13 +2203,18 @@ class _FrontierReplayControllerClient:
             }
         if trial_class == "neutral":
             return {
-                "next_evidence_needed": "confirm_or_alternate_trial_candidate",
+                "next_evidence_needed": "neutral_followup_confirmation_replay",
                 "next_action": "request_compare_extra_operator_diagnostics",
                 "diagnostic": "compare_extra_operator_diagnostics",
-                "blocked_by": "production_trial_neutral",
-                "promotion_ladder_stage": "trial_neutral_needs_alternate_candidate",
-                "alternate_trial_candidate_plan": "compare_extra_operator_diagnostics",
-                "why_not_apply": "bounded production_trial was neutral; keep production closed and compare alternate operator recipes",
+                "blocked_by": "production_trial_neutral_followup_confirmation",
+                "promotion_ladder_stage": "trial_neutral_needs_confirmation_replay",
+                "alternate_trial_candidate_plan": "confirm_neutral_or_probe_contrastive_neighborhood",
+                "neutral_followup_neighborhood": "contrastive_source_local",
+                "trial_followup_mode": "confirmation_neighborhood",
+                "why_not_apply": (
+                    "bounded production_trial was neutral; keep production closed and confirm the local "
+                    "contrastive neighborhood before considering alternate operator recipes"
+                ),
             }
         if trial_class == "helpful":
             return {
@@ -1940,6 +2249,32 @@ class _FrontierReplayControllerClient:
         return False
 
     @staticmethod
+    def _operator_recipe_expansion_seen_in_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+    ) -> bool:
+        for result in results:
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
+                continue
+            result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+            if objective_bundle_key and result_objective and result_objective != objective_bundle_key:
+                continue
+            if str(result.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion":
+                return True
+            if bool(result.get("post_bridge_exhaustion_recipe_expansion_requested", False)):
+                return True
+            summary = result.get("diagnostic_summary")
+            if isinstance(summary, Mapping) and (
+                str(summary.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+                or bool(summary.get("post_bridge_exhaustion_recipe_expansion_requested", False))
+            ):
+                return True
+        return False
+
+    @staticmethod
     def _production_trial_alternate_evidence_from_results(
         results: Sequence[Any],
         *,
@@ -1955,6 +2290,50 @@ class _FrontierReplayControllerClient:
                 continue
             summary = result.get("diagnostic_summary")
             evidence_rows = result.get("evidence_rows")
+            candidate_rows = result.get("activation_patch_candidate_pool")
+            if not isinstance(candidate_rows, SequenceABC) or isinstance(
+                candidate_rows,
+                (str, bytes, bytearray),
+            ):
+                candidate_rows = evidence_rows
+            activation_rows = [
+                row
+                for row in candidate_rows
+                if isinstance(row, Mapping)
+                and str(row.get("evidence_kind", "") or "") == "activation_patch_certification"
+            ] if isinstance(candidate_rows, SequenceABC) and not isinstance(
+                candidate_rows,
+                (str, bytes, bytearray),
+            ) else []
+            self_actuator_count = sum(
+                1
+                for row in activation_rows
+                if str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                == "self_actuator"
+            )
+            raw_bridge_count = sum(
+                1
+                for row in activation_rows
+                if str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                == "bridge_actuator"
+            )
+            cross_bound_count = sum(
+                1
+                for row in activation_rows
+                if str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                == "cross_bound"
+            )
+            direction_correct_bridge_count = sum(
+                1
+                for row in activation_rows
+                if str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                == "bridge_actuator"
+                and str(row.get("objective_bundle_key", "") or "") == objective_bundle_key
+                and str(row.get("actuator_bundle_key", "") or "") not in {"", objective_bundle_key}
+            )
+            contrastive_status = result.get("contrastive_neighborhood_status")
+            if not isinstance(contrastive_status, Mapping) and isinstance(summary, Mapping):
+                contrastive_status = summary.get("contrastive_neighborhood_status")
             return {
                 "diagnostic": "compare_extra_operator_diagnostics",
                 "objective_bundle_key": result_objective or objective_bundle_key,
@@ -1970,6 +2349,26 @@ class _FrontierReplayControllerClient:
                     else result.get("evidence_row_count")
                 ),
                 "diagnostic_summary": dict(summary) if isinstance(summary, Mapping) else None,
+                "contrastive_neighborhood_status": (
+                    dict(contrastive_status) if isinstance(contrastive_status, Mapping) else None
+                ),
+                "self_actuator_count": int(self_actuator_count),
+                "raw_bridge_actuator_count": int(raw_bridge_count),
+                "cross_bound_actuator_count": int(cross_bound_count),
+                "direction_correct_bridge_actuator_count": int(direction_correct_bridge_count),
+                "wrong_direction_bridge_actuator_count": int(
+                    max(0, raw_bridge_count - direction_correct_bridge_count)
+                ),
+                "bridge_direction_search_candidate_count": int(
+                    max(0, raw_bridge_count - direction_correct_bridge_count) + cross_bound_count
+                ),
+                "alternate_candidate_absent_reason": (
+                    "wrong_direction_bridge_only"
+                    if raw_bridge_count > 0
+                    and direction_correct_bridge_count == 0
+                    and self_actuator_count == 0
+                    else None
+                ),
             }
         return None
 
@@ -2024,6 +2423,7 @@ class _FrontierReplayControllerClient:
                 continue
             if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
                 continue
+            expansion_mode = str(result.get("operator_recipe_expansion_mode") or "")
             rows = result.get("activation_patch_candidate_pool")
             if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
                 rows = result.get("evidence_rows")
@@ -2034,7 +2434,15 @@ class _FrontierReplayControllerClient:
                     continue
                 if str(row.get("evidence_kind", "") or "") != "activation_patch_certification":
                     continue
-                row_objective = str(row.get("bundle_key") or result.get("objective_bundle_key") or "")
+                post_bridge_row = bool(
+                    row.get("post_bridge_exhaustion_recipe", False)
+                    or str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+                )
+                if post_bridge_row and expansion_mode != "post_bridge_exhaustion":
+                    continue
+                explicit_objective = str(row.get("objective_bundle_key") or "")
+                explicit_actuator = str(row.get("actuator_bundle_key") or "")
+                row_objective = str(row.get("bundle_key") or explicit_objective or result.get("objective_bundle_key") or "")
                 if objective_bundle_key and row_objective and row_objective != objective_bundle_key:
                     continue
                 recipe_id = str(row.get("operator_recipe_id") or "")
@@ -2054,28 +2462,45 @@ class _FrontierReplayControllerClient:
                 actual_delta_class = str(row.get("actual_delta_class") or "")
                 if actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "cross_bound"}:
                     continue
-                if actuator_class != "self_actuator":
+                if actuator_class not in {"self_actuator", "bridge_actuator"}:
                     continue
+                if actuator_class == "bridge_actuator":
+                    if explicit_objective != objective_bundle_key:
+                        continue
+                    if not explicit_actuator or explicit_actuator == objective_bundle_key:
+                        continue
                 target_mass_delta = _as_float(row.get("target_mass_delta"))
                 target_top20_delta = _as_int(row.get("target_top20_hit_delta"))
                 focus_rank_delta = _as_int(row.get("focus_rank_delta"))
                 self_delta = _as_float(row.get("self_delta"))
                 cross_delta = _as_float(row.get("cross_delta"))
                 alignment_margin = _as_float(row.get("alignment_margin"))
-                if actual_delta_class not in {"target_lift", "self_actuator"} and max(
+                direct_target_effect = bool(target_mass_delta > 0.00002 or target_top20_delta > 0)
+                if actual_delta_class not in {"target_lift", "self_actuator", "bridge_actuator"} and max(
                     target_mass_delta,
                     float(target_top20_delta),
                     float(focus_rank_delta),
                     self_delta,
                 ) <= 0.0:
                     continue
+                if not direct_target_effect:
+                    continue
                 alpha = _as_float(row.get("activation_patch_alpha"), 0.0)
+                owns_lift = actuator_class == "self_actuator"
                 candidate = {
                     "kind": "activation_patch_shadow_actuator",
                     "decision": "shadow",
                     "objective_bundle_key": objective_bundle_key or row_objective or None,
-                    "actuator_bundle_key": str(row.get("actuator_bundle_key") or objective_bundle_key or row_objective or "") or None,
-                    "objective_term": row.get("realized_lift_term") or row.get("objective_term"),
+                    "actuator_bundle_key": str(
+                        explicit_actuator
+                        if actuator_class == "bridge_actuator"
+                        else row.get("actuator_bundle_key")
+                        or objective_bundle_key
+                        or row_objective
+                        or ""
+                    )
+                    or None,
+                    "objective_term": row.get("objective_term") or row.get("realized_lift_term"),
                     "recipe_name": row.get("recipe_name"),
                     "operator_recipe_id": recipe_id or None,
                     "activation_patch_site": row.get("activation_patch_site"),
@@ -2100,8 +2525,16 @@ class _FrontierReplayControllerClient:
                         "cross_delta": round(float(cross_delta), 6),
                         "alignment_margin": round(float(alignment_margin), 6),
                     },
-                    "promotable_to_candidate_compiler": True,
-                    "promotion_reason": "alternate_after_failed_production_trial",
+                    "promotable_to_candidate_compiler": owns_lift,
+                    "promotion_reason": (
+                        "alternate_after_failed_production_trial"
+                        if owns_lift
+                        else "alternate_bridge_after_failed_production_trial"
+                    ),
+                    "requires_bridge_plan": not owns_lift,
+                    "alternate_candidate_mode": (
+                        "self_actuator_shadow_review" if owns_lift else "bridge_actuator_shadow_review"
+                    ),
                     "production_apply_allowed": False,
                     "certified_for_apply": False,
                     "operator_recipe_family_key": recipe_family or None,
@@ -2114,9 +2547,10 @@ class _FrontierReplayControllerClient:
                 score = (
                     0.0 if same_failed_structural_family else 1.0,
                     0.0 if same_failed_family else 1.0,
+                    1.0 if actuator_class == "self_actuator" else 0.45,
                     1.0 if actual_delta_class == "target_lift" else 0.0,
                     alignment_margin,
-                    self_delta,
+                    self_delta if owns_lift else cross_delta,
                     float(focus_rank_delta) * 0.01,
                     target_mass_delta * 1000.0,
                     float(target_top20_delta) * 0.1,
@@ -2315,6 +2749,139 @@ class _FrontierReplayControllerClient:
         return None
 
     @staticmethod
+    def _activation_patch_bridge_shadow_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            shadows: list[Any] = []
+            direct_shadow = result.get("activation_patch_shadow_actuator")
+            if isinstance(direct_shadow, Mapping):
+                shadows.append(direct_shadow)
+            review = result.get("activation_patch_candidate_review")
+            if isinstance(review, Mapping):
+                blueprint = review.get("blueprint")
+                if isinstance(blueprint, Mapping):
+                    shadows.append(blueprint)
+            for shadow in shadows:
+                if not isinstance(shadow, Mapping):
+                    continue
+                actuator_class = str(
+                    shadow.get("activation_patch_actuator_class")
+                    or shadow.get("actuator_class")
+                    or ""
+                )
+                if actuator_class != "bridge_actuator":
+                    continue
+                objective_key = str(shadow.get("objective_bundle_key", "") or "")
+                actuator_key = str(shadow.get("actuator_bundle_key", "") or "")
+                if not objective_key or not actuator_key or objective_key == actuator_key:
+                    continue
+                bridge_shadow = dict(shadow)
+                bridge_shadow["activation_patch_actuator_class"] = "bridge_actuator"
+                bridge_shadow["requires_bridge_plan"] = True
+                bridge_shadow["production_apply_allowed"] = False
+                bridge_shadow["certified_for_apply"] = False
+                return bridge_shadow
+        return None
+
+    @staticmethod
+    def _cross_bundle_bridge_shadow_from_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+    ) -> dict[str, Any] | None:
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "cross_bundle_bridge_search":
+                continue
+            shadows: list[Any] = []
+            direct_shadow = result.get("bridge_plan_shadow_actuator")
+            if isinstance(direct_shadow, Mapping):
+                shadows.append(direct_shadow)
+            search = result.get("cross_bundle_bridge_search")
+            if isinstance(search, Mapping):
+                search_shadow = search.get("bridge_plan_shadow_actuator")
+                if isinstance(search_shadow, Mapping):
+                    shadows.append(search_shadow)
+            for shadow in shadows:
+                if not isinstance(shadow, Mapping):
+                    continue
+                objective_key = str(shadow.get("objective_bundle_key", "") or "")
+                actuator_key = str(shadow.get("actuator_bundle_key", "") or "")
+                if objective_bundle_key and objective_key and objective_key != objective_bundle_key:
+                    continue
+                if not objective_key or not actuator_key or objective_key == actuator_key:
+                    continue
+                bridge_shadow = dict(shadow)
+                bridge_shadow["activation_patch_actuator_class"] = "bridge_actuator"
+                bridge_shadow["requires_bridge_plan"] = True
+                bridge_shadow["promotable_to_candidate_compiler"] = False
+                bridge_shadow["production_apply_allowed"] = False
+                bridge_shadow["certified_for_apply"] = False
+                bridge_shadow.setdefault("promotion_reason", "cross_bundle_bridge_search_direction_correct")
+                bridge_shadow.setdefault("alternate_candidate_mode", "cross_bundle_bridge_shadow_review")
+                return bridge_shadow
+        return None
+
+    @staticmethod
+    def _cross_bundle_bridge_status_from_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+    ) -> dict[str, Any] | None:
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "cross_bundle_bridge_search":
+                continue
+            result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+            summary = result.get("cross_bundle_bridge_summary")
+            search = result.get("cross_bundle_bridge_search")
+            if not isinstance(summary, Mapping) and isinstance(search, Mapping):
+                summary = search.get("summary")
+            summary_map = dict(summary) if isinstance(summary, Mapping) else {}
+            summary_objective = str(summary_map.get("objective_bundle_key") or "")
+            if objective_bundle_key and result_objective and result_objective != objective_bundle_key:
+                continue
+            if objective_bundle_key and summary_objective and summary_objective != objective_bundle_key:
+                continue
+
+            def _as_int(value: Any) -> int:
+                try:
+                    return int(value)
+                except Exception:
+                    return 0
+
+            status = str(
+                result.get("status")
+                or (search.get("status") if isinstance(search, Mapping) else "")
+                or summary_map.get("status")
+                or ""
+            )
+            eligible_count = _as_int(summary_map.get("eligible_bridge_candidate_count"))
+            direction_correct_count = _as_int(summary_map.get("direction_correct_bridge_count"))
+            matrix_count = _as_int(summary_map.get("matrix_row_count"))
+            exhausted = bool(
+                status == "no_direction_correct_bridge"
+                or (matrix_count > 0 and eligible_count == 0 and direction_correct_count == 0)
+            )
+            return {
+                "diagnostic": "cross_bundle_bridge_search",
+                "objective_bundle_key": summary_objective or result_objective or objective_bundle_key,
+                "status": status or ("no_direction_correct_bridge" if exhausted else "unknown"),
+                "matrix_row_count": matrix_count,
+                "eligible_bridge_candidate_count": eligible_count,
+                "direction_correct_bridge_count": direction_correct_count,
+                "wrong_direction_bridge_count": _as_int(summary_map.get("wrong_direction_bridge_count")),
+                "exhausted": exhausted,
+                "next_evidence_needed": result.get("next_evidence_needed")
+                or (search.get("next_evidence_needed") if isinstance(search, Mapping) else None)
+                or ("operator_recipe_expansion" if exhausted else None),
+            }
+        return None
+
+    @staticmethod
     def _attention_shadow_from_results(results: Sequence[Any]) -> dict[str, Any] | None:
         for result in results:
             if not isinstance(result, Mapping):
@@ -2401,6 +2968,14 @@ class _FrontierReplayControllerClient:
         )
         telemetry = packet.get("telemetry") if isinstance(packet.get("telemetry"), Mapping) else {}
         latest_result_items = list(latest_results) if has_latest_results else []
+        recent_results = packet.get("recent_diagnostic_results")
+        recent_result_items = (
+            list(recent_results)
+            if isinstance(recent_results, SequenceABC)
+            and not isinstance(recent_results, (str, bytes, bytearray))
+            else []
+        )
+        diagnostic_history_items = [*recent_result_items, *latest_result_items]
         activation_patch_preview = self._activation_patch_compile_preview_from_results(latest_result_items)
         activation_patch_runtime_support = self._activation_patch_runtime_support_from_results(latest_result_items)
         activation_patch_promotion_gate = self._activation_patch_promotion_gate_from_results(latest_result_items)
@@ -2423,6 +2998,7 @@ class _FrontierReplayControllerClient:
         request_activation_patch_production_shadow_round = False
         request_activation_patch_production_trial_round = False
         request_production_trial_followup_round = False
+        request_extra_operator_compare_round = False
         production_trial_outcome: dict[str, Any] | None = self._production_trial_outcome_from_packet(
             packet,
             objective_bundle_key=objective_bundle_key,
@@ -2435,6 +3011,22 @@ class _FrontierReplayControllerClient:
         )
         production_trial_alternate_evidence = self._production_trial_alternate_evidence_from_results(
             latest_result_items,
+            objective_bundle_key=objective_bundle_key,
+        )
+        cross_bundle_bridge_shadow = self._cross_bundle_bridge_shadow_from_results(
+            diagnostic_history_items,
+            objective_bundle_key=objective_bundle_key,
+        )
+        cross_bundle_bridge_status = self._cross_bundle_bridge_status_from_results(
+            diagnostic_history_items,
+            objective_bundle_key=objective_bundle_key,
+        )
+        cross_bundle_bridge_exhausted = bool(
+            isinstance(cross_bundle_bridge_status, Mapping)
+            and cross_bundle_bridge_status.get("exhausted")
+        )
+        post_bridge_recipe_expansion_seen = self._operator_recipe_expansion_seen_in_results(
+            diagnostic_history_items,
             objective_bundle_key=objective_bundle_key,
         )
         production_trial_alternate_candidate: dict[str, Any] | None = None
@@ -2491,15 +3083,39 @@ class _FrontierReplayControllerClient:
                     "reason": why_not_apply,
                     "production_trial_outcome": dict(production_trial_outcome),
                 }
+                for followup_key in (
+                    "neutral_followup_neighborhood",
+                    "trial_followup_mode",
+                    "alternate_trial_candidate_plan",
+                    "promotion_ladder_stage",
+                ):
+                    if production_trial_followup.get(followup_key) not in (None, ""):
+                        diagnostic_request[followup_key] = production_trial_followup[followup_key]
             elif (
                 production_trial_alternate_candidate is not None
                 and not activation_patch_preview_is_alternate_after_trial
             ):
                 request_attention_shadow_round = False
                 request_production_trial_followup_round = True
+                alternate_requires_bridge = bool(
+                    production_trial_alternate_candidate.get("requires_bridge_plan", False)
+                )
+                alternate_actuator_bundle_key = str(
+                    production_trial_alternate_candidate.get("actuator_bundle_key", "") or ""
+                )
+                if alternate_requires_bridge and alternate_actuator_bundle_key:
+                    step_actuator_bundle_key = alternate_actuator_bundle_key
                 diagnostic_name = "activation_patch_candidate_review"
-                next_evidence = "alternate_activation_patch_candidate_review"
+                next_evidence = (
+                    "bridge_plan_dual_layer_shadow_review"
+                    if alternate_requires_bridge
+                    else "alternate_activation_patch_candidate_review"
+                )
                 why_not_apply = (
+                    "production trial followup found a direction-correct bridge actuator; "
+                    "review objective/actuator as a dual-layer shadow plan"
+                    if alternate_requires_bridge
+                    else
                     "production trial followup found an alternate activation-patch recipe; "
                     "review it as shadow-only before any runtime support probe"
                 )
@@ -2514,12 +3130,117 @@ class _FrontierReplayControllerClient:
                     "reason": why_not_apply,
                     "production_trial_outcome": dict(production_trial_outcome),
                 }
+            elif (
+                cross_bundle_bridge_shadow is not None
+                and not activation_patch_preview_is_alternate_after_trial
+            ):
+                request_attention_shadow_round = False
+                request_production_trial_followup_round = True
+                production_trial_alternate_candidate = dict(cross_bundle_bridge_shadow)
+                cross_actuator_bundle_key = str(
+                    cross_bundle_bridge_shadow.get("actuator_bundle_key", "") or ""
+                )
+                if cross_actuator_bundle_key:
+                    step_actuator_bundle_key = cross_actuator_bundle_key
+                diagnostic_name = "activation_patch_candidate_review"
+                next_evidence = "bridge_plan_dual_layer_shadow_review"
+                why_not_apply = (
+                    "cross-bundle bridge search found a direction-correct shadow actuator; "
+                    "review objective/actuator separation before any runtime support probe"
+                )
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "activation_patch_shadow_actuator": dict(cross_bundle_bridge_shadow),
+                    "alternate_trial_candidate": dict(cross_bundle_bridge_shadow),
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                    "production_trial_outcome": dict(production_trial_outcome),
+                }
+            elif (
+                cross_bundle_bridge_exhausted
+                and not post_bridge_recipe_expansion_seen
+            ):
+                request_attention_shadow_round = False
+                request_production_trial_followup_round = True
+                production_trial_outcome_holds_activation_patch_pipeline = True
+                diagnostic_name = "compare_extra_operator_diagnostics"
+                next_evidence = "post_bridge_exhaustion_recipe_expansion"
+                why_not_apply = (
+                    "cross-bundle bridge search found no direction-correct actuator; "
+                    "hold the old candidate-review loop and compare expanded operator recipes"
+                )
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe_expansion_requested": True,
+                    "cross_bundle_bridge_search_state": dict(cross_bundle_bridge_status)
+                    if isinstance(cross_bundle_bridge_status, Mapping)
+                    else None,
+                    "production_trial_outcome": dict(production_trial_outcome),
+                }
+            elif (
+                production_trial_alternate_evidence is not None
+                and production_trial_alternate_candidate is None
+                and not self._diagnostic_seen_in_results(diagnostic_history_items, "cross_bundle_bridge_search")
+            ):
+                absent_reason = str(production_trial_alternate_evidence.get("alternate_candidate_absent_reason") or "")
+                try:
+                    direction_search_count = int(
+                        production_trial_alternate_evidence.get("bridge_direction_search_candidate_count", 0) or 0
+                    )
+                except Exception:
+                    direction_search_count = 0
+                if absent_reason == "wrong_direction_bridge_only" or direction_search_count > 0:
+                    request_attention_shadow_round = False
+                    request_production_trial_followup_round = True
+                    diagnostic_name = "cross_bundle_bridge_search"
+                    next_evidence = "direction_correct_bridge_plan_search"
+                    why_not_apply = (
+                        "alternate evidence did not yield an owned candidate but left bridge/cross-bound "
+                        "signals; search cross-bundle objective/actuator pairs before reopening activation_patch review"
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                        "production_trial_outcome": dict(production_trial_outcome),
+                        "production_trial_alternate_evidence": dict(production_trial_alternate_evidence),
+                    }
+                else:
+                    next_evidence = "alternate_trial_candidate_generator"
+                    why_not_apply = (
+                        "production trial followup evidence was received; hold the old activation_patch "
+                        "runtime-support loop until an alternate operator candidate consumes it"
+                    )
+            elif cross_bundle_bridge_exhausted:
+                production_trial_outcome_holds_activation_patch_pipeline = True
+                next_evidence = "operator_recipe_expansion_exhausted"
+                why_not_apply = (
+                    "cross-bundle bridge search found no direction-correct actuator and the post-bridge "
+                    "recipe expansion view has already been consumed; production apply remains closed"
+                )
             else:
                 next_evidence = "alternate_trial_candidate_generator"
                 why_not_apply = (
                     "production trial followup evidence was received; hold the old activation_patch "
                     "runtime-support loop until an alternate operator candidate consumes it"
                 )
+        activation_patch_bridge_shadow = self._activation_patch_bridge_shadow_from_results(latest_result_items)
+        if activation_patch_bridge_shadow is not None:
+            bridge_actuator_key = str(activation_patch_bridge_shadow.get("actuator_bundle_key", "") or "")
+            if bridge_actuator_key:
+                step_actuator_bundle_key = bridge_actuator_key
         activation_patch_request_shadow: dict[str, Any] | None = None
         if isinstance(activation_patch_preview, Mapping):
             if production_trial_alternate_candidate is not None and activation_patch_preview_is_alternate_after_trial:
@@ -2595,6 +3316,14 @@ class _FrontierReplayControllerClient:
                             "reason": why_not_apply,
                             "production_trial_outcome": dict(trial_outcome),
                         }
+                        for followup_key in (
+                            "neutral_followup_neighborhood",
+                            "trial_followup_mode",
+                            "alternate_trial_candidate_plan",
+                            "promotion_ladder_stage",
+                        ):
+                            if followup.get(followup_key) not in (None, ""):
+                                diagnostic_request[followup_key] = followup[followup_key]
                     else:
                         next_evidence = str(
                             activation_patch_production_trial_gate.get(
@@ -2744,8 +3473,102 @@ class _FrontierReplayControllerClient:
                     else "activation_patch executable shadow is diagnostic-only; production apply remains closed"
                 )
         elif activation_patch_preview_blocked_reason is not None:
-            next_evidence = "alternate_activation_patch_or_bridge_evidence"
-            why_not_apply = activation_patch_preview_blocked_reason
+            if (
+                activation_patch_preview_blocked_reason == "bridge_actuator_requires_dual_layer_plan"
+                and activation_patch_bridge_shadow is not None
+            ):
+                next_evidence = "bridge_plan_dual_layer_shadow_review"
+                why_not_apply = (
+                    "bridge actuator is visible, but it remains a dual-layer shadow plan until controller policy "
+                    "explicitly certifies objective/actuator separation"
+                )
+            elif activation_patch_preview_blocked_reason in {
+                "rank_carrier_not_target_actuator",
+                "target_readout_effect_not_certified",
+                "activation_patch_not_promotable_to_candidate_compiler",
+            }:
+                rank_carrier_block = activation_patch_preview_blocked_reason in {
+                    "rank_carrier_not_target_actuator",
+                    "target_readout_effect_not_certified",
+                }
+                compare_seen = self._diagnostic_seen_in_results(
+                    diagnostic_history_items,
+                    "compare_extra_operator_diagnostics",
+                )
+                cross_seen = self._diagnostic_seen_in_results(
+                    diagnostic_history_items,
+                    "cross_bundle_bridge_search",
+                )
+                if rank_carrier_block and cross_bundle_bridge_exhausted and not post_bridge_recipe_expansion_seen:
+                    request_extra_operator_compare_round = True
+                    diagnostic_name = "compare_extra_operator_diagnostics"
+                    next_evidence = "post_bridge_exhaustion_recipe_expansion"
+                    why_not_apply = (
+                        "rank-carrier conversion and cross-bundle bridge search did not produce a target actuator; "
+                        "compare expanded post-bridge operator recipes"
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                        "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                        "post_bridge_exhaustion_recipe_expansion_requested": True,
+                        "cross_bundle_bridge_search_state": dict(cross_bundle_bridge_status)
+                        if isinstance(cross_bundle_bridge_status, Mapping)
+                        else None,
+                    }
+                elif rank_carrier_block and compare_seen and not cross_seen:
+                    request_extra_operator_compare_round = True
+                    diagnostic_name = "cross_bundle_bridge_search"
+                    next_evidence = "direction_correct_bridge_plan_search"
+                    why_not_apply = (
+                        "rank-carrier conversion compare did not certify a target actuator; search whether another "
+                        "bundle can act as a direction-correct bridge for the objective"
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                        "activation_patch_compile_preview_blocked_reason": activation_patch_preview_blocked_reason,
+                    }
+                elif rank_carrier_block and cross_bundle_bridge_exhausted and post_bridge_recipe_expansion_seen:
+                    next_evidence = "operator_recipe_expansion_exhausted"
+                    why_not_apply = (
+                        "rank-carrier conversion, cross-bundle bridge search, and post-bridge recipe expansion "
+                        "have been observed without a production-safe target actuator"
+                    )
+                else:
+                    request_extra_operator_compare_round = True
+                    diagnostic_name = "compare_extra_operator_diagnostics"
+                    next_evidence = (
+                        "rank_carrier_to_target_conversion"
+                        if rank_carrier_block
+                        else "alternate_activation_patch_or_bridge_evidence"
+                    )
+                    why_not_apply = (
+                        "activation patch showed a rank carrier but not a target actuator; compare alternate "
+                        "operator recipes that could convert rank movement into target mass/top20 lift"
+                        if next_evidence == "rank_carrier_to_target_conversion"
+                        else activation_patch_preview_blocked_reason
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                        "activation_patch_compile_preview_blocked_reason": activation_patch_preview_blocked_reason,
+                    }
+            else:
+                next_evidence = "alternate_activation_patch_or_bridge_evidence"
+                why_not_apply = activation_patch_preview_blocked_reason
         proposal_attention_shadow = None if activation_patch_preview is not None else attention_shadow
         if request_attention_shadow_round:
             diagnostic_name = "attention_readout_carrier_probe"
@@ -2767,6 +3590,7 @@ class _FrontierReplayControllerClient:
                 or request_activation_patch_production_trial_round
                 or request_production_trial_followup_round
                 or request_attention_shadow_round
+                or request_extra_operator_compare_round
                 or not has_latest_results
             )
             else "noop"
@@ -2915,6 +3739,36 @@ class _FrontierReplayControllerClient:
                 "next_action": next_action,
             },
         }
+        if activation_patch_bridge_shadow is not None:
+            meta["bridge_plan_available"] = True
+            meta["bridge_plan_required"] = True
+            meta["bridge_plan_objective_bundle_key"] = objective_bundle_key
+            meta["bridge_plan_actuator_bundle_key"] = step_actuator_bundle_key
+            meta["bridge_plan_shadow_actuator"] = dict(activation_patch_bridge_shadow)
+            meta["bridge_plan_reason"] = (
+                "bridge_actuator_requires_dual_layer_plan"
+                if activation_patch_compile_preview_blocked_reason == "bridge_actuator_requires_dual_layer_plan"
+                else activation_patch_bridge_shadow.get("promotion_reason")
+            )
+            meta["controller_memory"]["bridge_plan_objective_bundle_key"] = objective_bundle_key
+            meta["controller_memory"]["bridge_plan_actuator_bundle_key"] = step_actuator_bundle_key
+            meta["controller_memory"]["bridge_plan_reason"] = meta["bridge_plan_reason"]
+        elif (
+            production_trial_alternate_candidate is not None
+            and bool(production_trial_alternate_candidate.get("requires_bridge_plan", False))
+        ):
+            meta["bridge_plan_available"] = True
+            meta["bridge_plan_required"] = True
+            meta["bridge_plan_objective_bundle_key"] = objective_bundle_key
+            meta["bridge_plan_actuator_bundle_key"] = step_actuator_bundle_key
+            meta["bridge_plan_shadow_actuator"] = dict(production_trial_alternate_candidate)
+            meta["bridge_plan_reason"] = (
+                production_trial_alternate_candidate.get("promotion_reason")
+                or "alternate_bridge_after_failed_production_trial"
+            )
+            meta["controller_memory"]["bridge_plan_objective_bundle_key"] = objective_bundle_key
+            meta["controller_memory"]["bridge_plan_actuator_bundle_key"] = step_actuator_bundle_key
+            meta["controller_memory"]["bridge_plan_reason"] = meta["bridge_plan_reason"]
         if production_trial_outcome is not None:
             meta["production_trial_outcome"] = dict(production_trial_outcome)
             meta["activation_patch_production_trial_effect_class"] = str(
@@ -2927,10 +3781,29 @@ class _FrontierReplayControllerClient:
                     meta.get("blocked_by", "activation_patch_production_trial_outcome"),
                 )
                 meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+                for followup_key in (
+                    "neutral_followup_neighborhood",
+                    "trial_followup_mode",
+                    "alternate_trial_candidate_plan",
+                    "promotion_ladder_stage",
+                ):
+                    if production_trial_followup.get(followup_key) not in (None, ""):
+                        meta[followup_key] = production_trial_followup[followup_key]
+                        meta["controller_memory"][followup_key] = production_trial_followup[followup_key]
+                if str(production_trial_followup.get("trial_followup_mode", "") or "") == "confirmation_neighborhood":
+                    meta["production_trial_neutral_followup_confirmation_requested"] = True
+                    meta["controller_memory"]["production_trial_neutral_followup_confirmation_requested"] = True
             if production_trial_alternate_evidence is not None:
                 meta["production_trial_alternate_evidence"] = dict(production_trial_alternate_evidence)
                 meta["production_trial_followup_consumed"] = True
-                meta["blocked_by"] = "production_trial_alternate_evidence_pending_candidate_generator"
+                absent_reason = str(
+                    production_trial_alternate_evidence.get("alternate_candidate_absent_reason") or ""
+                )
+                meta["blocked_by"] = (
+                    absent_reason
+                    if absent_reason
+                    else "production_trial_alternate_evidence_pending_candidate_generator"
+                )
                 meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
                 meta["controller_memory"]["production_trial_followup_consumed"] = True
             if production_trial_alternate_candidate is not None:
@@ -3039,6 +3912,7 @@ class _FrontierReplayControllerClient:
             or request_activation_patch_production_trial_round
             or request_production_trial_followup_round
             or request_attention_shadow_round
+            or request_extra_operator_compare_round
         )
         if has_latest_results and not request_round_open:
             meta["observed_outcome"] = "diagnostic_result_received"
@@ -3061,10 +3935,29 @@ class _FrontierReplayControllerClient:
                     meta.get("blocked_by", "activation_patch_production_trial_outcome"),
                 )
                 meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+                for followup_key in (
+                    "neutral_followup_neighborhood",
+                    "trial_followup_mode",
+                    "alternate_trial_candidate_plan",
+                    "promotion_ladder_stage",
+                ):
+                    if production_trial_followup.get(followup_key) not in (None, ""):
+                        meta[followup_key] = production_trial_followup[followup_key]
+                        meta["controller_memory"][followup_key] = production_trial_followup[followup_key]
+                if str(production_trial_followup.get("trial_followup_mode", "") or "") == "confirmation_neighborhood":
+                    meta["production_trial_neutral_followup_confirmation_requested"] = True
+                    meta["controller_memory"]["production_trial_neutral_followup_confirmation_requested"] = True
             if production_trial_alternate_evidence is not None:
                 meta["production_trial_alternate_evidence"] = dict(production_trial_alternate_evidence)
                 meta["production_trial_followup_consumed"] = True
-                meta["blocked_by"] = "production_trial_alternate_evidence_pending_candidate_generator"
+                absent_reason = str(
+                    production_trial_alternate_evidence.get("alternate_candidate_absent_reason") or ""
+                )
+                meta["blocked_by"] = (
+                    absent_reason
+                    if absent_reason
+                    else "production_trial_alternate_evidence_pending_candidate_generator"
+                )
                 meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
                 meta["controller_memory"]["production_trial_followup_consumed"] = True
             if production_trial_alternate_candidate is not None:
@@ -3082,6 +3975,36 @@ class _FrontierReplayControllerClient:
             meta["micro_rationale"] = (
                 "production trial outcome was folded back into the next diagnostic decision; production apply remains closed"
             )
+        if isinstance(cross_bundle_bridge_status, Mapping):
+            meta["cross_bundle_bridge_search_state"] = dict(cross_bundle_bridge_status)
+            meta["cross_bundle_bridge_search_exhausted"] = bool(cross_bundle_bridge_exhausted)
+            meta["controller_memory"]["cross_bundle_bridge_search_status"] = cross_bundle_bridge_status.get("status")
+            meta["controller_memory"]["cross_bundle_bridge_search_exhausted"] = bool(
+                cross_bundle_bridge_exhausted
+            )
+            if cross_bundle_bridge_exhausted:
+                meta["bridge_search_exhausted_reason"] = (
+                    cross_bundle_bridge_status.get("status") or "no_direction_correct_bridge"
+                )
+                meta["controller_memory"]["bridge_search_exhausted_reason"] = meta[
+                    "bridge_search_exhausted_reason"
+                ]
+                if post_bridge_recipe_expansion_seen:
+                    meta["operator_recipe_expansion_mode"] = "post_bridge_exhaustion"
+                    meta["operator_recipe_expansion_consumed"] = True
+                    meta["controller_memory"]["operator_recipe_expansion_consumed"] = True
+                    if meta.get("blocked_by") in {
+                        "production_trial_alternate_evidence_pending_candidate_generator",
+                        "wrong_direction_bridge_only",
+                    }:
+                        meta["blocked_by"] = "operator_recipe_expansion_exhausted"
+                        meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+                elif request_production_trial_followup_round and diagnostic_name == "compare_extra_operator_diagnostics":
+                    meta["operator_recipe_expansion_mode"] = "post_bridge_exhaustion"
+                    meta["operator_recipe_expansion_requested"] = True
+                    meta["blocked_by"] = "cross_bundle_bridge_search_exhausted"
+                    meta["controller_memory"]["operator_recipe_expansion_requested"] = True
+                    meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
         return {"version": "0.1", "decision": "noop", "meta": meta}
 
     def invoke(self, packet: dict[str, Any]) -> dict[str, Any]:
@@ -3423,6 +4346,10 @@ class ReadoutEscapeReplayHarnessResult:
     diagnostic_frontier_next_evidence: str | None
     diagnostic_frontier_request: str | None
     diagnostic_frontier_reason_text: str | None
+    diagnostic_frontier_state_source: str | None
+    diagnostic_frontier_loop_state: str | None
+    cross_bundle_bridge_search_exhausted: bool
+    post_bridge_exhaustion_recipe_expansion_observed: bool
     diagnostic_request_event_count: int
     diagnostic_result_event_count: int
     controller_diagnostic_request_names: tuple[str, ...]
@@ -3506,6 +4433,12 @@ class ReadoutEscapeReplayHarnessResult:
             "diagnostic_frontier_next_evidence": self.diagnostic_frontier_next_evidence,
             "diagnostic_frontier_request": self.diagnostic_frontier_request,
             "diagnostic_frontier_reason_text": self.diagnostic_frontier_reason_text,
+            "diagnostic_frontier_state_source": self.diagnostic_frontier_state_source,
+            "diagnostic_frontier_loop_state": self.diagnostic_frontier_loop_state,
+            "cross_bundle_bridge_search_exhausted": bool(self.cross_bundle_bridge_search_exhausted),
+            "post_bridge_exhaustion_recipe_expansion_observed": bool(
+                self.post_bridge_exhaustion_recipe_expansion_observed
+            ),
             "diagnostic_request_event_count": int(self.diagnostic_request_event_count),
             "diagnostic_result_event_count": int(self.diagnostic_result_event_count),
             "controller_diagnostic_request_names": list(self.controller_diagnostic_request_names),
@@ -3631,6 +4564,24 @@ def _focused_bridge_eval_recipe_specs() -> list[dict[str, Any]]:
             "pooling": "centered_mean",
             "contrast_mode": "minus_stealer",
             "contrast_scale": 0.25,
+            "competitor_strategy": "stealer",
+            "modes": ("kv_pair",),
+        },
+        {
+            "recipe_name": "term_token_minus_stealer_l050",
+            "localization": "exact_term_token",
+            "pooling": "single",
+            "contrast_mode": "minus_stealer",
+            "contrast_scale": 0.5,
+            "competitor_strategy": "stealer",
+            "modes": ("kv_pair",),
+        },
+        {
+            "recipe_name": "term_centered_pm1_minus_stealer_l050",
+            "localization": "exact_term_centered_pm1",
+            "pooling": "centered_mean",
+            "contrast_mode": "minus_stealer",
+            "contrast_scale": 0.5,
             "competitor_strategy": "stealer",
             "modes": ("kv_pair",),
         },
@@ -5819,8 +6770,10 @@ def run_readout_escape_replay_harness(
                 for patch_site, patch_alpha, source_localization, patch_mode in (
                     ("resid_pre", 0.05, "source_term_token", "blend"),
                     ("resid_pre", 0.05, "source_term_token_minus_stealer_l025", "blend"),
+                    ("resid_pre", 0.05, "source_term_token_minus_stealer_l050", "blend"),
                     ("resid_pre", 0.05, "source_centered_pm1", "blend"),
                     ("resid_pre", 0.05, "source_centered_pm1_minus_stealer_l025", "blend"),
+                    ("resid_pre", 0.05, "source_centered_pm1_minus_stealer_l050", "blend"),
                     ("resid_pre", 0.05, "source_term_token_orthogonal_stealer", "blend"),
                     ("resid_pre", 0.05, "source_span_mean", "add_norm"),
                     ("resid_pre", 0.05, "source_span_mean", "blend"),
@@ -5845,6 +6798,41 @@ def run_readout_escape_replay_harness(
                         alpha=patch_alpha,
                     )
                     if patch_row is not None:
+                        rows.append(patch_row)
+                for patch_site, patch_alpha, source_localization, patch_mode in (
+                    ("resid_pre", 0.03, "source_term_token", "blend"),
+                    ("resid_pre", 0.03, "source_centered_pm1", "blend"),
+                    ("resid_pre", 0.06, "source_term_token", "blend"),
+                    ("resid_pre", 0.06, "source_centered_pm1", "blend"),
+                    ("resid_post", 0.03, "source_term_token", "blend"),
+                    ("resid_post", 0.03, "source_centered_pm1", "blend"),
+                    ("resid_post", 0.06, "source_term_token", "blend"),
+                    ("mlp_out", 0.03, "source_term_token", "blend"),
+                    ("mlp_out", 0.03, "source_centered_pm1", "blend"),
+                    ("mlp_out", 0.06, "source_term_token", "blend"),
+                    ("resid_post", 0.03, "source_span_mean", "blend"),
+                    ("mlp_out", 0.03, "source_span_mean", "blend"),
+                ):
+                    patch_row = _run_activation_patch_operator(
+                        site=patch_site,
+                        layer=readout_layer,
+                        source_span=source_span,
+                        objective_bundle_key=bundle_key,
+                        objective_term=term,
+                        recipe_name=(
+                            f"post_bridge_{patch_site}_{source_localization}_to_last_{patch_mode}"
+                            f"_a{int(round(patch_alpha * 1000)):03d}"
+                        ),
+                        stealer_span=stealer_span,
+                        stealer_bundle_key=stealer_bundle_key,
+                        stealer_term=stealer_term,
+                        source_localization=source_localization,
+                        patch_mode=patch_mode,
+                        alpha=patch_alpha,
+                    )
+                    if patch_row is not None:
+                        patch_row["operator_recipe_expansion_mode"] = "post_bridge_exhaustion"
+                        patch_row["post_bridge_exhaustion_recipe"] = True
                         rows.append(patch_row)
             head_candidate = next(
                 (
@@ -6734,6 +7722,16 @@ def run_readout_escape_replay_harness(
         for item in controller_step_views
         if bool(item.get("bridge_visible"))
     )
+    bridge_eval_summary_for_result = (
+        forced_state.get("bridge_eval_summary")
+        if isinstance(forced_state.get("bridge_eval_summary"), Mapping)
+        else {}
+    )
+    effective_diagnostic_frontier = _effective_diagnostic_frontier_summary(
+        bridge_eval_summary=bridge_eval_summary_for_result,
+        recent_diagnostic_results=recent_diagnostic_results,
+        diagnostic_request_events=diagnostic_request_events,
+    )
     result = ReadoutEscapeReplayHarnessResult(
         seed=seed,
         task_id=env.task_id,
@@ -6992,29 +7990,17 @@ def run_readout_escape_replay_harness(
             )
             if str(key) and isinstance(value, Mapping)
         },
-        diagnostic_frontier_bundle_key=(
-            None
-            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
-            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_bundle_key") in (None, "")
-            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_bundle_key"))
+        diagnostic_frontier_bundle_key=effective_diagnostic_frontier.get("bundle_key"),
+        diagnostic_frontier_next_evidence=effective_diagnostic_frontier.get("next_evidence"),
+        diagnostic_frontier_request=effective_diagnostic_frontier.get("request"),
+        diagnostic_frontier_reason_text=effective_diagnostic_frontier.get("reason_text"),
+        diagnostic_frontier_state_source=effective_diagnostic_frontier.get("state_source"),
+        diagnostic_frontier_loop_state=effective_diagnostic_frontier.get("loop_state"),
+        cross_bundle_bridge_search_exhausted=bool(
+            effective_diagnostic_frontier.get("cross_bundle_bridge_search_exhausted", False)
         ),
-        diagnostic_frontier_next_evidence=(
-            None
-            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
-            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_next_evidence") in (None, "")
-            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_next_evidence"))
-        ),
-        diagnostic_frontier_request=(
-            None
-            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
-            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_request") in (None, "")
-            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_request"))
-        ),
-        diagnostic_frontier_reason_text=(
-            None
-            if not isinstance(forced_state.get("bridge_eval_summary"), Mapping)
-            or forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_reason_text") in (None, "")
-            else str(forced_state.get("bridge_eval_summary", {}).get("diagnostic_frontier_reason_text"))
+        post_bridge_exhaustion_recipe_expansion_observed=bool(
+            effective_diagnostic_frontier.get("post_bridge_exhaustion_recipe_expansion_observed", False)
         ),
         diagnostic_request_event_count=len(diagnostic_request_events),
         diagnostic_result_event_count=len(diagnostic_result_events),
