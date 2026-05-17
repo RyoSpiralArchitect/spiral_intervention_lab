@@ -40,6 +40,7 @@ from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime,
 from SpiralInterventionLab.runtime.schema import (
     ControllerCommand,
     ControllerObservationPacket,
+    SchemaError,
     SurfaceTargetRef,
     parse_controller_command,
     parse_observation_packet,
@@ -803,6 +804,41 @@ class TestCompiler(unittest.TestCase):
         expected_direction = torch.nn.functional.normalize(torch.tensor([0.0, 1.0, -1.0]), dim=0)
         self.assertTrue(torch.allclose(out[0, -1], 0.2 * expected_direction, atol=1e-6))
 
+    def test_readout_direction_rejects_unsafe_payloads(self):
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [True],
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [1],
+                "target_scale": 2.5,
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "negative_token_ids": list(range(33)),
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
     def test_actual_delta_classifies_attractor_relief_without_target_lift(self):
         worker = HookedTransformerWorkerRuntime.__new__(HookedTransformerWorkerRuntime)
         cls = worker._classify_actual_delta_result(
@@ -823,6 +859,39 @@ class TestCompiler(unittest.TestCase):
             }
         )
         self.assertEqual(cls, "collapse_suppressor")
+
+    def test_actual_delta_keeps_rank_and_gap_movement_below_target_lift(self):
+        worker = HookedTransformerWorkerRuntime.__new__(HookedTransformerWorkerRuntime)
+        self.assertEqual(
+            worker._classify_actual_delta_result(
+                {
+                    "focus_rank_delta": 8,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                }
+            ),
+            "rank_carrier",
+        )
+        self.assertEqual(
+            worker._classify_actual_delta_result(
+                {
+                    "target_top20_threshold_gap_delta": -0.12,
+                    "target_piece_logit_delta": 0.01,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                }
+            ),
+            "readout_gap_movement",
+        )
+        self.assertEqual(
+            worker._classify_actual_delta_result(
+                {
+                    "target_mass_delta": 0.00003,
+                    "target_top20_hit_delta": 0,
+                }
+            ),
+            "target_lift",
+        )
 
     def test_compile_loop_rescue_resid_add_records_loop_rescue_budget_pool(self):
         adapter = FakeAdapter()
@@ -5436,7 +5505,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             )
 
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["actual_delta_class"], "target_lift")
+        self.assertEqual(result["actual_delta_class"], "required_term_progress")
         policy_override = simulate_mock.call_args_list[1].kwargs["policy_override"]
         self.assertEqual(policy_override.global_budget.max_edits_per_step, 2)
         self.assertEqual(result["operator_family_key"], "composition|resid_add|source_body|exact_prompt_span_mean")

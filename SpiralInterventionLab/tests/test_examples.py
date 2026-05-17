@@ -2244,7 +2244,7 @@ class TestExamples(unittest.TestCase):
                         "operator_positive_memory": {
                             "readout_steering": {
                                 "recipe_family": "readout_steering",
-                                "traits": ["ownership_preserving", "target_reachable", "top20_gap_closer"],
+                                "traits": ["ownership_preserving", "target_reachable", "top20_gap_closer_candidate"],
                                 "recommended_next_action": "deepen_local_gap_closer",
                                 "best_recipe_name": "post_bridge_target_readout_patch_a040",
                                 "best_target_top20_threshold_gap": 0.37,
@@ -2255,7 +2255,7 @@ class TestExamples(unittest.TestCase):
                         "best_positive_operator_traits": [
                             "ownership_preserving",
                             "target_reachable",
-                            "top20_gap_closer",
+                            "top20_gap_closer_candidate",
                         ],
                         "best_positive_operator_next_action": "deepen_local_gap_closer",
                         "positive_operator_deepening_plan": {
@@ -2274,7 +2274,7 @@ class TestExamples(unittest.TestCase):
                             "traits": [
                                 "ownership_preserving",
                                 "target_reachable",
-                                "top20_gap_closer",
+                                "top20_gap_closer_candidate",
                             ],
                             "best_target_top20_threshold_gap": 0.37,
                         },
@@ -2310,7 +2310,7 @@ class TestExamples(unittest.TestCase):
             0.37,
         )
         self.assertEqual(meta["best_positive_operator_family"], "readout_steering")
-        self.assertIn("top20_gap_closer", meta["best_positive_operator_traits"])
+        self.assertIn("top20_gap_closer_candidate", meta["best_positive_operator_traits"])
         self.assertEqual(meta["best_positive_operator_next_action"], "deepen_local_gap_closer")
         self.assertEqual(meta["controller_curiosity_signal"], "positive_operator_memory_deepen_local_gap_closer")
         self.assertEqual(
@@ -2395,7 +2395,7 @@ class TestExamples(unittest.TestCase):
                             "evidence_kind": "activation_patch_certification",
                             "status": "supportive",
                             "actuator_class": "bridge_actuator",
-                            "actual_delta_class": "target_lift",
+                            "actual_delta_class": "readout_gap_movement",
                             "operator_recipe_id": "budget_recipe_that_lifts_send",
                             "realized_lift_bundle_key": actuator,
                             "realized_lift_term": "send",
@@ -2717,7 +2717,10 @@ class TestExamples(unittest.TestCase):
                             "target_piece_logit_delta": 0.12,
                             "target_piece_prob_delta": 0.00001,
                             "target_rank_after": 42,
+                            "target_top20_threshold_gap_baseline": 0.49,
                             "target_top20_threshold_gap": 0.37,
+                            "target_top20_threshold_gap_after": 0.37,
+                            "target_top20_threshold_gap_delta": -0.12,
                             "target_top20_margin": -0.37,
                             "readout_gap_closer_recipe": True,
                             "readout_gap_closer_axis": "target_top20_gap",
@@ -2737,13 +2740,18 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(summary["best_readout_steering_rank_carrier_recipe_name"], "post_bridge_target_readout_patch_a040")
         self.assertEqual(summary["best_readout_steering_target_top20_threshold_gap"], 0.37)
         self.assertEqual(summary["readout_gap_closer_recipe_count"], 1)
+        self.assertEqual(summary["readout_gap_probe_recipe_count"], 1)
+        self.assertEqual(summary["readout_gap_closer_candidate_count"], 1)
+        self.assertEqual(summary["readout_gap_closer_certified_count"], 1)
         self.assertEqual(summary["best_readout_gap_closer_recipe_name"], "post_bridge_target_readout_patch_a040")
         self.assertEqual(summary["best_readout_gap_closer_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(summary["best_readout_gap_closer_target_top20_threshold_gap_delta"], -0.12)
         self.assertEqual(summary["recommended_next_family"], "readout_steering_deepening:readout_steering")
         self.assertEqual(summary["best_positive_operator_family"], "readout_steering")
         self.assertIn("ownership_preserving", summary["best_positive_operator_traits"])
         self.assertIn("top20_gap_measured", summary["best_positive_operator_traits"])
-        self.assertIn("top20_gap_closer", summary["best_positive_operator_traits"])
+        self.assertIn("top20_gap_closer_candidate", summary["best_positive_operator_traits"])
+        self.assertIn("top20_gap_closer_certified", summary["best_positive_operator_traits"])
         self.assertEqual(summary["best_positive_operator_next_action"], "deepen_local_gap_closer")
         plan = summary["positive_operator_deepening_plan"]
         self.assertEqual(plan["kind"], "positive_operator_deepening_plan")
@@ -2756,20 +2764,32 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(plan["reason_code"], "positive_memory_local_gap_closer")
         self.assertEqual(plan["gap_closer_recipe_name"], "post_bridge_target_readout_patch_a040")
         self.assertEqual(plan["gap_closer_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(plan["gap_closer_target_top20_threshold_gap_delta"], -0.12)
+        self.assertEqual(plan["ttl_steps"], 2)
+        self.assertTrue(plan["stale_after_context_change"])
         memory = summary["operator_positive_memory"]["readout_steering"]
         self.assertEqual(memory["recommended_next_action"], "deepen_local_gap_closer")
         self.assertIn("target_reachable", memory["traits"])
+        self.assertIn("top20_gap_closer_certified", memory["traits"])
         self.assertEqual(memory["best_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(memory["best_target_top20_threshold_gap_delta"], -0.12)
+        self.assertEqual(memory["scope"]["objective_bundle_key"], objective)
+        self.assertEqual(memory["scope"]["target_piece"], " budget")
+        self.assertEqual(memory["ttl_steps"], 2)
         self.assertFalse(summary["production_apply_allowed"])
         matrix = result["operator_recipe_expansion_matrix"]
         self.assertEqual(matrix[0]["recipe_family"], "readout_steering")
         self.assertEqual(matrix[0]["failure_mode"], "self_rank_carrier")
         self.assertIn("positive_traits", matrix[0])
         self.assertIn("top20_gap_measured", matrix[0]["positive_traits"])
-        self.assertIn("top20_gap_closer", matrix[0]["positive_traits"])
+        self.assertIn("top20_gap_closer_candidate", matrix[0]["positive_traits"])
+        self.assertIn("top20_gap_closer_certified", matrix[0]["positive_traits"])
         self.assertEqual(matrix[0]["target_piece"], " budget")
         self.assertEqual(matrix[0]["target_rank_after"], 42)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap_baseline"], 0.49)
         self.assertEqual(matrix[0]["target_top20_threshold_gap"], 0.37)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap_after"], 0.37)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap_delta"], -0.12)
         self.assertEqual(matrix[0]["target_top20_margin"], -0.37)
         self.assertTrue(matrix[0]["readout_gap_closer_recipe"])
         self.assertEqual(matrix[0]["readout_gap_closer_axis"], "target_top20_gap")

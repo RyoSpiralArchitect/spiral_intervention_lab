@@ -28,6 +28,11 @@ EXPR_FNS = {
     "readout_direction",
 }
 
+READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS = 8
+READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS = 32
+READOUT_DIRECTION_MIN_SCALE = 0.0
+READOUT_DIRECTION_MAX_SCALE = 2.0
+
 
 class SchemaError(ValueError):
     pass
@@ -109,6 +114,13 @@ def _optional_int_array(value: Any, name: str) -> tuple[int, ...]:
     return tuple(_require_int(item, f"{name}[{idx}]") for idx, item in enumerate(seq))
 
 
+def _require_float_range(value: Any, name: str, *, minimum: float, maximum: float) -> float:
+    number = _require_float(value, name)
+    if number < minimum or number > maximum:
+        raise SchemaError(f"{name} must be between {minimum:g} and {maximum:g}")
+    return number
+
+
 def _validate_expr(expr: Any, name: str = "expr", depth: int = 0) -> Mapping[str, Any]:
     if depth > 8:
         raise SchemaError(f"{name} exceeds max depth 8")
@@ -178,10 +190,32 @@ def _validate_expr(expr: Any, name: str = "expr", depth: int = 0) -> Mapping[str
         negative_ids = _optional_int_array(node.get("negative_token_ids"), f"{name}.negative_token_ids")
         if not target_ids and not negative_ids:
             raise SchemaError(f"{name} must define target_token_ids or negative_token_ids")
+        if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:
+            raise SchemaError(
+                f"{name}.target_token_ids must contain at most "
+                f"{READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS} token ids"
+            )
+        if len(negative_ids) > READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS:
+            raise SchemaError(
+                f"{name}.negative_token_ids must contain at most "
+                f"{READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS} token ids"
+            )
         if "negative_scale" in node:
-            _require_float(node["negative_scale"], f"{name}.negative_scale")
+            _require_float_range(
+                node["negative_scale"],
+                f"{name}.negative_scale",
+                minimum=READOUT_DIRECTION_MIN_SCALE,
+                maximum=READOUT_DIRECTION_MAX_SCALE,
+            )
         if "target_scale" in node:
-            _require_float(node["target_scale"], f"{name}.target_scale")
+            _require_float_range(
+                node["target_scale"],
+                f"{name}.target_scale",
+                minimum=READOUT_DIRECTION_MIN_SCALE,
+                maximum=READOUT_DIRECTION_MAX_SCALE,
+            )
+        if "normalize" in node:
+            _require_bool(node["normalize"], f"{name}.normalize")
         return node
 
     raise SchemaError(f"unsupported expr fn {fn}")

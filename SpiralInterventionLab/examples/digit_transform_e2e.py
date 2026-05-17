@@ -1640,7 +1640,10 @@ def _diagnostic_evidence_ledger(
                 "target_piece_logit_delta",
                 "target_piece_prob_delta",
                 "target_rank_after",
+                "target_top20_threshold_gap_baseline",
                 "target_top20_threshold_gap",
+                "target_top20_threshold_gap_after",
+                "target_top20_threshold_gap_delta",
                 "target_top20_margin",
                 "readout_gap_closer_recipe",
                 "readout_gap_closer_axis",
@@ -2403,10 +2406,16 @@ class _FrontierReplayControllerClient:
                     "best_readout_steering_target_top20_threshold_gap"
                 ),
                 "readout_gap_closer_recipe_count": summary.get("readout_gap_closer_recipe_count"),
+                "readout_gap_probe_recipe_count": summary.get("readout_gap_probe_recipe_count"),
+                "readout_gap_closer_candidate_count": summary.get("readout_gap_closer_candidate_count"),
+                "readout_gap_closer_certified_count": summary.get("readout_gap_closer_certified_count"),
                 "best_readout_gap_closer_recipe_family": summary.get("best_readout_gap_closer_recipe_family"),
                 "best_readout_gap_closer_recipe_name": summary.get("best_readout_gap_closer_recipe_name"),
                 "best_readout_gap_closer_target_top20_threshold_gap": summary.get(
                     "best_readout_gap_closer_target_top20_threshold_gap"
+                ),
+                "best_readout_gap_closer_target_top20_threshold_gap_delta": summary.get(
+                    "best_readout_gap_closer_target_top20_threshold_gap_delta"
                 ),
                 "best_readout_gap_closer_target_piece_logit_delta": summary.get(
                     "best_readout_gap_closer_target_piece_logit_delta"
@@ -4248,9 +4257,13 @@ class _FrontierReplayControllerClient:
                 ]
             for gap_key in (
                 "readout_gap_closer_recipe_count",
+                "readout_gap_probe_recipe_count",
+                "readout_gap_closer_candidate_count",
+                "readout_gap_closer_certified_count",
                 "best_readout_gap_closer_recipe_family",
                 "best_readout_gap_closer_recipe_name",
                 "best_readout_gap_closer_target_top20_threshold_gap",
+                "best_readout_gap_closer_target_top20_threshold_gap_delta",
                 "best_readout_gap_closer_target_piece_logit_delta",
             ):
                 if readout_steering_deepening.get(gap_key) not in (None, ""):

@@ -14,6 +14,10 @@ from .schema import (
     ControllerObservationPacket,
     KvMixOp,
     Rank1PatchOp,
+    READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS,
+    READOUT_DIRECTION_MAX_SCALE,
+    READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS,
+    READOUT_DIRECTION_MIN_SCALE,
     ResidAddOp,
     SchemaError,
     SurfaceTargetRef,
@@ -84,14 +88,26 @@ def _as_token_ids(value: Any) -> tuple[int, ...]:
     token_ids: list[int] = []
     for item in value:
         if isinstance(item, bool):
-            continue
+            raise SchemaError("readout_direction token ids must be integers, not booleans")
         try:
             token_id = int(item)
         except Exception:
-            continue
+            raise SchemaError("readout_direction token ids must be integers")
         if token_id >= 0 and token_id not in token_ids:
             token_ids.append(token_id)
     return tuple(token_ids)
+
+
+def _readout_scale(value: Any, *, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SchemaError(f"readout_direction.{name} must be numeric")
+    scale = float(value)
+    if scale < READOUT_DIRECTION_MIN_SCALE or scale > READOUT_DIRECTION_MAX_SCALE:
+        raise SchemaError(
+            f"readout_direction.{name} must be between "
+            f"{READOUT_DIRECTION_MIN_SCALE:g} and {READOUT_DIRECTION_MAX_SCALE:g}"
+        )
+    return scale
 
 
 def _readout_matrix(ctx: "StepContext") -> torch.Tensor:
@@ -139,8 +155,12 @@ def _readout_direction(expr: Mapping[str, Any], ctx: "StepContext") -> torch.Ten
     matrix = _readout_matrix(ctx)
     target_ids = _as_token_ids(expr.get("target_token_ids"))
     negative_ids = _as_token_ids(expr.get("negative_token_ids"))
-    target_scale = float(expr.get("target_scale", 1.0) or 1.0)
-    negative_scale = float(expr.get("negative_scale", 1.0) or 1.0)
+    if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:
+        raise SchemaError("readout_direction exceeds target_token_ids cap")
+    if len(negative_ids) > READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS:
+        raise SchemaError("readout_direction exceeds negative_token_ids cap")
+    target_scale = _readout_scale(expr.get("target_scale", 1.0), name="target_scale")
+    negative_scale = _readout_scale(expr.get("negative_scale", 1.0), name="negative_scale")
     pieces: list[torch.Tensor] = []
     target = _mean_readout_vector(matrix, target_ids)
     if target is not None:

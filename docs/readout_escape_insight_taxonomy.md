@@ -231,7 +231,8 @@ Positive operator memory adds bounded curiosity:
 - `rank_carrier`
 - `target_reachable`
 - `top20_gap_measured`
-- `top20_gap_closer`
+- `top20_gap_closer_candidate`
+- `top20_gap_closer_certified`
 - `anti_collapse`
 - `neutral_stable`
 - `rank_to_mass_convertible`
@@ -240,14 +241,23 @@ This is not a permission system. It is a way to say:
 
 > This family is still uncertified, but it is locally worth deepening.
 
+It is scoped by objective bundle, target piece, recipe family, and
+`operator_recipe_id`, and it carries a short TTL plus
+`stale_after_context_change=true`. That keeps positive memory as bounded
+curiosity rather than long-lived superstition.
+
 ### Readout Gap-Closer Sweep
 
-The latest readout-steering deepening path adds narrow gap-closer recipes and
-summarizes:
+The latest readout-steering deepening path adds narrow gap-probe recipes and
+summarizes absolute gap plus baseline-relative movement:
 
 - `readout_gap_closer_recipe_count`
+- `readout_gap_probe_recipe_count`
+- `readout_gap_closer_candidate_count`
+- `readout_gap_closer_certified_count`
 - `best_readout_gap_closer_recipe_name`
 - `best_readout_gap_closer_target_top20_threshold_gap`
+- `best_readout_gap_closer_target_top20_threshold_gap_delta`
 - `best_readout_gap_closer_target_piece_logit_delta`
 
 Latest GPT-2 replay:
@@ -257,10 +267,14 @@ gap_count = 3
 best_gap_recipe = post_bridge_target_readout_patch_l005_a060_gap
 best_gap = 6.099704
 best_target_piece_logit_delta = 0.002202
+best_gap_delta_vs_baseline = not yet certified in this run
 episode_output = the the the the
 ```
 
-This is not a task win. It is a better local measurement.
+This is not a task win. It is a better local measurement. The term
+`gap_closer_certified` stays reserved for baseline-relative gap reduction that
+is also collapse-safe; otherwise the observation is only a measured/candidate
+signal.
 
 ## 3. Both: Research And Engineering Value
 
@@ -443,4 +457,3 @@ Recommended claim:
 Recommended non-claim:
 
 > This does not solve the constrained rewrite task yet.
-

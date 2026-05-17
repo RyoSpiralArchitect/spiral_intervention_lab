@@ -407,7 +407,8 @@ traits such as:
 - `rank_carrier`
 - `target_reachable`
 - `top20_gap_measured`
-- `top20_gap_closer`
+- `top20_gap_closer_candidate`
+- `top20_gap_closer_certified`
 - `anti_collapse`
 - `neutral_stable`
 - `rank_to_mass_convertible`
@@ -420,6 +421,11 @@ separate, still diagnostic-only signal:
 > This family is not certified, but it produced a non-harmful partial movement
 > worth deepening locally.
 
+Positive memory is deliberately scoped and short-lived. It carries the current
+`objective_bundle_key`, objective term, target piece, recipe family,
+`operator_recipe_id`, `ttl_steps`, and `stale_after_context_change=true` so a
+local hint cannot quietly become a cross-prompt superstition.
+
 The controller now receives a `positive_operator_deepening_plan` derived from
 that memory. The plan is structured as diagnostic guidance:
 
@@ -428,6 +434,13 @@ that memory. The plan is structured as diagnostic guidance:
   "kind": "positive_operator_deepening_plan",
   "permission": "diagnostic_only",
   "production_apply_allowed": false,
+  "ttl_steps": 2,
+  "stale_after_context_change": true,
+  "scope": {
+    "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+    "target_piece": " budget",
+    "operator_recipe_id": "post_bridge_target_readout_patch_l005_a060_gap"
+  },
   "recipe_family": "readout_steering",
   "next_action": "deepen_local_gap_closer",
   "deepening_axis": "target_top20_gap_closing",
@@ -451,16 +464,29 @@ now say:
 > do not treat this as production permission.
 
 The next implementation step turns that plan into a small, auditable local
-sweep. The readout-steering deepening path now marks gap-closer recipes with
-`readout_gap_closer_recipe=true` and summarizes the best observed gap:
+sweep. The readout-steering deepening path now marks gap-probe recipes with
+`readout_gap_closer_recipe=true` for backwards-compatible visibility, but the
+evidence is split into candidate vs. certified levels. A recipe is only a
+certified closer when its top-20 threshold gap shrinks against the no-edit
+baseline without collapse-sharpening.
 
 ```json
 {
   "readout_gap_closer_recipe_count": 3,
+  "readout_gap_probe_recipe_count": 3,
+  "readout_gap_closer_candidate_count": 3,
+  "readout_gap_closer_certified_count": 0,
   "best_readout_gap_closer_recipe_name": "target_readout_patch_l005_a060_gap",
-  "best_readout_gap_closer_target_top20_threshold_gap": 6.09
+  "best_readout_gap_closer_target_top20_threshold_gap": 6.09,
+  "best_readout_gap_closer_target_top20_threshold_gap_delta": null
 }
 ```
+
+The key contract is:
+
+- `top20_gap_measured`: the gap was observed
+- `top20_gap_closer_candidate`: the target piece moved in a plausible direction, but baseline gap delta is not yet sufficient
+- `top20_gap_closer_certified`: the gap shrank relative to baseline while staying collapse-safe
 
 The first gap-closer sweep stays deliberately narrow:
 

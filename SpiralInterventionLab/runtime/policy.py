@@ -18,6 +18,10 @@ from .schema import (
     HarnessControllerView,
     KvMixOp,
     Rank1PatchOp,
+    READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS,
+    READOUT_DIRECTION_MAX_SCALE,
+    READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS,
+    READOUT_DIRECTION_MIN_SCALE,
     SchemaError,
     Source,
     SurfaceInfo,
@@ -144,6 +148,25 @@ def _validate_expr_budget(
                 raise PolicyViolation(f"expression exceeds max depth {expr_depth_limit}")
             if node.get("fn") in {"add", "sub", "mean"} and len(node.get("args", [])) > policy.max_expr_args:
                 raise PolicyViolation(f"expression exceeds max arg count {policy.max_expr_args}")
+            if node.get("fn") == "readout_direction":
+                target_ids = node.get("target_token_ids") or ()
+                negative_ids = node.get("negative_token_ids") or ()
+                if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:
+                    raise PolicyViolation("readout_direction exceeds target_token_ids cap")
+                if len(negative_ids) > READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS:
+                    raise PolicyViolation("readout_direction exceeds negative_token_ids cap")
+                for scale_key in ("target_scale", "negative_scale"):
+                    if scale_key not in node:
+                        continue
+                    try:
+                        scale = float(node[scale_key])
+                    except Exception as exc:
+                        raise PolicyViolation(f"readout_direction.{scale_key} must be numeric") from exc
+                    if scale < READOUT_DIRECTION_MIN_SCALE or scale > READOUT_DIRECTION_MAX_SCALE:
+                        raise PolicyViolation(
+                            f"readout_direction.{scale_key} must be between "
+                            f"{READOUT_DIRECTION_MIN_SCALE:g} and {READOUT_DIRECTION_MAX_SCALE:g}"
+                        )
 
 
 def _validate_trace_access(source: Source, packet: ControllerObservationPacket) -> None:

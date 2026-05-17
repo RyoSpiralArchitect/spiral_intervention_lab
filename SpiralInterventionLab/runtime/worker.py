@@ -176,6 +176,7 @@ def _derive_operator_role_axes(
         if rank_carrier_only is not None
         else bool(
             failure == "self_rank_carrier"
+            or actual in {"rank_carrier", "readout_gap_movement"}
             or (
                 owns
                 and not target_effect
@@ -219,6 +220,8 @@ def _derive_operator_role_axes(
 
     if target_effect:
         effect_role = "target_actuator"
+    elif actual == "readout_gap_movement":
+        effect_role = "readout_gap_movement"
     elif rank_carrier:
         effect_role = "rank_carrier"
     elif actual == "collapse_suppressor" or failure == "collapse_suppressor":
@@ -2836,6 +2839,8 @@ class HookedTransformerWorkerRuntime:
         focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
         rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
         prefix_depth_delta = int(item.get("prefix_depth_delta", item.get("canary_prefix_depth_delta", 0)) or 0)
+        gap_delta = float(item.get("target_top20_threshold_gap_delta", 0.0) or 0.0)
+        target_piece_logit_delta = float(item.get("target_piece_logit_delta", 0.0) or 0.0)
         attractor_mass_delta = float(item.get("attractor_family_mass_delta", 0.0) or 0.0)
         attractor_top20_hit_delta = int(item.get("attractor_top20_hit_delta", 0) or 0)
         no_term_progress = recall_delta <= 0.0 and span_delta <= 0.0 and semantic_delta <= 0.01
@@ -2862,16 +2867,14 @@ class HookedTransformerWorkerRuntime:
             )
         ):
             return "collapse_suppressor"
-        if (
-            recall_delta > 0.0
-            or span_delta > 0.0
-            or target_top20_hit_delta > 0
-            or target_mass_delta > 0.00002
-            or focus_rank_delta >= 6
-            or rank_focus_delta >= 6
-            or prefix_depth_delta > 0
-        ):
+        if target_top20_hit_delta > 0 or target_mass_delta > 0.00002:
             return "target_lift"
+        if recall_delta > 0.0 or span_delta > 0.0 or prefix_depth_delta > 0:
+            return "required_term_progress"
+        if gap_delta < -0.01 and target_piece_logit_delta > 0.0:
+            return "readout_gap_movement"
+        if focus_rank_delta >= 6 or rank_focus_delta >= 6:
+            return "rank_carrier"
         if (
             continuation_changed
             and recall_delta <= 0.0
@@ -7698,6 +7701,8 @@ class HookedTransformerWorkerRuntime:
             int(token_id)
             for token_id in torch.topk(edited_logits, k=top_k_width).indices.detach().cpu().tolist()
         }
+        baseline_top_values = torch.topk(baseline_logits, k=top_k_width).values.detach().cpu().float()
+        baseline_top20_threshold = float(baseline_top_values[-1].item()) if baseline_top_values.numel() else 0.0
         edited_top_values = torch.topk(edited_logits, k=top_k_width).values.detach().cpu().float()
         edited_top20_threshold = float(edited_top_values[-1].item()) if edited_top_values.numel() else 0.0
         metrics: dict[str, Any] = {
@@ -7706,6 +7711,7 @@ class HookedTransformerWorkerRuntime:
             "target_mass_delta": round(target_mass_edited - target_mass_baseline, 6),
             "target_top20_hits_baseline": sum(1 for token_id in target_token_ids if token_id in baseline_top_ids),
             "target_top20_hits_edited": sum(1 for token_id in target_token_ids if token_id in edited_top_ids),
+            "target_top20_threshold_logit_baseline": round(float(baseline_top20_threshold), 6),
             "target_top20_threshold_logit_edited": round(float(edited_top20_threshold), 6),
         }
         metrics["target_top20_hit_delta"] = int(metrics["target_top20_hits_edited"] - metrics["target_top20_hits_baseline"])
@@ -7730,8 +7736,16 @@ class HookedTransformerWorkerRuntime:
             metrics["target_rank_before"] = int(best_rank_focus["baseline_rank"])
             metrics["target_rank_after"] = int(best_rank_focus["edited_rank"])
             metrics["target_rank_delta"] = int(best_rank_focus["rank_delta"])
+            target_logit_before = float(best_rank_focus["baseline_logit"])
             target_logit_after = float(best_rank_focus["edited_logit"])
+            gap_before = float(baseline_top20_threshold - target_logit_before)
+            gap_after = float(edited_top20_threshold - target_logit_after)
+            metrics["target_top20_threshold_gap_baseline"] = round(gap_before, 6)
             metrics["target_top20_threshold_gap"] = round(float(edited_top20_threshold - target_logit_after), 6)
+            metrics["target_top20_threshold_gap_after"] = round(gap_after, 6)
+            metrics["target_top20_threshold_gap_delta"] = round(gap_after - gap_before, 6)
+            metrics["target_piece_logit_baseline"] = round(target_logit_before, 6)
+            metrics["target_piece_logit_after"] = round(target_logit_after, 6)
             metrics["target_top20_margin"] = round(float(target_logit_after - edited_top20_threshold), 6)
         return metrics
 
@@ -10226,6 +10240,7 @@ class HookedTransformerWorkerRuntime:
                 matrix.append(
                     {
                         "objective_bundle_key": objective_key or row_objective or None,
+                        "intended_term": row.get("intended_term"),
                         "recipe_family": recipe_family,
                         "recipe_name": row.get("recipe_name"),
                         "operator_recipe_id": row.get("operator_recipe_id"),
@@ -10265,10 +10280,25 @@ class HookedTransformerWorkerRuntime:
                             if row.get("target_rank_after") is None
                             else _coerce_int(row.get("target_rank_after"))
                         ),
+                        "target_top20_threshold_gap_baseline": (
+                            None
+                            if row.get("target_top20_threshold_gap_baseline") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap_baseline")), 6)
+                        ),
                         "target_top20_threshold_gap": (
                             None
                             if row.get("target_top20_threshold_gap") is None
                             else round(_coerce_float(row.get("target_top20_threshold_gap")), 6)
+                        ),
+                        "target_top20_threshold_gap_after": (
+                            None
+                            if row.get("target_top20_threshold_gap_after") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap_after")), 6)
+                        ),
+                        "target_top20_threshold_gap_delta": (
+                            None
+                            if row.get("target_top20_threshold_gap_delta") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap_delta")), 6)
                         ),
                         "target_top20_margin": (
                             None
@@ -10316,6 +10346,7 @@ class HookedTransformerWorkerRuntime:
                 target_top20 = _coerce_int(item.get("target_top20_hit_delta"))
                 target_piece_logit = _coerce_float(item.get("target_piece_logit_delta"))
                 target_gap = item.get("target_top20_threshold_gap")
+                target_gap_delta = item.get("target_top20_threshold_gap_delta")
                 focus_rank = _coerce_int(item.get("focus_rank_delta"))
                 alignment = _coerce_float(item.get("alignment_margin"))
                 self_delta = _coerce_float(item.get("self_delta"))
@@ -10330,7 +10361,14 @@ class HookedTransformerWorkerRuntime:
                 if target_gap not in (None, ""):
                     _add("top20_gap_measured")
                     if _coerce_float(target_gap) > 0.0 and target_piece_logit > 0.0:
-                        _add("top20_gap_closer")
+                        _add("top20_gap_closer_candidate")
+                    if (
+                        target_gap_delta not in (None, "")
+                        and _coerce_float(target_gap_delta) < -0.01
+                        and repeat_delta <= 0.0
+                        and safety not in {"collapse_sharpener", "harmful", "policy_blocked"}
+                    ):
+                        _add("top20_gap_closer_certified")
                 if effect == "target_actuator" or target_mass > 0.00002 or target_top20 > 0:
                     _add("rank_to_mass_convertible")
                 if safety == "neutral" and repeat_delta <= 0.0:
@@ -10364,13 +10402,25 @@ class HookedTransformerWorkerRuntime:
                         "best_operator_recipe_id": None,
                         "best_score": None,
                         "best_target_top20_threshold_gap": None,
+                        "best_target_top20_threshold_gap_delta": None,
                         "best_target_piece_logit_delta": None,
                         "best_target_mass_delta": None,
                         "best_focus_rank_delta": None,
+                        "ttl_steps": 2,
+                        "observed_at_step": int(getattr(self, "_steps", 0) or 0),
+                        "stale_after_context_change": True,
+                        "scope": {
+                            "objective_bundle_key": objective_key or None,
+                            "objective_term": item.get("intended_term"),
+                            "target_piece": item.get("target_piece"),
+                            "recipe_family": family,
+                            "operator_recipe_id": item.get("operator_recipe_id"),
+                        },
                         "historical_effects": {
                             "rank_lift_sum": 0.0,
                             "target_mass_sum": 0.0,
                             "target_piece_logit_sum": 0.0,
+                            "gap_delta_sum": 0.0,
                             "collapse_count": 0,
                         },
                     },
@@ -10397,13 +10447,18 @@ class HookedTransformerWorkerRuntime:
                 effects["target_piece_logit_sum"] = float(
                     effects.get("target_piece_logit_sum", 0.0) or 0.0
                 ) + _coerce_float(item.get("target_piece_logit_delta"))
+                effects["gap_delta_sum"] = float(effects.get("gap_delta_sum", 0.0) or 0.0) + _coerce_float(
+                    item.get("target_top20_threshold_gap_delta")
+                )
                 if str(item.get("safety_role") or "") in {"collapse_sharpener", "harmful"}:
                     effects["collapse_count"] = int(effects.get("collapse_count", 0) or 0) + 1
                 score = (
                     3.0
                     if "rank_to_mass_convertible" in traits
                     else 2.0
-                    if "top20_gap_closer" in traits
+                    if "top20_gap_closer_certified" in traits
+                    else 1.85
+                    if "top20_gap_closer_candidate" in traits
                     else 1.7
                     if "top20_gap_measured" in traits
                     else 1.5
@@ -10422,9 +10477,17 @@ class HookedTransformerWorkerRuntime:
                     bucket["best_recipe_name"] = item.get("recipe_name")
                     bucket["best_operator_recipe_id"] = item.get("operator_recipe_id")
                     bucket["best_target_top20_threshold_gap"] = item.get("target_top20_threshold_gap")
+                    bucket["best_target_top20_threshold_gap_delta"] = item.get("target_top20_threshold_gap_delta")
                     bucket["best_target_piece_logit_delta"] = item.get("target_piece_logit_delta")
                     bucket["best_target_mass_delta"] = item.get("target_mass_delta")
                     bucket["best_focus_rank_delta"] = item.get("focus_rank_delta")
+                    bucket["scope"] = {
+                        "objective_bundle_key": objective_key or None,
+                        "objective_term": item.get("intended_term"),
+                        "target_piece": item.get("target_piece"),
+                        "recipe_family": family,
+                        "operator_recipe_id": item.get("operator_recipe_id"),
+                    }
 
             for bucket in operator_positive_memory.values():
                 count = max(1, int(bucket.get("positive_observation_count", 0) or 0))
@@ -10435,14 +10498,21 @@ class HookedTransformerWorkerRuntime:
                 rank_lift_sum = float(effects.pop("rank_lift_sum", 0.0) or 0.0)
                 target_mass_sum = float(effects.pop("target_mass_sum", 0.0) or 0.0)
                 target_piece_logit_sum = float(effects.pop("target_piece_logit_sum", 0.0) or 0.0)
+                gap_delta_sum = float(effects.pop("gap_delta_sum", 0.0) or 0.0)
                 effects["rank_lift_mean"] = round(rank_lift_sum / count, 6)
                 effects["target_mass_mean"] = round(target_mass_sum / count, 8)
                 effects["target_piece_logit_delta_mean"] = round(target_piece_logit_sum / count, 6)
+                effects["target_top20_threshold_gap_delta_mean"] = round(gap_delta_sum / count, 6)
                 effects["collapse_rate"] = round(float(collapse_count) / count, 6)
                 traits = set(str(trait) for trait in bucket.get("traits", ()) if str(trait))
                 if "rank_to_mass_convertible" in traits:
                     next_action = "promote_to_shadow_certification_review"
-                elif "top20_gap_closer" in traits or "top20_gap_measured" in traits or "target_reachable" in traits:
+                elif (
+                    "top20_gap_closer_certified" in traits
+                    or "top20_gap_closer_candidate" in traits
+                    or "top20_gap_measured" in traits
+                    or "target_reachable" in traits
+                ):
                     next_action = "deepen_local_gap_closer"
                 elif "rank_carrier" in traits:
                     next_action = "convert_rank_carrier_to_target"
@@ -10496,6 +10566,16 @@ class HookedTransformerWorkerRuntime:
                 for item in matrix
                 if bool(item.get("readout_gap_closer_recipe", False))
                 and item.get("target_top20_threshold_gap") is not None
+            ]
+            gap_closer_candidate_items = [
+                item
+                for item in gap_closer_items
+                if "top20_gap_closer_candidate" in set(str(trait) for trait in item.get("positive_traits", ()) if str(trait))
+            ]
+            gap_closer_certified_items = [
+                item
+                for item in gap_closer_items
+                if "top20_gap_closer_certified" in set(str(trait) for trait in item.get("positive_traits", ()) if str(trait))
             ]
             best_gap_closer = (
                 min(
@@ -10623,11 +10703,16 @@ class HookedTransformerWorkerRuntime:
                         "request"
                     )
                 effects = memory.get("historical_effects")
+                scope = memory.get("scope")
                 return {
                     "kind": "positive_operator_deepening_plan",
                     "permission": "diagnostic_only",
                     "production_apply_allowed": False,
                     "policy_candidate_ready": False,
+                    "ttl_steps": memory.get("ttl_steps", 2),
+                    "observed_at_step": memory.get("observed_at_step"),
+                    "stale_after_context_change": bool(memory.get("stale_after_context_change", True)),
+                    "scope": dict(scope) if isinstance(scope, Mapping) else {},
                     "objective_bundle_key": objective_key or None,
                     "recipe_family": family,
                     "recipe_name": memory.get("best_recipe_name"),
@@ -10646,6 +10731,7 @@ class HookedTransformerWorkerRuntime:
                     "traits": traits,
                     "best_score": memory.get("best_score"),
                     "best_target_top20_threshold_gap": memory.get("best_target_top20_threshold_gap"),
+                    "best_target_top20_threshold_gap_delta": memory.get("best_target_top20_threshold_gap_delta"),
                     "best_target_piece_logit_delta": memory.get("best_target_piece_logit_delta"),
                     "best_target_mass_delta": memory.get("best_target_mass_delta"),
                     "best_focus_rank_delta": memory.get("best_focus_rank_delta"),
@@ -10663,6 +10749,9 @@ class HookedTransformerWorkerRuntime:
                 )
                 positive_operator_deepening_plan["gap_closer_target_piece_logit_delta"] = best_gap_closer.get(
                     "target_piece_logit_delta"
+                )
+                positive_operator_deepening_plan["gap_closer_target_top20_threshold_gap_delta"] = best_gap_closer.get(
+                    "target_top20_threshold_gap_delta"
                 )
 
             summary = {
@@ -10726,6 +10815,14 @@ class HookedTransformerWorkerRuntime:
                 ),
                 "best_readout_gap_closer_target_piece_logit_delta": (
                     best_gap_closer.get("target_piece_logit_delta") if isinstance(best_gap_closer, Mapping) else None
+                ),
+                "readout_gap_probe_recipe_count": len(gap_closer_items),
+                "readout_gap_closer_candidate_count": len(gap_closer_candidate_items),
+                "readout_gap_closer_certified_count": len(gap_closer_certified_items),
+                "best_readout_gap_closer_target_top20_threshold_gap_delta": (
+                    best_gap_closer.get("target_top20_threshold_gap_delta")
+                    if isinstance(best_gap_closer, Mapping)
+                    else None
                 ),
                 "operator_positive_memory": {
                     str(family): dict(memory)
@@ -11257,7 +11354,10 @@ class HookedTransformerWorkerRuntime:
                         "target_piece_logit_delta",
                         "target_piece_prob_delta",
                         "target_rank_after",
+                        "target_top20_threshold_gap_baseline",
                         "target_top20_threshold_gap",
+                        "target_top20_threshold_gap_after",
+                        "target_top20_threshold_gap_delta",
                         "target_top20_margin",
                         "readout_gap_closer_recipe",
                         "readout_gap_closer_axis",
@@ -11314,7 +11414,10 @@ class HookedTransformerWorkerRuntime:
                         "target_piece_logit_delta",
                         "target_piece_prob_delta",
                         "target_rank_after",
+                        "target_top20_threshold_gap_baseline",
                         "target_top20_threshold_gap",
+                        "target_top20_threshold_gap_after",
+                        "target_top20_threshold_gap_delta",
                         "target_top20_margin",
                         "readout_gap_closer_recipe",
                         "readout_gap_closer_axis",
@@ -12474,9 +12577,9 @@ class HookedTransformerWorkerRuntime:
                     recipe_name = str(spec.get("recipe_name", steering_kind) or steering_kind)
                     competitor_strategy = str(spec.get("competitor_strategy", "") or "")
                     contrast_mode = str(spec.get("contrast_mode", "none") or "none")
-                    negative_scale = float(spec.get("negative_scale", 1.0) or 1.0)
-                    target_scale = float(spec.get("target_scale", 1.0) or 1.0)
-                    alpha = float(spec.get("alpha", 0.025) or 0.025)
+                    negative_scale = float(spec.get("negative_scale", 1.0))
+                    target_scale = float(spec.get("target_scale", 1.0))
+                    alpha = float(spec.get("alpha", 0.025))
                     competitor_bundle_key = ""
                     if competitor_strategy == "stealer":
                         seed_key = self._operator_recipe_seed_key(
