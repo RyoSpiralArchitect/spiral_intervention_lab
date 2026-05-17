@@ -114,6 +114,8 @@ def _iter_expr_nodes(expr: Mapping[str, Any], depth: int = 0) -> Iterable[tuple[
     elif fn in {"project_parallel", "project_orthogonal"}:
         yield from _iter_expr_nodes(expr["arg"], depth + 1)
         yield from _iter_expr_nodes(expr["basis"], depth + 1)
+    elif fn == "readout_direction":
+        return
 
 
 def _walk_source_exprs(source: Source) -> Iterable[Mapping[str, Any]]:

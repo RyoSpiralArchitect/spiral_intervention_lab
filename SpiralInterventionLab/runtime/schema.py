@@ -25,6 +25,7 @@ EXPR_FNS = {
     "mix",
     "project_parallel",
     "project_orthogonal",
+    "readout_direction",
 }
 
 
@@ -101,6 +102,13 @@ def _optional_string_array(value: Any, name: str) -> tuple[str, ...]:
     return tuple(_require_str(item, f"{name}[{idx}]") for idx, item in enumerate(seq))
 
 
+def _optional_int_array(value: Any, name: str) -> tuple[int, ...]:
+    if value is None:
+        return ()
+    seq = _as_sequence(value, name)
+    return tuple(_require_int(item, f"{name}[{idx}]") for idx, item in enumerate(seq))
+
+
 def _validate_expr(expr: Any, name: str = "expr", depth: int = 0) -> Mapping[str, Any]:
     if depth > 8:
         raise SchemaError(f"{name} exceeds max depth 8")
@@ -163,6 +171,17 @@ def _validate_expr(expr: Any, name: str = "expr", depth: int = 0) -> Mapping[str
     if fn in {"project_parallel", "project_orthogonal"}:
         _validate_expr(_require_key(node, "arg", name), f"{name}.arg", depth + 1)
         _validate_expr(_require_key(node, "basis", name), f"{name}.basis", depth + 1)
+        return node
+
+    if fn == "readout_direction":
+        target_ids = _optional_int_array(node.get("target_token_ids"), f"{name}.target_token_ids")
+        negative_ids = _optional_int_array(node.get("negative_token_ids"), f"{name}.negative_token_ids")
+        if not target_ids and not negative_ids:
+            raise SchemaError(f"{name} must define target_token_ids or negative_token_ids")
+        if "negative_scale" in node:
+            _require_float(node["negative_scale"], f"{name}.negative_scale")
+        if "target_scale" in node:
+            _require_float(node["target_scale"], f"{name}.target_scale")
         return node
 
     raise SchemaError(f"unsupported expr fn {fn}")

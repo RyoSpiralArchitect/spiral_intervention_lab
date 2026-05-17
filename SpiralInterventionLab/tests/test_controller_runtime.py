@@ -500,6 +500,7 @@ class FakeRuntimeState:
         self.seed = 17
         self.hooks = {}
         self.overlays = {}
+        self.model = None
         self.tensors = {
             ("runtime", None, "hidden", 11): torch.tensor([1.0, 2.0, 3.0]),
             ("runtime", None, "hidden", 7): torch.tensor([0.3, 0.4, 0.5]),
@@ -768,6 +769,60 @@ class TestCompiler(unittest.TestCase):
         act = torch.zeros(1, 4, 3)
         out = hook_record["hook_fn"](act, None)
         self.assertLessEqual(float(out[0, -1].norm().item()), 0.1001)
+
+    def test_compile_readout_direction_resid_add_uses_unembed_columns(self):
+        class TinyReadoutModel:
+            W_U = torch.tensor(
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                ]
+            )
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        runtime_state.model = TinyReadoutModel()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [1],
+                "negative_token_ids": [2],
+                "negative_scale": 1.0,
+            },
+        }
+
+        compiled = compile_command(command, packet, ctx)
+        compiled[0].apply(ctx)
+        hook_fn = runtime_state.hooks["e_rescue"]["hook_fn"]
+        out = hook_fn(torch.zeros(1, 4, 3), None)
+        expected_direction = torch.nn.functional.normalize(torch.tensor([0.0, 1.0, -1.0]), dim=0)
+        self.assertTrue(torch.allclose(out[0, -1], 0.2 * expected_direction, atol=1e-6))
+
+    def test_actual_delta_classifies_attractor_relief_without_target_lift(self):
+        worker = HookedTransformerWorkerRuntime.__new__(HookedTransformerWorkerRuntime)
+        cls = worker._classify_actual_delta_result(
+            {
+                "continuation_baseline": " the the",
+                "continuation_candidate": " the",
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "attractor_family_mass_delta": -0.0001,
+                "attractor_top20_hit_delta": -1,
+                "repeat_flag_delta": -1,
+                "repetition_score_delta": -0.2,
+                "entropy_delta": 0.04,
+                "top1_margin_delta": -0.01,
+            }
+        )
+        self.assertEqual(cls, "collapse_suppressor")
 
     def test_compile_loop_rescue_resid_add_records_loop_rescue_budget_pool(self):
         adapter = FakeAdapter()
@@ -1806,6 +1861,33 @@ class TestLoopAndEffects(unittest.TestCase):
                 "post_bridge_exhaustion_recipe_expansion",
             },
         )
+
+    def test_extract_diagnostic_requests_dedupes_post_bridge_next_action_alias(self):
+        objective = "kv_pair:budget:source_body:10:12"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "diagnostic_request": {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "bundle_key": objective,
+                    "objective_bundle_key": objective,
+                    "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe_expansion_requested": True,
+                },
+                "next_action": "request_compare_extra_operator_diagnostics",
+                "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+            },
+        }
+
+        requests = _extract_diagnostic_requests(command, {"strategy_hints": {}})
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(requests[0]["next_evidence_needed"], "post_bridge_exhaustion_recipe_expansion")
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "post_bridge_exhaustion")
+        self.assertTrue(requests[0]["post_bridge_exhaustion_recipe_expansion_requested"])
 
     def test_run_episode_marks_forced_diagnostic_apply_in_selection_report(self):
         class _DiagnosticToyController(_ToyController):

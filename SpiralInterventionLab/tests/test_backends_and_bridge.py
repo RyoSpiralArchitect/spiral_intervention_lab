@@ -983,6 +983,20 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "low")
         self.assertTrue(client.responses.calls[0]["input"].startswith("JSON packet:\n"))
 
+    def test_openai_controller_provider_uses_supported_gpt41_verbosity(self):
+        client = _FakeOpenAIClient()
+        provider = OpenAIControllerProvider(model="gpt-4.1-mini", client=client)
+
+        provider.complete(
+            ControllerProviderRequest(
+                system_prompt="sys",
+                payload={"step": 1},
+                expect_json=True,
+            )
+        )
+
+        self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "medium")
+
     def test_local_backend_worker_runtime_packet_is_schema_shaped(self):
         runtime = LocalBackendWorkerRuntime(
             backend=_FakeLocalBackend(),
