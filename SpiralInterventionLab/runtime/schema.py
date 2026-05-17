@@ -114,6 +114,14 @@ def _optional_int_array(value: Any, name: str) -> tuple[int, ...]:
     return tuple(_require_int(item, f"{name}[{idx}]") for idx, item in enumerate(seq))
 
 
+def _optional_nonnegative_int_array(value: Any, name: str) -> tuple[int, ...]:
+    items = _optional_int_array(value, name)
+    for idx, item in enumerate(items):
+        if item < 0:
+            raise SchemaError(f"{name}[{idx}] must be >= 0")
+    return items
+
+
 def _require_float_range(value: Any, name: str, *, minimum: float, maximum: float) -> float:
     number = _require_float(value, name)
     if number < minimum or number > maximum:
@@ -186,8 +194,8 @@ def _validate_expr(expr: Any, name: str = "expr", depth: int = 0) -> Mapping[str
         return node
 
     if fn == "readout_direction":
-        target_ids = _optional_int_array(node.get("target_token_ids"), f"{name}.target_token_ids")
-        negative_ids = _optional_int_array(node.get("negative_token_ids"), f"{name}.negative_token_ids")
+        target_ids = _optional_nonnegative_int_array(node.get("target_token_ids"), f"{name}.target_token_ids")
+        negative_ids = _optional_nonnegative_int_array(node.get("negative_token_ids"), f"{name}.negative_token_ids")
         if not target_ids and not negative_ids:
             raise SchemaError(f"{name} must define target_token_ids or negative_token_ids")
         if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:

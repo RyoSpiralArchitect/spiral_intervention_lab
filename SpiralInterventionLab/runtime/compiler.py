@@ -93,7 +93,9 @@ def _as_token_ids(value: Any) -> tuple[int, ...]:
             token_id = int(item)
         except Exception:
             raise SchemaError("readout_direction token ids must be integers")
-        if token_id >= 0 and token_id not in token_ids:
+        if token_id < 0:
+            raise SchemaError("readout_direction token ids must be >= 0")
+        if token_id not in token_ids:
             token_ids.append(token_id)
     return tuple(token_ids)
 

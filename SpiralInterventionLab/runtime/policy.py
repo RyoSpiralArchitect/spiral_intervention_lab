@@ -151,6 +151,10 @@ def _validate_expr_budget(
             if node.get("fn") == "readout_direction":
                 target_ids = node.get("target_token_ids") or ()
                 negative_ids = node.get("negative_token_ids") or ()
+                if any(int(token_id) < 0 for token_id in target_ids):
+                    raise PolicyViolation("readout_direction target_token_ids must be >= 0")
+                if any(int(token_id) < 0 for token_id in negative_ids):
+                    raise PolicyViolation("readout_direction negative_token_ids must be >= 0")
                 if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:
                     raise PolicyViolation("readout_direction exceeds target_token_ids cap")
                 if len(negative_ids) > READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS:

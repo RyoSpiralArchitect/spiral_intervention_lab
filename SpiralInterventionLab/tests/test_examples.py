@@ -2895,6 +2895,54 @@ class TestExamples(unittest.TestCase):
             "readout_steering_deepening",
         )
 
+    def test_readout_steering_deepening_does_not_fallback_to_activation_patch_rows(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                "next_evidence_needed": "readout_steering_deepening",
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_resid_post_term_to_last_blend_a060",
+                            "operator_recipe_id": "activation_rank_recipe",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "resid_post",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.06,
+                            "target_mass_delta": 0.0002,
+                            "target_top20_hit_delta": 0,
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        summary = result["operator_recipe_expansion_summary"]
+        self.assertEqual(summary["status"], "no_readout_steering_rows")
+        self.assertEqual(summary["matrix_row_count"], 0)
+        self.assertEqual(summary["positive_memory_family_count"], 0)
+        self.assertEqual(result["operator_recipe_expansion_matrix"], [])
+
     def test_activation_patch_candidate_review_blocks_rank_carrier_only_shadow(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
         bundle_status = {

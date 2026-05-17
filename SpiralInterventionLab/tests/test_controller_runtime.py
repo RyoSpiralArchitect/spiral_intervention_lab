@@ -821,6 +821,17 @@ class TestCompiler(unittest.TestCase):
             "dtype": "vector",
             "expr": {
                 "fn": "readout_direction",
+                "target_token_ids": [-1],
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
                 "target_token_ids": [1],
                 "target_scale": 2.5,
             },

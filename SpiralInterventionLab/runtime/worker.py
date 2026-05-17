@@ -10115,6 +10115,39 @@ class HookedTransformerWorkerRuntime:
                     or str(row.get("recipe_family") or "").startswith("readout_steering")
                     or str(row.get("operator_recipe_expansion_mode") or "") == "readout_steering_deepening"
                 ]
+                if not expansion_rows:
+                    summary = {
+                        "objective_bundle_key": objective_key or None,
+                        "status": "no_readout_steering_rows",
+                        "matrix_row_count": 0,
+                        "dedicated_recipe_row_count": 0,
+                        "failure_mode_counts": {},
+                        "ownership_role_counts": {},
+                        "effect_role_counts": {},
+                        "safety_role_counts": {},
+                        "dominant_failure_mode": "none",
+                        "readout_gap_closer_recipe_count": 0,
+                        "readout_gap_probe_recipe_count": 0,
+                        "readout_gap_closer_candidate_count": 0,
+                        "readout_gap_closer_certified_count": 0,
+                        "operator_positive_memory": {},
+                        "positive_memory_family_count": 0,
+                        "best_positive_operator_family": None,
+                        "best_positive_operator_traits": [],
+                        "best_positive_operator_next_action": None,
+                        "positive_operator_deepening_plan": None,
+                        "positive_operator_deepening_reason": None,
+                        "recommended_next_family": "readout_steering_deepening",
+                        "production_apply_allowed": False,
+                        "policy_candidate_ready": False,
+                    }
+                    return {
+                        "status": "no_readout_steering_rows",
+                        "summary": summary,
+                        "matrix": [],
+                        "family_mode_counts": {},
+                        "next_evidence_needed": "readout_steering_deepening",
+                    }
             else:
                 expansion_rows = [
                     row
