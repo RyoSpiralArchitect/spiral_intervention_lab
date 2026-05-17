@@ -2217,6 +2217,53 @@ class TestExamples(unittest.TestCase):
         self.assertTrue(shadow["requires_bridge_plan"])
         self.assertFalse(shadow["production_apply_allowed"])
 
+    def test_worker_cross_bundle_bridge_search_uses_post_bridge_exhaustion_next_evidence(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        stealer = "kv_pair:send:source_body:70:71"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "cross_bundle_bridge_search",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "next_evidence_needed": "direction_correct_bridge_plan_search",
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "intended_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "blocked",
+                            "actuator_class": "cross_bound",
+                            "actual_delta_class": "target_lift",
+                            "operator_recipe_id": "budget_recipe_that_lifts_send",
+                            "realized_lift_bundle_key": stealer,
+                            "realized_lift_term": "send",
+                            "self_delta": 0.01,
+                            "cross_delta": 0.04,
+                            "alignment_margin": -0.03,
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["diagnostic"], "cross_bundle_bridge_search")
+        self.assertEqual(result["status"], "no_direction_correct_bridge")
+        self.assertEqual(result["next_evidence_needed"], "post_bridge_exhaustion_recipe_expansion")
+        self.assertFalse(result["production_apply_allowed"])
+        summary = result["cross_bundle_bridge_summary"]
+        self.assertEqual(summary["eligible_bridge_candidate_count"], 0)
+        self.assertEqual(summary["wrong_direction_bridge_count"], 1)
+
     def test_worker_post_bridge_recipe_expansion_summarizes_failure_modes(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
         runtime._steps = 0
@@ -2422,6 +2469,7 @@ class TestExamples(unittest.TestCase):
 
         self.assertIsNotNone(result)
         assert result is not None
+        self.assertEqual(result["status"], "bridge_plan_or_more_evidence_required")
         self.assertFalse(result["compile_preview_created"])
         self.assertEqual(result["compile_preview_blocked_reason"], "rank_carrier_not_target_actuator")
         self.assertTrue(result["rank_carrier_only"])

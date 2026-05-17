@@ -2877,7 +2877,7 @@ class _FrontierReplayControllerClient:
                 "exhausted": exhausted,
                 "next_evidence_needed": result.get("next_evidence_needed")
                 or (search.get("next_evidence_needed") if isinstance(search, Mapping) else None)
-                or ("operator_recipe_expansion" if exhausted else None),
+                or ("post_bridge_exhaustion_recipe_expansion" if exhausted else None),
             }
         return None
 

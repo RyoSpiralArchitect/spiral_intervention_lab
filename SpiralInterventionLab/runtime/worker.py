@@ -7722,7 +7722,11 @@ class HookedTransformerWorkerRuntime:
             else "unknown"
         )
         target_promotable = bool(promotable and direct_target_effect)
-        compiler_status = "shadow_blueprint_ready" if promotable else "bridge_plan_or_more_evidence_required"
+        compiler_status = (
+            "shadow_blueprint_ready"
+            if target_promotable
+            else "bridge_plan_or_more_evidence_required"
+        )
         blueprint = {
             "kind": "activation_patch_candidate_blueprint",
             "objective_bundle_key": shadow.get("objective_bundle_key"),
@@ -9579,7 +9583,7 @@ class HookedTransformerWorkerRuntime:
                 "next_evidence_needed": (
                     "bridge_plan_dual_layer_shadow_review"
                     if shadow is not None
-                    else "operator_recipe_expansion"
+                    else "post_bridge_exhaustion_recipe_expansion"
                 ),
             }
 
