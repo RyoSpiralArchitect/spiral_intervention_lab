@@ -26,6 +26,8 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     _FrontierReplayControllerClient,
     _build_parser,
     _configure_torch_default_device_for_worker,
+    _controller_step_views,
+    _diagnostic_evidence_ledger,
     _effective_diagnostic_frontier_summary,
     _focused_bridge_eval_recipe_specs,
     _infer_tlens_model_ref,
@@ -741,6 +743,94 @@ class TestExamples(unittest.TestCase):
             self.assertTrue(Path(tmpdir, "readout_escape_replay.jsonl").exists())
             self.assertTrue(Path(tmpdir, "readout_escape_replay_summary.json").exists())
 
+    def test_controller_step_views_hoist_positive_operator_deepening_plan(self):
+        plan = {
+            "kind": "positive_operator_deepening_plan",
+            "recipe_family": "readout_steering",
+            "next_action": "deepen_local_gap_closer",
+            "deepening_axis": "target_top20_gap_closing",
+            "reason_code": "positive_memory_local_gap_closer",
+            "curiosity_signal": "positive_operator_memory_deepen_local_gap_closer",
+        }
+        views = _controller_step_views(
+            [
+                {
+                    "event": "controller_observation",
+                    "step": 2,
+                    "latest_diagnostic_results": [
+                        {
+                            "diagnostic": "compare_extra_operator_diagnostics",
+                            "operator_recipe_expansion_summary": {
+                                "positive_operator_deepening_plan": plan,
+                            },
+                        }
+                    ],
+                }
+            ]
+        )
+
+        self.assertEqual(len(views), 1)
+        self.assertEqual(views[0]["positive_operator_deepening_plan"]["reason_code"], "positive_memory_local_gap_closer")
+        self.assertEqual(
+            views[0]["controller_observation"]["positive_operator_deepening_plan"]["deepening_axis"],
+            "target_top20_gap_closing",
+        )
+        self.assertEqual(
+            views[0]["controller_observation"]["controller_curiosity_signal"],
+            "positive_operator_memory_deepen_local_gap_closer",
+        )
+
+    def test_diagnostic_evidence_ledger_keeps_readout_gap_closer_rows_visible(self):
+        extras = [
+            {
+                "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+                "diagnostic_family": "readout_steering",
+                "actuator_class": "self_actuator",
+                "recipe_name": f"plain_readout_{idx:02d}",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 1,
+            }
+            for idx in range(60)
+        ]
+        extras.extend(
+            [
+                {
+                    "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+                    "diagnostic_family": "readout_steering",
+                    "actuator_class": "self_actuator",
+                    "recipe_name": "target_readout_patch_pure_a060_gap",
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                    "target_top20_threshold_gap": 6.1,
+                    "focus_rank_delta": 1,
+                    "readout_gap_closer_recipe": True,
+                    "readout_gap_closer_axis": "target_top20_gap",
+                },
+                {
+                    "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+                    "diagnostic_family": "readout_steering",
+                    "actuator_class": "self_actuator",
+                    "recipe_name": "target_readout_patch_l005_a060_gap",
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                    "target_top20_threshold_gap": 6.0,
+                    "focus_rank_delta": 1,
+                    "readout_gap_closer_recipe": True,
+                    "readout_gap_closer_axis": "target_top20_gap",
+                },
+            ]
+        )
+
+        ledger = _diagnostic_evidence_ledger(
+            {"extra_operator_diagnostics": extras},
+            {"gate_report_frontier_bundle_key": "kv_pair:budget:source_body:72:73"},
+        )["diagnostic_evidence_ledger"]
+
+        visible_names = [item.get("recipe_name") for item in ledger[:4]]
+        self.assertIn("target_readout_patch_pure_a060_gap", visible_names)
+        self.assertIn("target_readout_patch_l005_a060_gap", visible_names)
+
     def test_run_readout_escape_replay_harness_directscan_logs_controller_selection(self):
         model, codec = self._make_model_and_codec()
 
@@ -1017,6 +1107,8 @@ class TestExamples(unittest.TestCase):
                         "production_trial_gate_review",
                         "bounded_production_trial",
                         "production_trial_gate_followup",
+                        "post_bridge_exhaustion_recipe_expansion",
+                        "readout_steering_deepening",
                     },
                 )
                 self.assertFalse(latest["production_apply_allowed"])
@@ -2103,6 +2195,143 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(meta["blocked_by"], "operator_recipe_expansion_exhausted")
         self.assertEqual(meta["next_evidence_needed"], "operator_recipe_expansion_exhausted")
 
+    def test_frontier_replay_requests_readout_steering_deepening_after_rank_carrier_expansion(self):
+        controller = _FrontierReplayControllerClient(replay_mode="diagnostic_request")
+        objective = "kv_pair:budget:source_body:72:73"
+        trial_outcome = {
+            "apply_kind": "production_trial",
+            "objective_bundle_key": objective,
+            "bundle_key": objective,
+            "operator_recipe_id": "failed_recipe",
+            "trial_effect_class": "regressing",
+            "verdict": "harmful",
+            "actuator_class": "dead_actuator",
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective,
+                "selected_bundle_key": objective,
+            },
+            "telemetry": {"diagnostic_call_budget_left": 2},
+            "recent_effect_summary": {
+                "production_trial_outcome_ledger": [trial_outcome],
+                "latest_effects": [trial_outcome],
+            },
+            "latest_diagnostic_results": [
+                {
+                    "diagnostic": "cross_bundle_bridge_search",
+                    "objective_bundle_key": objective,
+                    "status": "no_direction_correct_bridge",
+                    "cross_bundle_bridge_summary": {
+                        "objective_bundle_key": objective,
+                        "matrix_row_count": 9,
+                        "eligible_bridge_candidate_count": 0,
+                        "direction_correct_bridge_count": 0,
+                        "wrong_direction_bridge_count": 8,
+                        "status": "no_direction_correct_bridge",
+                    },
+                    "production_apply_allowed": False,
+                },
+                {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "objective_bundle_key": objective,
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe_expansion_requested": True,
+                    "next_evidence_needed": "readout_steering_deepening",
+                    "operator_recipe_expansion_summary": {
+                        "status": "rank_carrier_family_found",
+                        "recommended_next_family": "readout_steering_deepening:readout_steering",
+                        "operator_positive_memory": {
+                            "readout_steering": {
+                                "recipe_family": "readout_steering",
+                                "traits": ["ownership_preserving", "target_reachable", "top20_gap_closer_candidate"],
+                                "recommended_next_action": "deepen_local_gap_closer",
+                                "best_recipe_name": "post_bridge_target_readout_patch_a040",
+                                "best_target_top20_threshold_gap": 0.37,
+                            }
+                        },
+                        "positive_memory_family_count": 1,
+                        "best_positive_operator_family": "readout_steering",
+                        "best_positive_operator_traits": [
+                            "ownership_preserving",
+                            "target_reachable",
+                            "top20_gap_closer_candidate",
+                        ],
+                        "best_positive_operator_next_action": "deepen_local_gap_closer",
+                        "positive_operator_deepening_plan": {
+                            "kind": "positive_operator_deepening_plan",
+                            "permission": "diagnostic_only",
+                            "production_apply_allowed": False,
+                            "policy_candidate_ready": False,
+                            "recipe_family": "readout_steering",
+                            "recipe_name": "post_bridge_target_readout_patch_a040",
+                            "next_action": "deepen_local_gap_closer",
+                            "suggested_next_evidence": "readout_steering_deepening",
+                            "suggested_operator_recipe_expansion_mode": "readout_steering_deepening",
+                            "deepening_axis": "target_top20_gap_closing",
+                            "reason_code": "positive_memory_local_gap_closer",
+                            "curiosity_signal": "positive_operator_memory_deepen_local_gap_closer",
+                            "traits": [
+                                "ownership_preserving",
+                                "target_reachable",
+                                "top20_gap_closer_candidate",
+                            ],
+                            "best_target_top20_threshold_gap": 0.37,
+                        },
+                        "best_readout_steering_rank_carrier_recipe_family": "readout_steering",
+                        "best_readout_steering_rank_carrier_recipe_name": "post_bridge_target_readout_patch_a040",
+                        "best_readout_steering_target_top20_threshold_gap": 0.37,
+                        "production_apply_allowed": False,
+                    },
+                    "production_apply_allowed": False,
+                    "diagnostic_operator_supported": False,
+                    "policy_candidate_ready": False,
+                },
+            ],
+        }
+
+        command = controller._diagnostic_request_command(
+            packet=packet,
+            strategy_hints=packet["strategy_hints"],
+            frontier_bundle_key=objective,
+            suggested_bundle_key=objective,
+        )
+
+        meta = command["meta"]
+        request = meta["diagnostic_request"]
+        self.assertEqual(command["decision"], "noop")
+        self.assertEqual(meta["next_action"], "request_compare_extra_operator_diagnostics")
+        self.assertEqual(meta["next_evidence_needed"], "readout_steering_deepening")
+        self.assertEqual(meta["operator_recipe_expansion_mode"], "readout_steering_deepening")
+        self.assertTrue(meta["readout_steering_deepening_requested"])
+        self.assertEqual(meta["blocked_by"], "readout_steering_rank_carrier_needs_target_lift")
+        self.assertEqual(
+            meta["readout_steering_deepening_state"]["best_readout_steering_target_top20_threshold_gap"],
+            0.37,
+        )
+        self.assertEqual(meta["best_positive_operator_family"], "readout_steering")
+        self.assertIn("top20_gap_closer_candidate", meta["best_positive_operator_traits"])
+        self.assertEqual(meta["best_positive_operator_next_action"], "deepen_local_gap_closer")
+        self.assertEqual(meta["controller_curiosity_signal"], "positive_operator_memory_deepen_local_gap_closer")
+        self.assertEqual(
+            meta["positive_operator_deepening_plan"]["reason_code"],
+            "positive_memory_local_gap_closer",
+        )
+        self.assertEqual(
+            meta["positive_operator_deepening_plan"]["suggested_operator_recipe_expansion_mode"],
+            "readout_steering_deepening",
+        )
+        self.assertIn("readout_steering", meta["operator_positive_memory"])
+        self.assertEqual(request["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(request["next_evidence_needed"], "readout_steering_deepening")
+        self.assertEqual(request["operator_recipe_expansion_mode"], "readout_steering_deepening")
+        self.assertTrue(request["readout_steering_deepening_requested"])
+        self.assertIn("readout_steering", request["operator_positive_memory"])
+        self.assertEqual(
+            request["positive_operator_deepening_plan"]["deepening_axis"],
+            "target_top20_gap_closing",
+        )
+
     def test_effective_diagnostic_frontier_prefers_post_bridge_exhaustion_loop_state(self):
         objective = "kv_pair:budget:source_body:72:73"
         effective = _effective_diagnostic_frontier_summary(
@@ -2166,7 +2395,7 @@ class TestExamples(unittest.TestCase):
                             "evidence_kind": "activation_patch_certification",
                             "status": "supportive",
                             "actuator_class": "bridge_actuator",
-                            "actual_delta_class": "target_lift",
+                            "actual_delta_class": "readout_gap_movement",
                             "operator_recipe_id": "budget_recipe_that_lifts_send",
                             "realized_lift_bundle_key": actuator,
                             "realized_lift_term": "send",
@@ -2432,11 +2661,287 @@ class TestExamples(unittest.TestCase):
         summary = result["operator_recipe_expansion_summary"]
         self.assertEqual(summary["status"], "rank_carrier_family_found")
         self.assertEqual(summary["failure_mode_counts"]["self_rank_carrier"], 1)
+        self.assertEqual(summary["ownership_role_counts"]["self"], 1)
+        self.assertEqual(summary["effect_role_counts"]["rank_carrier"], 1)
+        self.assertEqual(summary["safety_role_counts"]["neutral"], 1)
         self.assertEqual(summary["best_rank_carrier_recipe_family"], "resid_pre|source_term_token|blend")
         self.assertEqual(summary["recommended_next_family"], "convert_rank_carrier_to_target:resid_pre|source_term_token|blend")
         self.assertFalse(summary["production_apply_allowed"])
         matrix = result["operator_recipe_expansion_matrix"]
         self.assertEqual(matrix[0]["failure_mode"], "self_rank_carrier")
+        self.assertEqual(matrix[0]["ownership_role"], "self")
+        self.assertEqual(matrix[0]["effect_role"], "rank_carrier")
+        self.assertEqual(matrix[0]["safety_role"], "neutral")
+
+    def test_worker_post_bridge_recipe_expansion_reports_readout_steering_rank_gap(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                "post_bridge_exhaustion_recipe_expansion_requested": True,
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "operator_probe",
+                            "diagnostic_family": "readout_steering",
+                            "operator_axis": "readout_steering",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_target_readout_patch_a040",
+                            "operator_recipe_id": "readout_recipe",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "recipe_family": "readout_steering",
+                            "readout_steering_kind": "target_readout",
+                            "realized_lift_bundle_key": objective,
+                            "self_delta": 0.15,
+                            "cross_delta": 0.0,
+                            "alignment_margin": 0.15,
+                            "target_mass_delta": 0.0,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 4,
+                            "target_piece": " budget",
+                            "target_piece_logit_delta": 0.12,
+                            "target_piece_prob_delta": 0.00001,
+                            "target_rank_after": 42,
+                            "target_top20_threshold_gap_baseline": 0.49,
+                            "target_top20_threshold_gap": 0.37,
+                            "target_top20_threshold_gap_after": 0.37,
+                            "target_top20_threshold_gap_delta": -0.12,
+                            "target_top20_margin": -0.37,
+                            "readout_gap_closer_recipe": True,
+                            "readout_gap_closer_axis": "target_top20_gap",
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["next_evidence_needed"], "readout_steering_deepening")
+        summary = result["operator_recipe_expansion_summary"]
+        self.assertEqual(summary["status"], "rank_carrier_family_found")
+        self.assertEqual(summary["failure_mode_counts"]["self_rank_carrier"], 1)
+        self.assertEqual(summary["best_readout_steering_rank_carrier_recipe_family"], "readout_steering")
+        self.assertEqual(summary["best_readout_steering_rank_carrier_recipe_name"], "post_bridge_target_readout_patch_a040")
+        self.assertEqual(summary["best_readout_steering_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(summary["readout_gap_closer_recipe_count"], 1)
+        self.assertEqual(summary["readout_gap_probe_recipe_count"], 1)
+        self.assertEqual(summary["readout_gap_closer_candidate_count"], 1)
+        self.assertEqual(summary["readout_gap_closer_certified_count"], 1)
+        self.assertEqual(summary["best_readout_gap_closer_recipe_name"], "post_bridge_target_readout_patch_a040")
+        self.assertEqual(summary["best_readout_gap_closer_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(summary["best_readout_gap_closer_target_top20_threshold_gap_delta"], -0.12)
+        self.assertEqual(summary["recommended_next_family"], "readout_steering_deepening:readout_steering")
+        self.assertEqual(summary["best_positive_operator_family"], "readout_steering")
+        self.assertIn("ownership_preserving", summary["best_positive_operator_traits"])
+        self.assertIn("top20_gap_measured", summary["best_positive_operator_traits"])
+        self.assertIn("top20_gap_closer_candidate", summary["best_positive_operator_traits"])
+        self.assertIn("top20_gap_closer_certified", summary["best_positive_operator_traits"])
+        self.assertEqual(summary["best_positive_operator_next_action"], "deepen_local_gap_closer")
+        plan = summary["positive_operator_deepening_plan"]
+        self.assertEqual(plan["kind"], "positive_operator_deepening_plan")
+        self.assertEqual(plan["permission"], "diagnostic_only")
+        self.assertFalse(plan["production_apply_allowed"])
+        self.assertEqual(plan["recipe_family"], "readout_steering")
+        self.assertEqual(plan["next_action"], "deepen_local_gap_closer")
+        self.assertEqual(plan["suggested_next_evidence"], "readout_steering_deepening")
+        self.assertEqual(plan["deepening_axis"], "target_top20_gap_closing")
+        self.assertEqual(plan["reason_code"], "positive_memory_local_gap_closer")
+        self.assertEqual(plan["gap_closer_recipe_name"], "post_bridge_target_readout_patch_a040")
+        self.assertEqual(plan["gap_closer_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(plan["gap_closer_target_top20_threshold_gap_delta"], -0.12)
+        self.assertEqual(plan["ttl_steps"], 2)
+        self.assertTrue(plan["stale_after_context_change"])
+        memory = summary["operator_positive_memory"]["readout_steering"]
+        self.assertEqual(memory["recommended_next_action"], "deepen_local_gap_closer")
+        self.assertIn("target_reachable", memory["traits"])
+        self.assertIn("top20_gap_closer_certified", memory["traits"])
+        self.assertEqual(memory["best_target_top20_threshold_gap"], 0.37)
+        self.assertEqual(memory["best_target_top20_threshold_gap_delta"], -0.12)
+        self.assertEqual(memory["scope"]["objective_bundle_key"], objective)
+        self.assertEqual(memory["scope"]["target_piece"], " budget")
+        self.assertEqual(memory["ttl_steps"], 2)
+        self.assertFalse(summary["production_apply_allowed"])
+        matrix = result["operator_recipe_expansion_matrix"]
+        self.assertEqual(matrix[0]["recipe_family"], "readout_steering")
+        self.assertEqual(matrix[0]["failure_mode"], "self_rank_carrier")
+        self.assertIn("positive_traits", matrix[0])
+        self.assertIn("top20_gap_measured", matrix[0]["positive_traits"])
+        self.assertIn("top20_gap_closer_candidate", matrix[0]["positive_traits"])
+        self.assertIn("top20_gap_closer_certified", matrix[0]["positive_traits"])
+        self.assertEqual(matrix[0]["target_piece"], " budget")
+        self.assertEqual(matrix[0]["target_rank_after"], 42)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap_baseline"], 0.49)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap"], 0.37)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap_after"], 0.37)
+        self.assertEqual(matrix[0]["target_top20_threshold_gap_delta"], -0.12)
+        self.assertEqual(matrix[0]["target_top20_margin"], -0.37)
+        self.assertTrue(matrix[0]["readout_gap_closer_recipe"])
+        self.assertEqual(matrix[0]["readout_gap_closer_axis"], "target_top20_gap")
+        self.assertIn("readout_steering", result["operator_positive_memory"])
+
+    def test_default_operator_recipe_specs_include_readout_gap_closer_sweep(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        specs = runtime._default_operator_recipe_specs()
+        gap_specs = [
+            spec
+            for spec in specs
+            if isinstance(spec, dict) and spec.get("readout_gap_closer_recipe")
+        ]
+        names = {str(spec.get("recipe_name")) for spec in gap_specs}
+        self.assertIn("target_readout_patch_pure_a060_gap", names)
+        self.assertIn("target_readout_patch_l005_a060_gap", names)
+        self.assertIn("contrastive_readout_patch_l025_a060_gap", names)
+        self.assertTrue(all(spec.get("readout_gap_closer_axis") == "target_top20_gap" for spec in gap_specs))
+
+    def test_worker_post_bridge_recipe_expansion_prioritizes_readout_steering_deepening_when_gap_exists(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                "post_bridge_exhaustion_recipe_expansion_requested": True,
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_resid_post_term_to_last_blend_a060",
+                            "operator_recipe_id": "activation_rank_recipe",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "resid_post",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.06,
+                            "activation_patch_source_localization": "source_term_token",
+                            "activation_patch_patch_mode": "blend",
+                            "realized_lift_bundle_key": objective,
+                            "self_delta": 1.2,
+                            "cross_delta": 0.6,
+                            "alignment_margin": 0.6,
+                            "target_mass_delta": 0.0,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 20,
+                        },
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "operator_probe",
+                            "diagnostic_family": "readout_steering",
+                            "operator_axis": "readout_steering",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_target_readout_patch_a060",
+                            "operator_recipe_id": "readout_rank_recipe",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "recipe_family": "readout_steering",
+                            "readout_steering_kind": "target_readout",
+                            "realized_lift_bundle_key": objective,
+                            "self_delta": 0.15,
+                            "cross_delta": 0.0,
+                            "alignment_margin": 0.15,
+                            "target_mass_delta": 0.0,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 4,
+                            "target_top20_threshold_gap": 6.1,
+                        },
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["next_evidence_needed"], "readout_steering_deepening")
+        summary = result["operator_recipe_expansion_summary"]
+        self.assertEqual(summary["best_rank_carrier_recipe_family"], "resid_post|source_term_token|blend")
+        self.assertEqual(summary["best_readout_steering_rank_carrier_recipe_family"], "readout_steering")
+        self.assertEqual(summary["best_readout_steering_target_top20_threshold_gap"], 6.1)
+        self.assertEqual(summary["recommended_next_family"], "readout_steering_deepening:readout_steering")
+        self.assertIn("readout_steering", summary["operator_positive_memory"])
+        self.assertEqual(summary["best_positive_operator_next_action"], "deepen_local_gap_closer")
+        self.assertEqual(
+            summary["positive_operator_deepening_plan"]["suggested_operator_recipe_expansion_mode"],
+            "readout_steering_deepening",
+        )
+
+    def test_readout_steering_deepening_does_not_fallback_to_activation_patch_rows(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "kv_pair:budget:source_body:72:73"
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+                "step_actuator_bundle_key": objective,
+                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                "next_evidence_needed": "readout_steering_deepening",
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": objective,
+                    "diagnostic_evidence_ledger": [
+                        {
+                            "bundle_key": objective,
+                            "objective_bundle_key": objective,
+                            "evidence_kind": "activation_patch_certification",
+                            "status": "supportive",
+                            "actuator_class": "self_actuator",
+                            "actual_delta_class": "target_lift",
+                            "recipe_name": "post_bridge_resid_post_term_to_last_blend_a060",
+                            "operator_recipe_id": "activation_rank_recipe",
+                            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                            "post_bridge_exhaustion_recipe": True,
+                            "activation_patch_site": "resid_post",
+                            "activation_patch_layer": 6,
+                            "activation_patch_alpha": 0.06,
+                            "target_mass_delta": 0.0002,
+                            "target_top20_hit_delta": 0,
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        summary = result["operator_recipe_expansion_summary"]
+        self.assertEqual(summary["status"], "no_readout_steering_rows")
+        self.assertEqual(summary["matrix_row_count"], 0)
+        self.assertEqual(summary["positive_memory_family_count"], 0)
+        self.assertEqual(result["operator_recipe_expansion_matrix"], [])
 
     def test_activation_patch_candidate_review_blocks_rank_carrier_only_shadow(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
@@ -2472,6 +2977,11 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(result["status"], "bridge_plan_or_more_evidence_required")
         self.assertFalse(result["compile_preview_created"])
         self.assertEqual(result["compile_preview_blocked_reason"], "rank_carrier_not_target_actuator")
+        self.assertEqual(result["ownership_role"], "self")
+        self.assertEqual(result["effect_role"], "rank_carrier")
+        self.assertEqual(result["safety_role"], "neutral")
+        self.assertEqual(result["blueprint"]["effect_role"], "rank_carrier")
+        self.assertEqual(result["ownership_gate"]["effect_role"], "rank_carrier")
         self.assertTrue(result["rank_carrier_only"])
         self.assertFalse(result["target_readout_effect_certified"])
         self.assertFalse(result["target_promotable_to_candidate_compiler"])

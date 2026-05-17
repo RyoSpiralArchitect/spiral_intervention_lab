@@ -165,8 +165,14 @@ class OpenAIControllerProvider(ControllerProvider):
     def model_name(self) -> str:
         return self._model_name
 
+    def _text_verbosity(self) -> str:
+        model = self.model_name.lower()
+        if model.startswith("gpt-4.1"):
+            return "medium"
+        return "low"
+
     def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
-        text_config: dict[str, Any] = {"verbosity": "low"}
+        text_config: dict[str, Any] = {"verbosity": self._text_verbosity()}
         if request.expect_json:
             text_config["format"] = {"type": "json_object"}
         payload_text = request.payload_text()

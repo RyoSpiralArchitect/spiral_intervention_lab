@@ -14,6 +14,10 @@ from .schema import (
     ControllerObservationPacket,
     KvMixOp,
     Rank1PatchOp,
+    READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS,
+    READOUT_DIRECTION_MAX_SCALE,
+    READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS,
+    READOUT_DIRECTION_MIN_SCALE,
     ResidAddOp,
     SchemaError,
     SurfaceTargetRef,
@@ -69,6 +73,109 @@ def _project_parallel(x: torch.Tensor, basis: torch.Tensor) -> torch.Tensor:
 
 def _project_orthogonal(x: torch.Tensor, basis: torch.Tensor) -> torch.Tensor:
     return x - _project_parallel(x, basis)
+
+
+def _model_from_ctx(ctx: "StepContext") -> Any:
+    runtime_model = getattr(ctx.runtime_state, "model", None)
+    if runtime_model is not None:
+        return runtime_model
+    return getattr(ctx.adapter, "model", None)
+
+
+def _as_token_ids(value: Any) -> tuple[int, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    token_ids: list[int] = []
+    for item in value:
+        if isinstance(item, bool):
+            raise SchemaError("readout_direction token ids must be integers, not booleans")
+        try:
+            token_id = int(item)
+        except Exception:
+            raise SchemaError("readout_direction token ids must be integers")
+        if token_id < 0:
+            raise SchemaError("readout_direction token ids must be >= 0")
+        if token_id not in token_ids:
+            token_ids.append(token_id)
+    return tuple(token_ids)
+
+
+def _readout_scale(value: Any, *, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise SchemaError(f"readout_direction.{name} must be numeric")
+    scale = float(value)
+    if scale < READOUT_DIRECTION_MIN_SCALE or scale > READOUT_DIRECTION_MAX_SCALE:
+        raise SchemaError(
+            f"readout_direction.{name} must be between "
+            f"{READOUT_DIRECTION_MIN_SCALE:g} and {READOUT_DIRECTION_MAX_SCALE:g}"
+        )
+    return scale
+
+
+def _readout_matrix(ctx: "StepContext") -> torch.Tensor:
+    model = _model_from_ctx(ctx)
+    if model is None:
+        raise KeyError("readout_direction requires a model on runtime_state or adapter")
+    candidates = (
+        getattr(model, "W_U", None),
+        getattr(getattr(model, "unembed", None), "W_U", None),
+        getattr(getattr(model, "unembed", None), "weight", None),
+        getattr(getattr(model, "lm_head", None), "weight", None),
+    )
+    for candidate in candidates:
+        if isinstance(candidate, torch.nn.Parameter):
+            return candidate.detach().float()
+        if isinstance(candidate, torch.Tensor):
+            return candidate.detach().float()
+    raise KeyError("readout_direction could not find W_U, unembed.weight, or lm_head.weight")
+
+
+def _readout_vectors(matrix: torch.Tensor, token_ids: tuple[int, ...]) -> torch.Tensor:
+    if matrix.ndim != 2:
+        raise ValueError(f"readout_direction expected a matrix, got shape {tuple(matrix.shape)}")
+    if not token_ids:
+        raise ValueError("readout_direction requires at least one token id")
+    max_token_id = max(token_ids)
+    ids_for_columns = max_token_id < int(matrix.shape[1])
+    ids_for_rows = max_token_id < int(matrix.shape[0])
+    ids = torch.tensor(list(token_ids), dtype=torch.long, device=matrix.device)
+    if ids_for_columns and (not ids_for_rows or matrix.shape[1] >= matrix.shape[0]):
+        return matrix.index_select(1, ids).transpose(0, 1).contiguous()
+    if ids_for_rows:
+        return matrix.index_select(0, ids).contiguous()
+    raise IndexError(f"readout_direction token id {max_token_id} is outside matrix shape {tuple(matrix.shape)}")
+
+
+def _mean_readout_vector(matrix: torch.Tensor, token_ids: tuple[int, ...]) -> torch.Tensor | None:
+    if not token_ids:
+        return None
+    vectors = _readout_vectors(matrix, token_ids)
+    return vectors.reshape(len(token_ids), -1).mean(dim=0)
+
+
+def _readout_direction(expr: Mapping[str, Any], ctx: "StepContext") -> torch.Tensor:
+    matrix = _readout_matrix(ctx)
+    target_ids = _as_token_ids(expr.get("target_token_ids"))
+    negative_ids = _as_token_ids(expr.get("negative_token_ids"))
+    if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:
+        raise SchemaError("readout_direction exceeds target_token_ids cap")
+    if len(negative_ids) > READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS:
+        raise SchemaError("readout_direction exceeds negative_token_ids cap")
+    target_scale = _readout_scale(expr.get("target_scale", 1.0), name="target_scale")
+    negative_scale = _readout_scale(expr.get("negative_scale", 1.0), name="negative_scale")
+    pieces: list[torch.Tensor] = []
+    target = _mean_readout_vector(matrix, target_ids)
+    if target is not None:
+        pieces.append(float(target_scale) * target)
+    negative = _mean_readout_vector(matrix, negative_ids)
+    if negative is not None:
+        pieces.append(-float(negative_scale) * negative)
+    if not pieces:
+        raise ValueError("readout_direction produced no vector")
+    direction = torch.stack(pieces, dim=0).sum(dim=0)
+    if bool(expr.get("normalize", True)):
+        direction = _normalize(direction)
+    return direction
 
 
 def compile_expr(expr: dict[str, Any] | Any) -> TensorThunk:
@@ -129,6 +236,10 @@ def compile_expr(expr: dict[str, Any] | Any) -> TensorThunk:
         item = compile_expr(expr["arg"])
         basis = compile_expr(expr["basis"])
         return lambda ctx: _project_orthogonal(item(ctx), basis(ctx))
+
+    if fn == "readout_direction":
+        payload = dict(expr)
+        return lambda ctx: _readout_direction(payload, ctx)
 
     raise ValueError(f"unknown expr fn: {fn}")
 

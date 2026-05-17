@@ -14,7 +14,11 @@ from SpiralInterventionLab.runtime.edit_budget import (
     prepare_direction,
 )
 from SpiralInterventionLab.runtime.effects import build_edit_effect, summarize_effects
-from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
+from SpiralInterventionLab.runtime.loop import (
+    InMemoryStructuredLogger,
+    _extract_diagnostic_requests,
+    run_episode,
+)
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
 from SpiralInterventionLab.runtime.policy import (
     GlobalBudget,
@@ -36,6 +40,7 @@ from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime,
 from SpiralInterventionLab.runtime.schema import (
     ControllerCommand,
     ControllerObservationPacket,
+    SchemaError,
     SurfaceTargetRef,
     parse_controller_command,
     parse_observation_packet,
@@ -496,6 +501,7 @@ class FakeRuntimeState:
         self.seed = 17
         self.hooks = {}
         self.overlays = {}
+        self.model = None
         self.tensors = {
             ("runtime", None, "hidden", 11): torch.tensor([1.0, 2.0, 3.0]),
             ("runtime", None, "hidden", 7): torch.tensor([0.3, 0.4, 0.5]),
@@ -764,6 +770,139 @@ class TestCompiler(unittest.TestCase):
         act = torch.zeros(1, 4, 3)
         out = hook_record["hook_fn"](act, None)
         self.assertLessEqual(float(out[0, -1].norm().item()), 0.1001)
+
+    def test_compile_readout_direction_resid_add_uses_unembed_columns(self):
+        class TinyReadoutModel:
+            W_U = torch.tensor(
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0],
+                ]
+            )
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        runtime_state.model = TinyReadoutModel()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [1],
+                "negative_token_ids": [2],
+                "negative_scale": 1.0,
+            },
+        }
+
+        compiled = compile_command(command, packet, ctx)
+        compiled[0].apply(ctx)
+        hook_fn = runtime_state.hooks["e_rescue"]["hook_fn"]
+        out = hook_fn(torch.zeros(1, 4, 3), None)
+        expected_direction = torch.nn.functional.normalize(torch.tensor([0.0, 1.0, -1.0]), dim=0)
+        self.assertTrue(torch.allclose(out[0, -1], 0.2 * expected_direction, atol=1e-6))
+
+    def test_readout_direction_rejects_unsafe_payloads(self):
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [True],
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [-1],
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "target_token_ids": [1],
+                "target_scale": 2.5,
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+        command = _resid_command()
+        command["edits"][0]["source"] = {
+            "dtype": "vector",
+            "expr": {
+                "fn": "readout_direction",
+                "negative_token_ids": list(range(33)),
+            },
+        }
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+    def test_actual_delta_classifies_attractor_relief_without_target_lift(self):
+        worker = HookedTransformerWorkerRuntime.__new__(HookedTransformerWorkerRuntime)
+        cls = worker._classify_actual_delta_result(
+            {
+                "continuation_baseline": " the the",
+                "continuation_candidate": " the",
+                "required_term_recall_delta": 0.0,
+                "required_term_span_progress_delta": 0.0,
+                "semantic_progress_delta": 0.0,
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "attractor_family_mass_delta": -0.0001,
+                "attractor_top20_hit_delta": -1,
+                "repeat_flag_delta": -1,
+                "repetition_score_delta": -0.2,
+                "entropy_delta": 0.04,
+                "top1_margin_delta": -0.01,
+            }
+        )
+        self.assertEqual(cls, "collapse_suppressor")
+
+    def test_actual_delta_keeps_rank_and_gap_movement_below_target_lift(self):
+        worker = HookedTransformerWorkerRuntime.__new__(HookedTransformerWorkerRuntime)
+        self.assertEqual(
+            worker._classify_actual_delta_result(
+                {
+                    "focus_rank_delta": 8,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                }
+            ),
+            "rank_carrier",
+        )
+        self.assertEqual(
+            worker._classify_actual_delta_result(
+                {
+                    "target_top20_threshold_gap_delta": -0.12,
+                    "target_piece_logit_delta": 0.01,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                }
+            ),
+            "readout_gap_movement",
+        )
+        self.assertEqual(
+            worker._classify_actual_delta_result(
+                {
+                    "target_mass_delta": 0.00003,
+                    "target_top20_hit_delta": 0,
+                }
+            ),
+            "target_lift",
+        )
 
     def test_compile_loop_rescue_resid_add_records_loop_rescue_budget_pool(self):
         adapter = FakeAdapter()
@@ -1716,6 +1855,119 @@ class TestLoopAndEffects(unittest.TestCase):
             "all_dead_actuator",
         )
         self.assertFalse(selection_event["bridge_eval_context_drift"])
+
+    def test_run_episode_prefers_meta_bridge_unavailable_reason(self):
+        class _BridgeUnavailableMetaController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                return {
+                    "version": "0.1",
+                    "decision": "noop",
+                    "meta": {
+                        "bridge_plan_unavailable_reason": "meta_no_safe_actuator",
+                        "bridge_plan_unavailable_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                        "bridge_plan_unavailable_objective_reasons": {
+                            "kv_pair:budget:source_body:10:12": "meta_no_safe_actuator",
+                        },
+                    },
+                }
+
+        class _BridgeUnavailableStaleHintsToyWorkerRuntime(_ToyWorkerRuntime):
+            def build_controller_packet(self):
+                packet = super().build_controller_packet()
+                packet["strategy_hints"] = {
+                    "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_unavailable_reason": "stale_strategy_hint_reason",
+                    "bridge_plan_unavailable_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_unavailable_objective_reasons": {
+                        "kv_pair:budget:source_body:10:12": "stale_strategy_hint_reason",
+                    },
+                }
+                return packet
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            _BridgeUnavailableStaleHintsToyWorkerRuntime(runtime_state),
+            _BridgeUnavailableMetaController(),
+            ctx,
+            logger=logger,
+        )
+
+        selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
+        self.assertEqual(selection_event["bridge_plan_unavailable_reason"], "meta_no_safe_actuator")
+        self.assertEqual(selection_event["controller_bridge_plan_unavailable_reason"], "meta_no_safe_actuator")
+        self.assertEqual(
+            selection_event["bridge_plan_unavailable_objective_reasons"]["kv_pair:budget:source_body:10:12"],
+            "meta_no_safe_actuator",
+        )
+
+    def test_extract_diagnostic_requests_keeps_distinct_intents(self):
+        objective = "kv_pair:budget:source_body:10:12"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "diagnostic_request": {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "bundle_key": objective,
+                    "objective_bundle_key": objective,
+                    "next_evidence_needed": "rank_carrier_to_target_conversion",
+                },
+                "controller_memory": {
+                    "diagnostic_request": {
+                        "diagnostic": "compare_extra_operator_diagnostics",
+                        "bundle_key": objective,
+                        "objective_bundle_key": objective,
+                        "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+                        "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    }
+                },
+            },
+        }
+
+        requests = _extract_diagnostic_requests(command, {"strategy_hints": {}})
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(
+            {request["next_evidence_needed"] for request in requests},
+            {
+                "rank_carrier_to_target_conversion",
+                "post_bridge_exhaustion_recipe_expansion",
+            },
+        )
+
+    def test_extract_diagnostic_requests_dedupes_post_bridge_next_action_alias(self):
+        objective = "kv_pair:budget:source_body:10:12"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "diagnostic_request": {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "bundle_key": objective,
+                    "objective_bundle_key": objective,
+                    "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe_expansion_requested": True,
+                },
+                "next_action": "request_compare_extra_operator_diagnostics",
+                "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+            },
+        }
+
+        requests = _extract_diagnostic_requests(command, {"strategy_hints": {}})
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(requests[0]["next_evidence_needed"], "post_bridge_exhaustion_recipe_expansion")
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "post_bridge_exhaustion")
+        self.assertTrue(requests[0]["post_bridge_exhaustion_recipe_expansion_requested"])
 
     def test_run_episode_marks_forced_diagnostic_apply_in_selection_report(self):
         class _DiagnosticToyController(_ToyController):
@@ -5264,7 +5516,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             )
 
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["actual_delta_class"], "target_lift")
+        self.assertEqual(result["actual_delta_class"], "required_term_progress")
         policy_override = simulate_mock.call_args_list[1].kwargs["policy_override"]
         self.assertEqual(policy_override.global_budget.max_edits_per_step, 2)
         self.assertEqual(result["operator_family_key"], "composition|resid_add|source_body|exact_prompt_span_mean")

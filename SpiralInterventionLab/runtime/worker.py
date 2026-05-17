@@ -59,6 +59,7 @@ _DECODER_CONTROL_MODE_SPECS = {
     },
 }
 _DECODER_CONTROL_MODES = set(_DECODER_CONTROL_MODE_SPECS)
+_DEFAULT_BAD_ATTRACTOR_TERMS = ("the", "EW", "inou", "shards")
 _CONTROLLER_MEMORY_STRING_FIELDS = (
     "hypothesis",
     "micro_rationale",
@@ -115,6 +116,132 @@ _CONTROLLER_DIAGNOSTIC_NAMES = {
 }
 _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", "missing_summary_terms")
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
+
+
+def _derive_operator_role_axes(
+    *,
+    actuator_class: Any = "",
+    actual_delta_class: Any = "",
+    failure_mode: Any = "",
+    owns_lift: Any | None = None,
+    direct_target_effect: Any | None = None,
+    rank_carrier_only: Any | None = None,
+    objective_bundle_key: Any = "",
+    realized_lift_bundle_key: Any = "",
+    target_mass_delta: Any = 0.0,
+    target_top20_hit_delta: Any = 0,
+    focus_rank_delta: Any = 0.0,
+    self_delta: Any = 0.0,
+    cross_delta: Any = 0.0,
+    repeat_delta: Any = 0.0,
+    entropy_delta: Any = 0.0,
+    top1_margin_delta: Any = 0.0,
+    status: Any = "",
+) -> dict[str, str]:
+    """Split overloaded actuator labels into ownership/effect/safety axes."""
+
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def _as_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    actuator = str(actuator_class or "")
+    actual = str(actual_delta_class or "")
+    failure = str(failure_mode or "")
+    objective_key = str(objective_bundle_key or "")
+    realized_key = str(realized_lift_bundle_key or "")
+    target_mass = _as_float(target_mass_delta)
+    target_top20 = _as_int(target_top20_hit_delta)
+    focus_rank = _as_float(focus_rank_delta)
+    self_score = _as_float(self_delta)
+    cross_score = _as_float(cross_delta)
+    repeat_score = _as_float(repeat_delta)
+    entropy_score = _as_float(entropy_delta)
+    top1_margin = _as_float(top1_margin_delta)
+    owns = bool(owns_lift) if owns_lift is not None else actuator == "self_actuator"
+    target_effect = (
+        bool(direct_target_effect)
+        if direct_target_effect is not None
+        else bool(target_mass >= 0.00002 or target_top20 > 0 or failure == "self_target_actuator")
+    )
+    rank_carrier = (
+        bool(rank_carrier_only)
+        if rank_carrier_only is not None
+        else bool(
+            failure == "self_rank_carrier"
+            or actual in {"rank_carrier", "readout_gap_movement"}
+            or (
+                owns
+                and not target_effect
+                and (focus_rank > 0.0 or self_score >= 0.02)
+            )
+        )
+    )
+
+    if actuator == "policy_violation" or actual == "policy_violation" or failure == "policy_violation":
+        safety_role = "policy_blocked"
+    elif actuator == "collapse_sharpener" or actual == "collapse_sharpener" or failure == "collapse_sharpener":
+        safety_role = "collapse_sharpener"
+    elif actuator == "harmful" or actual == "harmful":
+        safety_role = "harmful"
+    elif repeat_score > 0 and entropy_score < -0.01 and top1_margin > 0.001:
+        safety_role = "collapse_sharpener"
+    elif str(status or "") == "blocked":
+        safety_role = "blocked"
+    elif (
+        target_effect
+        or rank_carrier
+        or actual == "collapse_suppressor"
+        or failure in {"weak_nonharmful", "self_target_actuator", "self_rank_carrier", "collapse_suppressor"}
+    ):
+        safety_role = "neutral"
+    else:
+        safety_role = "unknown"
+
+    if failure == "wrong_direction" or actuator == "cross_bound":
+        ownership_role = "wrong_direction"
+    elif actuator == "bridge_actuator":
+        ownership_role = "bridge"
+    elif owns or failure in {"self_target_actuator", "self_rank_carrier"}:
+        ownership_role = "self"
+    elif realized_key and objective_key and realized_key != objective_key and cross_score > max(self_score, 0.005):
+        ownership_role = "wrong_direction"
+    elif actuator in {"dead_actuator", "collapse_sharpener", "collapse_suppressor", "harmful", "noisy_or_harmful"} or failure in {"dead", "weak_nonharmful", "collapse_suppressor"}:
+        ownership_role = "none"
+    else:
+        ownership_role = "unknown"
+
+    if target_effect:
+        effect_role = "target_actuator"
+    elif actual == "readout_gap_movement":
+        effect_role = "readout_gap_movement"
+    elif rank_carrier:
+        effect_role = "rank_carrier"
+    elif actual == "collapse_suppressor" or failure == "collapse_suppressor":
+        effect_role = "collapse_suppressor"
+    elif failure == "weak_nonharmful":
+        effect_role = "weak_nonharmful"
+    elif actuator == "dead_actuator" or failure == "dead":
+        effect_role = "dead"
+    elif safety_role in {"collapse_sharpener", "harmful", "policy_blocked"}:
+        effect_role = safety_role
+    elif ownership_role in {"bridge", "wrong_direction"} and (cross_score > 0.0 or actual == "target_lift"):
+        effect_role = "cross_bundle_lift"
+    else:
+        effect_role = "unknown"
+
+    return {
+        "ownership_role": ownership_role,
+        "effect_role": effect_role,
+        "safety_role": safety_role,
+    }
 
 
 @dataclass
@@ -2533,6 +2660,169 @@ class HookedTransformerWorkerRuntime:
             term_metrics[term] = metrics
         return term_metrics
 
+    def _first_piece_token_ids_for_terms(self, terms: Sequence[str]) -> list[int]:
+        token_ids: list[int] = []
+        for raw_term in terms:
+            term = str(raw_term or "").strip()
+            if not term:
+                continue
+            for variant in self._constraint_token_variants(term):
+                try:
+                    encoded = self.codec.encode(variant).detach().reshape(-1).to(dtype=torch.long).tolist()
+                except Exception:
+                    continue
+                if not encoded:
+                    continue
+                token_id = int(encoded[0])
+                if token_id >= 0 and token_id not in token_ids:
+                    token_ids.append(token_id)
+        return token_ids
+
+    def _readout_steering_surface_for_bundle(
+        self,
+        members: Sequence[Mapping[str, Any]],
+    ) -> SurfaceInfo | None:
+        activation_surfaces: list[SurfaceInfo] = []
+        by_layer: dict[int, SurfaceInfo] = {}
+        for surface in self.surface_catalog:
+            target = surface.target
+            if getattr(target, "kind", None) != "activation" or getattr(target, "site", None) != "resid_pre":
+                continue
+            token = getattr(target, "token", None)
+            if token is None or str(getattr(token, "mode", "")) != "last":
+                continue
+            if "resid_add" not in set(getattr(surface, "allow_ops", ()) or ()):
+                continue
+            activation_surfaces.append(surface)
+            by_layer.setdefault(int(getattr(target, "layer", 0) or 0), surface)
+        if not activation_surfaces:
+            return None
+        member_layers = sorted(
+            {
+                int(member.get("layer", 0) or 0)
+                for member in members
+                if isinstance(member.get("layer"), int) and not isinstance(member.get("layer"), bool)
+            },
+            reverse=True,
+        )
+        for layer in member_layers:
+            if layer in by_layer:
+                return by_layer[layer]
+        return max(
+            activation_surfaces,
+            key=lambda surface: (
+                int(getattr(surface.target, "layer", 0) or 0),
+                str(surface.surface_id),
+            ),
+        )
+
+    def _readout_steering_candidate(
+        self,
+        *,
+        bundle_key: str,
+        members: Sequence[Mapping[str, Any]],
+        intended_term: str,
+        recipe_name: str,
+        steering_kind: str,
+        target_terms: Sequence[str] = (),
+        negative_terms: Sequence[str] = (),
+        negative_scale: float = 1.0,
+        target_scale: float = 1.0,
+        alpha: float = 0.025,
+        contrast_mode: str = "none",
+        competitor_bundle_key: str | None = None,
+        competitor_term: str | None = None,
+    ) -> dict[str, Any] | None:
+        surface = self._readout_steering_surface_for_bundle(members)
+        if surface is None:
+            return None
+        target = surface.target
+        layer = int(getattr(target, "layer", 0) or 0)
+        target_token_ids = self._first_piece_token_ids_for_terms(target_terms)
+        negative_token_ids = self._first_piece_token_ids_for_terms(negative_terms)
+        if not target_token_ids and not negative_token_ids:
+            return None
+        caps = getattr(surface, "caps", None)
+        alpha_cap = float(getattr(caps, "max_alpha", 0.06) or 0.06)
+        step_cap = getattr(caps, "step_size", None)
+        norm_clip = float(getattr(caps, "norm_clip", 1.0) or 1.0)
+        safe_alpha = max(0.0, min(float(alpha), alpha_cap))
+        if safe_alpha <= 0.0:
+            return None
+        try:
+            step_size = safe_alpha if step_cap is None else min(float(step_cap), safe_alpha)
+        except Exception:
+            step_size = safe_alpha
+        expr = {
+            "fn": "clip_norm",
+            "max_norm": float(norm_clip),
+            "arg": {
+                "fn": "readout_direction",
+                "target_token_ids": [int(token_id) for token_id in target_token_ids],
+                "negative_token_ids": [int(token_id) for token_id in negative_token_ids],
+                "target_scale": float(target_scale),
+                "negative_scale": float(negative_scale),
+                "normalize": True,
+            },
+        }
+        steering_tag = str(steering_kind or "readout_direction")
+        candidate = {
+            "surface_id": str(surface.surface_id),
+            "kind": "resid_add",
+            "role": f"readout_steering:{steering_tag}",
+            "focus_feature": str(intended_term or ""),
+            "focus_term": str(intended_term or ""),
+            "bundle_key": str(bundle_key),
+            "bundle_family": "readout_steering",
+            "candidate_family": f"readout_steering:{steering_tag}",
+            "phase_objective": "readout_escape",
+            "site": "resid_pre",
+            "layer": int(layer),
+            "span_kind": "readout_direction",
+            "provenance_class": "readout_direction",
+            "read_source_resolved": True,
+            "write_target_resolved": True,
+            "source_position": -1,
+            "source_piece": str(intended_term or "") or None,
+            "source_segment_kind": "readout_direction",
+            "target": {"surface_id": str(surface.surface_id)},
+            "source": {"dtype": "vector", "expr": expr},
+            "op": {"kind": "resid_add", "alpha": float(safe_alpha)},
+            "budget": {
+                "ttl_steps": 1,
+                "norm_clip": float(norm_clip),
+                "step_size": float(step_size),
+                "revertible": True,
+            },
+            "recipe_localization": steering_tag,
+            "recipe_pooling": "readout_unembed",
+            "contrast_mode": str(contrast_mode or "none"),
+            "recipe_contrast_scale": float(negative_scale),
+            "recipe_alpha": float(safe_alpha),
+            "readout_steering_kind": steering_tag,
+            "readout_direction_target_token_ids": [int(token_id) for token_id in target_token_ids],
+            "readout_direction_negative_token_ids": [int(token_id) for token_id in negative_token_ids],
+            "bad_attractor_terms": [str(term) for term in negative_terms if str(term)],
+            "operator_recipe_seed_key": self._operator_recipe_seed_key(
+                mode="resid_readout",
+                localization=steering_tag,
+                pooling="readout_unembed",
+            ),
+            "meta": {
+                "hypothesis": f"diagnostic_{steering_tag}",
+                "expected_effect": "readout_steering_diagnostic_only",
+                "diagnostic_only": True,
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+                "bad_attractor_terms": [str(term) for term in negative_terms if str(term)],
+                "contrast_partner_bundle_key": competitor_bundle_key,
+                "contrast_partner_term": competitor_term,
+            },
+        }
+        candidate["operator_family_key"] = self._operator_family_key(candidate)
+        candidate["operator_recipe_id"] = self._operator_recipe_id(candidate)
+        return candidate
+
     def _classify_actual_delta_result(self, item: Mapping[str, Any]) -> str:
         continuation_baseline = str(item.get("continuation_baseline", "") or "")
         continuation_candidate = str(item.get("continuation_candidate", "") or "")
@@ -2549,10 +2839,13 @@ class HookedTransformerWorkerRuntime:
         focus_rank_delta = int(item.get("focus_rank_delta", 0) or 0)
         rank_focus_delta = int(item.get("rank_focus_delta", 0) or 0)
         prefix_depth_delta = int(item.get("prefix_depth_delta", item.get("canary_prefix_depth_delta", 0)) or 0)
+        gap_delta = float(item.get("target_top20_threshold_gap_delta", 0.0) or 0.0)
+        target_piece_logit_delta = float(item.get("target_piece_logit_delta", 0.0) or 0.0)
+        attractor_mass_delta = float(item.get("attractor_family_mass_delta", 0.0) or 0.0)
+        attractor_top20_hit_delta = int(item.get("attractor_top20_hit_delta", 0) or 0)
+        no_term_progress = recall_delta <= 0.0 and span_delta <= 0.0 and semantic_delta <= 0.01
         if (
-            recall_delta <= 0.0
-            and span_delta <= 0.0
-            and semantic_delta <= 0.01
+            no_term_progress
             and repeat_delta > 0
             and entropy_delta < -0.02
             and top1_margin_delta > 0.005
@@ -2562,15 +2855,26 @@ class HookedTransformerWorkerRuntime:
         if repeat_delta > 0 or semantic_delta < -0.03 or recall_delta < 0.0 or span_delta < 0.0:
             return "harmful"
         if (
-            recall_delta > 0.0
-            or span_delta > 0.0
-            or target_top20_hit_delta > 0
-            or target_mass_delta > 0.00002
-            or focus_rank_delta >= 6
-            or rank_focus_delta >= 6
-            or prefix_depth_delta > 0
+            no_term_progress
+            and target_mass_delta >= -0.00005
+            and target_top20_hit_delta >= 0
+            and (
+                attractor_mass_delta < -0.00002
+                or attractor_top20_hit_delta < 0
+                or repeat_delta < 0
+                or repetition_score_delta < -0.05
+                or (entropy_delta > 0.02 and top1_margin_delta < -0.002)
+            )
         ):
+            return "collapse_suppressor"
+        if target_top20_hit_delta > 0 or target_mass_delta > 0.00002:
             return "target_lift"
+        if recall_delta > 0.0 or span_delta > 0.0 or prefix_depth_delta > 0:
+            return "required_term_progress"
+        if gap_delta < -0.01 and target_piece_logit_delta > 0.0:
+            return "readout_gap_movement"
+        if focus_rank_delta >= 6 or rank_focus_delta >= 6:
+            return "rank_carrier"
         if (
             continuation_changed
             and recall_delta <= 0.0
@@ -2707,6 +3011,7 @@ class HookedTransformerWorkerRuntime:
             collapse_count = int(class_counts.get("collapse_isomorphic", 0) or 0)
             dead_count = int(class_counts.get("dead_actuator", 0) or 0)
             neutral_count = int(class_counts.get("neutral", 0) or 0)
+            suppressor_count = int(class_counts.get("collapse_suppressor", 0) or 0)
             error_count = int(class_counts.get("error", 0) or 0)
             if harmful_count > 0 or collapse_sharpener_count > 0:
                 status = "veto"
@@ -2716,6 +3021,10 @@ class HookedTransformerWorkerRuntime:
                 status = "apply_eligible"
                 certified_for_apply = True
                 reason = "target_lift_observed"
+            elif suppressor_count > 0:
+                status = "shadow_only"
+                certified_for_apply = False
+                reason = "collapse_suppressor_observed"
             elif error_count > 0:
                 status = "shadow_only"
                 certified_for_apply = False
@@ -2726,6 +3035,7 @@ class HookedTransformerWorkerRuntime:
                 reason = "no_target_lift_yet"
             family_prior_score = (
                 (1.0 * target_lift_count)
+                + (0.2 * suppressor_count)
                 + (0.1 * neutral_count)
                 - (0.1 * error_count)
                 - (0.25 * dead_count)
@@ -2810,6 +3120,8 @@ class HookedTransformerWorkerRuntime:
                 best_eval_actual_delta_class = str(item.get("actual_delta_class", "") or "")
                 if best_eval_actual_delta_class == "collapse_sharpener":
                     actuator_class = "collapse_sharpener"
+                elif best_eval_actual_delta_class == "collapse_suppressor":
+                    actuator_class = "collapse_suppressor"
                 elif self_delta > tau_self and alignment_margin > tau_align:
                     actuator_class = "self_actuator"
                 elif self_delta > tau_positive and alignment_margin < -tau_align and str(realized_lift_bundle_key) != intended_bundle_key:
@@ -2820,6 +3132,21 @@ class HookedTransformerWorkerRuntime:
                     actuator_class = "dead_actuator"
                 else:
                     actuator_class = "noisy_or_harmful"
+                role_axes = _derive_operator_role_axes(
+                    actuator_class=actuator_class,
+                    actual_delta_class=best_eval_actual_delta_class,
+                    objective_bundle_key=intended_bundle_key,
+                    realized_lift_bundle_key=realized_lift_bundle_key,
+                    target_mass_delta=item.get("target_mass_delta"),
+                    target_top20_hit_delta=item.get("target_top20_hit_delta"),
+                    focus_rank_delta=item.get("focus_rank_delta"),
+                    self_delta=self_delta,
+                    cross_delta=cross_delta,
+                    repeat_delta=item.get("repeat_flag_delta"),
+                    entropy_delta=item.get("entropy_delta"),
+                    top1_margin_delta=item.get("top1_margin_delta"),
+                    status=item.get("status"),
+                )
                 candidate_summary = {
                     "operator_recipe_id": recipe_id,
                     "operator_recipe_seed_key": recipe_seed_key,
@@ -2846,6 +3173,7 @@ class HookedTransformerWorkerRuntime:
                     "cross_delta": round(float(cross_delta), 6),
                     "alignment_margin": round(float(alignment_margin), 6),
                     "actuator_class": actuator_class,
+                    **role_axes,
                     "bridge_plan_bundle_key": str(realized_lift_bundle_key)
                     if actuator_class in {"bridge_actuator", "cross_bound"} and str(realized_lift_bundle_key) != intended_bundle_key
                     else None,
@@ -7373,12 +7701,18 @@ class HookedTransformerWorkerRuntime:
             int(token_id)
             for token_id in torch.topk(edited_logits, k=top_k_width).indices.detach().cpu().tolist()
         }
+        baseline_top_values = torch.topk(baseline_logits, k=top_k_width).values.detach().cpu().float()
+        baseline_top20_threshold = float(baseline_top_values[-1].item()) if baseline_top_values.numel() else 0.0
+        edited_top_values = torch.topk(edited_logits, k=top_k_width).values.detach().cpu().float()
+        edited_top20_threshold = float(edited_top_values[-1].item()) if edited_top_values.numel() else 0.0
         metrics: dict[str, Any] = {
             "target_mass_baseline": round(target_mass_baseline, 6),
             "target_mass_edited": round(target_mass_edited, 6),
             "target_mass_delta": round(target_mass_edited - target_mass_baseline, 6),
             "target_top20_hits_baseline": sum(1 for token_id in target_token_ids if token_id in baseline_top_ids),
             "target_top20_hits_edited": sum(1 for token_id in target_token_ids if token_id in edited_top_ids),
+            "target_top20_threshold_logit_baseline": round(float(baseline_top20_threshold), 6),
+            "target_top20_threshold_logit_edited": round(float(edited_top20_threshold), 6),
         }
         metrics["target_top20_hit_delta"] = int(metrics["target_top20_hits_edited"] - metrics["target_top20_hits_baseline"])
         if best_focus is not None:
@@ -7395,6 +7729,24 @@ class HookedTransformerWorkerRuntime:
             metrics["rank_focus_delta"] = int(best_rank_focus["rank_delta"])
             metrics["rank_focus_rank_baseline"] = int(best_rank_focus["baseline_rank"])
             metrics["rank_focus_rank_edited"] = int(best_rank_focus["edited_rank"])
+            metrics["target_piece"] = str(best_rank_focus["piece"])
+            metrics["target_piece_token_id"] = int(best_rank_focus["token_id"])
+            metrics["target_piece_logit_delta"] = round(float(best_rank_focus["logit_delta"]), 6)
+            metrics["target_piece_prob_delta"] = round(float(best_rank_focus["prob_delta"]), 6)
+            metrics["target_rank_before"] = int(best_rank_focus["baseline_rank"])
+            metrics["target_rank_after"] = int(best_rank_focus["edited_rank"])
+            metrics["target_rank_delta"] = int(best_rank_focus["rank_delta"])
+            target_logit_before = float(best_rank_focus["baseline_logit"])
+            target_logit_after = float(best_rank_focus["edited_logit"])
+            gap_before = float(baseline_top20_threshold - target_logit_before)
+            gap_after = float(edited_top20_threshold - target_logit_after)
+            metrics["target_top20_threshold_gap_baseline"] = round(gap_before, 6)
+            metrics["target_top20_threshold_gap"] = round(float(edited_top20_threshold - target_logit_after), 6)
+            metrics["target_top20_threshold_gap_after"] = round(gap_after, 6)
+            metrics["target_top20_threshold_gap_delta"] = round(gap_after - gap_before, 6)
+            metrics["target_piece_logit_baseline"] = round(target_logit_before, 6)
+            metrics["target_piece_logit_after"] = round(target_logit_after, 6)
+            metrics["target_top20_margin"] = round(float(target_logit_after - edited_top20_threshold), 6)
         return metrics
 
     def _current_answer_readout_canary(
@@ -7706,6 +8058,7 @@ class HookedTransformerWorkerRuntime:
         target_top20_delta = _as_int(counterfactual_delta.get("target_top20_hit_delta"), 0)
         focus_rank_delta = _as_float(counterfactual_delta.get("focus_rank_delta"), 0.0)
         self_delta = _as_float(counterfactual_delta.get("self_delta"), 0.0)
+        actual_delta_class = str(shadow.get("actual_delta_class", "") or "")
         direct_target_effect = bool(target_mass_delta >= 0.00002 or target_top20_delta > 0)
         rank_carrier_only = bool(
             owns_lift
@@ -7720,6 +8073,20 @@ class HookedTransformerWorkerRuntime:
             else "bridge_shadow"
             if actuator_class == "bridge_actuator"
             else "unknown"
+        )
+        role_axes = _derive_operator_role_axes(
+            actuator_class=actuator_class,
+            actual_delta_class=actual_delta_class,
+            owns_lift=owns_lift,
+            direct_target_effect=direct_target_effect,
+            rank_carrier_only=rank_carrier_only,
+            objective_bundle_key=shadow.get("objective_bundle_key"),
+            realized_lift_bundle_key=shadow.get("realized_lift_bundle_key"),
+            target_mass_delta=target_mass_delta,
+            target_top20_hit_delta=target_top20_delta,
+            focus_rank_delta=focus_rank_delta,
+            self_delta=self_delta,
+            status=shadow.get("status"),
         )
         target_promotable = bool(promotable and direct_target_effect)
         compiler_status = (
@@ -7752,12 +8119,12 @@ class HookedTransformerWorkerRuntime:
             "compile_state": "shadow_blueprint_only",
             "required_runtime_support": "activation_patch_blend_operator",
             "activation_patch_effect_role": effect_role,
+            **role_axes,
             "rank_carrier_only": bool(rank_carrier_only),
             "target_readout_effect_certified": bool(direct_target_effect),
             "production_apply_allowed": False,
             "certified_for_apply": False,
         }
-        actual_delta_class = str(shadow.get("actual_delta_class", "") or "")
         compile_preview_blocked_reason: str | None
         if owns_lift and target_promotable:
             compile_preview_blocked_reason = None
@@ -7788,6 +8155,7 @@ class HookedTransformerWorkerRuntime:
                 "actual_delta_class": actual_delta_class or None,
                 "required_runtime_support": "activation_patch_blend_operator",
                 "activation_patch_effect_role": effect_role,
+                **role_axes,
                 "rank_carrier_only": bool(rank_carrier_only),
                 "target_readout_effect_certified": bool(direct_target_effect),
                 "production_apply_allowed": False,
@@ -7816,6 +8184,7 @@ class HookedTransformerWorkerRuntime:
             "promotable_to_candidate_compiler": bool(promotable),
             "target_promotable_to_candidate_compiler": bool(target_promotable),
             "activation_patch_effect_role": effect_role,
+            **role_axes,
             "rank_carrier_only": bool(rank_carrier_only),
             "target_readout_effect_certified": bool(direct_target_effect),
             "compile_preview_created": bool(compile_preview is not None),
@@ -7830,6 +8199,7 @@ class HookedTransformerWorkerRuntime:
             "promotable_to_candidate_compiler": promotable,
             "target_promotable_to_candidate_compiler": bool(target_promotable),
             "activation_patch_effect_role": effect_role,
+            **role_axes,
             "rank_carrier_only": bool(rank_carrier_only),
             "target_readout_effect_certified": bool(direct_target_effect),
             "promotion_reason": shadow.get("promotion_reason"),
@@ -9482,6 +9852,20 @@ class HookedTransformerWorkerRuntime:
                         }
                     )
                 )
+                role_axes = _derive_operator_role_axes(
+                    actuator_class=actuator_class,
+                    actual_delta_class=row.get("actual_delta_class"),
+                    failure_mode="wrong_direction" if not direction_correct else "",
+                    objective_bundle_key=objective_key,
+                    realized_lift_bundle_key=realized_bundle,
+                    target_mass_delta=target_mass_delta,
+                    target_top20_hit_delta=top20_delta,
+                    focus_rank_delta=focus_rank_delta,
+                    self_delta=self_delta,
+                    cross_delta=cross_delta,
+                    repeat_delta=repeat_delta,
+                    status=status,
+                )
                 matrix.append(
                     {
                         "objective_bundle_key": objective_key,
@@ -9494,6 +9878,7 @@ class HookedTransformerWorkerRuntime:
                         "direction_correct": bool(direction_correct),
                         "bridge_plan_eligible": bool(eligible),
                         "bridge_plan_vetoes": vetoes,
+                        **role_axes,
                         "actuator_class": actuator_class,
                         "status": status or None,
                         "recipe_name": row.get("recipe_name"),
@@ -9718,19 +10103,68 @@ class HookedTransformerWorkerRuntime:
             carrier_to_actuator_status = "missing_after_attention_guided_operator"
 
         def _post_bridge_exhaustion_recipe_expansion_report() -> dict[str, Any] | None:
-            if str(request.get("operator_recipe_expansion_mode") or "") != "post_bridge_exhaustion":
+            expansion_mode = str(request.get("operator_recipe_expansion_mode") or "")
+            if expansion_mode not in {"post_bridge_exhaustion", "readout_steering_deepening"}:
                 return None
             objective_key = str(request.get("objective_bundle_key") or bundle_key or "")
-            expansion_rows = [
-                row
-                for row in activation_patch_rows
-                if str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
-                or bool(row.get("post_bridge_exhaustion_recipe", False))
-            ]
+            if expansion_mode == "readout_steering_deepening":
+                expansion_rows = [
+                    row
+                    for row in matching_rows
+                    if str(row.get("diagnostic_family") or row.get("operator_axis") or "") == "readout_steering"
+                    or str(row.get("recipe_family") or "").startswith("readout_steering")
+                    or str(row.get("operator_recipe_expansion_mode") or "") == "readout_steering_deepening"
+                ]
+                if not expansion_rows:
+                    summary = {
+                        "objective_bundle_key": objective_key or None,
+                        "status": "no_readout_steering_rows",
+                        "matrix_row_count": 0,
+                        "dedicated_recipe_row_count": 0,
+                        "failure_mode_counts": {},
+                        "ownership_role_counts": {},
+                        "effect_role_counts": {},
+                        "safety_role_counts": {},
+                        "dominant_failure_mode": "none",
+                        "readout_gap_closer_recipe_count": 0,
+                        "readout_gap_probe_recipe_count": 0,
+                        "readout_gap_closer_candidate_count": 0,
+                        "readout_gap_closer_certified_count": 0,
+                        "operator_positive_memory": {},
+                        "positive_memory_family_count": 0,
+                        "best_positive_operator_family": None,
+                        "best_positive_operator_traits": [],
+                        "best_positive_operator_next_action": None,
+                        "positive_operator_deepening_plan": None,
+                        "positive_operator_deepening_reason": None,
+                        "recommended_next_family": "readout_steering_deepening",
+                        "production_apply_allowed": False,
+                        "policy_candidate_ready": False,
+                    }
+                    return {
+                        "status": "no_readout_steering_rows",
+                        "summary": summary,
+                        "matrix": [],
+                        "family_mode_counts": {},
+                        "next_evidence_needed": "readout_steering_deepening",
+                    }
+            else:
+                expansion_rows = [
+                    row
+                    for row in matching_rows
+                    if str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+                    or bool(row.get("post_bridge_exhaustion_recipe", False))
+                ]
             source_rows = expansion_rows if expansion_rows else activation_patch_rows
             matrix: list[dict[str, Any]] = []
 
             def _recipe_family(row: Mapping[str, Any]) -> str:
+                if row.get("recipe_family") not in (None, ""):
+                    return str(row.get("recipe_family"))
+                diagnostic_family = str(row.get("diagnostic_family") or row.get("operator_axis") or "")
+                if diagnostic_family == "readout_steering":
+                    steering_kind = str(row.get("readout_steering_kind") or row.get("recipe_name") or "readout_direction")
+                    return f"readout_steering|{steering_kind}"
                 site = str(row.get("activation_patch_site") or "activation_patch")
                 source_loc = str(row.get("activation_patch_source_localization") or "unknown_source")
                 patch_mode = str(row.get("activation_patch_patch_mode") or "unknown_patch")
@@ -9774,6 +10208,8 @@ class HookedTransformerWorkerRuntime:
                     "harmful",
                 }:
                     return "collapse_sharpener"
+                if actuator_class == "collapse_suppressor" or actual_delta_class == "collapse_suppressor":
+                    return "collapse_suppressor"
                 if repeat_delta > 0 and entropy_delta < -0.01 and top1_margin_delta > 0.001:
                     return "collapse_sharpener"
                 self_owned = bool(actuator_class == "self_actuator" or (
@@ -9811,19 +10247,38 @@ class HookedTransformerWorkerRuntime:
                 self_delta = _coerce_float(row.get("self_delta"))
                 cross_delta = _coerce_float(row.get("cross_delta"))
                 target_mass = _coerce_float(row.get("target_mass_delta"))
+                target_top20 = _coerce_int(row.get("target_top20_hit_delta"))
                 focus_rank = _coerce_int(row.get("focus_rank_delta"))
                 repeat_delta = max(
                     _coerce_float(row.get("repeat_delta")),
                     _coerce_float(row.get("repeat_flag")),
                     _coerce_float(row.get("repetition_score")),
                 )
+                role_axes = _derive_operator_role_axes(
+                    actuator_class=row.get("actuator_class") or row.get("activation_patch_actuator_class"),
+                    actual_delta_class=row.get("actual_delta_class"),
+                    failure_mode=failure_mode,
+                    objective_bundle_key=objective_key or row_objective,
+                    realized_lift_bundle_key=row.get("realized_lift_bundle_key"),
+                    target_mass_delta=target_mass,
+                    target_top20_hit_delta=target_top20,
+                    focus_rank_delta=focus_rank,
+                    self_delta=self_delta,
+                    cross_delta=cross_delta,
+                    repeat_delta=repeat_delta,
+                    entropy_delta=row.get("entropy_delta"),
+                    top1_margin_delta=row.get("top1_margin_delta"),
+                    status=row.get("status"),
+                )
                 matrix.append(
                     {
                         "objective_bundle_key": objective_key or row_objective or None,
+                        "intended_term": row.get("intended_term"),
                         "recipe_family": recipe_family,
                         "recipe_name": row.get("recipe_name"),
                         "operator_recipe_id": row.get("operator_recipe_id"),
                         "failure_mode": failure_mode,
+                        **role_axes,
                         "actuator_class": row.get("actuator_class") or row.get("activation_patch_actuator_class"),
                         "status": row.get("status"),
                         "actual_delta_class": row.get("actual_delta_class"),
@@ -9833,11 +10288,56 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_alpha": row.get("activation_patch_alpha"),
                         "activation_patch_source_localization": row.get("activation_patch_source_localization"),
                         "activation_patch_patch_mode": row.get("activation_patch_patch_mode"),
+                        "readout_steering_kind": row.get("readout_steering_kind"),
+                        "readout_gap_closer_recipe": bool(row.get("readout_gap_closer_recipe", False)),
+                        "readout_gap_closer_axis": row.get("readout_gap_closer_axis"),
+                        "bad_attractor_terms": row.get("bad_attractor_terms"),
                         "self_delta": round(float(self_delta), 6),
                         "cross_delta": round(float(cross_delta), 6),
                         "alignment_margin": round(_coerce_float(row.get("alignment_margin")), 6),
                         "target_mass_delta": round(float(target_mass), 6),
-                        "target_top20_hit_delta": _coerce_int(row.get("target_top20_hit_delta")),
+                        "target_top20_hit_delta": target_top20,
+                        "target_piece": row.get("target_piece"),
+                        "target_piece_logit_delta": (
+                            None
+                            if row.get("target_piece_logit_delta") is None
+                            else round(_coerce_float(row.get("target_piece_logit_delta")), 6)
+                        ),
+                        "target_piece_prob_delta": (
+                            None
+                            if row.get("target_piece_prob_delta") is None
+                            else round(_coerce_float(row.get("target_piece_prob_delta")), 6)
+                        ),
+                        "target_rank_after": (
+                            None
+                            if row.get("target_rank_after") is None
+                            else _coerce_int(row.get("target_rank_after"))
+                        ),
+                        "target_top20_threshold_gap_baseline": (
+                            None
+                            if row.get("target_top20_threshold_gap_baseline") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap_baseline")), 6)
+                        ),
+                        "target_top20_threshold_gap": (
+                            None
+                            if row.get("target_top20_threshold_gap") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap")), 6)
+                        ),
+                        "target_top20_threshold_gap_after": (
+                            None
+                            if row.get("target_top20_threshold_gap_after") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap_after")), 6)
+                        ),
+                        "target_top20_threshold_gap_delta": (
+                            None
+                            if row.get("target_top20_threshold_gap_delta") is None
+                            else round(_coerce_float(row.get("target_top20_threshold_gap_delta")), 6)
+                        ),
+                        "target_top20_margin": (
+                            None
+                            if row.get("target_top20_margin") is None
+                            else round(_coerce_float(row.get("target_top20_margin")), 6)
+                        ),
                         "focus_rank_delta": int(focus_rank),
                         "repeat_delta": round(float(repeat_delta), 6),
                     }
@@ -9852,6 +10352,8 @@ class HookedTransformerWorkerRuntime:
                     if failure_mode == "self_rank_carrier"
                     else 1.0
                     if failure_mode == "weak_nonharmful"
+                    else 0.8
+                    if failure_mode == "collapse_suppressor"
                     else 0.0,
                     _coerce_float(item.get("self_delta")),
                     _coerce_float(item.get("target_mass_delta")) * 1000.0,
@@ -9861,12 +10363,213 @@ class HookedTransformerWorkerRuntime:
                 )
 
             matrix.sort(key=_expansion_rank, reverse=True)
+
+            def _positive_traits(item: Mapping[str, Any]) -> list[str]:
+                traits: list[str] = []
+
+                def _add(trait: str) -> None:
+                    if trait not in traits:
+                        traits.append(trait)
+
+                ownership = str(item.get("ownership_role") or "")
+                effect = str(item.get("effect_role") or "")
+                safety = str(item.get("safety_role") or "")
+                failure = str(item.get("failure_mode") or "")
+                target_mass = _coerce_float(item.get("target_mass_delta"))
+                target_top20 = _coerce_int(item.get("target_top20_hit_delta"))
+                target_piece_logit = _coerce_float(item.get("target_piece_logit_delta"))
+                target_gap = item.get("target_top20_threshold_gap")
+                target_gap_delta = item.get("target_top20_threshold_gap_delta")
+                focus_rank = _coerce_int(item.get("focus_rank_delta"))
+                alignment = _coerce_float(item.get("alignment_margin"))
+                self_delta = _coerce_float(item.get("self_delta"))
+                cross_delta = _coerce_float(item.get("cross_delta"))
+                repeat_delta = _coerce_float(item.get("repeat_delta"))
+                if ownership == "self" and alignment > 0.0:
+                    _add("ownership_preserving")
+                if effect == "rank_carrier" or focus_rank > 0 or self_delta >= 0.02:
+                    _add("rank_carrier")
+                if target_mass > 0.0 or target_top20 > 0 or target_piece_logit > 0.0:
+                    _add("target_reachable")
+                if target_gap not in (None, ""):
+                    _add("top20_gap_measured")
+                    if _coerce_float(target_gap) > 0.0 and target_piece_logit > 0.0:
+                        _add("top20_gap_closer_candidate")
+                    if (
+                        target_gap_delta not in (None, "")
+                        and _coerce_float(target_gap_delta) < -0.01
+                        and repeat_delta <= 0.0
+                        and safety not in {"collapse_sharpener", "harmful", "policy_blocked"}
+                    ):
+                        _add("top20_gap_closer_certified")
+                if effect == "target_actuator" or target_mass > 0.00002 or target_top20 > 0:
+                    _add("rank_to_mass_convertible")
+                if safety == "neutral" and repeat_delta <= 0.0:
+                    _add("anti_collapse")
+                    _add("neutral_stable")
+                if failure == "collapse_suppressor" or effect == "collapse_suppressor":
+                    _add("collapse_suppressor")
+                if ownership in {"bridge", "wrong_direction"} and cross_delta > 0.005:
+                    _add("bridge_compatible")
+                return traits
+
+            for item in matrix:
+                traits = _positive_traits(item)
+                if traits:
+                    item["positive_traits"] = traits
+
+            operator_positive_memory: dict[str, dict[str, Any]] = {}
+            for item in matrix:
+                traits = item.get("positive_traits")
+                if not isinstance(traits, SequenceABC) or isinstance(traits, (str, bytes, bytearray)) or not traits:
+                    continue
+                family = str(item.get("recipe_family") or "unknown")
+                bucket = operator_positive_memory.setdefault(
+                    family,
+                    {
+                        "recipe_family": family,
+                        "evidence_count": 0,
+                        "positive_observation_count": 0,
+                        "traits": [],
+                        "best_recipe_name": None,
+                        "best_operator_recipe_id": None,
+                        "best_score": None,
+                        "best_target_top20_threshold_gap": None,
+                        "best_target_top20_threshold_gap_delta": None,
+                        "best_target_piece_logit_delta": None,
+                        "best_target_mass_delta": None,
+                        "best_focus_rank_delta": None,
+                        "ttl_steps": 2,
+                        "observed_at_step": int(getattr(self, "_steps", 0) or 0),
+                        "stale_after_context_change": True,
+                        "scope": {
+                            "objective_bundle_key": objective_key or None,
+                            "objective_term": item.get("intended_term"),
+                            "target_piece": item.get("target_piece"),
+                            "recipe_family": family,
+                            "operator_recipe_id": item.get("operator_recipe_id"),
+                        },
+                        "historical_effects": {
+                            "rank_lift_sum": 0.0,
+                            "target_mass_sum": 0.0,
+                            "target_piece_logit_sum": 0.0,
+                            "gap_delta_sum": 0.0,
+                            "collapse_count": 0,
+                        },
+                    },
+                )
+                bucket["evidence_count"] = int(bucket.get("evidence_count", 0) or 0) + 1
+                bucket["positive_observation_count"] = int(bucket.get("positive_observation_count", 0) or 0) + 1
+                raw_traits = bucket.get("traits")
+                trait_list = raw_traits if isinstance(raw_traits, list) else []
+                for trait in traits:
+                    text = str(trait)
+                    if text and text not in trait_list:
+                        trait_list.append(text)
+                bucket["traits"] = trait_list
+                effects = bucket.get("historical_effects")
+                if not isinstance(effects, dict):
+                    effects = {}
+                    bucket["historical_effects"] = effects
+                effects["rank_lift_sum"] = float(effects.get("rank_lift_sum", 0.0) or 0.0) + float(
+                    _coerce_int(item.get("focus_rank_delta"))
+                )
+                effects["target_mass_sum"] = float(effects.get("target_mass_sum", 0.0) or 0.0) + _coerce_float(
+                    item.get("target_mass_delta")
+                )
+                effects["target_piece_logit_sum"] = float(
+                    effects.get("target_piece_logit_sum", 0.0) or 0.0
+                ) + _coerce_float(item.get("target_piece_logit_delta"))
+                effects["gap_delta_sum"] = float(effects.get("gap_delta_sum", 0.0) or 0.0) + _coerce_float(
+                    item.get("target_top20_threshold_gap_delta")
+                )
+                if str(item.get("safety_role") or "") in {"collapse_sharpener", "harmful"}:
+                    effects["collapse_count"] = int(effects.get("collapse_count", 0) or 0) + 1
+                score = (
+                    3.0
+                    if "rank_to_mass_convertible" in traits
+                    else 2.0
+                    if "top20_gap_closer_certified" in traits
+                    else 1.85
+                    if "top20_gap_closer_candidate" in traits
+                    else 1.7
+                    if "top20_gap_measured" in traits
+                    else 1.5
+                    if "target_reachable" in traits
+                    else 1.0
+                    if "rank_carrier" in traits
+                    else 0.5
+                )
+                score += min(1.0, max(0.0, _coerce_float(item.get("alignment_margin"))))
+                score += min(1.0, max(0.0, _coerce_float(item.get("target_piece_logit_delta"))))
+                if str(item.get("safety_role") or "") in {"collapse_sharpener", "harmful", "policy_blocked"}:
+                    score -= 2.0
+                current_best = bucket.get("best_score")
+                if current_best is None or score > _coerce_float(current_best, default=-999.0):
+                    bucket["best_score"] = round(float(score), 6)
+                    bucket["best_recipe_name"] = item.get("recipe_name")
+                    bucket["best_operator_recipe_id"] = item.get("operator_recipe_id")
+                    bucket["best_target_top20_threshold_gap"] = item.get("target_top20_threshold_gap")
+                    bucket["best_target_top20_threshold_gap_delta"] = item.get("target_top20_threshold_gap_delta")
+                    bucket["best_target_piece_logit_delta"] = item.get("target_piece_logit_delta")
+                    bucket["best_target_mass_delta"] = item.get("target_mass_delta")
+                    bucket["best_focus_rank_delta"] = item.get("focus_rank_delta")
+                    bucket["scope"] = {
+                        "objective_bundle_key": objective_key or None,
+                        "objective_term": item.get("intended_term"),
+                        "target_piece": item.get("target_piece"),
+                        "recipe_family": family,
+                        "operator_recipe_id": item.get("operator_recipe_id"),
+                    }
+
+            for bucket in operator_positive_memory.values():
+                count = max(1, int(bucket.get("positive_observation_count", 0) or 0))
+                effects = bucket.get("historical_effects")
+                if not isinstance(effects, dict):
+                    continue
+                collapse_count = int(effects.pop("collapse_count", 0) or 0)
+                rank_lift_sum = float(effects.pop("rank_lift_sum", 0.0) or 0.0)
+                target_mass_sum = float(effects.pop("target_mass_sum", 0.0) or 0.0)
+                target_piece_logit_sum = float(effects.pop("target_piece_logit_sum", 0.0) or 0.0)
+                gap_delta_sum = float(effects.pop("gap_delta_sum", 0.0) or 0.0)
+                effects["rank_lift_mean"] = round(rank_lift_sum / count, 6)
+                effects["target_mass_mean"] = round(target_mass_sum / count, 8)
+                effects["target_piece_logit_delta_mean"] = round(target_piece_logit_sum / count, 6)
+                effects["target_top20_threshold_gap_delta_mean"] = round(gap_delta_sum / count, 6)
+                effects["collapse_rate"] = round(float(collapse_count) / count, 6)
+                traits = set(str(trait) for trait in bucket.get("traits", ()) if str(trait))
+                if "rank_to_mass_convertible" in traits:
+                    next_action = "promote_to_shadow_certification_review"
+                elif (
+                    "top20_gap_closer_certified" in traits
+                    or "top20_gap_closer_candidate" in traits
+                    or "top20_gap_measured" in traits
+                    or "target_reachable" in traits
+                ):
+                    next_action = "deepen_local_gap_closer"
+                elif "rank_carrier" in traits:
+                    next_action = "convert_rank_carrier_to_target"
+                elif "bridge_compatible" in traits:
+                    next_action = "inspect_bridge_plan_shadow"
+                else:
+                    next_action = "keep_as_contextual_support"
+                bucket["recommended_next_action"] = next_action
+
             failure_mode_counts: dict[str, int] = {}
+            ownership_role_counts: dict[str, int] = {}
+            effect_role_counts: dict[str, int] = {}
+            safety_role_counts: dict[str, int] = {}
             family_mode_counts: dict[str, dict[str, int]] = {}
             for item in matrix:
                 mode = str(item.get("failure_mode") or "unknown")
                 family = str(item.get("recipe_family") or "unknown")
                 failure_mode_counts[mode] = int(failure_mode_counts.get(mode, 0)) + 1
+                ownership = str(item.get("ownership_role") or "unknown")
+                effect = str(item.get("effect_role") or "unknown")
+                safety = str(item.get("safety_role") or "unknown")
+                ownership_role_counts[ownership] = int(ownership_role_counts.get(ownership, 0)) + 1
+                effect_role_counts[effect] = int(effect_role_counts.get(effect, 0)) + 1
+                safety_role_counts[safety] = int(safety_role_counts.get(safety, 0)) + 1
                 bucket = family_mode_counts.setdefault(family, {})
                 bucket[mode] = int(bucket.get(mode, 0)) + 1
 
@@ -9882,6 +10585,43 @@ class HookedTransformerWorkerRuntime:
                 (item for item in matrix if str(item.get("failure_mode") or "") == "weak_nonharmful"),
                 None,
             )
+            best_readout_steering_rank_carrier = next(
+                (
+                    item
+                    for item in matrix
+                    if str(item.get("failure_mode") or "") == "self_rank_carrier"
+                    and str(item.get("recipe_family") or "").startswith("readout_steering")
+                ),
+                None,
+            )
+            gap_closer_items = [
+                item
+                for item in matrix
+                if bool(item.get("readout_gap_closer_recipe", False))
+                and item.get("target_top20_threshold_gap") is not None
+            ]
+            gap_closer_candidate_items = [
+                item
+                for item in gap_closer_items
+                if "top20_gap_closer_candidate" in set(str(trait) for trait in item.get("positive_traits", ()) if str(trait))
+            ]
+            gap_closer_certified_items = [
+                item
+                for item in gap_closer_items
+                if "top20_gap_closer_certified" in set(str(trait) for trait in item.get("positive_traits", ()) if str(trait))
+            ]
+            best_gap_closer = (
+                min(
+                    gap_closer_items,
+                    key=lambda item: (
+                        _coerce_float(item.get("target_top20_threshold_gap"), default=999999.0),
+                        -_coerce_float(item.get("target_piece_logit_delta")),
+                        -_coerce_float(item.get("alignment_margin")),
+                    ),
+                )
+                if gap_closer_items
+                else None
+            )
             best_nonharmful = best_target_actuator or best_rank_carrier or best_weak_nonharmful
             dominant_failure_mode = (
                 max(failure_mode_counts.items(), key=lambda entry: (int(entry[1]), str(entry[0])))[0]
@@ -9892,11 +10632,20 @@ class HookedTransformerWorkerRuntime:
                 recommended_next_family = f"deepen:{best_nonharmful.get('recipe_family')}"
                 status = "target_actuator_family_found"
             elif isinstance(best_rank_carrier, Mapping):
-                recommended_next_family = f"convert_rank_carrier_to_target:{best_rank_carrier.get('recipe_family')}"
+                if isinstance(best_readout_steering_rank_carrier, Mapping):
+                    recommended_next_family = (
+                        f"readout_steering_deepening:"
+                        f"{best_readout_steering_rank_carrier.get('recipe_family')}"
+                    )
+                else:
+                    recommended_next_family = f"convert_rank_carrier_to_target:{best_rank_carrier.get('recipe_family')}"
                 status = "rank_carrier_family_found"
             elif isinstance(best_weak_nonharmful, Mapping):
                 recommended_next_family = f"deepen:{best_weak_nonharmful.get('recipe_family')}"
                 status = "weak_nonharmful_family_found"
+            elif dominant_failure_mode == "collapse_suppressor":
+                recommended_next_family = "target_steer_after_attractor_suppression"
+                status = "collapse_suppressor_found"
             elif dominant_failure_mode == "wrong_direction":
                 recommended_next_family = "ownership_contrastive_search"
                 status = "wrong_direction_dominant"
@@ -9912,6 +10661,131 @@ class HookedTransformerWorkerRuntime:
             else:
                 recommended_next_family = "operator_family_shift"
                 status = "no_clear_family"
+            best_positive_memory = (
+                max(
+                    operator_positive_memory.values(),
+                    key=lambda item: (
+                        _coerce_float(item.get("best_score"), default=-999.0),
+                        int(item.get("positive_observation_count", 0) or 0),
+                        str(item.get("recipe_family") or ""),
+                    ),
+                )
+                if operator_positive_memory
+                else None
+            )
+
+            def _positive_deepening_plan(memory: Mapping[str, Any] | None) -> dict[str, Any] | None:
+                if not isinstance(memory, Mapping):
+                    return None
+                family = str(memory.get("recipe_family") or "")
+                if not family:
+                    return None
+                raw_traits = memory.get("traits")
+                traits = (
+                    [str(item) for item in raw_traits if str(item)]
+                    if isinstance(raw_traits, SequenceABC)
+                    and not isinstance(raw_traits, (str, bytes, bytearray))
+                    else []
+                )
+                next_action = str(memory.get("recommended_next_action") or "keep_as_contextual_support")
+                curiosity_suffix = "".join(
+                    ch if ch.isalnum() or ch == "_" else "_" for ch in next_action.lower()
+                )
+                if next_action == "promote_to_shadow_certification_review":
+                    reason_code = "positive_memory_target_lift_shadow_review"
+                    deepening_axis = "shadow_certification_review"
+                    suggested_next_evidence = "activation_patch_candidate_compiler_review"
+                    reason_text = (
+                        "positive operator memory found target-lift evidence; review shadow certification "
+                        "without granting production apply"
+                    )
+                elif next_action == "deepen_local_gap_closer":
+                    reason_code = "positive_memory_local_gap_closer"
+                    deepening_axis = "target_top20_gap_closing"
+                    suggested_next_evidence = (
+                        "readout_steering_deepening"
+                        if family.startswith("readout_steering")
+                        else "activation_patch_recipe_family_deepening"
+                    )
+                    reason_text = (
+                        "positive operator memory found self-owned non-collapse movement, but target mass/top20 "
+                        "is still uncertified; deepen local gap-closing diagnostics"
+                    )
+                elif next_action == "convert_rank_carrier_to_target":
+                    reason_code = "positive_memory_rank_carrier_conversion"
+                    deepening_axis = "rank_to_mass_conversion"
+                    suggested_next_evidence = "rank_carrier_to_target_conversion"
+                    reason_text = (
+                        "positive operator memory found a rank/readout carrier; search for a bounded conversion "
+                        "into target mass or top20 lift"
+                    )
+                elif next_action == "inspect_bridge_plan_shadow":
+                    reason_code = "positive_memory_bridge_shadow_review"
+                    deepening_axis = "bridge_shadow_review"
+                    suggested_next_evidence = "cross_bundle_bridge_search"
+                    reason_text = (
+                        "positive operator memory found bridge-compatible movement; inspect objective/actuator "
+                        "separation in shadow mode"
+                    )
+                else:
+                    reason_code = "positive_memory_contextual_support"
+                    deepening_axis = "contextual_support"
+                    suggested_next_evidence = "diagnostic_evidence_accumulation"
+                    reason_text = (
+                        "positive operator memory is supportive but not specific enough for a deeper diagnostic "
+                        "request"
+                    )
+                effects = memory.get("historical_effects")
+                scope = memory.get("scope")
+                return {
+                    "kind": "positive_operator_deepening_plan",
+                    "permission": "diagnostic_only",
+                    "production_apply_allowed": False,
+                    "policy_candidate_ready": False,
+                    "ttl_steps": memory.get("ttl_steps", 2),
+                    "observed_at_step": memory.get("observed_at_step"),
+                    "stale_after_context_change": bool(memory.get("stale_after_context_change", True)),
+                    "scope": dict(scope) if isinstance(scope, Mapping) else {},
+                    "objective_bundle_key": objective_key or None,
+                    "recipe_family": family,
+                    "recipe_name": memory.get("best_recipe_name"),
+                    "operator_recipe_id": memory.get("best_operator_recipe_id"),
+                    "next_action": next_action,
+                    "suggested_next_evidence": suggested_next_evidence,
+                    "suggested_operator_recipe_expansion_mode": (
+                        "readout_steering_deepening"
+                        if suggested_next_evidence == "readout_steering_deepening"
+                        else None
+                    ),
+                    "deepening_axis": deepening_axis,
+                    "reason_code": reason_code,
+                    "reason_text": reason_text,
+                    "curiosity_signal": f"positive_operator_memory_{curiosity_suffix}",
+                    "traits": traits,
+                    "best_score": memory.get("best_score"),
+                    "best_target_top20_threshold_gap": memory.get("best_target_top20_threshold_gap"),
+                    "best_target_top20_threshold_gap_delta": memory.get("best_target_top20_threshold_gap_delta"),
+                    "best_target_piece_logit_delta": memory.get("best_target_piece_logit_delta"),
+                    "best_target_mass_delta": memory.get("best_target_mass_delta"),
+                    "best_focus_rank_delta": memory.get("best_focus_rank_delta"),
+                    "historical_effects": dict(effects) if isinstance(effects, Mapping) else {},
+                }
+
+            positive_operator_deepening_plan = _positive_deepening_plan(best_positive_memory)
+            if isinstance(positive_operator_deepening_plan, dict) and isinstance(best_gap_closer, Mapping):
+                positive_operator_deepening_plan["gap_closer_recipe_name"] = best_gap_closer.get("recipe_name")
+                positive_operator_deepening_plan["gap_closer_operator_recipe_id"] = best_gap_closer.get(
+                    "operator_recipe_id"
+                )
+                positive_operator_deepening_plan["gap_closer_target_top20_threshold_gap"] = best_gap_closer.get(
+                    "target_top20_threshold_gap"
+                )
+                positive_operator_deepening_plan["gap_closer_target_piece_logit_delta"] = best_gap_closer.get(
+                    "target_piece_logit_delta"
+                )
+                positive_operator_deepening_plan["gap_closer_target_top20_threshold_gap_delta"] = best_gap_closer.get(
+                    "target_top20_threshold_gap_delta"
+                )
 
             summary = {
                 "objective_bundle_key": objective_key or None,
@@ -9919,6 +10793,9 @@ class HookedTransformerWorkerRuntime:
                 "matrix_row_count": len(matrix),
                 "dedicated_recipe_row_count": len(expansion_rows),
                 "failure_mode_counts": dict(sorted(failure_mode_counts.items())),
+                "ownership_role_counts": dict(sorted(ownership_role_counts.items())),
+                "effect_role_counts": dict(sorted(effect_role_counts.items())),
+                "safety_role_counts": dict(sorted(safety_role_counts.items())),
                 "dominant_failure_mode": dominant_failure_mode,
                 "best_nonharmful_recipe_family": (
                     best_nonharmful.get("recipe_family") if isinstance(best_nonharmful, Mapping) else None
@@ -9941,6 +10818,75 @@ class HookedTransformerWorkerRuntime:
                 "best_rank_carrier_recipe_name": (
                     best_rank_carrier.get("recipe_name") if isinstance(best_rank_carrier, Mapping) else None
                 ),
+                "best_readout_steering_rank_carrier_recipe_family": (
+                    best_readout_steering_rank_carrier.get("recipe_family")
+                    if isinstance(best_readout_steering_rank_carrier, Mapping)
+                    else None
+                ),
+                "best_readout_steering_rank_carrier_recipe_name": (
+                    best_readout_steering_rank_carrier.get("recipe_name")
+                    if isinstance(best_readout_steering_rank_carrier, Mapping)
+                    else None
+                ),
+                "best_readout_steering_target_top20_threshold_gap": (
+                    best_readout_steering_rank_carrier.get("target_top20_threshold_gap")
+                    if isinstance(best_readout_steering_rank_carrier, Mapping)
+                    else None
+                ),
+                "readout_gap_closer_recipe_count": len(gap_closer_items),
+                "best_readout_gap_closer_recipe_family": (
+                    best_gap_closer.get("recipe_family") if isinstance(best_gap_closer, Mapping) else None
+                ),
+                "best_readout_gap_closer_recipe_name": (
+                    best_gap_closer.get("recipe_name") if isinstance(best_gap_closer, Mapping) else None
+                ),
+                "best_readout_gap_closer_operator_recipe_id": (
+                    best_gap_closer.get("operator_recipe_id") if isinstance(best_gap_closer, Mapping) else None
+                ),
+                "best_readout_gap_closer_target_top20_threshold_gap": (
+                    best_gap_closer.get("target_top20_threshold_gap") if isinstance(best_gap_closer, Mapping) else None
+                ),
+                "best_readout_gap_closer_target_piece_logit_delta": (
+                    best_gap_closer.get("target_piece_logit_delta") if isinstance(best_gap_closer, Mapping) else None
+                ),
+                "readout_gap_probe_recipe_count": len(gap_closer_items),
+                "readout_gap_closer_candidate_count": len(gap_closer_candidate_items),
+                "readout_gap_closer_certified_count": len(gap_closer_certified_items),
+                "best_readout_gap_closer_target_top20_threshold_gap_delta": (
+                    best_gap_closer.get("target_top20_threshold_gap_delta")
+                    if isinstance(best_gap_closer, Mapping)
+                    else None
+                ),
+                "operator_positive_memory": {
+                    str(family): dict(memory)
+                    for family, memory in sorted(operator_positive_memory.items())
+                },
+                "positive_memory_family_count": len(operator_positive_memory),
+                "best_positive_operator_family": (
+                    best_positive_memory.get("recipe_family") if isinstance(best_positive_memory, Mapping) else None
+                ),
+                "best_positive_operator_traits": (
+                    list(best_positive_memory.get("traits", ()))
+                    if isinstance(best_positive_memory, Mapping)
+                    and isinstance(best_positive_memory.get("traits"), SequenceABC)
+                    and not isinstance(best_positive_memory.get("traits"), (str, bytes, bytearray))
+                    else []
+                ),
+                "best_positive_operator_next_action": (
+                    best_positive_memory.get("recommended_next_action")
+                    if isinstance(best_positive_memory, Mapping)
+                    else None
+                ),
+                "positive_operator_deepening_plan": (
+                    dict(positive_operator_deepening_plan)
+                    if isinstance(positive_operator_deepening_plan, Mapping)
+                    else None
+                ),
+                "positive_operator_deepening_reason": (
+                    positive_operator_deepening_plan.get("reason_code")
+                    if isinstance(positive_operator_deepening_plan, Mapping)
+                    else None
+                ),
                 "recommended_next_family": recommended_next_family,
                 "production_apply_allowed": False,
                 "policy_candidate_ready": False,
@@ -9956,6 +10902,8 @@ class HookedTransformerWorkerRuntime:
                 "next_evidence_needed": (
                     "activation_patch_recipe_family_deepening"
                     if isinstance(best_target_actuator, Mapping)
+                    else "readout_steering_deepening"
+                    if isinstance(best_readout_steering_rank_carrier, Mapping)
                     else "rank_carrier_to_target_conversion"
                     if isinstance(best_rank_carrier, Mapping)
                     else "activation_patch_recipe_family_deepening"
@@ -10056,6 +11004,23 @@ class HookedTransformerWorkerRuntime:
                 dict(post_bridge_recipe_expansion.get("summary"))
                 if isinstance(post_bridge_recipe_expansion, Mapping)
                 and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                else None
+            ),
+            "operator_positive_memory": (
+                dict(post_bridge_recipe_expansion.get("summary", {}).get("operator_positive_memory"))
+                if isinstance(post_bridge_recipe_expansion, Mapping)
+                and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                and isinstance(post_bridge_recipe_expansion.get("summary", {}).get("operator_positive_memory"), Mapping)
+                else {}
+            ),
+            "positive_operator_deepening_plan": (
+                dict(post_bridge_recipe_expansion.get("summary", {}).get("positive_operator_deepening_plan"))
+                if isinstance(post_bridge_recipe_expansion, Mapping)
+                and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                and isinstance(
+                    post_bridge_recipe_expansion.get("summary", {}).get("positive_operator_deepening_plan"),
+                    Mapping,
+                )
                 else None
             ),
             "operator_recipe_expansion_family_mode_counts": (
@@ -10352,6 +11317,54 @@ class HookedTransformerWorkerRuntime:
                     and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
                     else None
                 ),
+                "operator_positive_memory_family_count": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("positive_memory_family_count")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else 0
+                ),
+                "best_positive_operator_family": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("best_positive_operator_family")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else None
+                ),
+                "best_positive_operator_traits": (
+                    list(post_bridge_recipe_expansion.get("summary", {}).get("best_positive_operator_traits", ()))
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    and isinstance(
+                        post_bridge_recipe_expansion.get("summary", {}).get("best_positive_operator_traits"),
+                        SequenceABC,
+                    )
+                    and not isinstance(
+                        post_bridge_recipe_expansion.get("summary", {}).get("best_positive_operator_traits"),
+                        (str, bytes, bytearray),
+                    )
+                    else []
+                ),
+                "best_positive_operator_next_action": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("best_positive_operator_next_action")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else None
+                ),
+                "positive_operator_deepening_reason": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("positive_operator_deepening_reason")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else None
+                ),
+                "positive_operator_deepening_plan": (
+                    dict(post_bridge_recipe_expansion.get("summary", {}).get("positive_operator_deepening_plan"))
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    and isinstance(
+                        post_bridge_recipe_expansion.get("summary", {}).get("positive_operator_deepening_plan"),
+                        Mapping,
+                    )
+                    else None
+                ),
             },
             "activation_patch_candidate_pool": [
                 {
@@ -10370,6 +11383,17 @@ class HookedTransformerWorkerRuntime:
                         "operator_recipe_id",
                         "target_mass_delta",
                         "target_top20_hit_delta",
+                        "target_piece",
+                        "target_piece_logit_delta",
+                        "target_piece_prob_delta",
+                        "target_rank_after",
+                        "target_top20_threshold_gap_baseline",
+                        "target_top20_threshold_gap",
+                        "target_top20_threshold_gap_after",
+                        "target_top20_threshold_gap_delta",
+                        "target_top20_margin",
+                        "readout_gap_closer_recipe",
+                        "readout_gap_closer_axis",
                         "focus_rank_delta",
                         "activation_patch_site",
                         "activation_patch_layer",
@@ -10393,6 +11417,7 @@ class HookedTransformerWorkerRuntime:
                         "alignment_margin",
                         "bundle_lift_scores",
                         "counterfactual_delta",
+                        "positive_traits",
                     )
                     if row.get(key) not in (None, "", [])
                 }
@@ -10418,6 +11443,17 @@ class HookedTransformerWorkerRuntime:
                         "operator_family_priors",
                         "target_mass_delta",
                         "target_top20_hit_delta",
+                        "target_piece",
+                        "target_piece_logit_delta",
+                        "target_piece_prob_delta",
+                        "target_rank_after",
+                        "target_top20_threshold_gap_baseline",
+                        "target_top20_threshold_gap",
+                        "target_top20_threshold_gap_after",
+                        "target_top20_threshold_gap_delta",
+                        "target_top20_margin",
+                        "readout_gap_closer_recipe",
+                        "readout_gap_closer_axis",
                         "focus_rank_delta",
                         "support_score",
                         "blocked_by",
@@ -10467,6 +11503,7 @@ class HookedTransformerWorkerRuntime:
                         "promotable_to_certification_replay",
                         "promotion_reason",
                         "counterfactual_delta",
+                        "positive_traits",
                     )
                     if row.get(key) not in (None, "", [])
                 }
@@ -10883,6 +11920,7 @@ class HookedTransformerWorkerRuntime:
             }
         prepared_edits: list[dict[str, Any]] = []
         focus_terms: list[str] = []
+        bad_attractor_terms: list[str] = []
         operator_family_keys: list[str] = []
         operator_recipe_ids: list[str] = []
         for index, raw_edit in enumerate(edits):
@@ -10893,6 +11931,15 @@ class HookedTransformerWorkerRuntime:
             feature = str(raw_edit.get("focus_feature", "") or "")
             if feature and feature not in focus_terms:
                 focus_terms.append(feature)
+            raw_bad_terms = raw_edit.get("bad_attractor_terms")
+            if not isinstance(raw_bad_terms, SequenceABC) or isinstance(raw_bad_terms, (str, bytes, bytearray)):
+                meta = raw_edit.get("meta") if isinstance(raw_edit.get("meta"), Mapping) else {}
+                raw_bad_terms = meta.get("bad_attractor_terms") if isinstance(meta, Mapping) else ()
+            if isinstance(raw_bad_terms, SequenceABC) and not isinstance(raw_bad_terms, (str, bytes, bytearray)):
+                for term in raw_bad_terms:
+                    normalized = str(term or "")
+                    if normalized and normalized not in bad_attractor_terms:
+                        bad_attractor_terms.append(normalized)
             operator_family_keys.append(self._operator_family_key(raw_edit))
             operator_recipe_ids.append(self._operator_recipe_id(raw_edit))
         for term in self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")):
@@ -10981,6 +12028,18 @@ class HookedTransformerWorkerRuntime:
         )
         if term_readout_deltas:
             result["term_readout_deltas"] = dict(term_readout_deltas)
+        if bad_attractor_terms:
+            attractor_metrics = self._first_token_target_readout_metrics(
+                baseline["first_logits"],
+                edited["first_logits"],
+                focus_terms=bad_attractor_terms,
+            )
+            if attractor_metrics:
+                result["bad_attractor_terms"] = list(bad_attractor_terms)
+                result["attractor_family_mass_delta"] = attractor_metrics.get("target_mass_delta")
+                result["attractor_top20_hit_delta"] = attractor_metrics.get("target_top20_hit_delta")
+                result["attractor_focus_rank_delta"] = attractor_metrics.get("focus_rank_delta")
+                result["attractor_focus_piece"] = attractor_metrics.get("focus_piece")
         result["candidate_fingerprint"] = self._candidate_fingerprint(
             edits,
             intended_bundle_key=intended_bundle_key,
@@ -11161,6 +12220,92 @@ class HookedTransformerWorkerRuntime:
                 "competitor_strategy": "stealer",
                 "modes": ("kv_pair",),
             },
+            {
+                "recipe_name": "attractor_suppression_patch",
+                "recipe_family": "readout_steering",
+                "steering_kind": "attractor_suppression",
+                "contrast_mode": "suppress_attractor",
+                "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                "negative_scale": 1.0,
+                "alpha": 0.03,
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "contrastive_readout_patch",
+                "recipe_family": "readout_steering",
+                "steering_kind": "contrastive_readout",
+                "contrast_mode": "minus_competitor_readout",
+                "competitor_strategy": "base",
+                "negative_scale": 1.0,
+                "alpha": 0.025,
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "contrastive_readout_patch_l050_a040",
+                "recipe_family": "readout_steering",
+                "steering_kind": "contrastive_readout",
+                "contrast_mode": "minus_competitor_readout",
+                "competitor_strategy": "base",
+                "negative_scale": 0.5,
+                "alpha": 0.04,
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "contrastive_readout_patch_l025_a060_gap",
+                "recipe_family": "readout_steering",
+                "steering_kind": "contrastive_readout",
+                "contrast_mode": "minus_competitor_readout",
+                "competitor_strategy": "base",
+                "negative_scale": 0.25,
+                "alpha": 0.06,
+                "readout_gap_closer_recipe": True,
+                "readout_gap_closer_axis": "target_top20_gap",
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "target_readout_patch",
+                "recipe_family": "readout_steering",
+                "steering_kind": "target_readout",
+                "contrast_mode": "target_readout_minus_attractor",
+                "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                "negative_scale": 0.35,
+                "alpha": 0.025,
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "target_readout_patch_a040",
+                "recipe_family": "readout_steering",
+                "steering_kind": "target_readout",
+                "contrast_mode": "target_readout_minus_attractor",
+                "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                "negative_scale": 0.2,
+                "alpha": 0.04,
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "target_readout_patch_pure_a060_gap",
+                "recipe_family": "readout_steering",
+                "steering_kind": "target_readout",
+                "contrast_mode": "target_readout_pure",
+                "negative_terms": (),
+                "negative_scale": 0.0,
+                "alpha": 0.06,
+                "readout_gap_closer_recipe": True,
+                "readout_gap_closer_axis": "target_top20_gap",
+                "modes": ("resid_readout",),
+            },
+            {
+                "recipe_name": "target_readout_patch_l005_a060_gap",
+                "recipe_family": "readout_steering",
+                "steering_kind": "target_readout",
+                "contrast_mode": "target_readout_minus_attractor",
+                "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                "negative_scale": 0.05,
+                "alpha": 0.06,
+                "readout_gap_closer_recipe": True,
+                "readout_gap_closer_axis": "target_top20_gap",
+                "modes": ("resid_readout",),
+            },
         ]
 
     def replay_operator_recipe_matrix(
@@ -11202,16 +12347,35 @@ class HookedTransformerWorkerRuntime:
         ownership_terms = [str(term) for term in bundle_term_by_key.values() if str(term)]
         base_bundle_key = str(strategy_hints.get("base_winner_bundle_key", "") or "")
         base_members = grouped.get(base_bundle_key, [])
+        def _is_readout_steering_spec(spec: Mapping[str, Any]) -> bool:
+            modes = spec.get("modes", ())
+            if isinstance(modes, SequenceABC) and not isinstance(modes, (str, bytes, bytearray)):
+                if any(str(mode) == "resid_readout" for mode in modes):
+                    return True
+            return str(spec.get("recipe_family", "") or "") == "readout_steering"
+
+        steering_specs = [dict(spec) for spec in specs if _is_readout_steering_spec(spec)]
+        kv_specs = [dict(spec) for spec in specs if not _is_readout_steering_spec(spec)]
         primary_specs = [
             dict(spec)
-            for spec in specs
+            for spec in kv_specs
             if str(spec.get("competitor_strategy", "") or "") != "stealer"
             and str(spec.get("contrast_mode", "none") or "none") not in {"minus_stealer", "orthogonal_stealer"}
         ]
         stealer_specs = [
             dict(spec)
-            for spec in specs
+            for spec in kv_specs
             if spec not in primary_specs
+        ]
+        primary_steering_specs = [
+            dict(spec)
+            for spec in steering_specs
+            if str(spec.get("competitor_strategy", "") or "") != "stealer"
+        ]
+        stealer_steering_specs = [
+            dict(spec)
+            for spec in steering_specs
+            if str(spec.get("competitor_strategy", "") or "") == "stealer"
         ]
 
         def _evaluate_specs(
@@ -11428,7 +12592,101 @@ class HookedTransformerWorkerRuntime:
                             local_evaluations.append(result)
             return local_evaluations
 
+        def _evaluate_readout_steering_specs(
+            spec_list: Sequence[Mapping[str, Any]],
+            *,
+            stealer_bundle_map: Mapping[tuple[str, str], str] | None = None,
+        ) -> list[dict[str, Any]]:
+            local_evaluations: list[dict[str, Any]] = []
+            for bundle_key in chosen_bundle_keys:
+                members = grouped.get(bundle_key, [])
+                if not members:
+                    continue
+                intended_term = str(bundle_term_by_key.get(str(bundle_key), "") or "")
+                if not intended_term:
+                    continue
+                for spec in spec_list:
+                    steering_kind = str(spec.get("steering_kind", spec.get("recipe_name", "readout_direction")) or "readout_direction")
+                    recipe_name = str(spec.get("recipe_name", steering_kind) or steering_kind)
+                    competitor_strategy = str(spec.get("competitor_strategy", "") or "")
+                    contrast_mode = str(spec.get("contrast_mode", "none") or "none")
+                    negative_scale = float(spec.get("negative_scale", 1.0))
+                    target_scale = float(spec.get("target_scale", 1.0))
+                    alpha = float(spec.get("alpha", 0.025))
+                    competitor_bundle_key = ""
+                    if competitor_strategy == "stealer":
+                        seed_key = self._operator_recipe_seed_key(
+                            mode="resid_readout",
+                            localization=steering_kind,
+                            pooling="readout_unembed",
+                        )
+                        competitor_bundle_key = str((stealer_bundle_map or {}).get((seed_key, str(bundle_key)), "") or "")
+                        if not competitor_bundle_key:
+                            competitor_bundle_key = str((stealer_bundle_map or {}).get(("*", str(bundle_key)), "") or "")
+                    elif competitor_strategy == "base" and base_bundle_key and str(bundle_key) != base_bundle_key:
+                        competitor_bundle_key = base_bundle_key
+                    competitor_term = str(bundle_term_by_key.get(competitor_bundle_key, "") or "")
+                    target_terms: list[str] = []
+                    raw_negative_terms = spec.get("negative_terms", ())
+                    negative_terms = (
+                        [str(term) for term in raw_negative_terms if str(term)]
+                        if isinstance(raw_negative_terms, SequenceABC)
+                        and not isinstance(raw_negative_terms, (str, bytes, bytearray))
+                        else []
+                    )
+                    if steering_kind != "attractor_suppression":
+                        target_terms.append(intended_term)
+                    if steering_kind == "contrastive_readout":
+                        if not competitor_term:
+                            continue
+                        negative_terms = [competitor_term]
+                    candidate = self._readout_steering_candidate(
+                        bundle_key=str(bundle_key),
+                        members=members,
+                        intended_term=intended_term,
+                        recipe_name=recipe_name,
+                        steering_kind=steering_kind,
+                        target_terms=target_terms,
+                        negative_terms=negative_terms,
+                        negative_scale=negative_scale,
+                        target_scale=target_scale,
+                        alpha=alpha,
+                        contrast_mode=contrast_mode,
+                        competitor_bundle_key=competitor_bundle_key or None,
+                        competitor_term=competitor_term or None,
+                    )
+                    if candidate is None:
+                        continue
+                    result = self.replay_candidate_edits_actual_delta(
+                        [candidate],
+                        max_new_tokens=max_new_tokens,
+                        top_k=top_k,
+                        label=f"{recipe_name}:resid_readout:{bundle_key}",
+                        ownership_terms=ownership_terms,
+                        intended_bundle_key=bundle_key,
+                        intended_term=intended_term,
+                        contrast_partner_bundle_key=competitor_bundle_key or None,
+                        contrast_partner_term=competitor_term or None,
+                    )
+                    result["operator_recipe_id"] = str(candidate.get("operator_recipe_id", self._operator_recipe_id(candidate)))
+                    result["operator_recipe_seed_key"] = str(candidate.get("operator_recipe_seed_key") or "")
+                    result["recipe_mode"] = "resid_readout"
+                    result["recipe_name"] = recipe_name
+                    result["recipe_localization"] = steering_kind
+                    result["recipe_pooling"] = "readout_unembed"
+                    result["recipe_family"] = "readout_steering"
+                    result["contrast_mode"] = contrast_mode
+                    result["contrast_scale"] = round(float(negative_scale), 6)
+                    result["competitor_strategy"] = competitor_strategy or None
+                    result["readout_steering_kind"] = steering_kind
+                    result["readout_gap_closer_recipe"] = bool(spec.get("readout_gap_closer_recipe", False))
+                    result["readout_gap_closer_axis"] = spec.get("readout_gap_closer_axis")
+                    local_evaluations.append(result)
+            return local_evaluations
+
         evaluations = _evaluate_specs(primary_specs)
+        if primary_steering_specs:
+            evaluations.extend(_evaluate_readout_steering_specs(primary_steering_specs))
         ownership = self._summarize_operator_recipe_bundle_ownership(
             evaluations,
             bundle_term_by_key=bundle_term_by_key,
@@ -11443,6 +12701,13 @@ class HookedTransformerWorkerRuntime:
             evaluations.extend(
                 _evaluate_specs(
                     stealer_specs,
+                    stealer_bundle_map=stealer_bundle_map,
+                )
+            )
+        if stealer_steering_specs:
+            evaluations.extend(
+                _evaluate_readout_steering_specs(
+                    stealer_steering_specs,
                     stealer_bundle_map=stealer_bundle_map,
                 )
             )
@@ -11663,6 +12928,8 @@ class HookedTransformerWorkerRuntime:
             baseline_output_len = len(self._output_token_ids())
             first_logits: torch.Tensor | None = None
             first_entropy = 0.0
+            first_top1_margin = 0.0
+            first_repetition_score = 0.0
             for _ in range(max_new_tokens):
                 tokens = self._current_token_tensor()
                 logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
@@ -11670,7 +12937,10 @@ class HookedTransformerWorkerRuntime:
                 next_logits, _decoder_state = self._apply_decoder_control(next_logits)
                 if first_logits is None:
                     first_logits = next_logits.detach().cpu().float()
-                    first_entropy = float(self._compute_metrics(next_logits)["entropy"])
+                    first_metrics = self._compute_metrics(next_logits)
+                    first_entropy = float(first_metrics["entropy"])
+                    first_top1_margin = float(first_metrics["top1_margin"])
+                    first_repetition_score = float(first_metrics["repetition_score"])
                 next_token = int(torch.argmax(next_logits).item())
                 self._append_output_token(next_token)
                 continuation_ids = self._output_token_ids()[baseline_output_len:]
@@ -11687,6 +12957,8 @@ class HookedTransformerWorkerRuntime:
                 "continuation_token_ids": [int(token_id) for token_id in continuation_ids],
                 "first_logits": first_logits,
                 "entropy": first_entropy,
+                "top1_margin": first_top1_margin,
+                "repetition_score": first_repetition_score,
                 "repeat_flag": self._repeat_flag(),
                 "scoring": scoring,
             }

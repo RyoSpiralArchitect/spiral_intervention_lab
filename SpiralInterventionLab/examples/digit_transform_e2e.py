@@ -497,6 +497,39 @@ def load_worker_model(
 
 def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:
     grouped: dict[int, dict[str, Any]] = {}
+
+    def _positive_plan_from_result(result: Mapping[str, Any]) -> dict[str, Any] | None:
+        plan = result.get("positive_operator_deepening_plan")
+        if isinstance(plan, Mapping):
+            return dict(plan)
+        summary = result.get("operator_recipe_expansion_summary")
+        if isinstance(summary, Mapping) and isinstance(summary.get("positive_operator_deepening_plan"), Mapping):
+            return dict(summary["positive_operator_deepening_plan"])
+        diagnostic_summary = result.get("diagnostic_summary")
+        if (
+            isinstance(diagnostic_summary, Mapping)
+            and isinstance(diagnostic_summary.get("positive_operator_deepening_plan"), Mapping)
+        ):
+            return dict(diagnostic_summary["positive_operator_deepening_plan"])
+        return None
+
+    def _latest_positive_plan(bucket: Mapping[str, Any]) -> dict[str, Any] | None:
+        for result in reversed(list(bucket.get("diagnostic_results", ()))):
+            if isinstance(result, Mapping):
+                plan = _positive_plan_from_result(result)
+                if plan is not None:
+                    return plan
+        observation = bucket.get("controller_observation")
+        if isinstance(observation, Mapping):
+            latest = observation.get("latest_diagnostic_results")
+            if isinstance(latest, SequenceABC) and not isinstance(latest, (str, bytes, bytearray)):
+                for result in reversed(list(latest)):
+                    if isinstance(result, Mapping):
+                        plan = _positive_plan_from_result(result)
+                        if plan is not None:
+                            return plan
+        return None
+
     for event in events:
         try:
             step = int(event.get("step", 0))
@@ -550,12 +583,20 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
         bucket = grouped[step]
         selection = bucket.get("controller_selection")
         bridge_visible = bool(selection.get("controller_bridge_plan_visible", False)) if isinstance(selection, Mapping) else False
+        observation = bucket.get("controller_observation")
+        if isinstance(observation, Mapping):
+            observation = dict(observation)
+        positive_plan = _latest_positive_plan(bucket)
+        if positive_plan is not None and isinstance(observation, dict):
+            observation.setdefault("positive_operator_deepening_plan", dict(positive_plan))
+            if positive_plan.get("curiosity_signal") not in (None, ""):
+                observation.setdefault("controller_curiosity_signal", positive_plan.get("curiosity_signal"))
         views.append(
             {
                 "step": step,
                 "provider_attempt_count": len(bucket["provider_attempts"]),
                 "provider_attempts": list(bucket["provider_attempts"]),
-                "controller_observation": bucket.get("controller_observation"),
+                "controller_observation": observation,
                 "controller_decision": bucket.get("controller_decision"),
                 "controller_command": bucket.get("controller_command"),
                 "controller_selection": selection,
@@ -567,6 +608,7 @@ def _controller_step_views(events: Sequence[Mapping[str, Any]]) -> tuple[dict[st
                 "diagnostic_vetoes": list(bucket["diagnostic_vetoes"]),
                 "loop_patience_count": len(bucket["loop_patience"]),
                 "loop_patience": list(bucket["loop_patience"]),
+                "positive_operator_deepening_plan": positive_plan,
                 "bridge_visible": bridge_visible,
                 "bridge_dual_layer_missing": (
                     bool(selection.get("controller_bridge_dual_layer_missing", False))
@@ -1583,6 +1625,32 @@ def _diagnostic_evidence_ledger(
             )
             if item.get("operator_axis") not in (None, ""):
                 ledger[-1]["operator_axis"] = str(item.get("operator_axis"))
+            for generic_key in (
+                "recipe_family",
+                "recipe_mode",
+                "recipe_localization",
+                "recipe_pooling",
+                "contrast_mode",
+                "contrast_scale",
+                "readout_steering_kind",
+                "readout_direction_target_token_ids",
+                "readout_direction_negative_token_ids",
+                "bad_attractor_terms",
+                "target_piece",
+                "target_piece_logit_delta",
+                "target_piece_prob_delta",
+                "target_rank_after",
+                "target_top20_threshold_gap_baseline",
+                "target_top20_threshold_gap",
+                "target_top20_threshold_gap_after",
+                "target_top20_threshold_gap_delta",
+                "target_top20_margin",
+                "readout_gap_closer_recipe",
+                "readout_gap_closer_axis",
+                "positive_traits",
+            ):
+                if item.get(generic_key) not in (None, ""):
+                    ledger[-1][generic_key] = item.get(generic_key)
             if activation_shadow_actuator is not None:
                 ledger[-1]["activation_patch_shadow_actuator"] = dict(activation_shadow_actuator)
                 ledger[-1]["activation_patch_actuator_class"] = actuator_class
@@ -1829,6 +1897,7 @@ def _diagnostic_evidence_ledger(
         ledger,
         key=lambda row: (
             0 if str(row.get("evidence_kind", "") or "") == "operator_mode_decomposition" else 1,
+            0 if bool(row.get("readout_gap_closer_recipe", False)) else 1,
             str(row.get("bundle_key", "") or ""),
             str(row.get("recipe_name", "") or ""),
             str(row.get("evidence_kind", "") or ""),
@@ -2273,6 +2342,86 @@ class _FrontierReplayControllerClient:
             ):
                 return True
         return False
+
+    @staticmethod
+    def _readout_steering_deepening_from_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+    ) -> dict[str, Any] | None:
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
+                continue
+            result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+            if objective_bundle_key and result_objective and result_objective != objective_bundle_key:
+                continue
+            if str(result.get("operator_recipe_expansion_mode") or "") == "readout_steering_deepening":
+                return None
+            summary = result.get("operator_recipe_expansion_summary")
+            if not isinstance(summary, Mapping):
+                summary = result.get("diagnostic_summary")
+            summary = dict(summary) if isinstance(summary, Mapping) else {}
+            next_evidence = str(result.get("next_evidence_needed") or summary.get("next_evidence_needed") or "")
+            recommended = str(summary.get("recommended_next_family") or "")
+            if next_evidence != "readout_steering_deepening" and not recommended.startswith(
+                "readout_steering_deepening"
+            ):
+                continue
+            return {
+                "next_evidence_needed": "readout_steering_deepening",
+                "recommended_next_family": recommended or "readout_steering_deepening",
+                "status": summary.get("status") or result.get("status"),
+                "operator_positive_memory": (
+                    dict(result.get("operator_positive_memory"))
+                    if isinstance(result.get("operator_positive_memory"), Mapping)
+                    else dict(summary.get("operator_positive_memory"))
+                    if isinstance(summary.get("operator_positive_memory"), Mapping)
+                    else {}
+                ),
+                "positive_memory_family_count": summary.get("positive_memory_family_count"),
+                "best_positive_operator_family": summary.get("best_positive_operator_family"),
+                "best_positive_operator_traits": (
+                    list(summary.get("best_positive_operator_traits", ()))
+                    if isinstance(summary.get("best_positive_operator_traits"), SequenceABC)
+                    and not isinstance(summary.get("best_positive_operator_traits"), (str, bytes, bytearray))
+                    else []
+                ),
+                "best_positive_operator_next_action": summary.get("best_positive_operator_next_action"),
+                "positive_operator_deepening_plan": (
+                    dict(summary.get("positive_operator_deepening_plan"))
+                    if isinstance(summary.get("positive_operator_deepening_plan"), Mapping)
+                    else dict(result.get("positive_operator_deepening_plan"))
+                    if isinstance(result.get("positive_operator_deepening_plan"), Mapping)
+                    else None
+                ),
+                "best_readout_steering_rank_carrier_recipe_family": summary.get(
+                    "best_readout_steering_rank_carrier_recipe_family"
+                ),
+                "best_readout_steering_rank_carrier_recipe_name": summary.get(
+                    "best_readout_steering_rank_carrier_recipe_name"
+                ),
+                "best_readout_steering_target_top20_threshold_gap": summary.get(
+                    "best_readout_steering_target_top20_threshold_gap"
+                ),
+                "readout_gap_closer_recipe_count": summary.get("readout_gap_closer_recipe_count"),
+                "readout_gap_probe_recipe_count": summary.get("readout_gap_probe_recipe_count"),
+                "readout_gap_closer_candidate_count": summary.get("readout_gap_closer_candidate_count"),
+                "readout_gap_closer_certified_count": summary.get("readout_gap_closer_certified_count"),
+                "best_readout_gap_closer_recipe_family": summary.get("best_readout_gap_closer_recipe_family"),
+                "best_readout_gap_closer_recipe_name": summary.get("best_readout_gap_closer_recipe_name"),
+                "best_readout_gap_closer_target_top20_threshold_gap": summary.get(
+                    "best_readout_gap_closer_target_top20_threshold_gap"
+                ),
+                "best_readout_gap_closer_target_top20_threshold_gap_delta": summary.get(
+                    "best_readout_gap_closer_target_top20_threshold_gap_delta"
+                ),
+                "best_readout_gap_closer_target_piece_logit_delta": summary.get(
+                    "best_readout_gap_closer_target_piece_logit_delta"
+                ),
+            }
+        return None
 
     @staticmethod
     def _production_trial_alternate_evidence_from_results(
@@ -3029,6 +3178,10 @@ class _FrontierReplayControllerClient:
             diagnostic_history_items,
             objective_bundle_key=objective_bundle_key,
         )
+        readout_steering_deepening = self._readout_steering_deepening_from_results(
+            diagnostic_history_items,
+            objective_bundle_key=objective_bundle_key,
+        )
         production_trial_alternate_candidate: dict[str, Any] | None = None
         production_trial_blocked_recipe_id = (
             production_trial_outcome.get("operator_recipe_id")
@@ -3184,6 +3337,38 @@ class _FrontierReplayControllerClient:
                     "cross_bundle_bridge_search_state": dict(cross_bundle_bridge_status)
                     if isinstance(cross_bundle_bridge_status, Mapping)
                     else None,
+                    "production_trial_outcome": dict(production_trial_outcome),
+                }
+            elif cross_bundle_bridge_exhausted and readout_steering_deepening is not None:
+                request_attention_shadow_round = False
+                request_production_trial_followup_round = True
+                production_trial_outcome_holds_activation_patch_pipeline = True
+                diagnostic_name = "compare_extra_operator_diagnostics"
+                next_evidence = "readout_steering_deepening"
+                why_not_apply = (
+                    "post-bridge operator expansion found a self-owned readout steering rank carrier, "
+                    "but target mass/top20 lift is still missing; deepen readout steering diagnostics"
+                )
+                diagnostic_request = {
+                    "diagnostic": diagnostic_name,
+                    "bundle_key": objective_bundle_key,
+                    "objective_bundle_key": objective_bundle_key,
+                    "step_actuator_bundle_key": step_actuator_bundle_key,
+                    "next_evidence_needed": next_evidence,
+                    "reason": why_not_apply,
+                    "operator_recipe_expansion_mode": "readout_steering_deepening",
+                    "readout_steering_deepening_requested": True,
+                    "readout_steering_deepening_state": dict(readout_steering_deepening),
+                    "operator_positive_memory": (
+                        dict(readout_steering_deepening.get("operator_positive_memory"))
+                        if isinstance(readout_steering_deepening.get("operator_positive_memory"), Mapping)
+                        else {}
+                    ),
+                    "positive_operator_deepening_plan": (
+                        dict(readout_steering_deepening.get("positive_operator_deepening_plan"))
+                        if isinstance(readout_steering_deepening.get("positive_operator_deepening_plan"), Mapping)
+                        else None
+                    ),
                     "production_trial_outcome": dict(production_trial_outcome),
                 }
             elif (
@@ -3536,6 +3721,40 @@ class _FrontierReplayControllerClient:
                         "next_evidence_needed": next_evidence,
                         "reason": why_not_apply,
                         "activation_patch_compile_preview_blocked_reason": activation_patch_preview_blocked_reason,
+                    }
+                elif (
+                    rank_carrier_block
+                    and cross_bundle_bridge_exhausted
+                    and post_bridge_recipe_expansion_seen
+                    and readout_steering_deepening is not None
+                ):
+                    request_extra_operator_compare_round = True
+                    diagnostic_name = "compare_extra_operator_diagnostics"
+                    next_evidence = "readout_steering_deepening"
+                    why_not_apply = (
+                        "post-bridge operator expansion found a self-owned readout steering rank carrier, "
+                        "but target mass/top20 lift is still missing; deepen readout steering diagnostics"
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                        "operator_recipe_expansion_mode": "readout_steering_deepening",
+                        "readout_steering_deepening_requested": True,
+                        "readout_steering_deepening_state": dict(readout_steering_deepening),
+                        "operator_positive_memory": (
+                            dict(readout_steering_deepening.get("operator_positive_memory"))
+                            if isinstance(readout_steering_deepening.get("operator_positive_memory"), Mapping)
+                            else {}
+                        ),
+                        "positive_operator_deepening_plan": (
+                            dict(readout_steering_deepening.get("positive_operator_deepening_plan"))
+                            if isinstance(readout_steering_deepening.get("positive_operator_deepening_plan"), Mapping)
+                            else None
+                        ),
                     }
                 elif rank_carrier_block and cross_bundle_bridge_exhausted and post_bridge_recipe_expansion_seen:
                     next_evidence = "operator_recipe_expansion_exhausted"
@@ -4005,6 +4224,78 @@ class _FrontierReplayControllerClient:
                     meta["blocked_by"] = "cross_bundle_bridge_search_exhausted"
                     meta["controller_memory"]["operator_recipe_expansion_requested"] = True
                     meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
+        if readout_steering_deepening is not None:
+            meta["readout_steering_deepening_state"] = dict(readout_steering_deepening)
+            if isinstance(readout_steering_deepening.get("operator_positive_memory"), Mapping):
+                meta["operator_positive_memory"] = dict(readout_steering_deepening["operator_positive_memory"])
+                meta["controller_memory"]["operator_positive_memory_family_count"] = int(
+                    readout_steering_deepening.get("positive_memory_family_count", 0) or 0
+                )
+            if isinstance(readout_steering_deepening.get("positive_operator_deepening_plan"), Mapping):
+                meta["positive_operator_deepening_plan"] = dict(
+                    readout_steering_deepening["positive_operator_deepening_plan"]
+                )
+                meta["controller_memory"]["positive_operator_deepening_reason"] = meta[
+                    "positive_operator_deepening_plan"
+                ].get("reason_code")
+                meta["controller_memory"]["positive_operator_deepening_axis"] = meta[
+                    "positive_operator_deepening_plan"
+                ].get("deepening_axis")
+            if readout_steering_deepening.get("best_positive_operator_family") not in (None, ""):
+                meta["best_positive_operator_family"] = readout_steering_deepening.get(
+                    "best_positive_operator_family"
+                )
+                meta["controller_memory"]["best_positive_operator_family"] = meta[
+                    "best_positive_operator_family"
+                ]
+            if readout_steering_deepening.get("best_positive_operator_next_action") not in (None, ""):
+                meta["best_positive_operator_next_action"] = readout_steering_deepening.get(
+                    "best_positive_operator_next_action"
+                )
+                meta["controller_memory"]["best_positive_operator_next_action"] = meta[
+                    "best_positive_operator_next_action"
+                ]
+            for gap_key in (
+                "readout_gap_closer_recipe_count",
+                "readout_gap_probe_recipe_count",
+                "readout_gap_closer_candidate_count",
+                "readout_gap_closer_certified_count",
+                "best_readout_gap_closer_recipe_family",
+                "best_readout_gap_closer_recipe_name",
+                "best_readout_gap_closer_target_top20_threshold_gap",
+                "best_readout_gap_closer_target_top20_threshold_gap_delta",
+                "best_readout_gap_closer_target_piece_logit_delta",
+            ):
+                if readout_steering_deepening.get(gap_key) not in (None, ""):
+                    meta[gap_key] = readout_steering_deepening.get(gap_key)
+                    meta["controller_memory"][gap_key] = meta[gap_key]
+            traits = readout_steering_deepening.get("best_positive_operator_traits")
+            if isinstance(traits, SequenceABC) and not isinstance(traits, (str, bytes, bytearray)):
+                meta["best_positive_operator_traits"] = [str(item) for item in traits if str(item)]
+                meta["controller_memory"]["best_positive_operator_traits"] = list(
+                    meta["best_positive_operator_traits"]
+                )
+            meta["controller_memory"]["readout_steering_deepening_status"] = readout_steering_deepening.get("status")
+        if str(diagnostic_request.get("operator_recipe_expansion_mode") or "") == "readout_steering_deepening":
+            meta["operator_recipe_expansion_mode"] = "readout_steering_deepening"
+            meta["readout_steering_deepening_requested"] = True
+            plan = meta.get("positive_operator_deepening_plan")
+            plan_signal = plan.get("curiosity_signal") if isinstance(plan, Mapping) else None
+            if plan_signal not in (None, ""):
+                meta["controller_curiosity_signal"] = str(plan_signal)
+            else:
+                positive_next_action = str(meta.get("best_positive_operator_next_action") or "").strip()
+                curiosity_suffix = (
+                    "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in positive_next_action.lower())
+                    if positive_next_action
+                    else "readout_steering_deepening"
+                )
+                meta["controller_curiosity_signal"] = f"positive_operator_memory_{curiosity_suffix}"
+            meta["blocked_by"] = "readout_steering_rank_carrier_needs_target_lift"
+            meta["controller_memory"]["operator_recipe_expansion_mode"] = "readout_steering_deepening"
+            meta["controller_memory"]["readout_steering_deepening_requested"] = True
+            meta["controller_memory"]["controller_curiosity_signal"] = meta["controller_curiosity_signal"]
+            meta["controller_memory"]["blocked_by"] = meta["blocked_by"]
         return {"version": "0.1", "decision": "noop", "meta": meta}
 
     def invoke(self, packet: dict[str, Any]) -> dict[str, Any]:
@@ -5830,10 +6121,28 @@ def run_readout_escape_replay_harness(
                 "objective_term": objective_term,
                 "actuator_bundle_key": objective_bundle_key,
                 "status": str(result.get("status", "") or ""),
-                "actuator_class": str(result.get("actual_delta_class", "") or "") or None,
+                "actuator_class": str(result.get("actuator_class") or result.get("actual_delta_class", "") or "") or None,
+                "actual_delta_class": result.get("actual_delta_class"),
+                "realized_lift_bundle_key": result.get("realized_lift_bundle_key"),
+                "realized_lift_term": result.get("realized_lift_term"),
+                "self_delta": result.get("self_delta"),
+                "cross_delta": result.get("cross_delta"),
+                "alignment_margin": result.get("alignment_margin"),
+                "bundle_lift_scores": (
+                    dict(result.get("bundle_lift_scores"))
+                    if isinstance(result.get("bundle_lift_scores"), Mapping)
+                    else None
+                ),
                 "operator_recipe_id": result.get("operator_recipe_id"),
+                "operator_recipe_seed_key": result.get("operator_recipe_seed_key"),
                 "target_mass_delta": result.get("target_mass_delta"),
                 "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+                "target_piece": result.get("target_piece"),
+                "target_piece_logit_delta": result.get("target_piece_logit_delta"),
+                "target_piece_prob_delta": result.get("target_piece_prob_delta"),
+                "target_rank_after": result.get("target_rank_after"),
+                "target_top20_threshold_gap": result.get("target_top20_threshold_gap"),
+                "target_top20_margin": result.get("target_top20_margin"),
                 "focus_rank_delta": result.get("focus_rank_delta"),
                 "rank_focus_delta": result.get("rank_focus_delta"),
                 "required_term_recall_delta": result.get("required_term_recall_delta"),
@@ -5848,6 +6157,218 @@ def run_readout_escape_replay_harness(
                 if isinstance(result.get("eval_context_fingerprint"), Mapping)
                 else {},
             }
+
+        def _attach_bundle_lift_ownership(
+            result: dict[str, Any],
+            *,
+            bundle_key: str,
+        ) -> None:
+            term_deltas = result.get("term_readout_deltas") if isinstance(result.get("term_readout_deltas"), Mapping) else {}
+            bundle_scores: dict[str, float] = {}
+            for lift_bundle_key, lift_term in bundle_terms.items():
+                metrics = term_deltas.get(str(lift_term)) if isinstance(term_deltas, Mapping) else None
+                score = float(metrics.get("lift_score", 0.0) or 0.0) if isinstance(metrics, Mapping) else 0.0
+                bundle_scores[str(lift_bundle_key)] = float(score)
+            realized_lift_bundle_key = (
+                max(bundle_scores.items(), key=lambda entry: (float(entry[1]), str(entry[0])))[0]
+                if bundle_scores
+                else str(bundle_key)
+            )
+            self_delta = float(bundle_scores.get(str(bundle_key), 0.0) or 0.0)
+            cross_delta = max(
+                (
+                    float(score)
+                    for lift_bundle_key, score in bundle_scores.items()
+                    if str(lift_bundle_key) != str(bundle_key)
+                ),
+                default=0.0,
+            )
+            alignment_margin = float(self_delta - cross_delta)
+            actual_delta_class = str(result.get("actual_delta_class", "") or "")
+            if actual_delta_class in {"collapse_sharpener", "harmful", "collapse_suppressor"}:
+                actuator_class = actual_delta_class
+            elif self_delta > 0.03 and alignment_margin > 0.01:
+                actuator_class = "self_actuator"
+            elif self_delta > 0.005 and alignment_margin < -0.01 and str(realized_lift_bundle_key) != str(bundle_key):
+                actuator_class = "cross_bound"
+            elif cross_delta > 0.03 and str(realized_lift_bundle_key) != str(bundle_key):
+                actuator_class = "bridge_actuator"
+            elif max(self_delta, cross_delta) <= 0.01:
+                actuator_class = "dead_actuator"
+            else:
+                actuator_class = "noisy_or_harmful"
+            result["actuator_class"] = actuator_class
+            result["realized_lift_bundle_key"] = str(realized_lift_bundle_key) if bundle_scores else None
+            result["realized_lift_term"] = str(bundle_terms.get(str(realized_lift_bundle_key), "") or "") if bundle_scores else None
+            result["self_delta"] = round(float(self_delta), 6)
+            result["cross_delta"] = round(float(cross_delta), 6)
+            result["alignment_margin"] = round(float(alignment_margin), 6)
+            result["bundle_lift_scores"] = {
+                str(lift_bundle_key): round(float(score), 6)
+                for lift_bundle_key, score in sorted(bundle_scores.items(), key=lambda entry: str(entry[0]))
+            }
+
+        def _run_readout_steering_operator(
+            *,
+            bundle_key: str,
+            members: Sequence[Mapping[str, Any]],
+            objective_term: str,
+            recipe_name: str,
+            steering_kind: str,
+            target_terms: Sequence[str] = (),
+            negative_terms: Sequence[str] = (),
+            negative_scale: float = 1.0,
+            target_scale: float = 1.0,
+            alpha: float = 0.025,
+            contrast_mode: str = "none",
+            competitor_bundle_key: str | None = None,
+            competitor_term: str | None = None,
+            readout_gap_closer_recipe: bool = False,
+            readout_gap_closer_axis: str | None = None,
+        ) -> dict[str, Any] | None:
+            candidate = self._readout_steering_candidate(
+                bundle_key=bundle_key,
+                members=members,
+                intended_term=objective_term,
+                recipe_name=recipe_name,
+                steering_kind=steering_kind,
+                target_terms=target_terms,
+                negative_terms=negative_terms,
+                negative_scale=negative_scale,
+                target_scale=target_scale,
+                alpha=alpha,
+                contrast_mode=contrast_mode,
+                competitor_bundle_key=competitor_bundle_key,
+                competitor_term=competitor_term,
+            )
+            if candidate is None:
+                return None
+            result = self.replay_candidate_edits_actual_delta(
+                [candidate],
+                max_new_tokens=3,
+                top_k=8,
+                label=f"{recipe_name}:resid_readout:{bundle_key}",
+                ownership_terms=ownership_terms,
+                intended_bundle_key=bundle_key,
+                intended_term=objective_term,
+                contrast_partner_bundle_key=competitor_bundle_key,
+                contrast_partner_term=competitor_term,
+            )
+            _attach_bundle_lift_ownership(result, bundle_key=bundle_key)
+            result["operator_recipe_id"] = str(candidate.get("operator_recipe_id") or result.get("operator_recipe_id") or "")
+            result["operator_recipe_seed_key"] = str(candidate.get("operator_recipe_seed_key") or "")
+            row = _compact_actual_delta(
+                result,
+                diagnostic_family="readout_steering",
+                recipe_name=recipe_name,
+                objective_bundle_key=bundle_key,
+                objective_term=objective_term,
+            )
+            row.update(
+                {
+                    "operator_axis": "readout_steering",
+                    "recipe_family": "readout_steering",
+                    "recipe_mode": "resid_readout",
+                    "recipe_localization": steering_kind,
+                    "recipe_pooling": "readout_unembed",
+                    "contrast_mode": contrast_mode,
+                    "contrast_scale": round(float(negative_scale), 6),
+                    "readout_steering_kind": steering_kind,
+                    "readout_direction_target_token_ids": candidate.get("readout_direction_target_token_ids"),
+                    "readout_direction_negative_token_ids": candidate.get("readout_direction_negative_token_ids"),
+                    "bad_attractor_terms": list(candidate.get("bad_attractor_terms", ())),
+                    "readout_gap_closer_recipe": bool(readout_gap_closer_recipe),
+                    "readout_gap_closer_axis": readout_gap_closer_axis,
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe": True,
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                }
+            )
+            return row
+
+        def _run_readout_steering_sequence(
+            *,
+            bundle_key: str,
+            members: Sequence[Mapping[str, Any]],
+            objective_term: str,
+            recipe_name: str,
+            stages: Sequence[Mapping[str, Any]],
+        ) -> dict[str, Any] | None:
+            candidates: list[dict[str, Any]] = []
+            for stage in stages:
+                candidate = self._readout_steering_candidate(
+                    bundle_key=bundle_key,
+                    members=members,
+                    intended_term=objective_term,
+                    recipe_name=str(stage.get("recipe_name") or stage.get("steering_kind") or recipe_name),
+                    steering_kind=str(stage.get("steering_kind", "target_readout") or "target_readout"),
+                    target_terms=stage.get("target_terms", ()),
+                    negative_terms=stage.get("negative_terms", ()),
+                    negative_scale=float(stage.get("negative_scale", 1.0) or 1.0),
+                    target_scale=float(stage.get("target_scale", 1.0) or 1.0),
+                    alpha=float(stage.get("alpha", 0.025) or 0.025),
+                    contrast_mode=str(stage.get("contrast_mode", "none") or "none"),
+                    competitor_bundle_key=(
+                        str(stage.get("competitor_bundle_key"))
+                        if stage.get("competitor_bundle_key") not in (None, "")
+                        else None
+                    ),
+                    competitor_term=(
+                        str(stage.get("competitor_term"))
+                        if stage.get("competitor_term") not in (None, "")
+                        else None
+                    ),
+                )
+                if candidate is None:
+                    return None
+                candidates.append(candidate)
+            if not candidates:
+                return None
+            result = self.replay_candidate_edits_actual_delta(
+                candidates,
+                max_new_tokens=3,
+                top_k=8,
+                max_edits_per_step_override=len(candidates),
+                label=f"{recipe_name}:resid_readout_sequence:{bundle_key}",
+                ownership_terms=ownership_terms,
+                intended_bundle_key=bundle_key,
+                intended_term=objective_term,
+            )
+            _attach_bundle_lift_ownership(result, bundle_key=bundle_key)
+            stage_ids = [
+                str(candidate.get("operator_recipe_id", "") or "")
+                for candidate in candidates
+                if str(candidate.get("operator_recipe_id", "") or "")
+            ]
+            result["operator_recipe_id"] = "readout_escape|readout_steering_sequence|" + "+".join(stage_ids)
+            result["operator_recipe_seed_key"] = "resid_readout_sequence|readout_steering|two_stage"
+            row = _compact_actual_delta(
+                result,
+                diagnostic_family="readout_steering",
+                recipe_name=recipe_name,
+                objective_bundle_key=bundle_key,
+                objective_term=objective_term,
+            )
+            row.update(
+                {
+                    "operator_axis": "readout_steering",
+                    "recipe_family": "readout_steering_sequence",
+                    "recipe_mode": "resid_readout_sequence",
+                    "recipe_localization": "two_stage_suppress_then_target",
+                    "recipe_pooling": "readout_unembed",
+                    "contrast_mode": "two_stage",
+                    "contrast_scale": None,
+                    "readout_steering_kind": "two_stage_suppress_then_target",
+                    "readout_steering_stage_count": len(candidates),
+                    "bad_attractor_terms": list(stages[0].get("negative_terms", ())) if stages else [],
+                    "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    "post_bridge_exhaustion_recipe": True,
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                }
+            )
+            return row
 
         def _kv_candidates_by_bundle() -> dict[str, list[dict[str, Any]]]:
             grouped: dict[str, list[dict[str, Any]]] = {}
@@ -6022,6 +6543,12 @@ def run_readout_escape_replay_harness(
                 "operator_recipe_id": result.get("operator_recipe_id"),
                 "target_mass_delta": result.get("target_mass_delta"),
                 "target_top20_hit_delta": result.get("target_top20_hit_delta"),
+                "target_piece": result.get("target_piece"),
+                "target_piece_logit_delta": result.get("target_piece_logit_delta"),
+                "target_piece_prob_delta": result.get("target_piece_prob_delta"),
+                "target_rank_after": result.get("target_rank_after"),
+                "target_top20_threshold_gap": result.get("target_top20_threshold_gap"),
+                "target_top20_margin": result.get("target_top20_margin"),
                 "focus_rank_delta": result.get("focus_rank_delta"),
                 "rank_focus_delta": result.get("rank_focus_delta"),
                 "required_term_recall_delta": result.get("required_term_recall_delta"),
@@ -6834,6 +7361,186 @@ def run_readout_escape_replay_harness(
                         patch_row["operator_recipe_expansion_mode"] = "post_bridge_exhaustion"
                         patch_row["post_bridge_exhaustion_recipe"] = True
                         rows.append(patch_row)
+                steering_members = [
+                    dict(item)
+                    for item in grouped_candidates.get(bundle_key, [])
+                    if isinstance(item, Mapping)
+                ]
+                if steering_members:
+                    bad_attractor_terms = ("the", "EW", "inou", "shards")
+                    steering_specs: list[dict[str, Any]] = [
+                        {
+                            "recipe_name": "post_bridge_attractor_suppression_patch",
+                            "steering_kind": "attractor_suppression",
+                            "target_terms": (),
+                            "negative_terms": bad_attractor_terms,
+                            "negative_scale": 1.0,
+                            "alpha": 0.03,
+                            "contrast_mode": "suppress_attractor",
+                        },
+                        {
+                            "recipe_name": "post_bridge_target_readout_patch",
+                            "steering_kind": "target_readout",
+                            "target_terms": (term,),
+                            "negative_terms": bad_attractor_terms,
+                            "negative_scale": 0.35,
+                            "alpha": 0.025,
+                            "contrast_mode": "target_readout_minus_attractor",
+                        },
+                        {
+                            "recipe_name": "post_bridge_target_readout_patch_a040",
+                            "steering_kind": "target_readout",
+                            "target_terms": (term,),
+                            "negative_terms": bad_attractor_terms,
+                            "negative_scale": 0.20,
+                            "alpha": 0.04,
+                            "contrast_mode": "target_readout_minus_attractor",
+                        },
+                        {
+                            "recipe_name": "post_bridge_target_readout_patch_a060",
+                            "steering_kind": "target_readout",
+                            "target_terms": (term,),
+                            "negative_terms": bad_attractor_terms,
+                            "negative_scale": 0.10,
+                            "alpha": 0.06,
+                            "contrast_mode": "target_readout_minus_attractor",
+                        },
+                        {
+                            "recipe_name": "post_bridge_target_readout_patch_pure_a060_gap",
+                            "steering_kind": "target_readout",
+                            "target_terms": (term,),
+                            "negative_terms": (),
+                            "negative_scale": 0.0,
+                            "alpha": 0.06,
+                            "contrast_mode": "target_readout_pure",
+                            "readout_gap_closer_recipe": True,
+                            "readout_gap_closer_axis": "target_top20_gap",
+                        },
+                        {
+                            "recipe_name": "post_bridge_target_readout_patch_l005_a060_gap",
+                            "steering_kind": "target_readout",
+                            "target_terms": (term,),
+                            "negative_terms": bad_attractor_terms,
+                            "negative_scale": 0.05,
+                            "alpha": 0.06,
+                            "contrast_mode": "target_readout_minus_attractor",
+                            "readout_gap_closer_recipe": True,
+                            "readout_gap_closer_axis": "target_top20_gap",
+                        },
+                    ]
+                    if stealer_term:
+                        steering_specs.extend(
+                            [
+                                {
+                                    "recipe_name": "post_bridge_contrastive_readout_patch",
+                                    "steering_kind": "contrastive_readout",
+                                    "target_terms": (term,),
+                                    "negative_terms": (stealer_term,),
+                                    "negative_scale": 1.0,
+                                    "alpha": 0.025,
+                                    "contrast_mode": "minus_competitor_readout",
+                                    "competitor_bundle_key": stealer_bundle_key,
+                                    "competitor_term": stealer_term,
+                                },
+                                {
+                                    "recipe_name": "post_bridge_contrastive_readout_patch_l050_a040",
+                                    "steering_kind": "contrastive_readout",
+                                    "target_terms": (term,),
+                                    "negative_terms": (stealer_term,),
+                                    "negative_scale": 0.5,
+                                    "alpha": 0.04,
+                                    "contrast_mode": "minus_competitor_readout",
+                                    "competitor_bundle_key": stealer_bundle_key,
+                                    "competitor_term": stealer_term,
+                                },
+                                {
+                                    "recipe_name": "post_bridge_contrastive_readout_patch_l075_a060",
+                                    "steering_kind": "contrastive_readout",
+                                    "target_terms": (term,),
+                                    "negative_terms": (stealer_term,),
+                                    "negative_scale": 0.75,
+                                    "alpha": 0.06,
+                                    "contrast_mode": "minus_competitor_readout",
+                                    "competitor_bundle_key": stealer_bundle_key,
+                                    "competitor_term": stealer_term,
+                                },
+                                {
+                                    "recipe_name": "post_bridge_contrastive_readout_patch_l025_a060_gap",
+                                    "steering_kind": "contrastive_readout",
+                                    "target_terms": (term,),
+                                    "negative_terms": (stealer_term,),
+                                    "negative_scale": 0.25,
+                                    "alpha": 0.06,
+                                    "contrast_mode": "minus_competitor_readout",
+                                    "competitor_bundle_key": stealer_bundle_key,
+                                    "competitor_term": stealer_term,
+                                    "readout_gap_closer_recipe": True,
+                                    "readout_gap_closer_axis": "target_top20_gap",
+                                },
+                            ]
+                        )
+                    for steering_spec in steering_specs:
+                        steering_row = _run_readout_steering_operator(
+                            bundle_key=bundle_key,
+                            members=steering_members,
+                            objective_term=term,
+                            recipe_name=str(steering_spec["recipe_name"]),
+                            steering_kind=str(steering_spec["steering_kind"]),
+                            target_terms=steering_spec.get("target_terms", ()),
+                            negative_terms=steering_spec.get("negative_terms", ()),
+                            negative_scale=float(steering_spec.get("negative_scale", 1.0) or 1.0),
+                            target_scale=float(steering_spec.get("target_scale", 1.0) or 1.0),
+                            alpha=float(steering_spec.get("alpha", 0.025) or 0.025),
+                            contrast_mode=str(steering_spec.get("contrast_mode", "none") or "none"),
+                            competitor_bundle_key=(
+                                str(steering_spec.get("competitor_bundle_key"))
+                                if steering_spec.get("competitor_bundle_key") not in (None, "")
+                                else None
+                            ),
+                            competitor_term=(
+                                str(steering_spec.get("competitor_term"))
+                                if steering_spec.get("competitor_term") not in (None, "")
+                                else None
+                            ),
+                            readout_gap_closer_recipe=bool(
+                                steering_spec.get("readout_gap_closer_recipe", False)
+                            ),
+                            readout_gap_closer_axis=(
+                                str(steering_spec.get("readout_gap_closer_axis"))
+                                if steering_spec.get("readout_gap_closer_axis") not in (None, "")
+                                else None
+                            ),
+                        )
+                        if steering_row is not None:
+                            rows.append(steering_row)
+                    two_stage_row = _run_readout_steering_sequence(
+                        bundle_key=bundle_key,
+                        members=steering_members,
+                        objective_term=term,
+                        recipe_name="post_bridge_suppress_then_target_readout_patch",
+                        stages=(
+                            {
+                                "recipe_name": "stage1_attractor_suppression",
+                                "steering_kind": "attractor_suppression",
+                                "target_terms": (),
+                                "negative_terms": bad_attractor_terms,
+                                "negative_scale": 1.0,
+                                "alpha": 0.02,
+                                "contrast_mode": "suppress_attractor",
+                            },
+                            {
+                                "recipe_name": "stage2_target_readout",
+                                "steering_kind": "target_readout",
+                                "target_terms": (term,),
+                                "negative_terms": bad_attractor_terms,
+                                "negative_scale": 0.20,
+                                "alpha": 0.035,
+                                "contrast_mode": "target_readout_minus_attractor",
+                            },
+                        ),
+                    )
+                    if two_stage_row is not None:
+                        rows.append(two_stage_row)
             head_candidate = next(
                 (
                     item

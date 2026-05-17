@@ -395,3 +395,120 @@ But it has made the failure much sharper:
 - a rank-moving recipe can now be blocked as `self_rank_carrier` instead of mistaken for a production-safe self-actuator
 
 The next breakthrough likely requires converting non-dead diagnostic carriers into target-owned actuators, not giving the controller broader apply power.
+
+## Positive Operator Memory
+
+The latest loop adds a small positive-memory layer for operator diagnostics.
+
+This is intentionally not a permission system. It records bounded positive
+traits such as:
+
+- `ownership_preserving`
+- `rank_carrier`
+- `target_reachable`
+- `top20_gap_measured`
+- `top20_gap_closer_candidate`
+- `top20_gap_closer_certified`
+- `anti_collapse`
+- `neutral_stable`
+- `rank_to_mass_convertible`
+
+The purpose is to keep the controller from learning only negative governance.
+The harmful ledger, veto memory, bridge exhaustion, and collapse-sharpener
+classes are good at saying "do not apply this." Positive operator memory adds a
+separate, still diagnostic-only signal:
+
+> This family is not certified, but it produced a non-harmful partial movement
+> worth deepening locally.
+
+Positive memory is deliberately scoped and short-lived. It carries the current
+`objective_bundle_key`, objective term, target piece, recipe family,
+`operator_recipe_id`, `ttl_steps`, and `stale_after_context_change=true` so a
+local hint cannot quietly become a cross-prompt superstition.
+
+The controller now receives a `positive_operator_deepening_plan` derived from
+that memory. The plan is structured as diagnostic guidance:
+
+```json
+{
+  "kind": "positive_operator_deepening_plan",
+  "permission": "diagnostic_only",
+  "production_apply_allowed": false,
+  "ttl_steps": 2,
+  "stale_after_context_change": true,
+  "scope": {
+    "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+    "target_piece": " budget",
+    "operator_recipe_id": "post_bridge_target_readout_patch_l005_a060_gap"
+  },
+  "recipe_family": "readout_steering",
+  "next_action": "deepen_local_gap_closer",
+  "deepening_axis": "target_top20_gap_closing",
+  "reason_code": "positive_memory_local_gap_closer"
+}
+```
+
+This preserves the constitution:
+
+- memory records promising partial effects
+- the plan explains what to inspect next
+- the controller decides whether to request that diagnostic
+- production apply remains closed until a separate certification path passes
+
+In the current GPT-2 replay, readout steering remains a `self_rank_carrier`
+family rather than a target actuator. The useful progress is that the loop can
+now say:
+
+> Readout steering moved the target-owned readout signal without collapse, but
+> the target top-20 gap remains large. Deepen local gap-closing diagnostics;
+> do not treat this as production permission.
+
+The next implementation step turns that plan into a small, auditable local
+sweep. The readout-steering deepening path now marks gap-probe recipes with
+`readout_gap_closer_recipe=true` for backwards-compatible visibility, but the
+evidence is split into candidate vs. certified levels. A recipe is only a
+certified closer when its top-20 threshold gap shrinks against the no-edit
+baseline without collapse-sharpening.
+
+```json
+{
+  "readout_gap_closer_recipe_count": 3,
+  "readout_gap_probe_recipe_count": 3,
+  "readout_gap_closer_candidate_count": 3,
+  "readout_gap_closer_certified_count": 0,
+  "best_readout_gap_closer_recipe_name": "target_readout_patch_l005_a060_gap",
+  "best_readout_gap_closer_target_top20_threshold_gap": 6.09,
+  "best_readout_gap_closer_target_top20_threshold_gap_delta": null
+}
+```
+
+The key contract is:
+
+- `top20_gap_measured`: the gap was observed
+- `top20_gap_closer_candidate`: the target piece moved in a plausible direction, but baseline gap delta is not yet sufficient
+- `top20_gap_closer_certified`: the gap shrank relative to baseline while staying collapse-safe
+
+The first gap-closer sweep stays deliberately narrow:
+
+- pure target readout at the current alpha cap
+- target readout with very light attractor subtraction
+- contrastive readout with a low competitor subtraction
+
+The research question is not "did this solve the task?" yet. It is:
+
+> Did any bounded readout steering variant reduce the target top-20 gap without
+> becoming a collapse sharpener or a wrong-direction bridge?
+
+Latest GPT-2 direct-scan replay with this visible gap-closer ledger produced:
+
+```text
+gap_count = 3
+best_gap_recipe = post_bridge_target_readout_patch_l005_a060_gap
+best_gap = 6.099704
+best_target_piece_logit_delta = 0.002202
+```
+
+The output still fell into the repetition basin (`the the the the`), so this is
+not an escape success. The useful result is narrower: the controller can now
+compare several bounded readout gap closers and carry the best one forward in
+the positive deepening plan without treating it as production permission.

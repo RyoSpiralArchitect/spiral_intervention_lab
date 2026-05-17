@@ -18,6 +18,10 @@ from .schema import (
     HarnessControllerView,
     KvMixOp,
     Rank1PatchOp,
+    READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS,
+    READOUT_DIRECTION_MAX_SCALE,
+    READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS,
+    READOUT_DIRECTION_MIN_SCALE,
     SchemaError,
     Source,
     SurfaceInfo,
@@ -114,6 +118,8 @@ def _iter_expr_nodes(expr: Mapping[str, Any], depth: int = 0) -> Iterable[tuple[
     elif fn in {"project_parallel", "project_orthogonal"}:
         yield from _iter_expr_nodes(expr["arg"], depth + 1)
         yield from _iter_expr_nodes(expr["basis"], depth + 1)
+    elif fn == "readout_direction":
+        return
 
 
 def _walk_source_exprs(source: Source) -> Iterable[Mapping[str, Any]]:
@@ -142,6 +148,29 @@ def _validate_expr_budget(
                 raise PolicyViolation(f"expression exceeds max depth {expr_depth_limit}")
             if node.get("fn") in {"add", "sub", "mean"} and len(node.get("args", [])) > policy.max_expr_args:
                 raise PolicyViolation(f"expression exceeds max arg count {policy.max_expr_args}")
+            if node.get("fn") == "readout_direction":
+                target_ids = node.get("target_token_ids") or ()
+                negative_ids = node.get("negative_token_ids") or ()
+                if any(int(token_id) < 0 for token_id in target_ids):
+                    raise PolicyViolation("readout_direction target_token_ids must be >= 0")
+                if any(int(token_id) < 0 for token_id in negative_ids):
+                    raise PolicyViolation("readout_direction negative_token_ids must be >= 0")
+                if len(target_ids) > READOUT_DIRECTION_MAX_TARGET_TOKEN_IDS:
+                    raise PolicyViolation("readout_direction exceeds target_token_ids cap")
+                if len(negative_ids) > READOUT_DIRECTION_MAX_NEGATIVE_TOKEN_IDS:
+                    raise PolicyViolation("readout_direction exceeds negative_token_ids cap")
+                for scale_key in ("target_scale", "negative_scale"):
+                    if scale_key not in node:
+                        continue
+                    try:
+                        scale = float(node[scale_key])
+                    except Exception as exc:
+                        raise PolicyViolation(f"readout_direction.{scale_key} must be numeric") from exc
+                    if scale < READOUT_DIRECTION_MIN_SCALE or scale > READOUT_DIRECTION_MAX_SCALE:
+                        raise PolicyViolation(
+                            f"readout_direction.{scale_key} must be between "
+                            f"{READOUT_DIRECTION_MIN_SCALE:g} and {READOUT_DIRECTION_MAX_SCALE:g}"
+                        )
 
 
 def _validate_trace_access(source: Source, packet: ControllerObservationPacket) -> None:

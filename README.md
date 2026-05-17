@@ -39,6 +39,15 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 - `docs/`
   Research notes and control-plane design docs.
 
+Key current notes:
+
+- [`docs/readout_escape_research_observations.md`](docs/readout_escape_research_observations.md)
+  Chronological research observations for the readout-escape line.
+- [`docs/readout_escape_insight_taxonomy.md`](docs/readout_escape_insight_taxonomy.md)
+  Structured split between mechanistic-interpretability value, engineering value, and findings that are both.
+- [`docs/healthy_tweaking_control_planes.md`](docs/healthy_tweaking_control_planes.md)
+  Control-plane framing for bounded helper authority.
+
 ## Current Status
 
 The current implementation includes:

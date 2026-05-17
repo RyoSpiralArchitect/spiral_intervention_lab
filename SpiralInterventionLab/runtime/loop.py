@@ -506,6 +506,7 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
     diagnostic_request = meta.get("diagnostic_request")
     if diagnostic_request not in (None, ""):
         raw_requests.append(diagnostic_request)
+    diagnostic_request_defaults = diagnostic_request if isinstance(diagnostic_request, Mapping) else {}
     mapped_next_action = _diagnostic_request_from_next_action(meta.get("next_action"))
     if mapped_next_action is not None:
         raw_requests.append(mapped_next_action)
@@ -534,12 +535,24 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         row.setdefault(
             "bundle_key",
             meta.get("objective_bundle_key")
+            or diagnostic_request_defaults.get("bundle_key")
+            or diagnostic_request_defaults.get("objective_bundle_key")
             or strategy_hints.get("diagnostic_frontier_bundle_key")
             or strategy_hints.get("gate_report_frontier_bundle_key")
             or strategy_hints.get("selected_bundle_key"),
         )
-        row.setdefault("objective_bundle_key", meta.get("objective_bundle_key") or row.get("bundle_key"))
-        row.setdefault("step_actuator_bundle_key", meta.get("step_actuator_bundle_key") or row.get("bundle_key"))
+        row.setdefault(
+            "objective_bundle_key",
+            meta.get("objective_bundle_key")
+            or diagnostic_request_defaults.get("objective_bundle_key")
+            or row.get("bundle_key"),
+        )
+        row.setdefault(
+            "step_actuator_bundle_key",
+            meta.get("step_actuator_bundle_key")
+            or diagnostic_request_defaults.get("step_actuator_bundle_key")
+            or row.get("bundle_key"),
+        )
         row.setdefault(
             "next_evidence_needed",
             meta.get("next_evidence_needed")
@@ -548,16 +561,23 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         row.setdefault("reason", meta.get("why_not_apply") or strategy_hints.get("diagnostic_frontier_reason_text"))
         if meta.get("operator_recipe_expansion_mode") not in (None, ""):
             row.setdefault("operator_recipe_expansion_mode", meta.get("operator_recipe_expansion_mode"))
+        post_bridge_requested = (
+            str(row.get("next_evidence_needed") or "") == "post_bridge_exhaustion_recipe_expansion"
+            or bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False))
+            or str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+        )
+        if post_bridge_requested and str(row.get("diagnostic") or "") == "compare_extra_operator_diagnostics":
+            row.setdefault("operator_recipe_expansion_mode", "post_bridge_exhaustion")
         if bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False)) or (
             str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
         ):
             row.setdefault("post_bridge_exhaustion_recipe_expansion_requested", True)
         if isinstance(meta.get("cross_bundle_bridge_search_state"), Mapping):
             row.setdefault("cross_bundle_bridge_search_state", dict(meta["cross_bundle_bridge_search_state"]))
-        dedupe_key = "|".join(str(row.get(key, "") or "") for key in ("diagnostic", "bundle_key", "objective_bundle_key"))
-        if dedupe_key in seen:
+        signature = _diagnostic_request_signature(row)
+        if signature in seen:
             continue
-        seen.add(dedupe_key)
+        seen.add(signature)
         normalized.append(row)
     return normalized
 
@@ -1132,9 +1152,19 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         or strategy_hints.get("bridge_plan_actuator_bundle_key")
     )
     bridge_plan_reason = meta.get("bridge_plan_reason") or strategy_hints.get("bridge_plan_reason")
-    bridge_plan_unavailable_reason = strategy_hints.get("bridge_plan_unavailable_reason")
-    bridge_plan_unavailable_objective_bundle_key = strategy_hints.get("bridge_plan_unavailable_objective_bundle_key")
-    bridge_plan_unavailable_objective_reasons = strategy_hints.get("bridge_plan_unavailable_objective_reasons")
+    bridge_plan_unavailable_reason = (
+        meta.get("bridge_plan_unavailable_reason")
+        or strategy_hints.get("bridge_plan_unavailable_reason")
+    )
+    bridge_plan_unavailable_objective_bundle_key = (
+        meta.get("bridge_plan_unavailable_objective_bundle_key")
+        or strategy_hints.get("bridge_plan_unavailable_objective_bundle_key")
+    )
+    bridge_plan_unavailable_objective_reasons = (
+        meta.get("bridge_plan_unavailable_objective_reasons")
+        if isinstance(meta.get("bridge_plan_unavailable_objective_reasons"), Mapping)
+        else strategy_hints.get("bridge_plan_unavailable_objective_reasons")
+    )
     bridge_eval_context_drift = strategy_hints.get("bridge_eval_context_drift")
     controller_selected_bundle_key = _extract_controller_selected_bundle_key(packet, command)
     controller_objective_bundle_key = _optional_meta_text(meta, "objective_bundle_key")
