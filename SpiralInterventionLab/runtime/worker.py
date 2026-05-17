@@ -90,6 +90,7 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "request_sae_feature_scan",
     "request_compare_extra_operator_diagnostics",
     "request_non_kv_operator_search",
+    "request_cross_bundle_bridge_search",
     "request_activation_patch_candidate_review",
     "request_activation_patch_runtime_support_probe",
     "request_activation_patch_promotion_gate_review",
@@ -105,6 +106,7 @@ _CONTROLLER_DIAGNOSTIC_NAMES = {
     "readout_logit_adjacent_probe",
     "sae_feature_emitter_scan",
     "compare_extra_operator_diagnostics",
+    "cross_bundle_bridge_search",
     "activation_patch_candidate_review",
     "activation_patch_runtime_support_probe",
     "activation_patch_promotion_gate_review",
@@ -337,6 +339,8 @@ def _normalize_controller_diagnostic_name(value: Any) -> str | None:
         return "sae_feature_emitter_scan"
     if text in {"request_compare_extra_operator_diagnostics", "request_non_kv_operator_search"}:
         return "compare_extra_operator_diagnostics"
+    if text == "request_cross_bundle_bridge_search":
+        return "cross_bundle_bridge_search"
     if text == "request_activation_patch_candidate_review":
         return "activation_patch_candidate_review"
     if text == "request_activation_patch_runtime_support_probe":
@@ -377,11 +381,19 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
         ("next_evidence_needed", 96),
         ("focus_term", 80),
         ("operator_recipe_id", 160),
+        ("operator_recipe_expansion_mode", 96),
     ):
         text = _clean_controller_memory_text(value.get(key), limit=limit)
         if text is not None:
             normalized[key] = text
-    for key in ("activation_patch_shadow_actuator", "alternate_trial_candidate", "production_trial_outcome"):
+    if bool(value.get("post_bridge_exhaustion_recipe_expansion_requested", False)):
+        normalized["post_bridge_exhaustion_recipe_expansion_requested"] = True
+    for key in (
+        "activation_patch_shadow_actuator",
+        "alternate_trial_candidate",
+        "production_trial_outcome",
+        "cross_bundle_bridge_search_state",
+    ):
         item = value.get(key)
         if isinstance(item, Mapping):
             normalized[key] = dict(item)
@@ -7672,7 +7684,49 @@ class HookedTransformerWorkerRuntime:
         actuator_class = str(shadow.get("activation_patch_actuator_class", "") or "")
         promotable = bool(shadow.get("promotable_to_candidate_compiler", False))
         owns_lift = actuator_class == "self_actuator"
-        compiler_status = "shadow_blueprint_ready" if promotable else "bridge_plan_or_more_evidence_required"
+        counterfactual_delta = (
+            dict(shadow.get("counterfactual_delta", {}))
+            if isinstance(shadow.get("counterfactual_delta"), Mapping)
+            else {}
+        )
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                return int(value)
+            except Exception:
+                return default
+
+        target_mass_delta = _as_float(counterfactual_delta.get("target_mass_delta"), 0.0)
+        target_top20_delta = _as_int(counterfactual_delta.get("target_top20_hit_delta"), 0)
+        focus_rank_delta = _as_float(counterfactual_delta.get("focus_rank_delta"), 0.0)
+        self_delta = _as_float(counterfactual_delta.get("self_delta"), 0.0)
+        direct_target_effect = bool(target_mass_delta >= 0.00002 or target_top20_delta > 0)
+        rank_carrier_only = bool(
+            owns_lift
+            and not direct_target_effect
+            and (focus_rank_delta > 0.0 or self_delta >= 0.02)
+        )
+        effect_role = (
+            "self_target_actuator"
+            if owns_lift and direct_target_effect
+            else "self_rank_carrier"
+            if rank_carrier_only
+            else "bridge_shadow"
+            if actuator_class == "bridge_actuator"
+            else "unknown"
+        )
+        target_promotable = bool(promotable and direct_target_effect)
+        compiler_status = (
+            "shadow_blueprint_ready"
+            if target_promotable
+            else "bridge_plan_or_more_evidence_required"
+        )
         blueprint = {
             "kind": "activation_patch_candidate_blueprint",
             "objective_bundle_key": shadow.get("objective_bundle_key"),
@@ -7680,6 +7734,8 @@ class HookedTransformerWorkerRuntime:
             "objective_term": shadow.get("objective_term"),
             "recipe_name": shadow.get("recipe_name"),
             "operator_recipe_id": shadow.get("operator_recipe_id"),
+            "actuator_class": actuator_class or None,
+            "activation_patch_actuator_class": actuator_class or None,
             "site": shadow.get("activation_patch_site"),
             "layer": shadow.get("activation_patch_layer"),
             "alpha": shadow.get("activation_patch_alpha"),
@@ -7695,12 +7751,15 @@ class HookedTransformerWorkerRuntime:
             "target": "answer_boundary_last",
             "compile_state": "shadow_blueprint_only",
             "required_runtime_support": "activation_patch_blend_operator",
+            "activation_patch_effect_role": effect_role,
+            "rank_carrier_only": bool(rank_carrier_only),
+            "target_readout_effect_certified": bool(direct_target_effect),
             "production_apply_allowed": False,
             "certified_for_apply": False,
         }
         actual_delta_class = str(shadow.get("actual_delta_class", "") or "")
         compile_preview_blocked_reason: str | None
-        if owns_lift and promotable:
+        if owns_lift and target_promotable:
             compile_preview_blocked_reason = None
             compile_preview = {
                 "kind": "activation_patch_compile_preview",
@@ -7709,6 +7768,8 @@ class HookedTransformerWorkerRuntime:
                 "objective_term": shadow.get("objective_term"),
                 "recipe_name": shadow.get("recipe_name"),
                 "operator_recipe_id": shadow.get("operator_recipe_id"),
+                "actuator_class": actuator_class or None,
+                "activation_patch_actuator_class": actuator_class or None,
                 "site": shadow.get("activation_patch_site"),
                 "layer": shadow.get("activation_patch_layer"),
                 "alpha": shadow.get("activation_patch_alpha"),
@@ -7726,6 +7787,9 @@ class HookedTransformerWorkerRuntime:
                 "compile_state": "preview_only",
                 "actual_delta_class": actual_delta_class or None,
                 "required_runtime_support": "activation_patch_blend_operator",
+                "activation_patch_effect_role": effect_role,
+                "rank_carrier_only": bool(rank_carrier_only),
+                "target_readout_effect_certified": bool(direct_target_effect),
                 "production_apply_allowed": False,
                 "certified_for_apply": False,
             }
@@ -7737,6 +7801,10 @@ class HookedTransformerWorkerRuntime:
                 compile_preview_blocked_reason = "cross_bound_lift_not_owned_by_objective_bundle"
             elif actuator_class in {"dead_actuator", "collapse_sharpener", "harmful"}:
                 compile_preview_blocked_reason = f"{actuator_class}_not_compileable"
+            elif rank_carrier_only:
+                compile_preview_blocked_reason = "rank_carrier_not_target_actuator"
+            elif owns_lift and not direct_target_effect:
+                compile_preview_blocked_reason = "target_readout_effect_not_certified"
             elif not promotable:
                 compile_preview_blocked_reason = "activation_patch_not_promotable_to_candidate_compiler"
             else:
@@ -7746,6 +7814,10 @@ class HookedTransformerWorkerRuntime:
             "actuator_class": actuator_class or None,
             "owns_lift": bool(owns_lift),
             "promotable_to_candidate_compiler": bool(promotable),
+            "target_promotable_to_candidate_compiler": bool(target_promotable),
+            "activation_patch_effect_role": effect_role,
+            "rank_carrier_only": bool(rank_carrier_only),
+            "target_readout_effect_certified": bool(direct_target_effect),
             "compile_preview_created": bool(compile_preview is not None),
             "blocked_reason": compile_preview_blocked_reason,
             "policy_owner": "controller",
@@ -7756,14 +7828,16 @@ class HookedTransformerWorkerRuntime:
             "actuator_class": actuator_class or None,
             "actual_delta_class": actual_delta_class or None,
             "promotable_to_candidate_compiler": promotable,
+            "target_promotable_to_candidate_compiler": bool(target_promotable),
+            "activation_patch_effect_role": effect_role,
+            "rank_carrier_only": bool(rank_carrier_only),
+            "target_readout_effect_certified": bool(direct_target_effect),
             "promotion_reason": shadow.get("promotion_reason"),
             "ownership_gate": ownership_gate,
             "compile_preview_created": bool(compile_preview is not None),
             "compile_preview_blocked_reason": compile_preview_blocked_reason,
             "compile_preview": compile_preview,
-            "counterfactual_delta": dict(shadow.get("counterfactual_delta", {}))
-            if isinstance(shadow.get("counterfactual_delta"), Mapping)
-            else {},
+            "counterfactual_delta": dict(counterfactual_delta),
             "blueprint": blueprint,
             "why_not_apply": (
                 "activation patch blueprint is shadow-only until runtime has a compileable operator and guardrails"
@@ -7936,9 +8010,16 @@ class HookedTransformerWorkerRuntime:
             "focus_rank_delta_min": 5.0,
             "target_top20_hit_delta_min": 1.0,
         }
-        effect_size_certified = bool(
+        target_readout_effect_certified = bool(
             target_mass_delta >= effect_thresholds["target_mass_delta_min"]
             or target_top20_delta >= effect_thresholds["target_top20_hit_delta_min"]
+        )
+        rank_carrier_only = bool(
+            not target_readout_effect_certified
+            and (focus_rank_delta >= effect_thresholds["focus_rank_delta_min"] or self_delta >= effect_thresholds["self_delta_min"])
+        )
+        effect_size_certified = bool(
+            target_readout_effect_certified
             or self_delta >= effect_thresholds["self_delta_min"]
             or focus_rank_delta >= effect_thresholds["focus_rank_delta_min"]
         )
@@ -7946,6 +8027,7 @@ class HookedTransformerWorkerRuntime:
             {
                 "owned_self_actuator": actuator_class == "self_actuator",
                 "actual_delta_target_lift": actual_delta_class == "target_lift",
+                "target_readout_effect_certified": bool(target_readout_effect_certified),
                 "positive_readout_delta": bool(
                     target_mass_delta > 0.0
                     or target_top20_delta > 0.0
@@ -8009,6 +8091,8 @@ class HookedTransformerWorkerRuntime:
                     "actual_delta_class": actual_delta_class or None,
                     "self_delta": round(float(self_delta), 6),
                     "alignment_margin": round(float(alignment_margin), 6),
+                    "target_readout_effect_certified": bool(target_readout_effect_certified),
+                    "rank_carrier_only": bool(rank_carrier_only),
                 },
                 "next_evidence_needed": "production_shadow_live_ownership_replay",
             },
@@ -8062,10 +8146,29 @@ class HookedTransformerWorkerRuntime:
                     "target_top20_hit_delta": round(float(target_top20_delta), 6),
                     "focus_rank_delta": round(float(focus_rank_delta), 6),
                     "self_delta": round(float(self_delta), 6),
+                    "target_readout_effect_certified": bool(target_readout_effect_certified),
+                    "rank_carrier_only": bool(rank_carrier_only),
                 },
                 "next_evidence_needed": None
                 if effect_size_certified
                 else "larger_readout_effect_without_safety_regression",
+            },
+            "rank_carrier_not_target_actuator": {
+                "active": bool(rank_carrier_only),
+                "status": (
+                    "rank_carrier_seen_without_target_mass_or_top20_lift"
+                    if rank_carrier_only
+                    else "not_rank_carrier_only"
+                ),
+                "diagnostic_supported": bool(rank_carrier_only),
+                "thresholds": effect_thresholds,
+                "evidence": {
+                    "target_mass_delta": round(float(target_mass_delta), 6),
+                    "target_top20_hit_delta": round(float(target_top20_delta), 6),
+                    "focus_rank_delta": round(float(focus_rank_delta), 6),
+                    "self_delta": round(float(self_delta), 6),
+                },
+                "next_evidence_needed": "rank_carrier_to_target_conversion",
             },
         }
         production_denial_reasons = [
@@ -9007,12 +9110,18 @@ class HookedTransformerWorkerRuntime:
             bundle_status["activation_patch_status"] = "supportive"
             bundle_status["diagnostic_operator_supported"] = True
         ledger_raw = strategy_hints.get("diagnostic_evidence_ledger")
-        ledger_rows = [
+        all_ledger_rows = [
             dict(item)
             for item in ledger_raw
             if isinstance(item, Mapping)
-            and (not bundle_key or str(item.get("bundle_key", "") or "") == bundle_key)
         ] if isinstance(ledger_raw, SequenceABC) and not isinstance(ledger_raw, (str, bytes, bytearray)) else []
+        ledger_rows = [
+            dict(item)
+            for item in all_ledger_rows
+            if not bundle_key or str(item.get("bundle_key", "") or "") == bundle_key
+        ]
+        if diagnostic_name == "cross_bundle_bridge_search":
+            ledger_rows = list(all_ledger_rows)
 
         evidence_kinds_by_request = {
             "operator_diagnostic_replay": {
@@ -9038,6 +9147,10 @@ class HookedTransformerWorkerRuntime:
             "activation_patch_candidate_review": {
                 "activation_patch_certification",
                 "feature_emitter",
+            },
+            "cross_bundle_bridge_search": {
+                "activation_patch_certification",
+                "attention_guided_operator_certification",
             },
             "activation_patch_runtime_support_probe": {
                 "activation_patch_certification",
@@ -9073,6 +9186,7 @@ class HookedTransformerWorkerRuntime:
         if diagnostic_name in {
             "operator_diagnostic_replay",
             "compare_extra_operator_diagnostics",
+            "cross_bundle_bridge_search",
             "activation_patch_candidate_review",
             "activation_patch_runtime_support_probe",
             "activation_patch_promotion_gate_review",
@@ -9135,11 +9249,348 @@ class HookedTransformerWorkerRuntime:
             for row in matching_rows
             if str(row.get("evidence_kind", "") or "") == "activation_patch_certification"
         ]
+        def _coerce_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except Exception:
+                return default
+
+        def _coerce_int(value: Any, default: int = 0) -> int:
+            try:
+                return int(value)
+            except Exception:
+                return default
+
         activation_patch_blocked = sum(
             1 for row in activation_patch_rows if str(row.get("status", "") or "") == "blocked"
         )
         activation_patch_supportive = sum(
             1 for row in activation_patch_rows if str(row.get("status", "") or "") in {"supportive", "certified"}
+        )
+        contrastive_activation_patch_rows = [
+            row
+            for row in activation_patch_rows
+            if str(row.get("activation_patch_contrast_mode", "") or "") in {"minus_stealer", "orthogonal_stealer"}
+            or "stealer" in str(row.get("activation_patch_source_localization", "") or "")
+        ]
+        contrastive_mode_counts: dict[str, int] = {}
+        for row in contrastive_activation_patch_rows:
+            mode = str(row.get("activation_patch_contrast_mode", "") or "none")
+            contrastive_mode_counts[mode] = int(contrastive_mode_counts.get(mode, 0)) + 1
+        best_contrastive_row: Mapping[str, Any] | None = None
+        if contrastive_activation_patch_rows:
+            def _contrastive_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+                status = str(row.get("status", "") or "")
+                actuator_class = str(row.get("actuator_class", "") or "")
+                return (
+                    1.0 if status in {"supportive", "certified"} else 0.0,
+                    1.0 if actuator_class == "self_actuator" else 0.0,
+                    0.5 if actuator_class == "bridge_actuator" else 0.0,
+                    _coerce_float(row.get("alignment_margin", 0.0)),
+                    _coerce_float(row.get("self_delta", 0.0)),
+                    _coerce_float(row.get("target_mass_delta", 0.0)),
+                    float(_coerce_int(row.get("focus_rank_delta", 0))),
+                )
+
+            best_contrastive_row = max(contrastive_activation_patch_rows, key=_contrastive_rank)
+        contrastive_supportive = sum(
+            1
+            for row in contrastive_activation_patch_rows
+            if str(row.get("status", "") or "") in {"supportive", "certified"}
+        )
+        contrastive_blocked = sum(
+            1 for row in contrastive_activation_patch_rows if str(row.get("status", "") or "") == "blocked"
+        )
+        contrastive_neighborhood_status = {
+            "checked": bool(contrastive_activation_patch_rows),
+            "recipe_count": len(contrastive_activation_patch_rows),
+            "supportive_count": int(contrastive_supportive),
+            "blocked_count": int(contrastive_blocked),
+            "mode_counts": dict(contrastive_mode_counts),
+            "status": (
+                "supportive"
+                if contrastive_supportive > 0
+                else "blocked"
+                if contrastive_blocked > 0
+                else "observed"
+                if contrastive_activation_patch_rows
+                else "not_checked"
+            ),
+            "best_recipe_name": best_contrastive_row.get("recipe_name") if isinstance(best_contrastive_row, Mapping) else None,
+            "best_operator_recipe_id": best_contrastive_row.get("operator_recipe_id") if isinstance(best_contrastive_row, Mapping) else None,
+            "best_actuator_class": best_contrastive_row.get("actuator_class") if isinstance(best_contrastive_row, Mapping) else None,
+            "best_alignment_margin": round(_coerce_float(best_contrastive_row.get("alignment_margin")), 6)
+            if isinstance(best_contrastive_row, Mapping)
+            else None,
+            "best_self_delta": round(_coerce_float(best_contrastive_row.get("self_delta")), 6)
+            if isinstance(best_contrastive_row, Mapping)
+            else None,
+            "best_cross_delta": round(_coerce_float(best_contrastive_row.get("cross_delta")), 6)
+            if isinstance(best_contrastive_row, Mapping)
+            else None,
+            "best_target_mass_delta": round(_coerce_float(best_contrastive_row.get("target_mass_delta")), 6)
+            if isinstance(best_contrastive_row, Mapping)
+            else None,
+            "best_focus_rank_delta": _coerce_int(best_contrastive_row.get("focus_rank_delta"))
+            if isinstance(best_contrastive_row, Mapping)
+            else None,
+        }
+
+        def _activation_patch_shadow_from_bridge_row(
+            row: Mapping[str, Any],
+            *,
+            objective_key: str,
+            actuator_key: str,
+            bridge_reason: str,
+        ) -> dict[str, Any]:
+            return {
+                "kind": "activation_patch_shadow_actuator",
+                "decision": "shadow",
+                "objective_bundle_key": objective_key or None,
+                "actuator_bundle_key": actuator_key or None,
+                "objective_term": row.get("objective_term") or row.get("realized_lift_term"),
+                "recipe_name": row.get("recipe_name"),
+                "operator_recipe_id": row.get("operator_recipe_id"),
+                "activation_patch_site": row.get("activation_patch_site"),
+                "activation_patch_layer": row.get("activation_patch_layer"),
+                "activation_patch_alpha": row.get("activation_patch_alpha"),
+                "activation_patch_source_localization": row.get("activation_patch_source_localization"),
+                "activation_patch_patch_mode": row.get("activation_patch_patch_mode"),
+                "activation_patch_base_localization": row.get("activation_patch_base_localization"),
+                "activation_patch_contrast_mode": row.get("activation_patch_contrast_mode"),
+                "activation_patch_contrast_scale": row.get("activation_patch_contrast_scale"),
+                "activation_patch_stealer_bundle_key": row.get("activation_patch_stealer_bundle_key"),
+                "activation_patch_stealer_term": row.get("activation_patch_stealer_term"),
+                "activation_patch_actuator_class": "bridge_actuator",
+                "actual_delta_class": row.get("actual_delta_class"),
+                "realized_lift_bundle_key": row.get("realized_lift_bundle_key"),
+                "realized_lift_term": row.get("realized_lift_term"),
+                "counterfactual_delta": {
+                    "target_mass_delta": round(_coerce_float(row.get("target_mass_delta")), 6),
+                    "target_top20_hit_delta": _coerce_int(row.get("target_top20_hit_delta")),
+                    "focus_rank_delta": _coerce_int(row.get("focus_rank_delta")),
+                    "self_delta": round(_coerce_float(row.get("self_delta")), 6),
+                    "cross_delta": round(_coerce_float(row.get("cross_delta")), 6),
+                    "alignment_margin": round(_coerce_float(row.get("alignment_margin")), 6),
+                },
+                "promotable_to_candidate_compiler": False,
+                "promotion_reason": bridge_reason,
+                "requires_bridge_plan": True,
+                "alternate_candidate_mode": "cross_bundle_bridge_shadow_review",
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+            }
+
+        def _cross_bundle_bridge_search_report() -> dict[str, Any]:
+            objective_key = str(request.get("objective_bundle_key") or bundle_key or "")
+            matrix: list[dict[str, Any]] = []
+            for row in activation_patch_rows:
+                actuator_class = str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                if actuator_class not in {
+                    "bridge_actuator",
+                    "cross_bound",
+                    "self_actuator",
+                    "dead_actuator",
+                    "collapse_sharpener",
+                    "harmful",
+                    "noisy_or_harmful",
+                }:
+                    continue
+                explicit_objective = str(row.get("objective_bundle_key") or "")
+                explicit_actuator = str(row.get("actuator_bundle_key") or "")
+                row_bundle = str(row.get("bundle_key") or row.get("intended_bundle_key") or "")
+                intended_bundle = str(row.get("intended_bundle_key") or row_bundle or explicit_actuator or "")
+                realized_bundle = str(row.get("realized_lift_bundle_key") or row.get("bridge_plan_bundle_key") or "")
+                if not objective_key:
+                    continue
+
+                direction_basis = ""
+                actuator_key = explicit_actuator or intended_bundle or row_bundle
+                direction_correct = False
+                if explicit_objective == objective_key and explicit_actuator and explicit_actuator != objective_key:
+                    direction_basis = "explicit_objective_actuator"
+                    actuator_key = explicit_actuator
+                    direction_correct = True
+                elif realized_bundle == objective_key and intended_bundle and intended_bundle != objective_key:
+                    direction_basis = "realized_lift_from_other_bundle"
+                    actuator_key = explicit_actuator or intended_bundle
+                    direction_correct = True
+                elif row_bundle == objective_key and realized_bundle and realized_bundle != objective_key:
+                    direction_basis = "wrong_direction_lift"
+                    direction_correct = False
+                elif row_bundle == objective_key or explicit_objective == objective_key:
+                    direction_basis = "objective_self_or_unknown"
+                    direction_correct = False
+                else:
+                    continue
+
+                bundle_lift_scores = row.get("bundle_lift_scores")
+                objective_lift_delta = 0.0
+                if isinstance(bundle_lift_scores, Mapping):
+                    objective_lift_delta = _coerce_float(bundle_lift_scores.get(objective_key), 0.0)
+                if objective_lift_delta == 0.0 and realized_bundle == objective_key:
+                    objective_lift_delta = max(
+                        _coerce_float(row.get("cross_delta")),
+                        _coerce_float(row.get("target_mass_delta")),
+                        float(_coerce_int(row.get("focus_rank_delta"))) * 0.001,
+                    )
+                self_delta = _coerce_float(row.get("self_delta"))
+                cross_delta = _coerce_float(row.get("cross_delta"))
+                target_mass_delta = _coerce_float(row.get("target_mass_delta"))
+                focus_rank_delta = _coerce_int(row.get("focus_rank_delta"))
+                top20_delta = _coerce_int(row.get("target_top20_hit_delta"))
+                repeat_delta = max(
+                    _coerce_float(row.get("repeat_delta")),
+                    _coerce_float(row.get("repeat_flag")),
+                    _coerce_float(row.get("repetition_score")),
+                )
+                status = str(row.get("status") or "")
+                vetoes: list[str] = []
+                if not direction_correct:
+                    vetoes.append("not_direction_correct")
+                if actuator_key == objective_key:
+                    vetoes.append("actuator_matches_objective")
+                if status == "blocked":
+                    vetoes.append("status_blocked")
+                if actuator_class in {"dead_actuator", "collapse_sharpener", "harmful", "noisy_or_harmful"}:
+                    vetoes.append(actuator_class)
+                if repeat_delta > 0:
+                    vetoes.append("repeat_risk")
+                objective_signal = bool(
+                    objective_lift_delta > 0.0
+                    or target_mass_delta > 0.0
+                    or focus_rank_delta > 0
+                    or top20_delta > 0
+                    or realized_bundle == objective_key
+                )
+                if not objective_signal:
+                    vetoes.append("no_objective_lift_signal")
+                eligible = bool(
+                    direction_correct
+                    and objective_signal
+                    and status in {"supportive", "certified", "observed", ""}
+                    and actuator_class in {"bridge_actuator", "cross_bound"}
+                    and not any(
+                        item in vetoes
+                        for item in {
+                            "status_blocked",
+                            "dead_actuator",
+                            "collapse_sharpener",
+                            "harmful",
+                            "noisy_or_harmful",
+                            "repeat_risk",
+                        }
+                    )
+                )
+                matrix.append(
+                    {
+                        "objective_bundle_key": objective_key,
+                        "actuator_bundle_key": actuator_key or None,
+                        "source_bundle_key": row_bundle or None,
+                        "intended_bundle_key": intended_bundle or None,
+                        "realized_lift_bundle_key": realized_bundle or None,
+                        "realized_lift_term": row.get("realized_lift_term"),
+                        "direction_basis": direction_basis,
+                        "direction_correct": bool(direction_correct),
+                        "bridge_plan_eligible": bool(eligible),
+                        "bridge_plan_vetoes": vetoes,
+                        "actuator_class": actuator_class,
+                        "status": status or None,
+                        "recipe_name": row.get("recipe_name"),
+                        "operator_recipe_id": row.get("operator_recipe_id"),
+                        "activation_patch_site": row.get("activation_patch_site"),
+                        "activation_patch_layer": row.get("activation_patch_layer"),
+                        "activation_patch_alpha": row.get("activation_patch_alpha"),
+                        "activation_patch_source_localization": row.get("activation_patch_source_localization"),
+                        "activation_patch_patch_mode": row.get("activation_patch_patch_mode"),
+                        "activation_patch_contrast_mode": row.get("activation_patch_contrast_mode"),
+                        "activation_patch_contrast_scale": row.get("activation_patch_contrast_scale"),
+                        "objective_lift_delta": round(float(objective_lift_delta), 6),
+                        "actuator_self_delta": round(float(self_delta), 6),
+                        "cross_delta": round(float(cross_delta), 6),
+                        "alignment_margin": round(_coerce_float(row.get("alignment_margin")), 6),
+                        "target_mass_delta": round(float(target_mass_delta), 6),
+                        "target_top20_hit_delta": int(top20_delta),
+                        "focus_rank_delta": int(focus_rank_delta),
+                    }
+                )
+
+            def _bridge_rank(item: Mapping[str, Any]) -> tuple[float, ...]:
+                return (
+                    1.0 if item.get("bridge_plan_eligible") else 0.0,
+                    _coerce_float(item.get("objective_lift_delta")),
+                    float(_coerce_int(item.get("focus_rank_delta"))) * 0.001,
+                    _coerce_float(item.get("target_mass_delta")),
+                    _coerce_float(item.get("cross_delta")),
+                    -abs(_coerce_float(item.get("actuator_self_delta"))),
+                )
+
+            matrix.sort(key=_bridge_rank, reverse=True)
+            eligible_rows = [row for row in matrix if row.get("bridge_plan_eligible")]
+            best_row = eligible_rows[0] if eligible_rows else None
+            best_source_row: Mapping[str, Any] | None = None
+            if best_row is not None:
+                best_recipe = str(best_row.get("operator_recipe_id") or "")
+                best_actuator = str(best_row.get("actuator_bundle_key") or "")
+                for source_row in activation_patch_rows:
+                    if best_recipe and str(source_row.get("operator_recipe_id") or "") != best_recipe:
+                        continue
+                    source_actuator = str(
+                        source_row.get("actuator_bundle_key")
+                        or source_row.get("intended_bundle_key")
+                        or source_row.get("bundle_key")
+                        or ""
+                    )
+                    if best_actuator and source_actuator and source_actuator != best_actuator:
+                        continue
+                    best_source_row = source_row
+                    break
+            bridge_reason = (
+                "cross_bundle_bridge_search_direction_correct"
+                if best_row is not None
+                else "no_direction_correct_bridge_candidate"
+            )
+            shadow = (
+                _activation_patch_shadow_from_bridge_row(
+                    best_source_row or best_row,
+                    objective_key=objective_key,
+                    actuator_key=str(best_row.get("actuator_bundle_key") or ""),
+                    bridge_reason=bridge_reason,
+                )
+                if isinstance(best_row, Mapping)
+                else None
+            )
+            summary = {
+                "objective_bundle_key": objective_key or None,
+                "matrix_row_count": len(matrix),
+                "eligible_bridge_candidate_count": len(eligible_rows),
+                "wrong_direction_bridge_count": sum(
+                    1 for row in matrix if row.get("direction_basis") == "wrong_direction_lift"
+                ),
+                "direction_correct_bridge_count": sum(1 for row in matrix if row.get("direction_correct")),
+                "best_actuator_bundle_key": best_row.get("actuator_bundle_key") if isinstance(best_row, Mapping) else None,
+                "best_operator_recipe_id": best_row.get("operator_recipe_id") if isinstance(best_row, Mapping) else None,
+                "best_recipe_name": best_row.get("recipe_name") if isinstance(best_row, Mapping) else None,
+                "status": "bridge_found" if best_row is not None else "no_direction_correct_bridge",
+                "production_apply_allowed": False,
+            }
+            return {
+                "status": summary["status"],
+                "summary": summary,
+                "matrix": matrix[:16],
+                "bridge_plan_shadow_actuator": shadow,
+                "bridge_plan_reason": bridge_reason,
+                "next_evidence_needed": (
+                    "bridge_plan_dual_layer_shadow_review"
+                    if shadow is not None
+                    else "post_bridge_exhaustion_recipe_expansion"
+                ),
+            }
+
+        cross_bundle_bridge_search = (
+            _cross_bundle_bridge_search_report()
+            if diagnostic_name == "cross_bundle_bridge_search"
+            else None
         )
         activation_patch_candidate_review = self._activation_patch_candidate_review(bundle_status)
         activation_patch_compile_preview = (
@@ -9217,6 +9668,23 @@ class HookedTransformerWorkerRuntime:
             isinstance(activation_patch_promotion_gate_review, Mapping)
             and isinstance(activation_patch_promotion_gate_review.get("production_apply_candidate"), Mapping)
         )
+        activation_patch_bridge_plan_shadow: dict[str, Any] | None = None
+        if (
+            isinstance(activation_patch_candidate_review, Mapping)
+            and str(activation_patch_candidate_review.get("actuator_class", "") or "") == "bridge_actuator"
+        ):
+            blueprint = activation_patch_candidate_review.get("blueprint")
+            if isinstance(blueprint, Mapping):
+                objective_key = str(blueprint.get("objective_bundle_key", "") or "")
+                actuator_key = str(blueprint.get("actuator_bundle_key", "") or "")
+                if objective_key and actuator_key and objective_key != actuator_key:
+                    activation_patch_bridge_plan_shadow = dict(blueprint)
+                    activation_patch_bridge_plan_shadow["activation_patch_actuator_class"] = "bridge_actuator"
+                    activation_patch_bridge_plan_shadow["requires_bridge_plan"] = True
+        if activation_patch_bridge_plan_shadow is None and isinstance(cross_bundle_bridge_search, Mapping):
+            cross_shadow = cross_bundle_bridge_search.get("bridge_plan_shadow_actuator")
+            if isinstance(cross_shadow, Mapping):
+                activation_patch_bridge_plan_shadow = dict(cross_shadow)
         activation_patch_runtime_shadow_supported = bool(
             isinstance(activation_patch_runtime_support_probe, Mapping)
             and activation_patch_runtime_support_probe.get("runtime_supported_shadow_candidate")
@@ -9249,6 +9717,255 @@ class HookedTransformerWorkerRuntime:
         ):
             carrier_to_actuator_status = "missing_after_attention_guided_operator"
 
+        def _post_bridge_exhaustion_recipe_expansion_report() -> dict[str, Any] | None:
+            if str(request.get("operator_recipe_expansion_mode") or "") != "post_bridge_exhaustion":
+                return None
+            objective_key = str(request.get("objective_bundle_key") or bundle_key or "")
+            expansion_rows = [
+                row
+                for row in activation_patch_rows
+                if str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+                or bool(row.get("post_bridge_exhaustion_recipe", False))
+            ]
+            source_rows = expansion_rows if expansion_rows else activation_patch_rows
+            matrix: list[dict[str, Any]] = []
+
+            def _recipe_family(row: Mapping[str, Any]) -> str:
+                site = str(row.get("activation_patch_site") or "activation_patch")
+                source_loc = str(row.get("activation_patch_source_localization") or "unknown_source")
+                patch_mode = str(row.get("activation_patch_patch_mode") or "unknown_patch")
+                base_loc = str(row.get("activation_patch_base_localization") or "")
+                if base_loc and base_loc not in source_loc:
+                    source_loc = f"{source_loc}/{base_loc}"
+                return "|".join(item for item in (site, source_loc, patch_mode) if item)
+
+            def _failure_mode(row: Mapping[str, Any]) -> str:
+                actuator_class = str(row.get("actuator_class") or row.get("activation_patch_actuator_class") or "")
+                actual_delta_class = str(row.get("actual_delta_class") or "")
+                status = str(row.get("status") or "")
+                realized = str(row.get("realized_lift_bundle_key") or "")
+                self_delta = _coerce_float(row.get("self_delta"))
+                cross_delta = _coerce_float(row.get("cross_delta"))
+                alignment = _coerce_float(row.get("alignment_margin"))
+                target_mass = _coerce_float(row.get("target_mass_delta"))
+                target_top20 = _coerce_int(row.get("target_top20_hit_delta"))
+                focus_rank = _coerce_int(row.get("focus_rank_delta"))
+                repeat_delta = max(
+                    _coerce_float(row.get("repeat_delta")),
+                    _coerce_float(row.get("repeat_flag")),
+                    _coerce_float(row.get("repetition_score")),
+                )
+                entropy_delta = _coerce_float(row.get("entropy_delta"))
+                top1_margin_delta = _coerce_float(row.get("top1_margin_delta"))
+                blocked_text = " ".join(
+                    str(item)
+                    for item in (
+                        row.get("blocked_by")
+                        if isinstance(row.get("blocked_by"), SequenceABC)
+                        and not isinstance(row.get("blocked_by"), (str, bytes, bytearray))
+                        else (row.get("blocked_by"),)
+                    )
+                    if item not in (None, "")
+                ).lower()
+                if "policy" in blocked_text or actuator_class == "policy_violation" or actual_delta_class == "policy_violation":
+                    return "policy_violation"
+                if actuator_class in {"collapse_sharpener", "harmful"} or actual_delta_class in {
+                    "collapse_sharpener",
+                    "harmful",
+                }:
+                    return "collapse_sharpener"
+                if repeat_delta > 0 and entropy_delta < -0.01 and top1_margin_delta > 0.001:
+                    return "collapse_sharpener"
+                self_owned = bool(actuator_class == "self_actuator" or (
+                    objective_key
+                    and (not realized or realized == objective_key)
+                    and self_delta > 0.005
+                    and alignment >= -0.002
+                    and (target_mass > 0.0 or focus_rank > 0 or self_delta > 0.015)
+                ))
+                if self_owned:
+                    if target_mass > 0.00002 or target_top20 > 0:
+                        return "self_target_actuator"
+                    if focus_rank > 0 or self_delta > 0.015:
+                        return "self_rank_carrier"
+                    return "weak_nonharmful"
+                if actuator_class in {"bridge_actuator", "cross_bound"} or (
+                    realized and objective_key and realized != objective_key and cross_delta > max(self_delta, 0.005)
+                ):
+                    return "wrong_direction"
+                if actuator_class == "dead_actuator" or (
+                    max(abs(self_delta), abs(cross_delta), abs(target_mass), abs(float(focus_rank)) * 0.001) <= 0.005
+                    and status == "blocked"
+                ):
+                    return "dead"
+                return "weak_nonharmful"
+
+            for row in source_rows:
+                if not isinstance(row, Mapping):
+                    continue
+                row_objective = str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+                if objective_key and row_objective and row_objective != objective_key:
+                    continue
+                failure_mode = _failure_mode(row)
+                recipe_family = _recipe_family(row)
+                self_delta = _coerce_float(row.get("self_delta"))
+                cross_delta = _coerce_float(row.get("cross_delta"))
+                target_mass = _coerce_float(row.get("target_mass_delta"))
+                focus_rank = _coerce_int(row.get("focus_rank_delta"))
+                repeat_delta = max(
+                    _coerce_float(row.get("repeat_delta")),
+                    _coerce_float(row.get("repeat_flag")),
+                    _coerce_float(row.get("repetition_score")),
+                )
+                matrix.append(
+                    {
+                        "objective_bundle_key": objective_key or row_objective or None,
+                        "recipe_family": recipe_family,
+                        "recipe_name": row.get("recipe_name"),
+                        "operator_recipe_id": row.get("operator_recipe_id"),
+                        "failure_mode": failure_mode,
+                        "actuator_class": row.get("actuator_class") or row.get("activation_patch_actuator_class"),
+                        "status": row.get("status"),
+                        "actual_delta_class": row.get("actual_delta_class"),
+                        "realized_lift_bundle_key": row.get("realized_lift_bundle_key"),
+                        "activation_patch_site": row.get("activation_patch_site"),
+                        "activation_patch_layer": row.get("activation_patch_layer"),
+                        "activation_patch_alpha": row.get("activation_patch_alpha"),
+                        "activation_patch_source_localization": row.get("activation_patch_source_localization"),
+                        "activation_patch_patch_mode": row.get("activation_patch_patch_mode"),
+                        "self_delta": round(float(self_delta), 6),
+                        "cross_delta": round(float(cross_delta), 6),
+                        "alignment_margin": round(_coerce_float(row.get("alignment_margin")), 6),
+                        "target_mass_delta": round(float(target_mass), 6),
+                        "target_top20_hit_delta": _coerce_int(row.get("target_top20_hit_delta")),
+                        "focus_rank_delta": int(focus_rank),
+                        "repeat_delta": round(float(repeat_delta), 6),
+                    }
+                )
+
+            def _expansion_rank(item: Mapping[str, Any]) -> tuple[float, ...]:
+                failure_mode = str(item.get("failure_mode") or "")
+                return (
+                    3.0
+                    if failure_mode == "self_target_actuator"
+                    else 2.0
+                    if failure_mode == "self_rank_carrier"
+                    else 1.0
+                    if failure_mode == "weak_nonharmful"
+                    else 0.0,
+                    _coerce_float(item.get("self_delta")),
+                    _coerce_float(item.get("target_mass_delta")) * 1000.0,
+                    float(_coerce_int(item.get("focus_rank_delta"))) * 0.01,
+                    _coerce_float(item.get("alignment_margin")),
+                    -_coerce_float(item.get("repeat_delta")),
+                )
+
+            matrix.sort(key=_expansion_rank, reverse=True)
+            failure_mode_counts: dict[str, int] = {}
+            family_mode_counts: dict[str, dict[str, int]] = {}
+            for item in matrix:
+                mode = str(item.get("failure_mode") or "unknown")
+                family = str(item.get("recipe_family") or "unknown")
+                failure_mode_counts[mode] = int(failure_mode_counts.get(mode, 0)) + 1
+                bucket = family_mode_counts.setdefault(family, {})
+                bucket[mode] = int(bucket.get(mode, 0)) + 1
+
+            best_target_actuator = next(
+                (item for item in matrix if str(item.get("failure_mode") or "") == "self_target_actuator"),
+                None,
+            )
+            best_rank_carrier = next(
+                (item for item in matrix if str(item.get("failure_mode") or "") == "self_rank_carrier"),
+                None,
+            )
+            best_weak_nonharmful = next(
+                (item for item in matrix if str(item.get("failure_mode") or "") == "weak_nonharmful"),
+                None,
+            )
+            best_nonharmful = best_target_actuator or best_rank_carrier or best_weak_nonharmful
+            dominant_failure_mode = (
+                max(failure_mode_counts.items(), key=lambda entry: (int(entry[1]), str(entry[0])))[0]
+                if failure_mode_counts
+                else "none"
+            )
+            if isinstance(best_target_actuator, Mapping):
+                recommended_next_family = f"deepen:{best_nonharmful.get('recipe_family')}"
+                status = "target_actuator_family_found"
+            elif isinstance(best_rank_carrier, Mapping):
+                recommended_next_family = f"convert_rank_carrier_to_target:{best_rank_carrier.get('recipe_family')}"
+                status = "rank_carrier_family_found"
+            elif isinstance(best_weak_nonharmful, Mapping):
+                recommended_next_family = f"deepen:{best_weak_nonharmful.get('recipe_family')}"
+                status = "weak_nonharmful_family_found"
+            elif dominant_failure_mode == "wrong_direction":
+                recommended_next_family = "ownership_contrastive_search"
+                status = "wrong_direction_dominant"
+            elif dominant_failure_mode == "collapse_sharpener":
+                recommended_next_family = "lower_alpha_or_readout_local_probe"
+                status = "collapse_dominant"
+            elif dominant_failure_mode == "dead":
+                recommended_next_family = "activation_site_layer_sweep_or_sae_feature_emitter"
+                status = "dead_dominant"
+            elif dominant_failure_mode == "policy_violation":
+                recommended_next_family = "policy_safe_recipe_compiler"
+                status = "policy_blocked"
+            else:
+                recommended_next_family = "operator_family_shift"
+                status = "no_clear_family"
+
+            summary = {
+                "objective_bundle_key": objective_key or None,
+                "status": status,
+                "matrix_row_count": len(matrix),
+                "dedicated_recipe_row_count": len(expansion_rows),
+                "failure_mode_counts": dict(sorted(failure_mode_counts.items())),
+                "dominant_failure_mode": dominant_failure_mode,
+                "best_nonharmful_recipe_family": (
+                    best_nonharmful.get("recipe_family") if isinstance(best_nonharmful, Mapping) else None
+                ),
+                "best_nonharmful_recipe_name": (
+                    best_nonharmful.get("recipe_name") if isinstance(best_nonharmful, Mapping) else None
+                ),
+                "best_nonharmful_operator_recipe_id": (
+                    best_nonharmful.get("operator_recipe_id") if isinstance(best_nonharmful, Mapping) else None
+                ),
+                "best_target_actuator_recipe_family": (
+                    best_target_actuator.get("recipe_family") if isinstance(best_target_actuator, Mapping) else None
+                ),
+                "best_target_actuator_recipe_name": (
+                    best_target_actuator.get("recipe_name") if isinstance(best_target_actuator, Mapping) else None
+                ),
+                "best_rank_carrier_recipe_family": (
+                    best_rank_carrier.get("recipe_family") if isinstance(best_rank_carrier, Mapping) else None
+                ),
+                "best_rank_carrier_recipe_name": (
+                    best_rank_carrier.get("recipe_name") if isinstance(best_rank_carrier, Mapping) else None
+                ),
+                "recommended_next_family": recommended_next_family,
+                "production_apply_allowed": False,
+                "policy_candidate_ready": False,
+            }
+            return {
+                "status": status,
+                "summary": summary,
+                "matrix": matrix[:24],
+                "family_mode_counts": {
+                    str(family): dict(sorted(counts.items()))
+                    for family, counts in sorted(family_mode_counts.items())
+                },
+                "next_evidence_needed": (
+                    "activation_patch_recipe_family_deepening"
+                    if isinstance(best_target_actuator, Mapping)
+                    else "rank_carrier_to_target_conversion"
+                    if isinstance(best_rank_carrier, Mapping)
+                    else "activation_patch_recipe_family_deepening"
+                    if isinstance(best_weak_nonharmful, Mapping)
+                    else recommended_next_family
+                ),
+            }
+
+        post_bridge_recipe_expansion = _post_bridge_exhaustion_recipe_expansion_report()
+
         result = {
             "diagnostic": diagnostic_name,
             "status": "ok" if matching_rows or bundle_status else "no_cached_evidence",
@@ -9266,12 +9983,26 @@ class HookedTransformerWorkerRuntime:
                 if diagnostic_name == "activation_patch_production_shadow_replay"
                 else activation_patch_production_trial_next_evidence
                 if diagnostic_name == "activation_patch_production_trial_gate_review"
+                else cross_bundle_bridge_search.get("next_evidence_needed")
+                if diagnostic_name == "cross_bundle_bridge_search" and isinstance(cross_bundle_bridge_search, Mapping)
+                else post_bridge_recipe_expansion.get("next_evidence_needed")
+                if isinstance(post_bridge_recipe_expansion, Mapping)
                 else activation_patch_review_next_evidence
             )
             or request.get("next_evidence_needed")
             or bundle_status.get("next_evidence_needed")
             or strategy_hints.get("diagnostic_frontier_next_evidence"),
             "diagnostic_request_reason": request.get("reason") or strategy_hints.get("diagnostic_frontier_reason_text"),
+            "operator_recipe_expansion_mode": request.get("operator_recipe_expansion_mode"),
+            "post_bridge_exhaustion_recipe_expansion_requested": bool(
+                request.get("post_bridge_exhaustion_recipe_expansion_requested", False)
+                or str(request.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+            ),
+            "cross_bundle_bridge_search_state": (
+                dict(request["cross_bundle_bridge_search_state"])
+                if isinstance(request.get("cross_bundle_bridge_search_state"), Mapping)
+                else None
+            ),
             "operator_certified": False,
             "diagnostic_operator_supported": diagnostic_operator_supported,
             "policy_candidate_ready": policy_candidate_ready,
@@ -9299,7 +10030,51 @@ class HookedTransformerWorkerRuntime:
                 bundle_status.get("activation_patch_promotable_to_candidate", False)
             ),
             "activation_patch_promotion_reason": bundle_status.get("activation_patch_promotion_reason"),
+            "contrastive_neighborhood_status": dict(contrastive_neighborhood_status),
+            "cross_bundle_bridge_search": cross_bundle_bridge_search,
+            "cross_bundle_bridge_matrix": (
+                list(cross_bundle_bridge_search.get("matrix", ()))
+                if isinstance(cross_bundle_bridge_search, Mapping)
+                and isinstance(cross_bundle_bridge_search.get("matrix"), SequenceABC)
+                and not isinstance(cross_bundle_bridge_search.get("matrix"), (str, bytes, bytearray))
+                else []
+            ),
+            "cross_bundle_bridge_summary": (
+                dict(cross_bundle_bridge_search.get("summary"))
+                if isinstance(cross_bundle_bridge_search, Mapping)
+                and isinstance(cross_bundle_bridge_search.get("summary"), Mapping)
+                else None
+            ),
+            "operator_recipe_expansion_matrix": (
+                list(post_bridge_recipe_expansion.get("matrix", ()))
+                if isinstance(post_bridge_recipe_expansion, Mapping)
+                and isinstance(post_bridge_recipe_expansion.get("matrix"), SequenceABC)
+                and not isinstance(post_bridge_recipe_expansion.get("matrix"), (str, bytes, bytearray))
+                else []
+            ),
+            "operator_recipe_expansion_summary": (
+                dict(post_bridge_recipe_expansion.get("summary"))
+                if isinstance(post_bridge_recipe_expansion, Mapping)
+                and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                else None
+            ),
+            "operator_recipe_expansion_family_mode_counts": (
+                dict(post_bridge_recipe_expansion.get("family_mode_counts"))
+                if isinstance(post_bridge_recipe_expansion, Mapping)
+                and isinstance(post_bridge_recipe_expansion.get("family_mode_counts"), Mapping)
+                else {}
+            ),
             "activation_patch_candidate_review": activation_patch_candidate_review,
+            "bridge_plan_shadow_actuator": activation_patch_bridge_plan_shadow,
+            "bridge_plan_reason": (
+                cross_bundle_bridge_search.get("bridge_plan_reason")
+                if isinstance(cross_bundle_bridge_search, Mapping)
+                and cross_bundle_bridge_search.get("bridge_plan_shadow_actuator") is not None
+                else activation_patch_candidate_review.get("compile_preview_blocked_reason")
+                if isinstance(activation_patch_candidate_review, Mapping)
+                and activation_patch_bridge_plan_shadow is not None
+                else None
+            ),
             "activation_patch_compile_preview_created": bool(activation_patch_compile_preview is not None),
             "activation_patch_compile_preview_blocked_reason": (
                 activation_patch_candidate_review.get("compile_preview_blocked_reason")
@@ -9455,6 +10230,30 @@ class HookedTransformerWorkerRuntime:
                 "activation_patch_checked": bool(bundle_status.get("activation_patch_checked", False)) or bool(activation_patch_rows),
                 "activation_patch_blocked_count": activation_patch_blocked,
                 "activation_patch_supportive_count": activation_patch_supportive,
+                "contrastive_neighborhood_status": dict(contrastive_neighborhood_status),
+                "cross_bundle_bridge_search_status": (
+                    cross_bundle_bridge_search.get("status")
+                    if isinstance(cross_bundle_bridge_search, Mapping)
+                    else None
+                ),
+                "cross_bundle_bridge_candidate_count": (
+                    cross_bundle_bridge_search.get("summary", {}).get("matrix_row_count")
+                    if isinstance(cross_bundle_bridge_search, Mapping)
+                    and isinstance(cross_bundle_bridge_search.get("summary"), Mapping)
+                    else 0
+                ),
+                "cross_bundle_direction_correct_count": (
+                    cross_bundle_bridge_search.get("summary", {}).get("direction_correct_bridge_count")
+                    if isinstance(cross_bundle_bridge_search, Mapping)
+                    and isinstance(cross_bundle_bridge_search.get("summary"), Mapping)
+                    else 0
+                ),
+                "cross_bundle_eligible_bridge_count": (
+                    cross_bundle_bridge_search.get("summary", {}).get("eligible_bridge_candidate_count")
+                    if isinstance(cross_bundle_bridge_search, Mapping)
+                    and isinstance(cross_bundle_bridge_search.get("summary"), Mapping)
+                    else 0
+                ),
                 "activation_patch_promotable_to_candidate": bool(
                     bundle_status.get("activation_patch_promotable_to_candidate", False)
                 ),
@@ -9462,6 +10261,12 @@ class HookedTransformerWorkerRuntime:
                 "activation_patch_compile_preview_blocked_reason": (
                     activation_patch_candidate_review.get("compile_preview_blocked_reason")
                     if isinstance(activation_patch_candidate_review, Mapping)
+                    else None
+                ),
+                "bridge_plan_shadow_available": bool(activation_patch_bridge_plan_shadow is not None),
+                "bridge_plan_shadow_actuator_bundle_key": (
+                    activation_patch_bridge_plan_shadow.get("actuator_bundle_key")
+                    if isinstance(activation_patch_bridge_plan_shadow, Mapping)
                     else None
                 ),
                 "activation_patch_next_evidence_after_review": activation_patch_review_next_evidence,
@@ -9513,11 +10318,50 @@ class HookedTransformerWorkerRuntime:
                 "policy_candidate_ready": policy_candidate_ready,
                 "production_operator_certified": False,
                 "carrier_to_actuator_status": carrier_to_actuator_status or None,
+                "operator_recipe_expansion_mode": request.get("operator_recipe_expansion_mode"),
+                "post_bridge_exhaustion_recipe_expansion_requested": bool(
+                    request.get("post_bridge_exhaustion_recipe_expansion_requested", False)
+                    or str(request.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+                ),
+                "operator_recipe_expansion_status": (
+                    post_bridge_recipe_expansion.get("status")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    else None
+                ),
+                "operator_recipe_expansion_row_count": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("matrix_row_count")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else 0
+                ),
+                "operator_recipe_expansion_dominant_failure_mode": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("dominant_failure_mode")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else None
+                ),
+                "operator_recipe_expansion_best_nonharmful_recipe_family": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("best_nonharmful_recipe_family")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else None
+                ),
+                "operator_recipe_expansion_recommended_next_family": (
+                    post_bridge_recipe_expansion.get("summary", {}).get("recommended_next_family")
+                    if isinstance(post_bridge_recipe_expansion, Mapping)
+                    and isinstance(post_bridge_recipe_expansion.get("summary"), Mapping)
+                    else None
+                ),
             },
             "activation_patch_candidate_pool": [
                 {
                     key: row.get(key)
                     for key in (
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "actuator_bundle_key",
+                        "intended_bundle_key",
+                        "intended_term",
                         "evidence_kind",
                         "diagnostic_family",
                         "status",
@@ -9538,9 +10382,12 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_stealer_bundle_key",
                         "activation_patch_stealer_term",
                         "activation_source_norm",
+                        "operator_recipe_expansion_mode",
+                        "post_bridge_exhaustion_recipe",
                         "actual_delta_class",
                         "realized_lift_bundle_key",
                         "realized_lift_term",
+                        "bridge_plan_bundle_key",
                         "self_delta",
                         "cross_delta",
                         "alignment_margin",
@@ -9555,6 +10402,11 @@ class HookedTransformerWorkerRuntime:
                 {
                     key: row.get(key)
                     for key in (
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "actuator_bundle_key",
+                        "intended_bundle_key",
+                        "intended_term",
                         "evidence_kind",
                         "diagnostic_family",
                         "status",
@@ -9596,9 +10448,12 @@ class HookedTransformerWorkerRuntime:
                         "activation_source_norm",
                         "activation_target_norm_before",
                         "activation_target_norm_after",
+                        "operator_recipe_expansion_mode",
+                        "post_bridge_exhaustion_recipe",
                         "actual_delta_class",
                         "realized_lift_bundle_key",
                         "realized_lift_term",
+                        "bridge_plan_bundle_key",
                         "self_delta",
                         "cross_delta",
                         "alignment_margin",
@@ -9622,9 +10477,23 @@ class HookedTransformerWorkerRuntime:
             result["certified_for_apply"] = False
             result["production_apply_allowed"] = False
         elif diagnostic_name == "compare_extra_operator_diagnostics":
-            result["diagnostic_role"] = "operator_evidence_view"
+            result["diagnostic_role"] = (
+                "operator_recipe_expansion_view"
+                if str(request.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
+                else "operator_evidence_view"
+            )
             result["certified_for_apply"] = False
             result["production_apply_allowed"] = False
+        elif diagnostic_name == "cross_bundle_bridge_search":
+            result["diagnostic_role"] = "cross_bundle_bridge_search"
+            result["status"] = (
+                cross_bundle_bridge_search.get("status")
+                if isinstance(cross_bundle_bridge_search, Mapping)
+                else result.get("status")
+            )
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+            result["production_operator_certified"] = False
         elif diagnostic_name == "activation_patch_candidate_review":
             result["diagnostic_role"] = "activation_patch_candidate_review"
             result["certified_for_apply"] = False
@@ -10237,6 +11106,15 @@ class HookedTransformerWorkerRuntime:
                 "pooling": "centered_mean",
                 "contrast_mode": "minus_stealer",
                 "contrast_scale": 0.25,
+                "competitor_strategy": "stealer",
+                "modes": ("kv_pair",),
+            },
+            {
+                "recipe_name": "term_centered_pm1_minus_stealer_l050",
+                "localization": "exact_term_centered_pm1",
+                "pooling": "centered_mean",
+                "contrast_mode": "minus_stealer",
+                "contrast_scale": 0.5,
                 "competitor_strategy": "stealer",
                 "modes": ("kv_pair",),
             },

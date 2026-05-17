@@ -24,6 +24,8 @@ Auxiliary controls are healthy supports. They can make the worker easier to stee
 | Soft entity recall prior | `loop_aware_entity_recall` | Continue or start explicit missing entity token sequences from task feedback, while keeping the effect bounded and auditable. |
 | Soft entity logit bias | `logit_bias_entity_soft` | Nudge logits toward a small coverage-ranked set of explicit missing entities, stronger for untouched terms and weaker once a term starts to emerge. |
 | Semantic progress critic | `MiniLM` sentence critic | Add a coverage-weighted semantic-progress signal so meaning-level drift only counts once explicit task coverage begins to move. |
+| Readout carrier diagnostics | `self_rank_carrier`, attention carrier probes, SAE/readout feature hints | Improve the controller's map of promising internal paths without granting apply authority. |
+| Bounded production trial | `production_trial`, `alternate_followup` | Test one reversible operator step under TTL/norm/budget guardrails while keeping `production_apply_allowed=false`. |
 
 Auxiliary controls should only:
 - operate with bounded, inspectable strength
@@ -50,3 +52,11 @@ The intended progression is:
 3. Commit only after a direction repeatedly helps.
 
 Strong commits such as weight editing belong at the end of that progression, not at the start.
+
+The current readout-escape work adds one more practical rule:
+
+> Rank movement is evidence, not permission.
+
+A `self_rank_carrier` can guide the next diagnostic request, but it should not
+be treated as a `self_target_actuator` until target mass or target top-20 lift is
+observed under the same controller-owned contract.

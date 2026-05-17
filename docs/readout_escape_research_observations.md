@@ -1,6 +1,6 @@
 # Readout Escape Research Observations
 
-Status date: 2026-05-15
+Status date: 2026-05-17
 
 This note summarizes the current research state of the readout-escape line. It is intentionally about observations and interpretation, not just implementation history.
 
@@ -118,7 +118,7 @@ It has:
 
 This lets the controller test one bounded step without turning a diagnostic into a general permission slip.
 
-## Latest GPT-2 Observation
+## GPT-2 Observation: Follow-Up Trial Ladder
 
 The recent direct-scan replay established a two-stage trial comparison.
 
@@ -259,34 +259,121 @@ harmful span/term patch
 
 But the last arrow is not yet established.
 
+## Latest GPT-2 Observation: Rank Carrier Split
+
+The newest direct-scan replay sharpens that last arrow.
+
+The previous activation-patch diagnostics could label a recipe as a
+`self_actuator` when it produced large ownership/rank movement:
+
+```text
+self_delta > 0
+alignment_margin >= 0
+focus_rank_delta > 0
+```
+
+That was too coarse. A recipe can move the intended bundle's rank without
+moving the target token mass or creating a top-20 target hit. In the current
+readout-escape setting, that is not yet a safe actuator.
+
+The runtime now separates:
+
+| Class | Meaning |
+| --- | --- |
+| `self_target_actuator` | Intended bundle owns lift and target mass/top20 improves |
+| `self_rank_carrier` | Intended bundle owns rank/readout movement, but target mass/top20 does not improve |
+| `wrong_direction` | Another bundle receives more useful lift |
+| `collapse_sharpener` | Intervention sharpens a bad/repetitive basin |
+| `dead` | No meaningful movement |
+
+This split changed the live replay behavior. The earlier ladder could promote a
+rank-moving activation patch into a bounded production trial; the latest ladder
+blocks that path and requests more evidence instead.
+
+Observed diagnostic sequence in local GPT-2 direct-scan replay:
+
+```text
+activation_patch_candidate_review
+-> compare_extra_operator_diagnostics
+-> cross_bundle_bridge_search
+-> compare_extra_operator_diagnostics(post_bridge_exhaustion)
+```
+
+The important part is what did not happen:
+
+```text
+no production_trial
+no production apply
+no repeat of the same compare loop
+```
+
+The post-bridge expansion produced:
+
+```json
+{
+  "status": "rank_carrier_family_found",
+  "failure_mode_counts": {
+    "self_rank_carrier": 3,
+    "wrong_direction": 9
+  },
+  "best_target_actuator_recipe_family": null,
+  "best_rank_carrier_recipe_family": "resid_pre|source_term_token|blend",
+  "recommended_next_family": "convert_rank_carrier_to_target:resid_pre|source_term_token|blend"
+}
+```
+
+Interpretation:
+
+- `budget` is no longer merely invisible.
+- Some recipes can move `budget` in rank/readout space.
+- Those recipes still do not lift `budget` as a first-token target.
+- Many expanded recipes are still stolen by the neighboring `send` bundle.
+- The next operator problem is conversion, not broader controller authority.
+
+This is a useful negative result. The system can now say:
+
+> I found a rank/readout carrier for the objective, but not a target actuator.
+> Production trial remains closed. Search for a recipe that converts the carrier
+> into target mass/top20 lift.
+
+That is a much better failure mode than either applying the carrier directly or
+calling the entire family dead.
+
 ## Near-Term Experimental Plan
 
 Recommended next experiments:
 
-1. Continue the contrastive source-local recipe sweep.
-   Try small variations around `source_centered_pm1_minus_stealer_l025` before opening larger search.
+1. Convert the best rank carrier into a target actuator.
+   The current best family is `resid_pre|source_term_token|blend`. The next
+   sweep should ask whether that rank carrier can be turned into target
+   mass/top20 lift without increasing collapse risk.
 
-2. Add confirmation replay for neutral follow-ups.
+2. Continue the contrastive source-local recipe sweep.
+   Try small variations around `source_centered_pm1_minus_stealer_l025` and
+   `source_term_token_to_last` before opening larger search.
+
+3. Add confirmation replay for neutral follow-ups.
    Neutral is not success, but it is a safer local neighborhood than harmful/regressing.
 
-3. Compare centered and fused seeds.
+4. Compare centered and fused seeds.
    Keep the matrix small:
    `source_centered_pm1`, `source_centered_pm1_minus_stealer_l025`, `source_term_fused`, and one orthogonal variant.
 
-4. Keep attention ablation diagnostic-only.
+5. Keep attention ablation diagnostic-only.
    Use it to identify carrier heads and rank sensitivity. Do not promote it to apply until it has ownership-style certification.
 
-5. Strengthen the readout analyzer as a feature emitter.
+6. Strengthen the readout analyzer as a feature emitter.
    Improve evidence quality, not authority. Prefer backend-swappable feature vectors over controller-visible answer hints.
 
-6. Preserve controller-owned explanations.
+7. Preserve controller-owned explanations.
    Every noop, trial, veto, or follow-up should leave a one-sentence reason reconstructible from structured fields.
 
-7. Treat GPT-2 as a measurement rig.
+8. Treat GPT-2 as a measurement rig.
    The next larger-model step should test whether the classification axes transfer, not whether a specific recipe transfers.
 
 ## Open Questions
 
+- Can the current `resid_pre|source_term_token|blend` rank carrier be converted into positive target lift?
 - Can contrastive source-local activation patches produce positive target lift, or only avoid harm?
 - Is `budget` inherently a payload term at this decode point, requiring a bridge actuator such as `send`?
 - Which evidence type best predicts safe trial outcome: ownership replay, attention carrier score, SAE feature support, or first-piece reachability?
@@ -305,5 +392,6 @@ But it has made the failure much sharper:
 - unsafe apply is better blocked
 - operator failures are now recipe-local rather than mystical
 - a harmful primary trial can now lead to a bounded neutral alternate trial
+- a rank-moving recipe can now be blocked as `self_rank_carrier` instead of mistaken for a production-safe self-actuator
 
 The next breakthrough likely requires converting non-dead diagnostic carriers into target-owned actuators, not giving the controller broader apply power.
