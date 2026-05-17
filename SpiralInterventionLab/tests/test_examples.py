@@ -2432,11 +2432,17 @@ class TestExamples(unittest.TestCase):
         summary = result["operator_recipe_expansion_summary"]
         self.assertEqual(summary["status"], "rank_carrier_family_found")
         self.assertEqual(summary["failure_mode_counts"]["self_rank_carrier"], 1)
+        self.assertEqual(summary["ownership_role_counts"]["self"], 1)
+        self.assertEqual(summary["effect_role_counts"]["rank_carrier"], 1)
+        self.assertEqual(summary["safety_role_counts"]["neutral"], 1)
         self.assertEqual(summary["best_rank_carrier_recipe_family"], "resid_pre|source_term_token|blend")
         self.assertEqual(summary["recommended_next_family"], "convert_rank_carrier_to_target:resid_pre|source_term_token|blend")
         self.assertFalse(summary["production_apply_allowed"])
         matrix = result["operator_recipe_expansion_matrix"]
         self.assertEqual(matrix[0]["failure_mode"], "self_rank_carrier")
+        self.assertEqual(matrix[0]["ownership_role"], "self")
+        self.assertEqual(matrix[0]["effect_role"], "rank_carrier")
+        self.assertEqual(matrix[0]["safety_role"], "neutral")
 
     def test_activation_patch_candidate_review_blocks_rank_carrier_only_shadow(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
@@ -2472,6 +2478,11 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(result["status"], "bridge_plan_or_more_evidence_required")
         self.assertFalse(result["compile_preview_created"])
         self.assertEqual(result["compile_preview_blocked_reason"], "rank_carrier_not_target_actuator")
+        self.assertEqual(result["ownership_role"], "self")
+        self.assertEqual(result["effect_role"], "rank_carrier")
+        self.assertEqual(result["safety_role"], "neutral")
+        self.assertEqual(result["blueprint"]["effect_role"], "rank_carrier")
+        self.assertEqual(result["ownership_gate"]["effect_role"], "rank_carrier")
         self.assertTrue(result["rank_carrier_only"])
         self.assertFalse(result["target_readout_effect_certified"])
         self.assertFalse(result["target_promotable_to_candidate_compiler"])

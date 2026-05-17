@@ -554,10 +554,10 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
             row.setdefault("post_bridge_exhaustion_recipe_expansion_requested", True)
         if isinstance(meta.get("cross_bundle_bridge_search_state"), Mapping):
             row.setdefault("cross_bundle_bridge_search_state", dict(meta["cross_bundle_bridge_search_state"]))
-        dedupe_key = "|".join(str(row.get(key, "") or "") for key in ("diagnostic", "bundle_key", "objective_bundle_key"))
-        if dedupe_key in seen:
+        signature = _diagnostic_request_signature(row)
+        if signature in seen:
             continue
-        seen.add(dedupe_key)
+        seen.add(signature)
         normalized.append(row)
     return normalized
 
@@ -1132,9 +1132,19 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         or strategy_hints.get("bridge_plan_actuator_bundle_key")
     )
     bridge_plan_reason = meta.get("bridge_plan_reason") or strategy_hints.get("bridge_plan_reason")
-    bridge_plan_unavailable_reason = strategy_hints.get("bridge_plan_unavailable_reason")
-    bridge_plan_unavailable_objective_bundle_key = strategy_hints.get("bridge_plan_unavailable_objective_bundle_key")
-    bridge_plan_unavailable_objective_reasons = strategy_hints.get("bridge_plan_unavailable_objective_reasons")
+    bridge_plan_unavailable_reason = (
+        meta.get("bridge_plan_unavailable_reason")
+        or strategy_hints.get("bridge_plan_unavailable_reason")
+    )
+    bridge_plan_unavailable_objective_bundle_key = (
+        meta.get("bridge_plan_unavailable_objective_bundle_key")
+        or strategy_hints.get("bridge_plan_unavailable_objective_bundle_key")
+    )
+    bridge_plan_unavailable_objective_reasons = (
+        meta.get("bridge_plan_unavailable_objective_reasons")
+        if isinstance(meta.get("bridge_plan_unavailable_objective_reasons"), Mapping)
+        else strategy_hints.get("bridge_plan_unavailable_objective_reasons")
+    )
     bridge_eval_context_drift = strategy_hints.get("bridge_eval_context_drift")
     controller_selected_bundle_key = _extract_controller_selected_bundle_key(packet, command)
     controller_objective_bundle_key = _optional_meta_text(meta, "objective_bundle_key")

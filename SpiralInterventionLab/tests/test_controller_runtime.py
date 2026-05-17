@@ -14,7 +14,11 @@ from SpiralInterventionLab.runtime.edit_budget import (
     prepare_direction,
 )
 from SpiralInterventionLab.runtime.effects import build_edit_effect, summarize_effects
-from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
+from SpiralInterventionLab.runtime.loop import (
+    InMemoryStructuredLogger,
+    _extract_diagnostic_requests,
+    run_episode,
+)
 from SpiralInterventionLab.runtime.overlays import OverlayHandle
 from SpiralInterventionLab.runtime.policy import (
     GlobalBudget,
@@ -1716,6 +1720,92 @@ class TestLoopAndEffects(unittest.TestCase):
             "all_dead_actuator",
         )
         self.assertFalse(selection_event["bridge_eval_context_drift"])
+
+    def test_run_episode_prefers_meta_bridge_unavailable_reason(self):
+        class _BridgeUnavailableMetaController(_ToyController):
+            def invoke(self, packet):
+                self.calls += 1
+                return {
+                    "version": "0.1",
+                    "decision": "noop",
+                    "meta": {
+                        "bridge_plan_unavailable_reason": "meta_no_safe_actuator",
+                        "bridge_plan_unavailable_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                        "bridge_plan_unavailable_objective_reasons": {
+                            "kv_pair:budget:source_body:10:12": "meta_no_safe_actuator",
+                        },
+                    },
+                }
+
+        class _BridgeUnavailableStaleHintsToyWorkerRuntime(_ToyWorkerRuntime):
+            def build_controller_packet(self):
+                packet = super().build_controller_packet()
+                packet["strategy_hints"] = {
+                    "gate_report_frontier_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_unavailable_reason": "stale_strategy_hint_reason",
+                    "bridge_plan_unavailable_objective_bundle_key": "kv_pair:budget:source_body:10:12",
+                    "bridge_plan_unavailable_objective_reasons": {
+                        "kv_pair:budget:source_body:10:12": "stale_strategy_hint_reason",
+                    },
+                }
+                return packet
+
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet = parse_observation_packet(_make_packet())
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        logger = InMemoryStructuredLogger()
+
+        run_episode(
+            _ToyTaskEnv(),
+            _BridgeUnavailableStaleHintsToyWorkerRuntime(runtime_state),
+            _BridgeUnavailableMetaController(),
+            ctx,
+            logger=logger,
+        )
+
+        selection_event = next(event for event in logger.events if event["event"] == "controller_selection")
+        self.assertEqual(selection_event["bridge_plan_unavailable_reason"], "meta_no_safe_actuator")
+        self.assertEqual(selection_event["controller_bridge_plan_unavailable_reason"], "meta_no_safe_actuator")
+        self.assertEqual(
+            selection_event["bridge_plan_unavailable_objective_reasons"]["kv_pair:budget:source_body:10:12"],
+            "meta_no_safe_actuator",
+        )
+
+    def test_extract_diagnostic_requests_keeps_distinct_intents(self):
+        objective = "kv_pair:budget:source_body:10:12"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "diagnostic_request": {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "bundle_key": objective,
+                    "objective_bundle_key": objective,
+                    "next_evidence_needed": "rank_carrier_to_target_conversion",
+                },
+                "controller_memory": {
+                    "diagnostic_request": {
+                        "diagnostic": "compare_extra_operator_diagnostics",
+                        "bundle_key": objective,
+                        "objective_bundle_key": objective,
+                        "next_evidence_needed": "post_bridge_exhaustion_recipe_expansion",
+                        "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                    }
+                },
+            },
+        }
+
+        requests = _extract_diagnostic_requests(command, {"strategy_hints": {}})
+
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(
+            {request["next_evidence_needed"] for request in requests},
+            {
+                "rank_carrier_to_target_conversion",
+                "post_bridge_exhaustion_recipe_expansion",
+            },
+        )
 
     def test_run_episode_marks_forced_diagnostic_apply_in_selection_report(self):
         class _DiagnosticToyController(_ToyController):

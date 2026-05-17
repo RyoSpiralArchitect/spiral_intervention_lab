@@ -117,6 +117,122 @@ _SOFT_CONSTRAINT_FEEDBACK_KEYS = ("missing_required_terms", "missing_keywords", 
 _ENTITY_RECALL_FEEDBACK_KEYS = ("entity_recall_terms",) + _SOFT_CONSTRAINT_FEEDBACK_KEYS
 
 
+def _derive_operator_role_axes(
+    *,
+    actuator_class: Any = "",
+    actual_delta_class: Any = "",
+    failure_mode: Any = "",
+    owns_lift: Any | None = None,
+    direct_target_effect: Any | None = None,
+    rank_carrier_only: Any | None = None,
+    objective_bundle_key: Any = "",
+    realized_lift_bundle_key: Any = "",
+    target_mass_delta: Any = 0.0,
+    target_top20_hit_delta: Any = 0,
+    focus_rank_delta: Any = 0.0,
+    self_delta: Any = 0.0,
+    cross_delta: Any = 0.0,
+    repeat_delta: Any = 0.0,
+    entropy_delta: Any = 0.0,
+    top1_margin_delta: Any = 0.0,
+    status: Any = "",
+) -> dict[str, str]:
+    """Split overloaded actuator labels into ownership/effect/safety axes."""
+
+    def _as_float(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except Exception:
+            return default
+
+    def _as_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return default
+
+    actuator = str(actuator_class or "")
+    actual = str(actual_delta_class or "")
+    failure = str(failure_mode or "")
+    objective_key = str(objective_bundle_key or "")
+    realized_key = str(realized_lift_bundle_key or "")
+    target_mass = _as_float(target_mass_delta)
+    target_top20 = _as_int(target_top20_hit_delta)
+    focus_rank = _as_float(focus_rank_delta)
+    self_score = _as_float(self_delta)
+    cross_score = _as_float(cross_delta)
+    repeat_score = _as_float(repeat_delta)
+    entropy_score = _as_float(entropy_delta)
+    top1_margin = _as_float(top1_margin_delta)
+    owns = bool(owns_lift) if owns_lift is not None else actuator == "self_actuator"
+    target_effect = (
+        bool(direct_target_effect)
+        if direct_target_effect is not None
+        else bool(target_mass >= 0.00002 or target_top20 > 0 or failure == "self_target_actuator")
+    )
+    rank_carrier = (
+        bool(rank_carrier_only)
+        if rank_carrier_only is not None
+        else bool(
+            failure == "self_rank_carrier"
+            or (
+                owns
+                and not target_effect
+                and (focus_rank > 0.0 or self_score >= 0.02)
+            )
+        )
+    )
+
+    if actuator == "policy_violation" or actual == "policy_violation" or failure == "policy_violation":
+        safety_role = "policy_blocked"
+    elif actuator == "collapse_sharpener" or actual == "collapse_sharpener" or failure == "collapse_sharpener":
+        safety_role = "collapse_sharpener"
+    elif actuator == "harmful" or actual == "harmful":
+        safety_role = "harmful"
+    elif repeat_score > 0 and entropy_score < -0.01 and top1_margin > 0.001:
+        safety_role = "collapse_sharpener"
+    elif str(status or "") == "blocked":
+        safety_role = "blocked"
+    elif target_effect or rank_carrier or failure in {"weak_nonharmful", "self_target_actuator", "self_rank_carrier"}:
+        safety_role = "neutral"
+    else:
+        safety_role = "unknown"
+
+    if failure == "wrong_direction" or actuator == "cross_bound":
+        ownership_role = "wrong_direction"
+    elif actuator == "bridge_actuator":
+        ownership_role = "bridge"
+    elif owns or failure in {"self_target_actuator", "self_rank_carrier"}:
+        ownership_role = "self"
+    elif realized_key and objective_key and realized_key != objective_key and cross_score > max(self_score, 0.005):
+        ownership_role = "wrong_direction"
+    elif actuator in {"dead_actuator", "collapse_sharpener", "harmful", "noisy_or_harmful"} or failure in {"dead", "weak_nonharmful"}:
+        ownership_role = "none"
+    else:
+        ownership_role = "unknown"
+
+    if target_effect:
+        effect_role = "target_actuator"
+    elif rank_carrier:
+        effect_role = "rank_carrier"
+    elif failure == "weak_nonharmful":
+        effect_role = "weak_nonharmful"
+    elif actuator == "dead_actuator" or failure == "dead":
+        effect_role = "dead"
+    elif safety_role in {"collapse_sharpener", "harmful", "policy_blocked"}:
+        effect_role = safety_role
+    elif ownership_role in {"bridge", "wrong_direction"} and (cross_score > 0.0 or actual == "target_lift"):
+        effect_role = "cross_bundle_lift"
+    else:
+        effect_role = "unknown"
+
+    return {
+        "ownership_role": ownership_role,
+        "effect_role": effect_role,
+        "safety_role": safety_role,
+    }
+
+
 @dataclass
 class _TokenSegment:
     kind: str
@@ -7706,6 +7822,7 @@ class HookedTransformerWorkerRuntime:
         target_top20_delta = _as_int(counterfactual_delta.get("target_top20_hit_delta"), 0)
         focus_rank_delta = _as_float(counterfactual_delta.get("focus_rank_delta"), 0.0)
         self_delta = _as_float(counterfactual_delta.get("self_delta"), 0.0)
+        actual_delta_class = str(shadow.get("actual_delta_class", "") or "")
         direct_target_effect = bool(target_mass_delta >= 0.00002 or target_top20_delta > 0)
         rank_carrier_only = bool(
             owns_lift
@@ -7720,6 +7837,20 @@ class HookedTransformerWorkerRuntime:
             else "bridge_shadow"
             if actuator_class == "bridge_actuator"
             else "unknown"
+        )
+        role_axes = _derive_operator_role_axes(
+            actuator_class=actuator_class,
+            actual_delta_class=actual_delta_class,
+            owns_lift=owns_lift,
+            direct_target_effect=direct_target_effect,
+            rank_carrier_only=rank_carrier_only,
+            objective_bundle_key=shadow.get("objective_bundle_key"),
+            realized_lift_bundle_key=shadow.get("realized_lift_bundle_key"),
+            target_mass_delta=target_mass_delta,
+            target_top20_hit_delta=target_top20_delta,
+            focus_rank_delta=focus_rank_delta,
+            self_delta=self_delta,
+            status=shadow.get("status"),
         )
         target_promotable = bool(promotable and direct_target_effect)
         compiler_status = (
@@ -7752,12 +7883,12 @@ class HookedTransformerWorkerRuntime:
             "compile_state": "shadow_blueprint_only",
             "required_runtime_support": "activation_patch_blend_operator",
             "activation_patch_effect_role": effect_role,
+            **role_axes,
             "rank_carrier_only": bool(rank_carrier_only),
             "target_readout_effect_certified": bool(direct_target_effect),
             "production_apply_allowed": False,
             "certified_for_apply": False,
         }
-        actual_delta_class = str(shadow.get("actual_delta_class", "") or "")
         compile_preview_blocked_reason: str | None
         if owns_lift and target_promotable:
             compile_preview_blocked_reason = None
@@ -7788,6 +7919,7 @@ class HookedTransformerWorkerRuntime:
                 "actual_delta_class": actual_delta_class or None,
                 "required_runtime_support": "activation_patch_blend_operator",
                 "activation_patch_effect_role": effect_role,
+                **role_axes,
                 "rank_carrier_only": bool(rank_carrier_only),
                 "target_readout_effect_certified": bool(direct_target_effect),
                 "production_apply_allowed": False,
@@ -7816,6 +7948,7 @@ class HookedTransformerWorkerRuntime:
             "promotable_to_candidate_compiler": bool(promotable),
             "target_promotable_to_candidate_compiler": bool(target_promotable),
             "activation_patch_effect_role": effect_role,
+            **role_axes,
             "rank_carrier_only": bool(rank_carrier_only),
             "target_readout_effect_certified": bool(direct_target_effect),
             "compile_preview_created": bool(compile_preview is not None),
@@ -7830,6 +7963,7 @@ class HookedTransformerWorkerRuntime:
             "promotable_to_candidate_compiler": promotable,
             "target_promotable_to_candidate_compiler": bool(target_promotable),
             "activation_patch_effect_role": effect_role,
+            **role_axes,
             "rank_carrier_only": bool(rank_carrier_only),
             "target_readout_effect_certified": bool(direct_target_effect),
             "promotion_reason": shadow.get("promotion_reason"),
@@ -9482,6 +9616,20 @@ class HookedTransformerWorkerRuntime:
                         }
                     )
                 )
+                role_axes = _derive_operator_role_axes(
+                    actuator_class=actuator_class,
+                    actual_delta_class=row.get("actual_delta_class"),
+                    failure_mode="wrong_direction" if not direction_correct else "",
+                    objective_bundle_key=objective_key,
+                    realized_lift_bundle_key=realized_bundle,
+                    target_mass_delta=target_mass_delta,
+                    target_top20_hit_delta=top20_delta,
+                    focus_rank_delta=focus_rank_delta,
+                    self_delta=self_delta,
+                    cross_delta=cross_delta,
+                    repeat_delta=repeat_delta,
+                    status=status,
+                )
                 matrix.append(
                     {
                         "objective_bundle_key": objective_key,
@@ -9494,6 +9642,7 @@ class HookedTransformerWorkerRuntime:
                         "direction_correct": bool(direction_correct),
                         "bridge_plan_eligible": bool(eligible),
                         "bridge_plan_vetoes": vetoes,
+                        **role_axes,
                         "actuator_class": actuator_class,
                         "status": status or None,
                         "recipe_name": row.get("recipe_name"),
@@ -9811,11 +9960,28 @@ class HookedTransformerWorkerRuntime:
                 self_delta = _coerce_float(row.get("self_delta"))
                 cross_delta = _coerce_float(row.get("cross_delta"))
                 target_mass = _coerce_float(row.get("target_mass_delta"))
+                target_top20 = _coerce_int(row.get("target_top20_hit_delta"))
                 focus_rank = _coerce_int(row.get("focus_rank_delta"))
                 repeat_delta = max(
                     _coerce_float(row.get("repeat_delta")),
                     _coerce_float(row.get("repeat_flag")),
                     _coerce_float(row.get("repetition_score")),
+                )
+                role_axes = _derive_operator_role_axes(
+                    actuator_class=row.get("actuator_class") or row.get("activation_patch_actuator_class"),
+                    actual_delta_class=row.get("actual_delta_class"),
+                    failure_mode=failure_mode,
+                    objective_bundle_key=objective_key or row_objective,
+                    realized_lift_bundle_key=row.get("realized_lift_bundle_key"),
+                    target_mass_delta=target_mass,
+                    target_top20_hit_delta=target_top20,
+                    focus_rank_delta=focus_rank,
+                    self_delta=self_delta,
+                    cross_delta=cross_delta,
+                    repeat_delta=repeat_delta,
+                    entropy_delta=row.get("entropy_delta"),
+                    top1_margin_delta=row.get("top1_margin_delta"),
+                    status=row.get("status"),
                 )
                 matrix.append(
                     {
@@ -9824,6 +9990,7 @@ class HookedTransformerWorkerRuntime:
                         "recipe_name": row.get("recipe_name"),
                         "operator_recipe_id": row.get("operator_recipe_id"),
                         "failure_mode": failure_mode,
+                        **role_axes,
                         "actuator_class": row.get("actuator_class") or row.get("activation_patch_actuator_class"),
                         "status": row.get("status"),
                         "actual_delta_class": row.get("actual_delta_class"),
@@ -9837,7 +10004,7 @@ class HookedTransformerWorkerRuntime:
                         "cross_delta": round(float(cross_delta), 6),
                         "alignment_margin": round(_coerce_float(row.get("alignment_margin")), 6),
                         "target_mass_delta": round(float(target_mass), 6),
-                        "target_top20_hit_delta": _coerce_int(row.get("target_top20_hit_delta")),
+                        "target_top20_hit_delta": target_top20,
                         "focus_rank_delta": int(focus_rank),
                         "repeat_delta": round(float(repeat_delta), 6),
                     }
@@ -9862,11 +10029,20 @@ class HookedTransformerWorkerRuntime:
 
             matrix.sort(key=_expansion_rank, reverse=True)
             failure_mode_counts: dict[str, int] = {}
+            ownership_role_counts: dict[str, int] = {}
+            effect_role_counts: dict[str, int] = {}
+            safety_role_counts: dict[str, int] = {}
             family_mode_counts: dict[str, dict[str, int]] = {}
             for item in matrix:
                 mode = str(item.get("failure_mode") or "unknown")
                 family = str(item.get("recipe_family") or "unknown")
                 failure_mode_counts[mode] = int(failure_mode_counts.get(mode, 0)) + 1
+                ownership = str(item.get("ownership_role") or "unknown")
+                effect = str(item.get("effect_role") or "unknown")
+                safety = str(item.get("safety_role") or "unknown")
+                ownership_role_counts[ownership] = int(ownership_role_counts.get(ownership, 0)) + 1
+                effect_role_counts[effect] = int(effect_role_counts.get(effect, 0)) + 1
+                safety_role_counts[safety] = int(safety_role_counts.get(safety, 0)) + 1
                 bucket = family_mode_counts.setdefault(family, {})
                 bucket[mode] = int(bucket.get(mode, 0)) + 1
 
@@ -9919,6 +10095,9 @@ class HookedTransformerWorkerRuntime:
                 "matrix_row_count": len(matrix),
                 "dedicated_recipe_row_count": len(expansion_rows),
                 "failure_mode_counts": dict(sorted(failure_mode_counts.items())),
+                "ownership_role_counts": dict(sorted(ownership_role_counts.items())),
+                "effect_role_counts": dict(sorted(effect_role_counts.items())),
+                "safety_role_counts": dict(sorted(safety_role_counts.items())),
                 "dominant_failure_mode": dominant_failure_mode,
                 "best_nonharmful_recipe_family": (
                     best_nonharmful.get("recipe_family") if isinstance(best_nonharmful, Mapping) else None
