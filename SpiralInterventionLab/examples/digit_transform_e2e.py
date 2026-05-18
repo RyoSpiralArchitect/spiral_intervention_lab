@@ -37,6 +37,7 @@ from ..tasks import (
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
     SpiralDigitTransformEnv,
+    SpiralEasyConstrainedRewriteEnv,
     SpiralEntailmentReasoningEnv,
     SpiralSentenceOrderingEnv,
     SpiralStructuredSummaryEnv,
@@ -75,6 +76,7 @@ ExperimentTaskEnv = (
     | SpiralSentenceOrderingEnv
     | SpiralEntailmentReasoningEnv
     | SpiralConstrainedRewriteEnv
+    | SpiralEasyConstrainedRewriteEnv
     | SpiralStructuredSummaryEnv
 )
 
@@ -4457,6 +4459,8 @@ def create_task_env(task_name: str, *, semantic_critic: Any | None = None) -> Ex
         return SpiralEntailmentReasoningEnv()
     if normalized in {"constrained_rewrite", "rewrite"}:
         return SpiralConstrainedRewriteEnv(semantic_critic=semantic_critic)
+    if normalized in {"constrained_rewrite_easy", "easy_constrained_rewrite", "rewrite_easy", "easy_rewrite"}:
+        return SpiralEasyConstrainedRewriteEnv(semantic_critic=semantic_critic)
     if normalized in {"structured_summary", "summary"}:
         return SpiralStructuredSummaryEnv(semantic_critic=semantic_critic)
     raise ValueError(f"unknown task '{task_name}'")
@@ -8901,6 +8905,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "sentence_ordering",
             "entailment_reasoning",
             "constrained_rewrite",
+            "constrained_rewrite_easy",
             "structured_summary",
         ],
         help="Task environment to run",

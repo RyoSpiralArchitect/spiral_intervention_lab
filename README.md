@@ -404,6 +404,25 @@ while activation/readout work remains responsible for recovering `Mira`, `send`,
 and `Omar`. The detailed comparison lives in
 [`docs/readout_escape_research_observations.md`](docs/readout_escape_research_observations.md#baseline-comparison).
 
+There is now also a slightly easier companion benchmark,
+`constrained_rewrite_easy`, for this exact comparison. It keeps the same
+feedback contract as `constrained_rewrite` but uses shorter source sentences,
+single-token forbidden terms, and word budgets that a clean source-copy rewrite
+can satisfy. For seed `7`, the easy variant keeps the `Mira/send/budget/Omar`
+payload while removing the multi-token `in order to` trap:
+
+```text
+SOURCE: Mira should send the budget draft to Omar before lunch.
+Keep: Mira, send, budget, Omar
+Avoid: should
+Max words: 9
+```
+
+This benchmark is not meant to replace the harder constrained rewrite task. It
+is a calibration rung: if runtime guardrails plus readout/operator work cannot
+recover payload on `constrained_rewrite_easy`, the hard task is probably still
+too entangled for the current actuator set.
+
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
 model. The Hugging Face cache may be offline even when network is available, so
@@ -517,6 +536,17 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --worker-model gpt2-small \
   --task constrained_rewrite \
   --readout-analyzer heuristic \
+  --seed 7
+```
+
+For a lighter constrained-rewrite calibration run:
+
+```bash
+python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
+  --provider openai \
+  --controller-model gpt-4.1-mini \
+  --worker-model gpt2 \
+  --task constrained_rewrite_easy \
   --seed 7
 ```
 

@@ -596,3 +596,41 @@ This is exactly the intended dual-brain separation. The guardrail gets no
 mechanistic credit for `budget`; it only blocks illegal continuations. The
 remaining research question is narrower and cleaner: how to recover `Mira`,
 `send`, and `Omar` without reopening the forbidden source-copy basin.
+
+### Easier Calibration Benchmark
+
+The hard constrained rewrite task mixes several difficulties at once:
+
+- multi-token forbidden phrases such as `in order to`
+- source-copy attraction
+- four required payload terms
+- a tight answer-start readout problem
+
+To avoid treating every failure as the same failure, the repo now includes
+`constrained_rewrite_easy`. It keeps the same scoring and feedback contract as
+`constrained_rewrite`, but lowers the surface complexity:
+
+- shorter source sentences
+- single-token forbidden terms
+- word budgets that a clean source-copy rewrite can satisfy
+- the same required-term recall / forbidden-clean / word-budget score fields
+
+For seed `7`, the easy episode is:
+
+```text
+SOURCE: Mira should send the budget draft to Omar before lunch.
+Keep: Mira, send, budget, Omar
+Avoid: should
+Max words: 9
+```
+
+This gives the next set of runs a calibration rung between raw source-copy and
+the harder readout-escape task. The intended interpretation is:
+
+- if `constrained_rewrite_easy` fails, the current actuator/guardrail stack is
+  still struggling with basic payload preservation under a single surface ban
+- if `constrained_rewrite_easy` succeeds but `constrained_rewrite` fails, the
+  remaining bottleneck is likely the harder task's multi-token forbidden phrase
+  and answer-boundary readout geometry
+- if both fail in the same way, the issue is probably not task difficulty but
+  the operator recipe family itself

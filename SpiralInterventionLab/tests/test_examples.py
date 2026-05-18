@@ -44,6 +44,7 @@ from SpiralInterventionLab.tasks import (
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
     SpiralDigitTransformEnv,
+    SpiralEasyConstrainedRewriteEnv,
     SpiralEntailmentReasoningEnv,
     SpiralSentenceOrderingEnv,
     SpiralStructuredSummaryEnv,
@@ -438,6 +439,8 @@ class TestExamples(unittest.TestCase):
         self.assertIsInstance(create_task_env("sentence_ordering"), SpiralSentenceOrderingEnv)
         self.assertIsInstance(create_task_env("entailment_reasoning"), SpiralEntailmentReasoningEnv)
         self.assertIsInstance(create_task_env("constrained_rewrite"), SpiralConstrainedRewriteEnv)
+        self.assertIsInstance(create_task_env("constrained_rewrite_easy"), SpiralEasyConstrainedRewriteEnv)
+        self.assertIsInstance(create_task_env("easy_rewrite"), SpiralEasyConstrainedRewriteEnv)
         self.assertIsInstance(create_task_env("structured_summary"), SpiralStructuredSummaryEnv)
 
     def test_run_digit_transform_experiment_smoke(self):
