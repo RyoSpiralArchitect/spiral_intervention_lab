@@ -6141,7 +6141,10 @@ def run_readout_escape_replay_harness(
                 "target_piece_logit_delta": result.get("target_piece_logit_delta"),
                 "target_piece_prob_delta": result.get("target_piece_prob_delta"),
                 "target_rank_after": result.get("target_rank_after"),
+                "target_top20_threshold_gap_baseline": result.get("target_top20_threshold_gap_baseline"),
                 "target_top20_threshold_gap": result.get("target_top20_threshold_gap"),
+                "target_top20_threshold_gap_after": result.get("target_top20_threshold_gap_after"),
+                "target_top20_threshold_gap_delta": result.get("target_top20_threshold_gap_delta"),
                 "target_top20_margin": result.get("target_top20_margin"),
                 "focus_rank_delta": result.get("focus_rank_delta"),
                 "rank_focus_delta": result.get("rank_focus_delta"),
@@ -6547,7 +6550,10 @@ def run_readout_escape_replay_harness(
                 "target_piece_logit_delta": result.get("target_piece_logit_delta"),
                 "target_piece_prob_delta": result.get("target_piece_prob_delta"),
                 "target_rank_after": result.get("target_rank_after"),
+                "target_top20_threshold_gap_baseline": result.get("target_top20_threshold_gap_baseline"),
                 "target_top20_threshold_gap": result.get("target_top20_threshold_gap"),
+                "target_top20_threshold_gap_after": result.get("target_top20_threshold_gap_after"),
+                "target_top20_threshold_gap_delta": result.get("target_top20_threshold_gap_delta"),
                 "target_top20_margin": result.get("target_top20_margin"),
                 "focus_rank_delta": result.get("focus_rank_delta"),
                 "rank_focus_delta": result.get("rank_focus_delta"),
@@ -7428,6 +7434,45 @@ def run_readout_escape_replay_harness(
                             "readout_gap_closer_axis": "target_top20_gap",
                         },
                     ]
+                    existing_steering_names = {
+                        str(item.get("recipe_name", ""))
+                        for item in steering_specs
+                        if isinstance(item, Mapping)
+                    }
+                    for negative_scale, alpha in (
+                        (0.0, 0.04),
+                        (0.0, 0.05),
+                        (0.025, 0.04),
+                        (0.025, 0.05),
+                        (0.025, 0.06),
+                        (0.05, 0.04),
+                        (0.05, 0.05),
+                        (0.075, 0.04),
+                        (0.075, 0.05),
+                        (0.075, 0.06),
+                    ):
+                        scale_tag = "pure" if negative_scale == 0.0 else f"l{int(round(negative_scale * 1000)):03d}"
+                        alpha_tag = f"a{int(round(alpha * 1000)):03d}"
+                        recipe_name = f"post_bridge_target_readout_patch_{scale_tag}_{alpha_tag}_gap"
+                        if recipe_name in existing_steering_names:
+                            continue
+                        steering_specs.append(
+                            {
+                                "recipe_name": recipe_name,
+                                "steering_kind": "target_readout",
+                                "target_terms": (term,),
+                                "negative_terms": () if negative_scale == 0.0 else bad_attractor_terms,
+                                "negative_scale": negative_scale,
+                                "alpha": alpha,
+                                "contrast_mode": (
+                                    "target_readout_pure"
+                                    if negative_scale == 0.0
+                                    else "target_readout_minus_attractor"
+                                ),
+                                "readout_gap_closer_recipe": True,
+                                "readout_gap_closer_axis": "target_top20_gap",
+                            }
+                        )
                     if stealer_term:
                         steering_specs.extend(
                             [
@@ -7488,9 +7533,9 @@ def run_readout_escape_replay_harness(
                             steering_kind=str(steering_spec["steering_kind"]),
                             target_terms=steering_spec.get("target_terms", ()),
                             negative_terms=steering_spec.get("negative_terms", ()),
-                            negative_scale=float(steering_spec.get("negative_scale", 1.0) or 1.0),
-                            target_scale=float(steering_spec.get("target_scale", 1.0) or 1.0),
-                            alpha=float(steering_spec.get("alpha", 0.025) or 0.025),
+                            negative_scale=float(steering_spec.get("negative_scale", 1.0)),
+                            target_scale=float(steering_spec.get("target_scale", 1.0)),
+                            alpha=float(steering_spec.get("alpha", 0.025)),
                             contrast_mode=str(steering_spec.get("contrast_mode", "none") or "none"),
                             competitor_bundle_key=(
                                 str(steering_spec.get("competitor_bundle_key"))

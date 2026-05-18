@@ -31,8 +31,9 @@ if HAS_TRANSFORMERS:
 
 
 class _FakeProvider(ControllerProvider):
-    def __init__(self, *responses: str):
+    def __init__(self, *responses: str, model_name: str = "fake-model"):
         self.responses = list(responses)
+        self._model_name = str(model_name)
         self.requests: list[ControllerProviderRequest] = []
 
     @property
@@ -41,7 +42,7 @@ class _FakeProvider(ControllerProvider):
 
     @property
     def model_name(self) -> str:
-        return "fake-model"
+        return self._model_name
 
     def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
         self.requests.append(request)
@@ -184,6 +185,15 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertGreater(provider.requests[0].max_output_tokens, 200)
         self.assertEqual(client.latest_trace()["effective_max_output_tokens"], provider.requests[0].max_output_tokens)
+
+    def test_provider_controller_client_uses_gpt5_output_floor(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}", model_name="gpt-5.5")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, max_output_tokens=800)
+
+        client.invoke({"step": 1})
+
+        self.assertEqual(provider.requests[0].max_output_tokens, 1600)
+        self.assertEqual(client.latest_trace()["effective_max_output_tokens"], 1600)
 
     def test_provider_controller_client_observation_includes_task_feedback(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
@@ -982,6 +992,8 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(client.responses.calls[0]["text"]["format"]["type"], "json_object")
         self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "low")
         self.assertTrue(client.responses.calls[0]["input"].startswith("JSON packet:\n"))
+        self.assertNotIn("temperature", client.responses.calls[0])
+        self.assertEqual(client.responses.calls[0]["reasoning"]["effort"], "low")
 
     def test_openai_controller_provider_uses_supported_gpt41_verbosity(self):
         client = _FakeOpenAIClient()
@@ -996,6 +1008,7 @@ class TestBackendsAndBridge(unittest.TestCase):
         )
 
         self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "medium")
+        self.assertIn("temperature", client.responses.calls[0])
 
     def test_local_backend_worker_runtime_packet_is_schema_shaped(self):
         runtime = LocalBackendWorkerRuntime(

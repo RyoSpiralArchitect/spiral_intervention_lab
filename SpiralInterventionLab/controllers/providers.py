@@ -171,6 +171,16 @@ class OpenAIControllerProvider(ControllerProvider):
             return "medium"
         return "low"
 
+    def _supports_temperature(self) -> bool:
+        model = self.model_name.lower()
+        return not model.startswith("gpt-5")
+
+    def _reasoning_config(self) -> dict[str, Any] | None:
+        model = self.model_name.lower()
+        if model.startswith("gpt-5"):
+            return {"effort": "low"}
+        return None
+
     def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
         text_config: dict[str, Any] = {"verbosity": self._text_verbosity()}
         if request.expect_json:
@@ -178,15 +188,20 @@ class OpenAIControllerProvider(ControllerProvider):
         payload_text = request.payload_text()
         if request.expect_json:
             payload_text = f"JSON packet:\n{payload_text}"
-        raw = self.client.responses.create(
-            model=self.model_name,
-            instructions=request.effective_system_prompt(),
-            input=payload_text,
-            temperature=request.temperature,
-            max_output_tokens=request.max_output_tokens,
-            metadata=dict(request.metadata),
-            text=text_config,
-        )
+        request_kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "instructions": request.effective_system_prompt(),
+            "input": payload_text,
+            "max_output_tokens": request.max_output_tokens,
+            "metadata": dict(request.metadata),
+            "text": text_config,
+        }
+        if self._supports_temperature():
+            request_kwargs["temperature"] = request.temperature
+        reasoning_config = self._reasoning_config()
+        if reasoning_config is not None:
+            request_kwargs["reasoning"] = reasoning_config
+        raw = self.client.responses.create(**request_kwargs)
         text = getattr(raw, "output_text", None) or ""
         return ControllerProviderResponse(
             text=str(text).strip(),

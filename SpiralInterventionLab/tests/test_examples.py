@@ -2806,7 +2806,11 @@ class TestExamples(unittest.TestCase):
         names = {str(spec.get("recipe_name")) for spec in gap_specs}
         self.assertIn("target_readout_patch_pure_a060_gap", names)
         self.assertIn("target_readout_patch_l005_a060_gap", names)
+        self.assertIn("target_readout_patch_pure_a040_gap", names)
+        self.assertIn("target_readout_patch_l025_a050_gap", names)
+        self.assertIn("target_readout_patch_l075_a060_gap", names)
         self.assertIn("contrastive_readout_patch_l025_a060_gap", names)
+        self.assertGreaterEqual(len(gap_specs), 12)
         self.assertTrue(all(spec.get("readout_gap_closer_axis") == "target_top20_gap" for spec in gap_specs))
 
     def test_worker_post_bridge_recipe_expansion_prioritizes_readout_steering_deepening_when_gap_exists(self):
