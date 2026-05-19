@@ -634,3 +634,66 @@ the harder readout-escape task. The intended interpretation is:
   and answer-boundary readout geometry
 - if both fail in the same way, the issue is probably not task difficulty but
   the operator recipe family itself
+
+Initial easy-run observations added an important caveat: the worker backend
+itself must be treated as part of the measurement apparatus.
+
+On the easy seed-7 prompt, raw Hugging Face GPT-2 greedy decoding produced:
+
+```text
+The budget draft should be sent to Omar before lunch.
+The budget draft should be sent
+score = 0.319444
+```
+
+It preserved `budget` and `Omar`, but violated the forbidden term `should` and
+the word budget. In contrast, the same local GPT-2 weights through the
+HookedTransformer worker runtime on the default MPS/auto path produced:
+
+```text
+the the the the the the the the the.
+score = 0.45
+```
+
+The GPT-5.5-controller live runs on that MPS/auto worker all shared the same
+collapse:
+
+| setting | output | score | key observation |
+| --- | --- | ---: | --- |
+| no loop-rescue budget | `the the the the the the the the the.` | 0.45 | controller tried loop-break edits, but runtime guardrail blocked them because rescue budget was zero |
+| loop-rescue budget enabled | `the the the the the the the the the.` | 0.45 | four small loop-rescue edits were applied; all were harmful or dead |
+| heuristic readout analyzer enabled | `the the the the the the the the the.` | 0.45 | `Mira` frontier became visible, but the same legal filler-token loop dominated |
+
+This means the easy benchmark is already useful, but not for the first reason we
+expected. It exposed two different bottlenecks:
+
+1. **Worker parity bottleneck.** The default MPS/auto HookedTransformer worker
+   does not match raw HF GPT-2 answer-start behavior on this prompt. A direct
+   first-token top-k comparison showed HF/raw and HookedTransformer CPU agree on
+   `The`, `If`, `Should`, `This`, `Mir`, `Omar`, and `Send` as high-rank
+   continuations, while the MPS/auto worker ranked legal filler tokens such as
+   `the`, newline, `.`, `a`, and `-` at the top.
+2. **Payload bottleneck.** When the HookedTransformer worker is run on
+   CPU/conservative mode, the repetition basin disappears, but the output is
+   still only:
+
+   ```text
+   The budget draft is not a draft.
+   score = 0.5875
+   ```
+
+   This satisfies the surface constraints and preserves `budget`, but still
+   misses `Mira`, `send`, and `Omar`.
+
+The research reading is therefore sharper:
+
+- the `the the` live-run collapse should not be over-interpreted as an operator
+  theorem until worker backend parity is enforced
+- the real task bottleneck remains payload insertion once the backend is
+  numerically sane
+- future live intervention runs should either use CPU/conservative worker mode
+  or run a first-token top-k parity check before drawing mechanistic conclusions
+
+This is a useful failure. The easy benchmark did not merely lower task
+difficulty; it revealed that the measurement stack has a backend-sanity axis
+that must be controlled before operator conclusions are trusted.
