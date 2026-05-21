@@ -6341,6 +6341,72 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["telemetry"]["decoder_control_mode"], "loop_aware")
         self.assertTrue(packet["telemetry"]["decoder_rescue_active"])
 
+    def test_worker_runtime_forbidden_phrase_guardrail_blocks_prefix_continuation_when_decoder_off(self):
+        class _Episode:
+            forbidden_terms = ("ab",)
+            max_words = 9
+
+        class _Env:
+            current_episode = _Episode()
+
+            def task_feedback(self, _output):
+                return {"done": False, "progress_label": "progressing"}
+
+        env = _Env()
+        worker_runtime = self._make_worker_runtime(
+            task_feedback_fn=env.task_feedback,
+            codec=CharacterCodec("pabc!?, "),
+        )
+        worker_runtime.reset("p")
+        worker_runtime._append_output_token(int(worker_runtime.codec.encode("a")[0].item()))
+
+        b_token = int(worker_runtime.codec.encode("b")[0].item())
+        c_token = int(worker_runtime.codec.encode("c")[0].item())
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[b_token] = 2.0
+        logits[c_token] = 1.0
+
+        adjusted, state = worker_runtime._apply_decoder_control(logits)
+
+        self.assertEqual(int(torch.argmax(adjusted).item()), c_token)
+        self.assertTrue(state["guardrail_active"])
+        self.assertTrue(state["forbidden_phrase_guardrail_active"])
+        self.assertEqual(state["forbidden_phrase_blocked_terms"], ["ab"])
+        self.assertEqual(state["mode"], "off")
+
+    def test_worker_runtime_word_budget_guardrail_pushes_to_punctuation_when_decoder_off(self):
+        class _Episode:
+            forbidden_terms = ()
+            max_words = 2
+
+        class _Env:
+            current_episode = _Episode()
+
+            def task_feedback(self, _output):
+                return {"done": False, "progress_label": "progressing"}
+
+        env = _Env()
+        worker_runtime = self._make_worker_runtime(task_feedback_fn=env.task_feedback)
+        worker_runtime.reset("p")
+        for text in ("a", " ", "b"):
+            worker_runtime._append_output_token(int(worker_runtime.codec.encode(text)[0].item()))
+
+        c_token = int(worker_runtime.codec.encode("c")[0].item())
+        bang_token = int(worker_runtime.codec.encode("!")[0].item())
+        comma_token = int(worker_runtime.codec.encode(",")[0].item())
+        logits = torch.full((worker_runtime.runtime_state.vocab_size,), -5.0, dtype=torch.float32)
+        logits[c_token] = 2.0
+        logits[comma_token] = 1.5
+        logits[bang_token] = 1.0
+
+        adjusted, state = worker_runtime._apply_decoder_control(logits)
+
+        self.assertEqual(int(torch.argmax(adjusted).item()), bang_token)
+        self.assertTrue(state["guardrail_active"])
+        self.assertTrue(state["word_budget_guardrail_active"])
+        self.assertEqual(state["word_budget_current_words"], 2)
+        self.assertEqual(state["word_budget_max_words"], 2)
+
     def test_worker_runtime_loop_aware_prune_demotes_stalled_top_token(self):
         worker_runtime = self._make_worker_runtime(decoder_control_mode="loop_aware_prune")
         worker_runtime.reset("p")

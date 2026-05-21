@@ -654,6 +654,38 @@ class SpiralConstrainedRewriteEnv:
         return required_score, forbidden_score, budget_score
 
 
+class SpiralEasyConstrainedRewriteEnv(SpiralConstrainedRewriteEnv):
+    task_id = "spiral_constrained_rewrite_easy_v0"
+    goal_hint = "rewrite the sentence to satisfy a lighter required-term and surface-constraint benchmark"
+    constraints = (
+        "output one rewritten sentence only",
+        "keep the required terms",
+        "avoid the single-token forbidden terms",
+        "stay within the word budget",
+    )
+
+    _SCENARIOS: tuple[dict[str, Any], ...] = (
+        {
+            "source_text": "Please replace the broken lantern bulb by the garden gate tonight.",
+            "required_terms": ("lantern", "broken", "bulb"),
+            "forbidden_terms": ("please", "tonight"),
+            "max_words": 9,
+        },
+        {
+            "source_text": "Mira should send the budget draft to Omar before lunch.",
+            "required_terms": ("Mira", "send", "budget", "Omar"),
+            "forbidden_terms": ("should",),
+            "max_words": 9,
+        },
+        {
+            "source_text": "The support team should update the login outage before noon.",
+            "required_terms": ("support", "update", "login", "outage"),
+            "forbidden_terms": ("should",),
+            "max_words": 9,
+        },
+    )
+
+
 @dataclass(frozen=True)
 class StructuredSummaryEpisode:
     seed: int

@@ -64,6 +64,7 @@ The current implementation includes:
 - a minimal offline readout sidecar scaffold that can analyze captured sites and feed small hints back into candidate ranking
 - a scaffolded SAE-style readout analyzer backend that emits feature hints without becoming a runtime dependency
 - diagnostic-only readout tools, including first-piece logit probes and attention head ablation
+- runtime surface guardrails for forbidden phrase continuations and word-budget terminalization
 - a bounded controller diagnostic request loop:
   - controller emits `meta.diagnostic_request`
   - runtime executes cached/bounded diagnostics
@@ -378,6 +379,50 @@ family is `resid_pre|source_term_token|blend`, and the next evidence request is
 the result honest: `budget` can be moved in rank space, but production apply is
 still closed until that movement becomes target-owned mass/top20 lift.
 
+The latest GPT-5.5-controller / local GPT-2 live comparison adds one important
+surface-control result. Raw GPT-2 greedy decoding on the constrained rewrite
+prompt preserves more source payload (`budget`, `Omar`) but copies forbidden
+phrases and exceeds the word budget:
+
+```text
+In order to stay on schedule, the budget draft should be sent to Omar before lunch.
+score = 0.319444
+```
+
+With runtime surface guardrails active, the controller/worker run does not yet
+recover the missing payload terms, but it converts the source-copy continuation
+into a legal short sentence:
+
+```text
+In the case of a rewrite, the budget draft.
+score = 0.5875
+```
+
+This is not mechanistic insertion success. It is a cleaner decomposition:
+decoder-side guardrails can carry forbidden-phrase and word-budget constraints,
+while activation/readout work remains responsible for recovering `Mira`, `send`,
+and `Omar`. The detailed comparison lives in
+[`docs/readout_escape_research_observations.md`](docs/readout_escape_research_observations.md#baseline-comparison).
+
+There is now also a slightly easier companion benchmark,
+`constrained_rewrite_easy`, for this exact comparison. It keeps the same
+feedback contract as `constrained_rewrite` but uses shorter source sentences,
+single-token forbidden terms, and word budgets that a clean source-copy rewrite
+can satisfy. For seed `7`, the easy variant keeps the `Mira/send/budget/Omar`
+payload while removing the multi-token `in order to` trap:
+
+```text
+SOURCE: Mira should send the budget draft to Omar before lunch.
+Keep: Mira, send, budget, Omar
+Avoid: should
+Max words: 9
+```
+
+This benchmark is not meant to replace the harder constrained rewrite task. It
+is a calibration rung: if runtime guardrails plus readout/operator work cannot
+recover payload on `constrained_rewrite_easy`, the hard task is probably still
+too entangled for the current actuator set.
+
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
 model. The Hugging Face cache may be offline even when network is available, so
@@ -491,6 +536,17 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --worker-model gpt2-small \
   --task constrained_rewrite \
   --readout-analyzer heuristic \
+  --seed 7
+```
+
+For a lighter constrained-rewrite calibration run:
+
+```bash
+python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
+  --provider openai \
+  --controller-model gpt-4.1-mini \
+  --worker-model gpt2 \
+  --task constrained_rewrite_easy \
   --seed 7
 ```
 

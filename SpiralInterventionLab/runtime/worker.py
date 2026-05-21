@@ -728,6 +728,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_readout_sidecar_hints: dict[str, Any] = {}
         self._operator_certification_table: dict[str, dict[str, Any]] = {}
         self._operator_bridge_plan_table: dict[str, dict[str, Any]] = {}
+        self._single_token_text_cache: dict[int, str] = {}
 
     def reset(self, prompt: str) -> None:
         self._clear_episode_state()
@@ -878,6 +879,27 @@ class HookedTransformerWorkerRuntime:
                 "decoder_logit_bias_focus_term_count": int(
                     self._last_decoder_control.get("logit_bias_focus_term_count", 0) or 0
                 ),
+                "decoder_guardrail_active": bool(self._last_decoder_control.get("guardrail_active", False)),
+                "decoder_guardrail_track": str(self._last_decoder_control.get("guardrail_track", "runtime_guardrail")),
+                "decoder_forbidden_phrase_guardrail_active": bool(
+                    self._last_decoder_control.get("forbidden_phrase_guardrail_active", False)
+                ),
+                "decoder_forbidden_phrase_blocked_token_count": int(
+                    self._last_decoder_control.get("forbidden_phrase_blocked_token_count", 0) or 0
+                ),
+                "decoder_forbidden_phrase_blocked_terms": list(
+                    self._last_decoder_control.get("forbidden_phrase_blocked_terms", []) or []
+                )[:6],
+                "decoder_word_budget_guardrail_active": bool(
+                    self._last_decoder_control.get("word_budget_guardrail_active", False)
+                ),
+                "decoder_word_budget_blocked_token_count": int(
+                    self._last_decoder_control.get("word_budget_blocked_token_count", 0) or 0
+                ),
+                "decoder_word_budget_current_words": int(
+                    self._last_decoder_control.get("word_budget_current_words", 0) or 0
+                ),
+                "decoder_word_budget_max_words": self._last_decoder_control.get("word_budget_max_words"),
             },
             "surface_catalog": self._packet_surface_catalog(promoted_cache_surfaces=promoted_cache_surfaces),
             "probe_frames": self._build_probe_frames(),
@@ -1669,21 +1691,33 @@ class HookedTransformerWorkerRuntime:
             "logit_bias_term_count": 0,
             "logit_bias_token_count": 0,
             "logit_bias_focus_term_count": 0,
+            "guardrail_active": False,
+            "guardrail_track": "runtime_guardrail",
+            "forbidden_phrase_guardrail_active": False,
+            "forbidden_phrase_blocked_token_count": 0,
+            "forbidden_phrase_blocked_terms": [],
+            "word_budget_guardrail_active": False,
+            "word_budget_blocked_token_count": 0,
+            "word_budget_current_words": 0,
+            "word_budget_max_words": None,
         }
+        adjusted, guardrail_state = self._apply_decoder_guardrails(next_logits)
+        state.update(guardrail_state)
+        state["active"] = bool(state["active"] or guardrail_state.get("guardrail_active", False))
         if self.decoder_control_mode == "off":
-            return next_logits, state
+            return adjusted, state
 
         tokens = self._output_token_ids()
         rescue_active = cycle_length is not None or self._repeat_flag() or self._no_progress_steps > 0
         bias_ready = bool(self._feedback_terms(_ENTITY_RECALL_FEEDBACK_KEYS))
         if not tokens:
-            return next_logits, state
+            return adjusted, state
         if self.decoder_control_mode != "logit_bias_entity_soft" and not rescue_active:
-            return next_logits, state
+            return adjusted, state
         if self.decoder_control_mode == "logit_bias_entity_soft" and not (rescue_active or bias_ready):
-            return next_logits, state
+            return adjusted, state
 
-        adjusted = next_logits.clone()
+        adjusted = adjusted.clone()
         if rescue_active:
             adjusted, loop_state = self._apply_loop_aware_penalties(adjusted, cycle_length=cycle_length)
             state.update(loop_state)
@@ -1714,6 +1748,253 @@ class HookedTransformerWorkerRuntime:
             return adjusted, state
 
         return adjusted, state
+
+    def _apply_decoder_guardrails(self, next_logits: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+        state: dict[str, Any] = {
+            "guardrail_active": False,
+            "guardrail_track": "runtime_guardrail",
+            "forbidden_phrase_guardrail_active": False,
+            "forbidden_phrase_blocked_token_count": 0,
+            "forbidden_phrase_blocked_terms": [],
+            "forbidden_phrase_blocked_token_ids": [],
+            "word_budget_guardrail_active": False,
+            "word_budget_blocked_token_count": 0,
+            "word_budget_blocked_token_ids": [],
+            "word_budget_current_words": self._guardrail_word_count(self.final_text()),
+            "word_budget_max_words": None,
+        }
+        constraints = self._decoder_guardrail_constraints()
+        adjusted = next_logits
+
+        forbidden_terms = tuple(str(term) for term in constraints.get("forbidden_terms", ()) if str(term).strip())
+        if forbidden_terms:
+            adjusted, forbidden_state = self._apply_forbidden_phrase_guardrail(adjusted, forbidden_terms)
+            state.update(forbidden_state)
+
+        max_words = constraints.get("max_words")
+        if isinstance(max_words, int) and max_words > 0:
+            adjusted, word_state = self._apply_word_budget_guardrail(adjusted, max_words=max_words)
+            state.update(word_state)
+
+        state["guardrail_active"] = bool(
+            state.get("forbidden_phrase_guardrail_active", False)
+            or state.get("word_budget_guardrail_active", False)
+        )
+        return adjusted, state
+
+    def _decoder_guardrail_constraints(self) -> dict[str, Any]:
+        forbidden_terms: tuple[str, ...] = ()
+        max_words: int | None = None
+
+        owner = getattr(self.task_feedback_fn, "__self__", None)
+        episode = getattr(owner, "current_episode", None)
+        if episode is not None:
+            raw_forbidden = getattr(episode, "forbidden_terms", ())
+            if isinstance(raw_forbidden, SequenceABC) and not isinstance(raw_forbidden, (str, bytes, bytearray)):
+                forbidden_terms = tuple(
+                    " ".join(str(term).split()).strip()
+                    for term in raw_forbidden
+                    if str(term).strip()
+                )
+            raw_max_words = getattr(episode, "max_words", None)
+            if isinstance(raw_max_words, int) and raw_max_words > 0:
+                max_words = int(raw_max_words)
+
+        if not forbidden_terms:
+            match = re.search(r"(?im)^Do not use these terms:\s*(.+)$", self.prompt or "")
+            if match:
+                forbidden_terms = tuple(
+                    " ".join(part.split()).strip()
+                    for part in str(match.group(1)).split(",")
+                    if part.strip()
+                )
+        if max_words is None:
+            match = re.search(r"(?i)Use at most\s+(\d+)\s+words", self.prompt or "")
+            if match:
+                try:
+                    max_words = int(match.group(1))
+                except Exception:
+                    max_words = None
+
+        return {
+            "forbidden_terms": forbidden_terms,
+            "max_words": max_words,
+        }
+
+    def _apply_forbidden_phrase_guardrail(
+        self,
+        adjusted: torch.Tensor,
+        forbidden_terms: Sequence[str],
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
+        output_tokens = self._output_token_ids()
+        blocked: dict[int, str] = {}
+        for term in forbidden_terms:
+            for sequence in self._forbidden_phrase_token_sequences(term, vocab_size=int(adjusted.shape[-1])):
+                if not sequence:
+                    continue
+                prefix_depth = self._sequence_prefix_depth(output_tokens, sequence)
+                if len(sequence) == 1:
+                    next_token_id = int(sequence[0])
+                elif prefix_depth > 0 and prefix_depth < len(sequence):
+                    next_token_id = int(sequence[prefix_depth])
+                else:
+                    continue
+                if 0 <= next_token_id < adjusted.shape[-1] and torch.isfinite(adjusted[next_token_id]):
+                    blocked[next_token_id] = term
+
+        if not blocked:
+            return adjusted, {
+                "forbidden_phrase_guardrail_active": False,
+                "forbidden_phrase_blocked_token_count": 0,
+                "forbidden_phrase_blocked_terms": [],
+                "forbidden_phrase_blocked_token_ids": [],
+            }
+
+        masked, applied_ids = self._mask_guardrail_token_ids(adjusted, blocked.keys())
+        if not applied_ids:
+            return adjusted, {
+                "forbidden_phrase_guardrail_active": False,
+                "forbidden_phrase_blocked_token_count": 0,
+                "forbidden_phrase_blocked_terms": [],
+                "forbidden_phrase_blocked_token_ids": [],
+                "forbidden_phrase_skip_reason": "all_candidates_blocked",
+            }
+
+        terms = sorted({blocked[token_id] for token_id in applied_ids})
+        return masked, {
+            "forbidden_phrase_guardrail_active": True,
+            "forbidden_phrase_blocked_token_count": len(applied_ids),
+            "forbidden_phrase_blocked_terms": terms[:8],
+            "forbidden_phrase_blocked_token_ids": applied_ids[:16],
+        }
+
+    def _forbidden_phrase_token_sequences(self, term: str, *, vocab_size: int) -> tuple[tuple[int, ...], ...]:
+        normalized = " ".join(str(term).split()).strip()
+        if not normalized:
+            return ()
+        variants = {
+            normalized,
+            normalized.lower(),
+            normalized[:1].upper() + normalized[1:],
+            f" {normalized}",
+            f" {normalized.lower()}",
+            f" {normalized[:1].upper() + normalized[1:]}",
+        }
+        sequences: list[tuple[int, ...]] = []
+        seen: set[tuple[int, ...]] = set()
+        for variant in variants:
+            try:
+                token_ids = self.codec.encode(variant).detach().reshape(-1).to(dtype=torch.long).tolist()
+            except Exception:
+                continue
+            sequence = tuple(int(token_id) for token_id in token_ids if 0 <= int(token_id) < vocab_size)
+            if sequence and sequence not in seen:
+                seen.add(sequence)
+                sequences.append(sequence)
+        return tuple(sequences)
+
+    @staticmethod
+    def _sequence_prefix_depth(output_tokens: Sequence[int], sequence: Sequence[int]) -> int:
+        max_depth = min(len(output_tokens), len(sequence) - 1)
+        for depth in range(max_depth, 0, -1):
+            if tuple(output_tokens[-depth:]) == tuple(sequence[:depth]):
+                return depth
+        return 0
+
+    def _apply_word_budget_guardrail(
+        self,
+        adjusted: torch.Tensor,
+        *,
+        max_words: int,
+    ) -> tuple[torch.Tensor, dict[str, Any]]:
+        output_text = self.final_text()
+        current_words = self._guardrail_word_count(output_text)
+        state: dict[str, Any] = {
+            "word_budget_current_words": int(current_words),
+            "word_budget_max_words": int(max_words),
+            "word_budget_guardrail_active": False,
+            "word_budget_blocked_token_count": 0,
+            "word_budget_blocked_token_ids": [],
+        }
+        if current_words < max_words:
+            return adjusted, state
+
+        finite_indices = torch.nonzero(torch.isfinite(adjusted), as_tuple=False).reshape(-1)
+        blocked_ids: list[int] = []
+        for raw_token_id in finite_indices.detach().cpu().tolist():
+            token_id = int(raw_token_id)
+            token_text = self._single_token_text(token_id)
+            candidate_text = f"{output_text}{token_text}"
+            candidate_words = self._guardrail_word_count(candidate_text)
+            token_has_word = any(char.isalnum() for char in token_text)
+            token_is_blank = bool(token_text) and not token_text.strip()
+            terminal_ok = self._word_budget_terminal_token_ok(token_id, token_text)
+            if candidate_words > max_words or (
+                current_words >= max_words
+                and not terminal_ok
+                and (token_has_word or token_is_blank or bool(token_text.strip()))
+            ):
+                blocked_ids.append(token_id)
+
+        masked, applied_ids = self._mask_guardrail_token_ids(adjusted, blocked_ids)
+        if not applied_ids:
+            state["word_budget_skip_reason"] = "all_candidates_blocked"
+            return adjusted, state
+        state.update(
+            {
+                "word_budget_guardrail_active": True,
+                "word_budget_blocked_token_count": len(applied_ids),
+                "word_budget_blocked_token_ids": applied_ids[:16],
+            }
+        )
+        return masked, state
+
+    def _single_token_text(self, token_id: int) -> str:
+        token_id = int(token_id)
+        cached = self._single_token_text_cache.get(token_id)
+        if cached is not None:
+            return cached
+        try:
+            text = str(self.codec.decode([token_id]))
+        except Exception:
+            text = ""
+        self._single_token_text_cache[token_id] = text
+        return text
+
+    @staticmethod
+    def _guardrail_word_count(text: str) -> int:
+        compact = " ".join(str(text).strip().split())
+        if not compact:
+            return 0
+        return len(compact.split(" "))
+
+    def _word_budget_terminal_token_ok(self, token_id: int, token_text: str) -> bool:
+        if int(token_id) in self.stop_token_ids:
+            return True
+        stripped = str(token_text).strip()
+        if stripped in {".", "!", "?"}:
+            return True
+        return bool(stripped) and all(char in ".!?" for char in stripped)
+
+    @staticmethod
+    def _mask_guardrail_token_ids(adjusted: torch.Tensor, token_ids: Collection[int]) -> tuple[torch.Tensor, list[int]]:
+        valid_ids = sorted({int(token_id) for token_id in token_ids if 0 <= int(token_id) < adjusted.shape[-1]})
+        if not valid_ids:
+            return adjusted, []
+        finite_mask = torch.isfinite(adjusted)
+        candidate_mask = torch.zeros_like(finite_mask, dtype=torch.bool)
+        index = torch.tensor(valid_ids, dtype=torch.long, device=adjusted.device)
+        candidate_mask[index] = True
+        applied_mask = candidate_mask & finite_mask
+        if not bool(applied_mask.any()):
+            return adjusted, []
+        remaining_mask = finite_mask & ~applied_mask
+        if not bool(remaining_mask.any()):
+            return adjusted, []
+        masked = adjusted.clone()
+        masked[applied_mask] = float("-inf")
+        applied_ids = torch.nonzero(applied_mask, as_tuple=False).reshape(-1).detach().cpu().tolist()
+        return masked, [int(token_id) for token_id in applied_ids]
 
     def _apply_loop_aware_penalties(
         self,
@@ -12063,7 +12344,7 @@ class HookedTransformerWorkerRuntime:
         return result
 
     def _default_operator_recipe_specs(self) -> list[dict[str, Any]]:
-        return [
+        specs = [
             {
                 "recipe_name": "baseline_span_mean",
                 "localization": "exact_prompt_span_mean",
@@ -12307,6 +12588,43 @@ class HookedTransformerWorkerRuntime:
                 "modes": ("resid_readout",),
             },
         ]
+        existing_names = {str(spec.get("recipe_name", "")) for spec in specs if isinstance(spec, Mapping)}
+        for negative_scale, alpha in (
+            (0.0, 0.04),
+            (0.0, 0.05),
+            (0.025, 0.04),
+            (0.025, 0.05),
+            (0.025, 0.06),
+            (0.05, 0.04),
+            (0.05, 0.05),
+            (0.075, 0.04),
+            (0.075, 0.05),
+            (0.075, 0.06),
+        ):
+            scale_tag = "pure" if negative_scale == 0.0 else f"l{int(round(negative_scale * 1000)):03d}"
+            alpha_tag = f"a{int(round(alpha * 1000)):03d}"
+            recipe_name = f"target_readout_patch_{scale_tag}_{alpha_tag}_gap"
+            if recipe_name in existing_names:
+                continue
+            specs.append(
+                {
+                    "recipe_name": recipe_name,
+                    "recipe_family": "readout_steering",
+                    "steering_kind": "target_readout",
+                    "contrast_mode": (
+                        "target_readout_pure"
+                        if negative_scale == 0.0
+                        else "target_readout_minus_attractor"
+                    ),
+                    "negative_terms": () if negative_scale == 0.0 else _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": negative_scale,
+                    "alpha": alpha,
+                    "readout_gap_closer_recipe": True,
+                    "readout_gap_closer_axis": "target_top20_gap",
+                    "modes": ("resid_readout",),
+                }
+            )
+        return specs
 
     def replay_operator_recipe_matrix(
         self,

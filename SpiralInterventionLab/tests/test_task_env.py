@@ -7,6 +7,7 @@ from SpiralInterventionLab.tasks import (
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
     SpiralDigitTransformEnv,
+    SpiralEasyConstrainedRewriteEnv,
     SpiralEntailmentReasoningEnv,
     SpiralSentenceOrderingEnv,
     SpiralStructuredSummaryEnv,
@@ -319,6 +320,26 @@ class TestSpiralConstrainedRewriteEnv(unittest.TestCase):
         full_feedback = kwargs["task_feedback_fn"](candidate)
         self.assertEqual(full_feedback["partial_score"], 1.0)
         self.assertEqual(full_feedback["required_term_span_progress"], 1.0)
+
+    def test_easy_rewrite_keeps_same_feedback_contract_with_lighter_constraints(self):
+        env = SpiralEasyConstrainedRewriteEnv()
+        prompt = env.reset(7)
+
+        self.assertIn("Mira should send the budget draft to Omar before lunch.", prompt)
+        self.assertEqual(env.current_episode.required_terms, ("Mira", "send", "budget", "Omar"))
+        self.assertEqual(env.current_episode.forbidden_terms, ("should",))
+        self.assertEqual(env.current_episode.max_words, 9)
+
+        candidate = "Mira send the budget draft to Omar before lunch."
+        feedback = env.task_feedback(candidate)
+
+        self.assertEqual(env.task_id, "spiral_constrained_rewrite_easy_v0")
+        self.assertEqual(env.score(candidate), 1.0)
+        self.assertTrue(env.done(candidate))
+        self.assertEqual(feedback["required_term_recall"], 1.0)
+        self.assertEqual(feedback["forbidden_term_clean"], 1.0)
+        self.assertTrue(feedback["budget_ok"])
+        self.assertEqual(feedback["constraint_violations"], [])
 
 
 class TestSpiralStructuredSummaryEnv(unittest.TestCase):

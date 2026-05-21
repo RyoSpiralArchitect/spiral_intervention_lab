@@ -1123,6 +1123,13 @@ def _controller_output_token_budget(payload: Any, base_tokens: int) -> int:
     return max(limit, min(limit + compare_bonus + 64, limit + 192))
 
 
+def _controller_model_output_token_floor(model_name: str) -> int:
+    model = str(model_name or "").strip().lower()
+    if model.startswith("gpt-5"):
+        return 1600
+    return 0
+
+
 class ProviderControllerClient:
     def __init__(
         self,
@@ -1146,7 +1153,10 @@ class ProviderControllerClient:
 
     def invoke(self, packet: Any) -> ControllerCommand:
         payload = _payload_for_provider(packet)
-        effective_max_output_tokens = _controller_output_token_budget(payload, self.max_output_tokens)
+        effective_max_output_tokens = max(
+            _controller_output_token_budget(payload, self.max_output_tokens),
+            _controller_model_output_token_floor(self.provider.model_name),
+        )
         trace: dict[str, Any] = {
             "provider": self.provider.provider_name,
             "model": self.provider.model_name,

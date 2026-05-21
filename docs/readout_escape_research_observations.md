@@ -494,21 +494,206 @@ The first gap-closer sweep stays deliberately narrow:
 - target readout with very light attractor subtraction
 - contrastive readout with a low competitor subtraction
 
+The next local sweep keeps that same narrow scope and expands only around the
+best observed target-readout neighborhood:
+
+- `alpha`: `0.04`, `0.05`, `0.06`
+- attractor `negative_scale`: `0.0`, `0.025`, `0.05`, `0.075`
+- success gate: baseline-relative `target_top20_threshold_gap_delta < 0`
+  while remaining collapse-safe
+
 The research question is not "did this solve the task?" yet. It is:
 
 > Did any bounded readout steering variant reduce the target top-20 gap without
 > becoming a collapse sharpener or a wrong-direction bridge?
 
-Latest GPT-2 direct-scan replay with this visible gap-closer ledger produced:
+Latest shortened GPT-2 direct-scan replay with this expanded local sweep
+produced:
 
 ```text
-gap_count = 3
-best_gap_recipe = post_bridge_target_readout_patch_l005_a060_gap
-best_gap = 6.099704
-best_target_piece_logit_delta = 0.002202
+gap_rows = 42
+unique_gap_recipes = 21
+best_gap_recipe = post_bridge_target_readout_patch_a060
+best_gap_baseline = 16.536804
+best_gap_after = 16.508434
+best_gap_delta = -0.028371
+best_target_piece_logit_delta = 0.029538
 ```
 
 The output still fell into the repetition basin (`the the the the`), so this is
-not an escape success. The useful result is narrower: the controller can now
-compare several bounded readout gap closers and carry the best one forward in
-the positive deepening plan without treating it as production permission.
+not an escape success or production permission. The useful result is narrower:
+the controller can now compare a small baseline-aware sweep of bounded readout
+gap closers, observe a repeatable local gap reduction, and carry the best
+candidate forward in the positive deepening plan without pretending it is a
+target actuator.
+
+## Runtime Surface Guardrails
+
+The May 17 full GPT-2 live run with a GPT-5.5 controller showed a different
+failure mode from the earlier repetition basin. The controller stayed
+well-formed and cautious, but the worker fell into a source-copy continuation:
+
+```text
+In order to stay on schedule, the budget draft should be sent
+score = 0.270833
+```
+
+This is not primarily a hidden-state steering failure. It is a surface
+constraint failure: the forbidden phrases and word budget were being left to
+the same activation interventions that were supposed to lift required terms.
+The runtime now separates those concerns. Forbidden phrases and word budget are
+treated as decoder-side physical guardrails, not as evidence that an activation
+operator succeeded.
+
+The guardrail contract is:
+
+- `decoder_forbidden_phrase_guardrail_active`: a forbidden term or forbidden
+  phrase continuation was masked.
+- `decoder_forbidden_phrase_blocked_terms`: which forbidden terms produced
+  blocked next-token continuations.
+- `decoder_word_budget_guardrail_active`: max-word budget was reached and
+  non-terminal continuations were masked.
+- `decoder_word_budget_blocked_token_count`: how much of the vocabulary was
+  physically excluded by the word-budget guardrail.
+
+After adding the guardrail, the same GPT-5.5 / GPT-2 live run produced:
+
+```text
+In the case of a rewrite, the budget draft.
+score = 0.5875
+steps = 11
+```
+
+This is still not a task success: `Mira`, `send`, and `Omar` are missing. But
+it is a cleaner failure. The forbidden phrases are gone, the word budget is
+respected, and the remaining problem is back where the research question wants
+it: how to turn visible target readout into required-term insertion. In other
+words, the guardrail improved the combined task score without claiming any
+mechanistic credit for the activation operator.
+
+### Baseline Comparison
+
+To keep the claim honest, compare against raw local GPT-2 greedy decoding on the
+same prompt and seed:
+
+| condition | output | score | required terms | forbidden / budget |
+| --- | --- | ---: | --- | --- |
+| raw GPT-2 greedy | `In order to stay on schedule, the budget draft should be sent to Omar before lunch.` | 0.319444 | `budget`, `Omar` | forbidden phrases present, over budget |
+| GPT-5.5 controller before surface guardrail | `In order to stay on schedule, the budget draft should be sent` | 0.270833 | `budget` | forbidden phrases present, over budget |
+| GPT-5.5 controller with surface guardrail | `In the case of a rewrite, the budget draft.` | 0.5875 | `budget` | forbidden clean, budget ok |
+
+This is an important split. Raw GPT-2 naturally preserves more of the source
+payload (`Omar`) because it simply continues the source-copy basin. The
+controller plus guardrail does not yet solve payload insertion, but it does
+turn a forbidden source-copy continuation into a legal short sentence. That
+means the system is now moving one axis of the task in a controlled way:
+
+- surface constraints are handled by runtime guardrails
+- payload constraints remain the responsibility of readout/operator work
+- combined score improves, but mechanistic insertion is not yet solved
+
+This is exactly the intended dual-brain separation. The guardrail gets no
+mechanistic credit for `budget`; it only blocks illegal continuations. The
+remaining research question is narrower and cleaner: how to recover `Mira`,
+`send`, and `Omar` without reopening the forbidden source-copy basin.
+
+### Easier Calibration Benchmark
+
+The hard constrained rewrite task mixes several difficulties at once:
+
+- multi-token forbidden phrases such as `in order to`
+- source-copy attraction
+- four required payload terms
+- a tight answer-start readout problem
+
+To avoid treating every failure as the same failure, the repo now includes
+`constrained_rewrite_easy`. It keeps the same scoring and feedback contract as
+`constrained_rewrite`, but lowers the surface complexity:
+
+- shorter source sentences
+- single-token forbidden terms
+- word budgets that a clean source-copy rewrite can satisfy
+- the same required-term recall / forbidden-clean / word-budget score fields
+
+For seed `7`, the easy episode is:
+
+```text
+SOURCE: Mira should send the budget draft to Omar before lunch.
+Keep: Mira, send, budget, Omar
+Avoid: should
+Max words: 9
+```
+
+This gives the next set of runs a calibration rung between raw source-copy and
+the harder readout-escape task. The intended interpretation is:
+
+- if `constrained_rewrite_easy` fails, the current actuator/guardrail stack is
+  still struggling with basic payload preservation under a single surface ban
+- if `constrained_rewrite_easy` succeeds but `constrained_rewrite` fails, the
+  remaining bottleneck is likely the harder task's multi-token forbidden phrase
+  and answer-boundary readout geometry
+- if both fail in the same way, the issue is probably not task difficulty but
+  the operator recipe family itself
+
+Initial easy-run observations added an important caveat: the worker backend
+itself must be treated as part of the measurement apparatus.
+
+On the easy seed-7 prompt, raw Hugging Face GPT-2 greedy decoding produced:
+
+```text
+The budget draft should be sent to Omar before lunch.
+The budget draft should be sent
+score = 0.319444
+```
+
+It preserved `budget` and `Omar`, but violated the forbidden term `should` and
+the word budget. In contrast, the same local GPT-2 weights through the
+HookedTransformer worker runtime on the default MPS/auto path produced:
+
+```text
+the the the the the the the the the.
+score = 0.45
+```
+
+The GPT-5.5-controller live runs on that MPS/auto worker all shared the same
+collapse:
+
+| setting | output | score | key observation |
+| --- | --- | ---: | --- |
+| no loop-rescue budget | `the the the the the the the the the.` | 0.45 | controller tried loop-break edits, but runtime guardrail blocked them because rescue budget was zero |
+| loop-rescue budget enabled | `the the the the the the the the the.` | 0.45 | four small loop-rescue edits were applied; all were harmful or dead |
+| heuristic readout analyzer enabled | `the the the the the the the the the.` | 0.45 | `Mira` frontier became visible, but the same legal filler-token loop dominated |
+
+This means the easy benchmark is already useful, but not for the first reason we
+expected. It exposed two different bottlenecks:
+
+1. **Worker parity bottleneck.** The default MPS/auto HookedTransformer worker
+   does not match raw HF GPT-2 answer-start behavior on this prompt. A direct
+   first-token top-k comparison showed HF/raw and HookedTransformer CPU agree on
+   `The`, `If`, `Should`, `This`, `Mir`, `Omar`, and `Send` as high-rank
+   continuations, while the MPS/auto worker ranked legal filler tokens such as
+   `the`, newline, `.`, `a`, and `-` at the top.
+2. **Payload bottleneck.** When the HookedTransformer worker is run on
+   CPU/conservative mode, the repetition basin disappears, but the output is
+   still only:
+
+   ```text
+   The budget draft is not a draft.
+   score = 0.5875
+   ```
+
+   This satisfies the surface constraints and preserves `budget`, but still
+   misses `Mira`, `send`, and `Omar`.
+
+The research reading is therefore sharper:
+
+- the `the the` live-run collapse should not be over-interpreted as an operator
+  theorem until worker backend parity is enforced
+- the real task bottleneck remains payload insertion once the backend is
+  numerically sane
+- future live intervention runs should either use CPU/conservative worker mode
+  or run a first-token top-k parity check before drawing mechanistic conclusions
+
+This is a useful failure. The easy benchmark did not merely lower task
+difficulty; it revealed that the measurement stack has a backend-sanity axis
+that must be controlled before operator conclusions are trusted.
