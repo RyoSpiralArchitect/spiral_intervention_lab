@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from collections import Counter, deque
 from collections.abc import Iterable, Sequence as SequenceABC
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any, Callable, Mapping, Sequence
 import torch
 
 from ..bridge import ProviderControllerClient, ProviderPromptHintController
+from ..controllers.base import ControllerProvider, ControllerProviderRequest
 from ..controllers.factory import create_controller_provider, normalize_provider_name, provider_api_env_var
 from ..runtime import (
     BaselineSuiteResult,
@@ -58,6 +60,7 @@ except Exception:  # pragma: no cover - optional dependency at import time
 _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
 _WORKER_MPS_MODES = ("auto", "conservative")
 _CONTROLLER_REFLECTION_MODES = ("off", "structured")
+_POST_RUN_DEBRIEF_MODES = ("off", "controller")
 _SEMANTIC_CRITIC_MODES = ("off", "minilm")
 _READOUT_ANALYZER_MODES = ("off", "heuristic", "sae_scaffold")
 _READOUT_ANALYZER_RERANK_MODES = ("off", "shadow", "apply")
@@ -1945,6 +1948,297 @@ def _write_summary_artifact(log_dir: str | Path | None, filename: str, payload: 
     (base / filename).write_text(json.dumps(dict(payload), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def _write_text_artifact(log_dir: str | Path | None, filename: str, text: str) -> None:
+    if log_dir is None:
+        return
+    base = Path(log_dir)
+    base.mkdir(parents=True, exist_ok=True)
+    (base / filename).write_text(str(text), encoding="utf-8")
+
+
+_POST_RUN_DEBRIEF_SKIP_KEYS = {
+    "activation_patch_rows",
+    "allowed_token_ids",
+    "controller_packet",
+    "full_packet",
+    "prompt",
+    "raw_json_object",
+    "response_text",
+    "token_logprobs",
+}
+
+
+def _compact_for_post_run_debrief(
+    value: Any,
+    *,
+    depth: int = 0,
+    max_depth: int = 4,
+    max_items: int = 18,
+    max_string: int = 900,
+) -> Any:
+    if depth > max_depth:
+        return "<truncated-depth>"
+    if isinstance(value, str):
+        if len(value) <= max_string:
+            return value
+        return f"{value[:max_string]}...<truncated {len(value) - max_string} chars>"
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    if isinstance(value, Mapping):
+        compact: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= max_items:
+                compact["_truncated_items"] = max(0, len(value) - max_items)
+                break
+            key_str = str(key)
+            if key_str in _POST_RUN_DEBRIEF_SKIP_KEYS:
+                compact[key_str] = "<omitted>"
+                continue
+            compact[key_str] = _compact_for_post_run_debrief(
+                item,
+                depth=depth + 1,
+                max_depth=max_depth,
+                max_items=max_items,
+                max_string=max_string,
+            )
+        return compact
+    if isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+        items = list(value)
+        compact_items = [
+            _compact_for_post_run_debrief(
+                item,
+                depth=depth + 1,
+                max_depth=max_depth,
+                max_items=max_items,
+                max_string=max_string,
+            )
+            for item in items[:max_items]
+        ]
+        if len(items) > max_items:
+            compact_items.append({"_truncated_items": len(items) - max_items})
+        return compact_items
+    return str(value)
+
+
+def _episode_digest(episode: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(episode, Mapping):
+        return None
+    digest = {
+        "output": episode.get("output"),
+        "score": episode.get("score"),
+        "steps": episode.get("steps"),
+    }
+    for key in ("task_done", "success", "final_task_feedback"):
+        if key in episode:
+            digest[key] = episode.get(key)
+    return _compact_for_post_run_debrief(digest, max_depth=3, max_items=12, max_string=700)
+
+
+def _result_payload_digest(result_payload: Mapping[str, Any]) -> dict[str, Any]:
+    digest: dict[str, Any] = {
+        "suite_mode": result_payload.get("suite_mode"),
+        "seed": result_payload.get("seed"),
+        "task_id": result_payload.get("task_id"),
+        "worker_model_name": result_payload.get("worker_model_name"),
+        "controller_provider": result_payload.get("controller_provider"),
+        "controller_model_name": result_payload.get("controller_model_name"),
+        "controller_reflection_mode": result_payload.get("controller_reflection_mode"),
+        "worker_decoder_control_mode": result_payload.get("worker_decoder_control_mode"),
+        "worker_loop_rescue_edits_per_run": result_payload.get("worker_loop_rescue_edits_per_run"),
+    }
+    if isinstance(result_payload.get("summary"), Mapping):
+        digest["summary"] = _compact_for_post_run_debrief(result_payload["summary"], max_depth=3, max_items=16)
+    for key in ("b0", "b1", "c1"):
+        digest[key] = _episode_digest(result_payload.get(key) if isinstance(result_payload.get(key), Mapping) else None)
+    runs = result_payload.get("runs")
+    if isinstance(runs, SequenceABC) and not isinstance(runs, (str, bytes, bytearray)):
+        run_digests = []
+        for run in list(runs)[:8]:
+            if isinstance(run, Mapping):
+                run_digests.append(_result_payload_digest(run))
+        digest["runs"] = run_digests
+        if len(runs) > 8:
+            digest["runs_truncated"] = len(runs) - 8
+    return digest
+
+
+def _jsonl_log_digest(log_dir: str | Path | None, *, max_files: int = 16, tail_per_file: int = 80) -> dict[str, Any]:
+    if log_dir is None:
+        return {"log_dir": None, "log_files": [], "event_counts": {}, "controller_step_views_tail": []}
+    base = Path(log_dir)
+    if not base.exists():
+        return {"log_dir": str(base), "log_files": [], "event_counts": {}, "controller_step_views_tail": []}
+
+    total_event_counts: Counter[str] = Counter()
+    file_summaries: list[dict[str, Any]] = []
+    combined_tail_events: list[dict[str, Any]] = []
+    jsonl_paths = sorted(path for path in base.rglob("*.jsonl") if path.is_file())
+    for path_index, path in enumerate(jsonl_paths):
+        file_event_counts: Counter[str] = Counter()
+        tail: deque[dict[str, Any]] = deque(maxlen=tail_per_file)
+        line_count = 0
+        with path.open("r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                line_count += 1
+                try:
+                    event = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    file_event_counts["<json_decode_error>"] += 1
+                    total_event_counts["<json_decode_error>"] += 1
+                    continue
+                if not isinstance(event, Mapping):
+                    continue
+                event_name = str(event.get("event", "<missing_event>") or "<missing_event>")
+                file_event_counts[event_name] += 1
+                total_event_counts[event_name] += 1
+                tail.append(dict(event))
+        if path_index < max_files:
+            relative = str(path.relative_to(base))
+            tail_events = list(tail)
+            combined_tail_events.extend(tail_events)
+            file_summaries.append(
+                {
+                    "path": relative,
+                    "line_count": line_count,
+                    "event_counts": dict(sorted(file_event_counts.items())),
+                    "tail_events": [
+                        _compact_for_post_run_debrief(event, max_depth=3, max_items=20, max_string=600)
+                        for event in tail_events[-12:]
+                    ],
+                }
+            )
+
+    step_views = _controller_step_views(combined_tail_events) if combined_tail_events else ()
+    return {
+        "log_dir": str(base),
+        "jsonl_file_count": len(jsonl_paths),
+        "jsonl_files_included": min(len(jsonl_paths), max_files),
+        "event_counts": dict(sorted(total_event_counts.items())),
+        "log_files": file_summaries,
+        "controller_step_views_tail": _compact_for_post_run_debrief(
+            list(step_views)[-8:],
+            max_depth=5,
+            max_items=12,
+            max_string=700,
+        ),
+    }
+
+
+def _post_run_debrief_system_prompt() -> str:
+    return (
+        "You are writing a post-run qualitative audit memo for Spiral Intervention Lab.\n"
+        "This is not a controller command, not hidden chain-of-thought, not a score, and not paper-ready evidence.\n"
+        "Use concise evidence-grounded bullets. Cite only the supplied run summary and logs; do not infer unseen model internals.\n"
+        "Do not propose applying unsafe interventions directly. Treat diagnostic support as evidence, not permission.\n\n"
+        "Write markdown with exactly these headings:\n"
+        "## What happened?\n"
+        "## What made the run difficult?\n"
+        "## Most likely failure factors\n"
+        "## Evidence supporting this reading\n"
+        "## What I would try next\n"
+        "## What would have made this easier?\n"
+        "## What should not be concluded\n"
+        "## Controller-perspective note\n"
+        "In 'What would have made this easier?', list 2-5 concrete diagnostic affordances, runtime fields, "
+        "tool results, or compact summaries that would have made the run easier to reason about. This section is "
+        "a qualitative lab-note wish list only: it must not authorize interventions, select candidates, or become "
+        "future-run context automatically.\n"
+        "In the final section, write 2-4 short first-person bullets from the perspective of a controller "
+        "that has only the supplied runtime trajectory as memory. This is an interpretation layer, not evidence. "
+        "Prefer phrasing such as 'I would describe', 'I kept seeing', or 'I lacked evidence for'. "
+        "Do not claim private feelings, hidden thoughts, or unseen internal model states.\n"
+        "Keep the memo compact enough for a human lab notebook."
+    )
+
+
+def build_post_run_debrief_packet(
+    *,
+    result_payload: Mapping[str, Any],
+    log_dir: str | Path | None,
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": "post_run_controller_debrief_packet",
+        "qualitative_only": True,
+        "not_for_scoring": True,
+        "not_for_future_context": True,
+        "do_not_autofeed_into_next_run": True,
+        "interpretation_boundary": (
+            "The debrief may summarize controller trajectory evidence, but it is not a metric, "
+            "not a success label, and not an authorization signal for future apply decisions."
+        ),
+        "required_output_sections": [
+            "What happened?",
+            "What made the run difficult?",
+            "Most likely failure factors",
+            "Evidence supporting this reading",
+            "What I would try next",
+            "What would have made this easier?",
+            "What should not be concluded",
+            "Controller-perspective note",
+        ],
+        "run_result_digest": _result_payload_digest(result_payload),
+        "log_digest": _jsonl_log_digest(log_dir),
+    }
+
+
+def write_post_run_debrief_artifacts(
+    *,
+    provider: ControllerProvider,
+    result_payload: Mapping[str, Any],
+    log_dir: str | Path,
+    max_output_tokens: int = 1200,
+) -> dict[str, Any]:
+    packet = build_post_run_debrief_packet(result_payload=result_payload, log_dir=log_dir)
+    response = provider.complete(
+        ControllerProviderRequest(
+            system_prompt=_post_run_debrief_system_prompt(),
+            payload=packet,
+            max_output_tokens=max_output_tokens,
+            temperature=0.0,
+            expect_json=False,
+            metadata={
+                "artifact_kind": "post_run_controller_debrief",
+                "qualitative_only": "true",
+                "not_for_scoring": "true",
+                "not_for_future_context": "true",
+            },
+        )
+    )
+    memo = str(response.text or "").strip()
+    if not memo:
+        memo = "_Post-run debrief provider returned an empty memo._"
+    artifact = {
+        "artifact_kind": "post_run_controller_debrief",
+        "qualitative_only": True,
+        "not_for_scoring": True,
+        "not_for_future_context": True,
+        "do_not_autofeed_into_next_run": True,
+        "provider": response.provider,
+        "model": response.model,
+        "usage": _compact_for_post_run_debrief(dict(response.usage), max_depth=4, max_items=20),
+        "metadata": _compact_for_post_run_debrief(dict(response.metadata), max_depth=3, max_items=20),
+        "debrief_text": memo,
+        "packet_summary": {
+            "suite_mode": packet["run_result_digest"].get("suite_mode"),
+            "task_id": packet["run_result_digest"].get("task_id"),
+            "event_counts": packet["log_digest"].get("event_counts", {}),
+            "jsonl_file_count": packet["log_digest"].get("jsonl_file_count", 0),
+        },
+    }
+    _write_text_artifact(log_dir, "post_run_debrief.md", memo.rstrip() + "\n")
+    _write_summary_artifact(log_dir, "post_run_debrief.json", artifact)
+    return {
+        "markdown_path": str(Path(log_dir) / "post_run_debrief.md"),
+        "json_path": str(Path(log_dir) / "post_run_debrief.json"),
+        "provider": response.provider,
+        "model": response.model,
+        "artifact_kind": "post_run_controller_debrief",
+        "qualitative_only": True,
+        "not_for_scoring": True,
+        "not_for_future_context": True,
+    }
+
+
 def create_semantic_critic(
     mode: str,
     *,
@@ -2065,6 +2359,10 @@ class _FrontierReplayControllerClient:
             "operator_recipe_expansion_family_mode_counts": result.get(
                 "operator_recipe_expansion_family_mode_counts"
             ),
+            "entity_operator_materialization_status": result.get("entity_operator_materialization_status"),
+            "entity_operator_materialization_count": result.get("entity_operator_materialization_count"),
+            "entity_operator_deepening_plan": result.get("entity_operator_deepening_plan"),
+            "positive_operator_deepening_plan": result.get("positive_operator_deepening_plan"),
             "activation_patch_runtime_support_status": result.get("activation_patch_runtime_support_status"),
             "activation_patch_diagnostic_executable_created": result.get(
                 "activation_patch_diagnostic_executable_created"
@@ -8915,6 +9213,26 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=0, help="Episode seed")
     parser.add_argument("--num-seeds", type=int, default=1, help="Run a consecutive multi-seed sweep starting at --seed")
     parser.add_argument("--controller-api-key", default=None, help="Optional API key override for the controller provider")
+    parser.add_argument(
+        "--post-run-debrief",
+        default="off",
+        choices=list(_POST_RUN_DEBRIEF_MODES),
+        help=(
+            "Optional qualitative post-run memo. 'controller' asks the controller provider to write "
+            "post_run_debrief.md/json from run artifacts; the memo is explicitly not used for scoring or next-run context."
+        ),
+    )
+    parser.add_argument(
+        "--post-run-debrief-model",
+        default=None,
+        help="Optional controller-provider model override for --post-run-debrief=controller; defaults to --controller-model.",
+    )
+    parser.add_argument(
+        "--post-run-debrief-max-output-tokens",
+        type=int,
+        default=1200,
+        help="Maximum output tokens for the qualitative post-run debrief memo.",
+    )
     parser.add_argument("--no-b1", action="store_true", help="Disable the prompt-hint baseline; B1 runs by default")
     parser.add_argument("--c1-only", action="store_true", help="Run only the C1 controller loop without B0/B1 baselines")
     parser.add_argument("--task-view-mode", default="redacted", choices=["redacted", "full"], help="Controller task view mode")
@@ -9023,6 +9341,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--worker-loop-rescue-total-alpha must be >= 0")
     if args.worker_loop_rescue_total_edit_cost is not None and args.worker_loop_rescue_total_edit_cost < 0.0:
         parser.error("--worker-loop-rescue-total-edit-cost must be >= 0")
+    if args.post_run_debrief_max_output_tokens <= 0:
+        parser.error("--post-run-debrief-max-output-tokens must be >= 1")
+    if args.post_run_debrief != "off" and args.log_dir is None:
+        parser.error("--post-run-debrief requires --log-dir so the quarantined memo artifacts have a stable home")
     if args.c1_only and args.num_seeds != 1:
         parser.error("--c1-only currently supports only --num-seeds 1")
     if args.controller_api_key is None:
@@ -9134,6 +9456,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
         )
         payload = sweep.to_dict()
+    if args.post_run_debrief == "controller":
+        debrief_provider = create_controller_provider(
+            args.provider,
+            model=args.post_run_debrief_model or args.controller_model,
+            api_key=args.controller_api_key,
+        )
+        payload["post_run_debrief_artifact"] = write_post_run_debrief_artifacts(
+            provider=debrief_provider,
+            result_payload=payload,
+            log_dir=args.log_dir,
+            max_output_tokens=args.post_run_debrief_max_output_tokens,
+        )
     print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

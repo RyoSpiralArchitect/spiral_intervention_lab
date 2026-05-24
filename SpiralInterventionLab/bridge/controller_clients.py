@@ -594,14 +594,157 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
         "certified_for_apply",
         "production_apply_allowed",
         "feature_backend",
+        "top20_reachable_count",
+        "near_reachable_count",
+        "source_body_span_count",
+        "reviewed_term_count",
+        "candidate_blueprint_count",
+        "entity_operator_materialization_count",
+        "entity_operator_materialization_status",
+        "entity_operator_deepening_reason",
+        "entity_operator_deepening_next_evidence",
+        "required_term_recall",
+        "required_term_span_progress",
     ):
         if value.get(key) not in (None, "", []):
             summary[key] = value.get(key)
+    focus_terms = value.get("focus_terms")
+    if isinstance(focus_terms, Sequence) and not isinstance(focus_terms, (str, bytes, bytearray)):
+        compact_terms = [str(item) for item in focus_terms[:6] if str(item)]
+        if compact_terms:
+            summary["focus_terms"] = compact_terms
+    term_rows = value.get("term_readout_rows")
+    if isinstance(term_rows, Sequence) and not isinstance(term_rows, (str, bytes, bytearray)):
+        rows: list[dict[str, Any]] = []
+        for item in term_rows[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            rows.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "term",
+                        "first_piece",
+                        "rank",
+                        "prob",
+                        "top20_hit",
+                        "span_progress",
+                        "source_provenance",
+                        "readout_status",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if rows:
+            summary["term_readout_rows"] = rows
+    candidate_terms = value.get("candidate_terms")
+    if isinstance(candidate_terms, Sequence) and not isinstance(candidate_terms, (str, bytes, bytearray)):
+        compact_candidate_terms = [str(item) for item in candidate_terms[:6] if str(item)]
+        if compact_candidate_terms:
+            summary["candidate_terms"] = compact_candidate_terms
+    candidate_blueprints = value.get("candidate_blueprints")
+    if isinstance(candidate_blueprints, Sequence) and not isinstance(candidate_blueprints, (str, bytes, bytearray)):
+        compact_blueprints: list[dict[str, Any]] = []
+        for item in candidate_blueprints[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_blueprints.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "kind",
+                        "objective_term",
+                        "first_piece",
+                        "readout_status",
+                        "rank",
+                        "source_provenance",
+                        "candidate_status",
+                        "recommended_operator_families",
+                        "recommended_next_diagnostic",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if compact_blueprints:
+            summary["candidate_blueprints"] = compact_blueprints
+    review_matrix = value.get("review_matrix")
+    if isinstance(review_matrix, Sequence) and not isinstance(review_matrix, (str, bytes, bytearray)):
+        compact_review_rows: list[dict[str, Any]] = []
+        for item in review_matrix[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_review_rows.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "term",
+                        "rank",
+                        "readout_status",
+                        "source_provenance",
+                        "review_decision",
+                        "blocked_by",
+                        "recommended_operator_families",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if compact_review_rows:
+            summary["entity_candidate_review_rows"] = compact_review_rows
     blocked_by = value.get("blocked_by")
     if isinstance(blocked_by, Sequence) and not isinstance(blocked_by, (str, bytes, bytearray)):
         compact_blocked = [str(item) for item in blocked_by[:4] if str(item)]
         if compact_blocked:
             summary["blocked_by"] = compact_blocked
+    entity_plan = value.get("entity_operator_deepening_plan")
+    if isinstance(entity_plan, Mapping):
+        compact_entity_plan = {
+            key: entity_plan.get(key)
+            for key in (
+                "kind",
+                "source",
+                "permission",
+                "objective_bundle_key",
+                "intended_term",
+                "recipe_family",
+                "recipe_name",
+                "next_action",
+                "suggested_next_evidence",
+                "suggested_operator_recipe_expansion_mode",
+                "deepening_axis",
+                "reason_code",
+                "best_target_top20_threshold_gap_delta",
+                "best_target_piece_logit_delta",
+                "best_focus_rank_delta",
+                "traits",
+            )
+            if entity_plan.get(key) not in (None, "", [])
+        }
+        if compact_entity_plan:
+            summary["entity_operator_deepening_plan"] = compact_entity_plan
+    positive_plan = value.get("positive_operator_deepening_plan")
+    if isinstance(positive_plan, Mapping):
+        compact_positive_plan = {
+            key: positive_plan.get(key)
+            for key in (
+                "kind",
+                "source",
+                "permission",
+                "objective_bundle_key",
+                "intended_term",
+                "recipe_family",
+                "recipe_name",
+                "next_action",
+                "suggested_next_evidence",
+                "suggested_operator_recipe_expansion_mode",
+                "deepening_axis",
+                "reason_code",
+                "curiosity_signal",
+                "traits",
+            )
+            if positive_plan.get(key) not in (None, "", [])
+        }
+        if compact_positive_plan:
+            summary["positive_operator_deepening_plan"] = compact_positive_plan
     evidence_rows = value.get("evidence_rows")
     if isinstance(evidence_rows, Sequence) and not isinstance(evidence_rows, (str, bytes, bytearray)):
         rows: list[dict[str, Any]] = []
@@ -616,11 +759,20 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
                         "diagnostic_family",
                         "status",
                         "actuator_class",
+                        "ownership_role",
+                        "effect_role",
+                        "safety_role",
+                        "operator_axis",
+                        "recipe_family",
                         "recipe_name",
+                        "actual_delta_class",
                         "target_mass_delta",
                         "target_top20_hit_delta",
+                        "target_piece_logit_delta",
+                        "target_top20_threshold_gap_delta",
                         "focus_rank_delta",
                         "support_score",
+                        "positive_traits",
                         "blocked_by",
                     )
                     if item.get(key) not in (None, "", [])

@@ -459,6 +459,12 @@ def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
         return {"kind": "semantic_progress"}
     if isinstance(request, Mapping):
         return dict(request)
+    if str(meta.get("next_action") or "").strip().lower().replace("-", "_") == "request_observer_check":
+        return {
+            "kind": "semantic_progress",
+            "trigger": "controller_next_action",
+            "reason": str(meta.get("why_not_apply") or meta.get("micro_rationale") or "controller requested observer check"),
+        }
     return None
 
 
@@ -488,6 +494,8 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
         "request_sae_feature_scan": "sae_feature_emitter_scan",
         "request_compare_extra_operator_diagnostics": "compare_extra_operator_diagnostics",
         "request_non_kv_operator_search": "compare_extra_operator_diagnostics",
+        "request_target_entity_insertion_probe": "target_entity_insertion_probe",
+        "request_entity_insertion_operator_candidate_review": "entity_insertion_operator_candidate_review",
         "request_cross_bundle_bridge_search": "cross_bundle_bridge_search",
         "request_activation_patch_candidate_review": "activation_patch_candidate_review",
         "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
@@ -561,6 +569,11 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         row.setdefault("reason", meta.get("why_not_apply") or strategy_hints.get("diagnostic_frontier_reason_text"))
         if meta.get("operator_recipe_expansion_mode") not in (None, ""):
             row.setdefault("operator_recipe_expansion_mode", meta.get("operator_recipe_expansion_mode"))
+        elif strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode") not in (None, ""):
+            row.setdefault(
+                "operator_recipe_expansion_mode",
+                strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode"),
+            )
         post_bridge_requested = (
             str(row.get("next_evidence_needed") or "") == "post_bridge_exhaustion_recipe_expansion"
             or bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False))
@@ -568,6 +581,17 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         )
         if post_bridge_requested and str(row.get("diagnostic") or "") == "compare_extra_operator_diagnostics":
             row.setdefault("operator_recipe_expansion_mode", "post_bridge_exhaustion")
+        readout_steering_deepening_requested = (
+            str(row.get("next_evidence_needed") or "") == "readout_steering_deepening"
+            or str(row.get("operator_recipe_expansion_mode") or "") == "readout_steering_deepening"
+            or bool(meta.get("readout_steering_deepening_requested", False))
+        )
+        if (
+            readout_steering_deepening_requested
+            and str(row.get("diagnostic") or "") == "compare_extra_operator_diagnostics"
+        ):
+            row.setdefault("operator_recipe_expansion_mode", "readout_steering_deepening")
+            row.setdefault("readout_steering_deepening_requested", True)
         if bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False)) or (
             str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
         ):
