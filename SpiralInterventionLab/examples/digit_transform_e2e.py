@@ -60,6 +60,8 @@ except Exception:  # pragma: no cover - optional dependency at import time
 _DECODE_ALLOWLIST_CACHE: dict[tuple[int, str], tuple[int, ...]] = {}
 _WORKER_MPS_MODES = ("auto", "conservative")
 _CONTROLLER_REFLECTION_MODES = ("off", "structured")
+_CONTROLLER_PACKET_VIEWS = ("full", "compact")
+_CONTROLLER_PROMPT_PROFILES = ("full", "compact")
 _POST_RUN_DEBRIEF_MODES = ("off", "controller")
 _SEMANTIC_CRITIC_MODES = ("off", "minilm")
 _READOUT_ANALYZER_MODES = ("off", "heuristic", "sae_scaffold")
@@ -1972,9 +1974,9 @@ def _compact_for_post_run_debrief(
     value: Any,
     *,
     depth: int = 0,
-    max_depth: int = 4,
-    max_items: int = 18,
-    max_string: int = 900,
+    max_depth: int = 3,
+    max_items: int = 12,
+    max_string: int = 520,
 ) -> Any:
     if depth > max_depth:
         return "<truncated-depth>"
@@ -2062,7 +2064,7 @@ def _result_payload_digest(result_payload: Mapping[str, Any]) -> dict[str, Any]:
     return digest
 
 
-def _jsonl_log_digest(log_dir: str | Path | None, *, max_files: int = 16, tail_per_file: int = 80) -> dict[str, Any]:
+def _jsonl_log_digest(log_dir: str | Path | None, *, max_files: int = 16, tail_per_file: int = 32) -> dict[str, Any]:
     if log_dir is None:
         return {"log_dir": None, "log_files": [], "event_counts": {}, "controller_step_views_tail": []}
     base = Path(log_dir)
@@ -2102,8 +2104,8 @@ def _jsonl_log_digest(log_dir: str | Path | None, *, max_files: int = 16, tail_p
                     "line_count": line_count,
                     "event_counts": dict(sorted(file_event_counts.items())),
                     "tail_events": [
-                        _compact_for_post_run_debrief(event, max_depth=3, max_items=20, max_string=600)
-                        for event in tail_events[-12:]
+                        _compact_for_post_run_debrief(event, max_depth=3, max_items=14, max_string=420)
+                        for event in tail_events[-8:]
                     ],
                 }
             )
@@ -2128,7 +2130,7 @@ def _post_run_debrief_system_prompt() -> str:
     return (
         "You are writing a post-run qualitative audit memo for Spiral Intervention Lab.\n"
         "This is not a controller command, not hidden chain-of-thought, not a score, and not paper-ready evidence.\n"
-        "Use concise evidence-grounded bullets. Cite only the supplied run summary and logs; do not infer unseen model internals.\n"
+        "Use compact evidence-grounded bullets. Cite only the supplied run summary and logs; do not infer unseen model internals.\n"
         "Do not propose applying unsafe interventions directly. Treat diagnostic support as evidence, not permission.\n\n"
         "Write markdown with exactly these headings:\n"
         "## What happened?\n"
@@ -2139,10 +2141,11 @@ def _post_run_debrief_system_prompt() -> str:
         "## What would have made this easier?\n"
         "## What should not be concluded\n"
         "## Controller-perspective note\n"
-        "In 'What would have made this easier?', list 2-5 concrete diagnostic affordances, runtime fields, "
-        "tool results, or compact summaries that would have made the run easier to reason about. This section is "
-        "a qualitative lab-note wish list only: it must not authorize interventions, select candidates, or become "
-        "future-run context automatically.\n"
+        "Use at most 3 bullets per section, except 'What would have made this easier?' may use 2-5 bullets.\n"
+        "Each bullet should be one short sentence or a label plus one short explanation.\n"
+        "In 'What would have made this easier?', use the schema '- missing_signal: why_it_would_help -> suggested_field'. "
+        "This section is a qualitative lab-note wish list only: it must not authorize interventions, select candidates, "
+        "or become future-run context automatically.\n"
         "In the final section, write 2-4 short first-person bullets from the perspective of a controller "
         "that has only the supplied runtime trajectory as memory. This is an interpretation layer, not evidence. "
         "Prefer phrasing such as 'I would describe', 'I kept seeing', or 'I lacked evidence for'. "
@@ -2166,6 +2169,11 @@ def build_post_run_debrief_packet(
             "The debrief may summarize controller trajectory evidence, but it is not a metric, "
             "not a success label, and not an authorization signal for future apply decisions."
         ),
+        "output_diet_contract": {
+            "max_bullets_per_section": 3,
+            "what_would_have_helped_schema": "missing_signal: why_it_would_help -> suggested_field",
+            "qualitative_affordances_only": True,
+        },
         "required_output_sections": [
             "What happened?",
             "What made the run difficult?",
@@ -5200,6 +5208,7 @@ def run_digit_transform_experiment(
     task_env: ExperimentTaskEnv | None = None,
     include_prompt_baseline: bool = True,
     controller_prompt_asset: str = "controller_v01.txt",
+    controller_packet_view: str = "full",
     hint_prompt_asset: str = "prompt_hint_v01.txt",
     task_view_mode: str = "redacted",
     log_dir: str | Path | None = None,
@@ -5241,7 +5250,12 @@ def run_digit_transform_experiment(
         model=controller_model_name,
         api_key=controller_api_key,
     )
-    c1_controller = ProviderControllerClient(provider, prompt_asset=controller_prompt_asset, max_attempts=3)
+    c1_controller = ProviderControllerClient(
+        provider,
+        prompt_asset=controller_prompt_asset,
+        packet_view=controller_packet_view,
+        max_attempts=3,
+    )
     b1_controller = (
         ProviderPromptHintController(provider, prompt_asset=hint_prompt_asset)
         if include_prompt_baseline
@@ -5310,6 +5324,7 @@ def run_digit_transform_c1_only_experiment(
     worker_model: Any | None = None,
     task_env: ExperimentTaskEnv | None = None,
     controller_prompt_asset: str = "controller_v01.txt",
+    controller_packet_view: str = "full",
     task_view_mode: str = "redacted",
     log_dir: str | Path | None = None,
     codec: Any | None = None,
@@ -5350,7 +5365,12 @@ def run_digit_transform_c1_only_experiment(
         model=controller_model_name,
         api_key=controller_api_key,
     )
-    c1_controller = ProviderControllerClient(provider, prompt_asset=controller_prompt_asset, max_attempts=3)
+    c1_controller = ProviderControllerClient(
+        provider,
+        prompt_asset=controller_prompt_asset,
+        packet_view=controller_packet_view,
+        max_attempts=3,
+    )
     worker = build_hooked_transformer_worker_runtime(
         model,
         env,
@@ -9103,6 +9123,7 @@ def run_digit_transform_sweep(
     task_env_factory: Callable[[], ExperimentTaskEnv] | None = None,
     include_prompt_baseline: bool = True,
     controller_prompt_asset: str = "controller_v01.txt",
+    controller_packet_view: str = "full",
     hint_prompt_asset: str = "prompt_hint_v01.txt",
     task_view_mode: str = "redacted",
     log_dir: str | Path | None = None,
@@ -9159,6 +9180,7 @@ def run_digit_transform_sweep(
                 task_env=env_factory(),
                 include_prompt_baseline=include_prompt_baseline,
                 controller_prompt_asset=controller_prompt_asset,
+                controller_packet_view=controller_packet_view,
                 hint_prompt_asset=hint_prompt_asset,
                 task_view_mode=task_view_mode,
                 log_dir=seed_log_dir,
@@ -9193,6 +9215,23 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a Spiral intervention-lab task experiment.")
     parser.add_argument("--provider", required=True, help="Controller provider: openai, anthropic, mistral, or google")
     parser.add_argument("--controller-model", required=True, help="Black-box controller model name")
+    parser.add_argument(
+        "--controller-prompt-profile",
+        default="compact",
+        choices=list(_CONTROLLER_PROMPT_PROFILES),
+        help="Controller prompt size profile. compact keeps the same decision contract with a shorter constitution.",
+    )
+    parser.add_argument(
+        "--controller-prompt-asset",
+        default=None,
+        help="Optional prompt asset override; defaults to controller_v01_compact.txt for compact or controller_v01.txt for full.",
+    )
+    parser.add_argument(
+        "--controller-packet-view",
+        default="compact",
+        choices=list(_CONTROLLER_PACKET_VIEWS),
+        help="Observation packet sent to the controller. compact preserves raw JSONL logs while sending bounded summaries.",
+    )
     parser.add_argument("--worker-model", default="gpt2-small", help="HookedTransformer worker model name or alias")
     parser.add_argument(
         "--task",
@@ -9347,6 +9386,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--post-run-debrief requires --log-dir so the quarantined memo artifacts have a stable home")
     if args.c1_only and args.num_seeds != 1:
         parser.error("--c1-only currently supports only --num-seeds 1")
+    controller_prompt_asset = args.controller_prompt_asset or (
+        "controller_v01_compact.txt" if args.controller_prompt_profile == "compact" else "controller_v01.txt"
+    )
     if args.controller_api_key is None:
         env_var = provider_api_env_var(args.provider)
         if os.getenv(env_var) is None:
@@ -9372,6 +9414,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             seed=args.seed,
             controller_api_key=args.controller_api_key,
             task_env=create_task_env(args.task, semantic_critic=semantic_critic),
+            controller_prompt_asset=controller_prompt_asset,
+            controller_packet_view=args.controller_packet_view,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,
@@ -9403,6 +9447,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             controller_api_key=args.controller_api_key,
             task_env=create_task_env(args.task, semantic_critic=semantic_critic),
             include_prompt_baseline=not args.no_b1,
+            controller_prompt_asset=controller_prompt_asset,
+            controller_packet_view=args.controller_packet_view,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,
@@ -9434,6 +9480,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             controller_api_key=args.controller_api_key,
             task_env_factory=lambda: create_task_env(args.task, semantic_critic=semantic_critic),
             include_prompt_baseline=not args.no_b1,
+            controller_prompt_asset=controller_prompt_asset,
+            controller_packet_view=args.controller_packet_view,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,

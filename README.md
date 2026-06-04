@@ -573,6 +573,13 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --seed 7
 ```
 
+Controller API calls use the compact prompt and compact packet view by default
+from the CLI. The raw evidence remains in JSONL logs, while the controller sees
+bounded top-k summaries plus omitted counts and prompt-size telemetry in
+`controller_provider_attempt.request`. Use `--controller-prompt-profile full`
+and/or `--controller-packet-view full` when you need the older full-context
+behavior for debugging.
+
 To ask the controller provider for a quarantined qualitative memo after a run,
 add a log directory and enable the post-run debrief:
 

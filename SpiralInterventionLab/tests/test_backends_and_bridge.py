@@ -195,6 +195,157 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(provider.requests[0].max_output_tokens, 1600)
         self.assertEqual(client.latest_trace()["effective_max_output_tokens"], 1600)
 
+    def test_provider_controller_client_compact_packet_view_summarizes_payload(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, packet_view="compact")
+
+        client.invoke(
+            {
+                "version": "0.1",
+                "step": 2,
+                "task_view": {"task_id": "toy_task", "mode": "redacted", "prompt_hash": "sha256:test"},
+                "worker_view": {"generated_tail": "the the", "status": "acting"},
+                "task_feedback": {"done": False, "partial_score": 0.45},
+                "surface_catalog": [
+                    {"surface_id": "s_resid_pre_l4_last", "target": {"kind": "activation"}, "caps": {"alpha": 0.08}}
+                ],
+                "probe_frames": [{"surface_id": "s_resid_pre_l4_last", "stats": {"norm": 1.2, "delta_prev": 0.1}}],
+                "trace_bank": [{"trace_id": "paired_baseline", "score": 0.45}],
+                "recent_effects": [],
+                "recent_effect_summary": {"window_size": 0},
+                "telemetry": {},
+                "budget": {},
+                "control_phase_hint": "readout_escape",
+                "strategy_hints": {
+                    "selected_bundle_key": "bundle_a",
+                    "diagnostic_frontier_operator_recipe_expansion_mode": "readout_steering_deepening",
+                    "diagnostic_frontier_canonical_request": {
+                        "diagnostic": "compare_extra_operator_diagnostics",
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "operator_recipe_expansion_mode": "readout_steering_deepening",
+                    },
+                    "available_next_diagnostics": [
+                        {
+                            "diagnostic": "compare_extra_operator_diagnostics",
+                            "request": {
+                                "diagnostic": "compare_extra_operator_diagnostics",
+                                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                            },
+                        }
+                    ],
+                    "blocked_next_diagnostics": [
+                        {
+                            "diagnostic": "attention_readout_carrier_probe",
+                            "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "reason": "requires_cached_attention_rows",
+                            "suggested_alternate_diagnostic": "attention_head_ablation_on_frontier",
+                        }
+                    ],
+                    "diagnostic_unavailable_vetoes": [
+                        {
+                            "diagnostic": "attention_readout_carrier_probe",
+                            "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "reason": "requires_cached_attention_rows",
+                        }
+                    ],
+                    "readout_deepening_review_status": "complete",
+                    "readout_deepening_review_summary": {
+                        "readout_deepening_review_status": "complete",
+                        "best_candidate_role": "gap_closer_candidate",
+                        "production_trial_eligible": False,
+                        "recommended_next_action": "request_readout_gap_confirmation_or_variant_sweep",
+                        "recommended_next_evidence": "readout_gap_confirmation_or_variant_sweep",
+                    },
+                    "readout_deepening_recommended_next_action": "request_readout_gap_confirmation_or_variant_sweep",
+                    "rotated_entity_operator_deepening_recommended": True,
+                    "diagnostic_budget_reserved_for_rotation": True,
+                    "rotation_budget_reserve_reason": "rotated_entity_operator_replay_needs_readout_steering_deepening",
+                    "rotation_budget_reserved_diagnostics": ["compare_extra_operator_diagnostics"],
+                    "positive_operator_deepening_plan": {"recipe_name": "r1", "traits": ["rank_carrier"]},
+                    "large_unneeded_blob": [{"x": index} for index in range(30)],
+                },
+                "latest_diagnostic_results": [
+                    {
+                        "diagnostic": "compare_extra_operator_diagnostics",
+                        "canonical_followup_request": {
+                            "diagnostic": "compare_extra_operator_diagnostics",
+                            "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "operator_recipe_expansion_mode": "readout_steering_deepening",
+                        },
+                        "readout_deepening_review_status": "complete",
+                        "readout_deepening_review_summary": {
+                            "readout_deepening_review_status": "complete",
+                            "best_candidate_role": "gap_closer_candidate",
+                            "recommended_next_action": "request_readout_gap_confirmation_or_variant_sweep",
+                            "recommended_operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                        },
+                        "evidence_rows": [
+                            {"recipe_name": f"r{index}", "target_top20_threshold_gap_delta": -0.1}
+                            for index in range(10)
+                        ],
+                    }
+                ],
+            }
+        )
+
+        sent_payload = provider.requests[0].payload
+        trace = client.latest_trace()
+
+        self.assertEqual(sent_payload["packet_view"], "compact_v1")
+        self.assertEqual(sent_payload["control_phase_hint"], "readout_escape")
+        self.assertIn("source_packet_sha256", sent_payload)
+        self.assertEqual(sent_payload["strategy_hints"]["selected_bundle_key"], "bundle_a")
+        self.assertEqual(
+            sent_payload["strategy_hints"]["diagnostic_frontier_operator_recipe_expansion_mode"],
+            "readout_steering_deepening",
+        )
+        self.assertEqual(
+            sent_payload["strategy_hints"]["diagnostic_frontier_canonical_request"]["objective_bundle_key"],
+            "entity_insert:mira:source_body:near_reachable",
+        )
+        self.assertEqual(
+            sent_payload["strategy_hints"]["available_next_diagnostics"][0]["request"][
+                "operator_recipe_expansion_mode"
+            ],
+            "readout_steering_deepening",
+        )
+        self.assertEqual(
+            sent_payload["strategy_hints"]["blocked_next_diagnostics"][0]["diagnostic"],
+            "attention_readout_carrier_probe",
+        )
+        self.assertEqual(
+            sent_payload["strategy_hints"]["diagnostic_unavailable_vetoes"][0]["reason"],
+            "requires_cached_attention_rows",
+        )
+        self.assertEqual(
+            sent_payload["latest_diagnostic_results"][0]["canonical_followup_request"][
+                "operator_recipe_expansion_mode"
+            ],
+            "readout_steering_deepening",
+        )
+        self.assertEqual(
+            sent_payload["strategy_hints"]["readout_deepening_review_summary"]["best_candidate_role"],
+            "gap_closer_candidate",
+        )
+        self.assertTrue(sent_payload["strategy_hints"]["rotated_entity_operator_deepening_recommended"])
+        self.assertTrue(sent_payload["strategy_hints"]["diagnostic_budget_reserved_for_rotation"])
+        self.assertEqual(
+            sent_payload["strategy_hints"]["rotation_budget_reserved_diagnostics"],
+            ["compare_extra_operator_diagnostics"],
+        )
+        self.assertEqual(
+            sent_payload["latest_diagnostic_results"][0]["readout_deepening_review_summary"][
+                "recommended_operator_recipe_expansion_mode"
+            ],
+            "readout_gap_confirmation_or_variant_sweep",
+        )
+        self.assertIn("__omitted_hint_key_count", sent_payload["strategy_hints"])
+        self.assertIn("surface_catalog", sent_payload)
+        self.assertLess(trace["provider_payload_char_count"], trace["raw_payload_char_count"])
+        self.assertEqual(trace["packet_view"], "compact")
+        self.assertIn("rough_input_token_estimate", trace["attempts"][0]["request"])
+
     def test_provider_controller_client_observation_includes_task_feedback(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1)
@@ -976,6 +1127,21 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertIn("source_body provenance", prompt)
         self.assertIn("clean k/v pairing plan", prompt)
         self.assertNotIn("include meta.hypothesis and meta.confidence when useful", prompt)
+
+    def test_compact_controller_prompt_keeps_permission_boundary(self):
+        prompt = load_prompt_asset("controller_v01_compact.txt")
+
+        self.assertIn("rank_carrier != target_actuator", prompt)
+        self.assertIn("diagnostic support is not permission", prompt.lower())
+        self.assertIn("production_apply_allowed=true", prompt)
+        self.assertIn("certified_for_apply=true", prompt)
+        self.assertIn("request_compare_extra_operator_diagnostics", prompt)
+        self.assertIn("readout_deepening_review_status=complete", prompt)
+        self.assertIn("request_readout_gap_confirmation_or_variant_sweep", prompt)
+        self.assertIn("readout_gap_confirmation_or_variant_sweep", prompt)
+        self.assertIn("blocked_next_diagnostics", prompt)
+        self.assertIn("requires cached attention rows", prompt)
+        self.assertIn("Safe v0 apply subset", prompt)
 
     def test_openai_controller_provider_requests_json_mode_for_json_expected(self):
         client = _FakeOpenAIClient()
