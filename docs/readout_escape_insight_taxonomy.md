@@ -1,6 +1,6 @@
 # Readout Escape Insight Taxonomy
 
-Status date: 2026-05-17
+Status date: 2026-06-13
 
 This note organizes the current readout-escape findings into three buckets:
 
@@ -276,6 +276,72 @@ This is not a task win. It is a better local measurement. The term
 is also collapse-safe; otherwise the observation is only a measured/candidate
 signal.
 
+### Confirmed Gap-Only Objectives
+
+The newest router adds another useful negative category:
+
+```text
+confirmed_gap_only_no_target_lift
+```
+
+This state means a term/objective produced repeatable gap movement but still did
+not produce target mass or target top-20 lift. It is not ignored; it is put on a
+temporary rotation cooldown so the controller does not keep proving the same
+gap-only fact.
+
+Engineering consequence:
+
+- a confirmed gap-only term is excluded from the next objective rotation
+- the term is not abandoned as a task requirement
+- it is routed toward operator-family conversion instead of another term-level
+  confirmation
+
+Research consequence:
+
+> The system can distinguish "the target basin is locally visible" from "the
+> target is competitive at the answer boundary."
+
+### Carrier-To-Actuator Conversion
+
+The current conversion sweep asks whether readout/gap carriers can become
+target-owned actuators. The latest local run reaches the conversion sweep
+inside the fixed diagnostic budget, but the best result remains:
+
+```text
+best_candidate_role = carrier_only_no_target_actuator
+target_mass_delta ~= tiny positive
+target_top20_hit_delta = 0
+production_trial_eligible = false
+```
+
+This is an important distinction:
+
+```text
+carrier_to_actuator_conversion_failed != no evidence
+```
+
+It means the readout-steering family can still touch the right neighborhood,
+but it has not produced answer-boundary target lift.
+
+### Non-KV Operator-Family Shift Preview
+
+When conversion fails as carrier-only, the runtime now emits diagnostic-only
+`operator_family_shift_preview_rows`:
+
+- `resid_readout_direction_patch`
+- `activation_patch_source_term_token`
+- `anti_attractor_suppression_patch`
+- `attention_route_carrier_probe`
+
+These are scaffolds for the next measurement axis. They preserve the rule:
+
+```text
+operator_family_shift_preview != production apply permission
+```
+
+The practical value is that the controller can stop spending diagnostics on the
+same readout-steering family once it has shown repeated gap-only behavior.
+
 ## 3. Both: Research And Engineering Value
 
 These ideas are scientifically interesting and also improve the runtime.
@@ -341,70 +407,62 @@ Typed failure modes make research and engineering move together:
 
 ## Current Integrated Reading
 
-The system has progressed through four stages:
+The system has progressed through six stages:
 
 1. detect collapse
 2. nominate a plausible frontier
 3. distinguish rank/readout carriers from target actuators
 4. locally deepen the most promising gap closers
+5. rotate objectives when a term is confirmed gap-only
+6. route failed carrier conversion into non-KV family-shift previews
 
 The current state is:
 
 - visibility is much better than actuation
 - `budget` can be seen and locally touched
-- readout steering can move nearby logits but still leaves a large top-20 gap
+- readout steering can repeatedly move nearby logits/gaps
+- conversion sweeps still fail to create target mass/top-20 lift
 - production apply remains correctly closed
-- the controller now has a positive local search signal instead of only vetoes
+- the controller now has a positive local search signal and a family-shift
+  escape hatch instead of only vetoes
 
 This is a healthy plateau, not a dead end.
 
 ## Next Strategy
 
-### Immediate: Gap-Closer Delta Accounting
+### Immediate: Execute The Non-KV Family Shift Preview
 
-The next run should compare gap closers against a no-edit readout baseline:
+The next run should let the controller request `non_kv_operator_search` after
+`carrier_only_no_target_actuator`. The expected output is not an edit; it is a
+small comparison over:
 
-- absolute target top-20 gap
-- gap delta versus baseline
-- target-piece logit delta
-- target-piece probability delta
-- target rank after edit
-- repeat/collapse deltas
-
-This will tell us whether the best gap closer is actually closing the gap or
-merely being selected as the least bad row.
-
-### Short Term: Localize Around The Best Gap Recipe
-
-The current best recipe is:
-
-```text
-post_bridge_target_readout_patch_l005_a060_gap
-```
-
-Suggested bounded sweep:
-
-- `negative_scale`: `0.0`, `0.025`, `0.05`, `0.075`, `0.10`
-- `alpha`: capped values around `0.05`, `0.06`
-- same target token set
-- same bad-attractor set
-- no production apply
+- residual readout-direction patching
+- activation patching from source term tokens
+- anti-attractor suppression
+- attention-route carrier probing
 
 Goal:
 
-> Improve target top-20 gap without collapse sharpening.
+> Find a family that can move target mass/top-20, not just target rank or gap.
 
-### Medium Term: Carrier-To-Actuator Conversion
+### Short Term: Compare Operator Families Under One Contract
 
-If gap closers keep improving logit deltas without top-20 hits, test whether a
-two-stage diagnostic can convert carrier movement:
+Once the preview rows are executable, compare families using the same strict
+success condition:
 
 ```text
-stage 1: anti-collapse or low-attractor target readout
-stage 2: target readout / contrastive target readout
+target_mass_delta > threshold
+or target_top20_hit_delta > 0
 ```
 
-Keep this shadow-only until both stages are non-harmful.
+Secondary signals such as rank movement, target-piece logit deltas, and gap
+delta should remain explanatory, not sufficient.
+
+### Medium Term: Two-Stage Conversion Only After Family Evidence
+
+Two-stage patches remain plausible, but should wait until at least one family
+shows non-harmful target-lift evidence. Otherwise the controller risks turning
+"more steps" into "more ways to sharpen the wrong basin."
 
 ### Medium Term: Bridge Plan As A First-Class Research Object
 

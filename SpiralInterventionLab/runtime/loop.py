@@ -514,6 +514,8 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
         "request_non_kv_operator_search": "compare_extra_operator_diagnostics",
         "request_target_entity_insertion_probe": "target_entity_insertion_probe",
         "request_entity_insertion_operator_candidate_review": "entity_insertion_operator_candidate_review",
+        "request_objective_rotation_pipeline": "objective_rotation_pipeline",
+        "request_carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_sweep",
         "request_cross_bundle_bridge_search": "cross_bundle_bridge_search",
         "request_activation_patch_candidate_review": "activation_patch_candidate_review",
         "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
@@ -613,6 +615,13 @@ def _canonicalize_diagnostic_request_row(
         "seed_recipe_name",
         "terms",
         "target_terms",
+        "objective_bundle_keys",
+        "seed_objective_bundle_keys",
+        "objective_rotation_pipeline",
+        "carrier_to_actuator_conversion_sweep",
+        "operator_family_shift_requested",
+        "operator_family_shift_source",
+        "operator_family_shift_preview_rows",
         "reason",
         "permission",
     ):
@@ -769,6 +778,14 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         ):
             row.setdefault("operator_recipe_expansion_mode", "readout_steering_deepening")
             row.setdefault("readout_steering_deepening_requested", True)
+        carrier_conversion_requested = (
+            str(row.get("next_evidence_needed") or "") == "carrier_to_actuator_conversion_sweep"
+            or str(row.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
+            or bool(meta.get("carrier_to_actuator_conversion_sweep", False))
+        )
+        if carrier_conversion_requested and str(row.get("diagnostic") or "") == "carrier_to_actuator_conversion_sweep":
+            row.setdefault("operator_recipe_expansion_mode", "carrier_to_actuator_conversion_sweep")
+            row.setdefault("carrier_to_actuator_conversion_sweep", True)
         if bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False)) or (
             str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
         ):

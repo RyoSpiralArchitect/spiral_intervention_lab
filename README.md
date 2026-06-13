@@ -93,6 +93,12 @@ The current implementation includes:
   - `production_operator_certified`
   - `blocked_by`
   - the next diagnostic request the controller should ask for
+- readout gap/deepening routers that distinguish:
+  - `gap_closer_candidate`
+  - `confirmed_gap_only_no_target_lift`
+  - `carrier_only_no_target_actuator`
+  - `operator_family_shift_after_gap_carrier_conversion_failed`
+- diagnostic-only non-KV operator-family shift previews after carrier conversion fails, including residual readout-direction, source-term activation patch, anti-attractor suppression, and attention-route carrier probe scaffolds
 
 ## Current Bottleneck
 
@@ -119,6 +125,10 @@ than it is at:
 The main research question has therefore sharpened from “can we intervene at all?” to:
 
 > Which bounded, auditable runtime controls actually improve readout competitiveness at the answer boundary, and can that lift stay owned by the intended bundle?
+
+The latest readout-escape line narrows this again:
+
+> If readout steering can repeatedly produce gap/rank carriers but not target mass/top-20 lift, which non-KV operator family can convert that carrier into a target-owned actuator?
 
 The latest runs narrow this further. For the `budget` frontier in the constrained rewrite direct-scan replay, the diagnostic ledger reports:
 
@@ -156,6 +166,8 @@ Several concrete lessons have come out of the recent runs:
 - “Helpful” is not enough. We now explicitly distinguish between lift that belongs to the intended bundle and lift that gets stolen by another bundle.
 - Ownership matters. A recipe can move logits while still being the wrong actuator if `realized_lift_bundle != intended_bundle`.
 - Diagnostic signals are not apply permission. `logit_adjacent`, attention ablation, and SAE-style feature hints improve the controller's map, but they do not certify a runtime edit.
+- Gap movement is not target actuation. A repeatable `target_top20_threshold_gap_delta < 0` can justify confirmation or family shift, but it does not justify production trial unless target mass or target top-20 lift appears.
+- Term rotation is a measurement tool, not an endless loop. Once a term is `confirmed_gap_only_no_target_lift`, the controller should stop re-confirming it and shift the operator family.
 - Operator certification is starting to look slightly over-powered if treated as a decision layer. It should be kept as evidence for the controller, not as a second policy owner.
 
 ## Readout Analyzer Status

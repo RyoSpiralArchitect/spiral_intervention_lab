@@ -93,6 +93,8 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
     "request_non_kv_operator_search",
     "request_target_entity_insertion_probe",
     "request_entity_insertion_operator_candidate_review",
+    "request_objective_rotation_pipeline",
+    "request_carrier_to_actuator_conversion_sweep",
     "request_cross_bundle_bridge_search",
     "request_activation_patch_candidate_review",
     "request_activation_patch_runtime_support_probe",
@@ -111,6 +113,8 @@ _CONTROLLER_DIAGNOSTIC_NAMES = {
     "sae_feature_emitter_scan",
     "target_entity_insertion_probe",
     "entity_insertion_operator_candidate_review",
+    "objective_rotation_pipeline",
+    "carrier_to_actuator_conversion_sweep",
     "compare_extra_operator_diagnostics",
     "cross_bundle_bridge_search",
     "activation_patch_candidate_review",
@@ -478,6 +482,10 @@ def _normalize_controller_diagnostic_name(value: Any) -> str | None:
         return "target_entity_insertion_probe"
     if text == "request_entity_insertion_operator_candidate_review":
         return "entity_insertion_operator_candidate_review"
+    if text == "request_objective_rotation_pipeline":
+        return "objective_rotation_pipeline"
+    if text == "request_carrier_to_actuator_conversion_sweep":
+        return "carrier_to_actuator_conversion_sweep"
     if text == "request_cross_bundle_bridge_search":
         return "cross_bundle_bridge_search"
     if text == "request_activation_patch_candidate_review":
@@ -6086,6 +6094,218 @@ class HookedTransformerWorkerRuntime:
             return "loop_break"
         return "monitor"
 
+    @staticmethod
+    def _diagnostic_objective_keys(result: Mapping[str, Any]) -> set[str]:
+        result_objectives = {
+            str(result.get("objective_bundle_key") or ""),
+            str(result.get("bundle_key") or ""),
+            str(result.get("step_actuator_bundle_key") or ""),
+        }
+        for nested_key in ("readout_deepening_review_summary", "operator_recipe_expansion_summary"):
+            nested = result.get(nested_key)
+            if isinstance(nested, Mapping):
+                result_objectives.add(str(nested.get("objective_bundle_key") or ""))
+                result_objectives.add(str(nested.get("bundle_key") or ""))
+        for rows_key in ("evidence_rows", "operator_recipe_expansion_matrix"):
+            rows = result.get(rows_key)
+            if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
+                continue
+            for row in rows[:8]:
+                if not isinstance(row, Mapping):
+                    continue
+                result_objectives.add(str(row.get("objective_bundle_key") or ""))
+                result_objectives.add(str(row.get("bundle_key") or ""))
+        result_objectives.discard("")
+        return result_objectives
+
+    def _readout_gap_confirmation_seen_for_objective(self, objective_key: str) -> bool:
+        objective_key = str(objective_key or "")
+        for result in getattr(self, "_diagnostic_results", []):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic") or "") not in {
+                "compare_extra_operator_diagnostics",
+                "readout_gap_confirmation_or_variant_sweep",
+            }:
+                continue
+            if str(result.get("operator_recipe_expansion_mode") or "") != (
+                "readout_gap_confirmation_or_variant_sweep"
+            ):
+                continue
+            if not objective_key:
+                return True
+            if objective_key in self._diagnostic_objective_keys(result):
+                return True
+        return False
+
+    def _confirmed_gap_only_objective_rows(self) -> list[dict[str, Any]]:
+        """Return latest objectives where gap movement was confirmed without target lift."""
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        rows_by_objective: dict[str, dict[str, Any]] = {}
+        for result in getattr(self, "_diagnostic_results", []):
+            if not isinstance(result, Mapping):
+                continue
+            diagnostic = str(result.get("diagnostic") or "")
+            if diagnostic not in {
+                "compare_extra_operator_diagnostics",
+                "readout_gap_confirmation_or_variant_sweep",
+            }:
+                continue
+            if str(result.get("operator_recipe_expansion_mode") or "") != "readout_gap_confirmation_or_variant_sweep":
+                continue
+            review = result.get("readout_deepening_review_summary")
+            if not isinstance(review, Mapping):
+                continue
+            role = str(review.get("best_candidate_role") or "")
+            trial_eligible = bool(review.get("production_trial_eligible", False))
+            objective_key = str(
+                review.get("objective_bundle_key")
+                or result.get("objective_bundle_key")
+                or result.get("bundle_key")
+                or ""
+            )
+            if not objective_key:
+                continue
+            target_mass_delta = _as_float(review.get("target_mass_delta"), default=0.0)
+            target_top20_hit_delta = _as_int(review.get("target_top20_hit_delta"), default=0)
+            direct_target_effect = target_mass_delta > 0.00002 or target_top20_hit_delta > 0
+            if role != "gap_closer_candidate" or trial_eligible or direct_target_effect:
+                continue
+            term = self._term_from_bundle_key(objective_key)
+            rows_by_objective[objective_key] = {
+                "objective_bundle_key": objective_key,
+                "term": term or None,
+                "objective_status": "confirmed_gap_only_no_target_lift",
+                "rotation_eligible": False,
+                "ttl_reason": "until_new_operator_family_or_conversion_sweep",
+                "best_candidate_role": role,
+                "gap_delta": review.get("gap_delta"),
+                "target_mass_delta": review.get("target_mass_delta"),
+                "target_top20_hit_delta": review.get("target_top20_hit_delta"),
+                "best_recipe_id": review.get("best_recipe_id"),
+                "best_recipe_name": review.get("best_recipe_name"),
+                "recorded_step": result.get("recorded_step"),
+            }
+        return sorted(
+            rows_by_objective.values(),
+            key=lambda row: int(row.get("recorded_step", -1) or -1),
+            reverse=True,
+        )
+
+    @staticmethod
+    def _operator_family_shift_preview_rows(
+        *,
+        objective_bundle_key: str,
+        objective_term: str = "",
+        seed_recipe_id: str = "",
+        seed_recipe_family: str = "",
+    ) -> list[dict[str, Any]]:
+        """Return diagnostic-only non-KV families to try after carrier conversion stalls."""
+
+        objective_key = str(objective_bundle_key or "")
+        term = str(objective_term or "")
+        seed_recipe = str(seed_recipe_id or "")
+        seed_family = str(seed_recipe_family or "")
+        rows = [
+            {
+                "operator_family": "resid_readout_direction_patch",
+                "operator_axis": "non_kv_operator_search",
+                "candidate_kind": "resid_add",
+                "diagnostic_family": "readout_direction_patch",
+                "purpose": "test whether direct residual readout steering can turn a gap carrier into target mass/top20 lift",
+            },
+            {
+                "operator_family": "activation_patch_source_term_token",
+                "operator_axis": "non_kv_operator_search",
+                "candidate_kind": "activation_patch",
+                "diagnostic_family": "source_term_activation_patch",
+                "purpose": "patch a source-body term-local activation instead of another readout gap steer",
+            },
+            {
+                "operator_family": "anti_attractor_suppression_patch",
+                "operator_axis": "non_kv_operator_search",
+                "candidate_kind": "attractor_suppression",
+                "diagnostic_family": "collapse_suppression",
+                "purpose": "reduce junk-attractor pressure before asking for more target lift",
+            },
+            {
+                "operator_family": "attention_route_carrier_probe",
+                "operator_axis": "non_kv_operator_search",
+                "candidate_kind": "attention_route_probe",
+                "diagnostic_family": "attention_route_carrier",
+                "purpose": "inspect whether answer-boundary attention route is the missing carrier-to-actuator bridge",
+            },
+        ]
+        normalized: list[dict[str, Any]] = []
+        for index, row in enumerate(rows):
+            item = dict(row)
+            item.update(
+                {
+                    "objective_bundle_key": objective_key or None,
+                    "objective_term": term or None,
+                    "preview_rank": index + 1,
+                    "source": "carrier_to_actuator_conversion_failed",
+                    "permission": "diagnostic_only",
+                    "production_apply_allowed": False,
+                    "policy_candidate_ready": False,
+                    "seed_operator_recipe_id": seed_recipe or None,
+                    "seed_recipe_family": seed_family or None,
+                }
+            )
+            normalized.append({key: value for key, value in item.items() if value not in (None, "", [])})
+        return normalized
+
+    @classmethod
+    def _operator_family_shift_canonical_request(
+        cls,
+        *,
+        objective_bundle_key: str,
+        objective_term: str = "",
+        seed_recipe_id: str = "",
+        seed_recipe_family: str = "",
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        preview_rows = cls._operator_family_shift_preview_rows(
+            objective_bundle_key=objective_bundle_key,
+            objective_term=objective_term,
+            seed_recipe_id=seed_recipe_id,
+            seed_recipe_family=seed_recipe_family,
+        )
+        request = {
+            "diagnostic": "compare_extra_operator_diagnostics",
+            "bundle_key": objective_bundle_key or None,
+            "objective_bundle_key": objective_bundle_key or None,
+            "next_evidence_needed": "non_kv_operator_search",
+            "operator_recipe_expansion_mode": "non_kv_operator_search",
+            "operator_family_shift_requested": True,
+            "operator_family_shift_source": "carrier_to_actuator_conversion_failed",
+            "operator_family_shift_preview_rows": preview_rows,
+            "seed_operator_recipe_id": seed_recipe_id or None,
+            "seed_recipe_family": seed_recipe_family or None,
+            "reason": reason
+            or "carrier-to-actuator conversion stayed carrier-only; inspect bounded non-KV operator families",
+            "permission": "diagnostic_only",
+            "production_apply_allowed": False,
+            "policy_candidate_ready": False,
+        }
+        return {key: value for key, value in request.items() if value not in (None, "", [])}
+
     def _strategy_hints(
         self,
         *,
@@ -6136,6 +6356,7 @@ class HookedTransformerWorkerRuntime:
         )
         kv_retry_canary_checked = sum(1 for item in kv_retry_candidate_edits if bool(item.get("canary_checked")))
         kv_retry_positive_count = sum(1 for item in kv_retry_candidate_edits if bool(item.get("canary_pass")))
+        confirmed_gap_only_rows = self._confirmed_gap_only_objective_rows()
         semantic_focus = self._semantic_focus_summary(promoted_cache_surfaces=promoted_cache_surfaces)
         readout_escape_needed, readout_escape_reason, readout_escape_block_reason = self._readout_escape_needed(
             answer_readout_canary=answer_readout_canary,
@@ -6179,6 +6400,15 @@ class HookedTransformerWorkerRuntime:
             "kv_retry_candidate_edits": kv_retry_candidate_edits,
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
+        max_diagnostic_calls = int(getattr(self, "max_diagnostic_calls_per_run", 0) or 0)
+        diagnostic_call_count = len(getattr(self, "_diagnostic_results", []))
+        diagnostic_call_budget_left = max(0, max_diagnostic_calls - diagnostic_call_count) if max_diagnostic_calls > 0 else 0
+        diagnostic_budget_exhausted = bool(max_diagnostic_calls > 0 and diagnostic_call_budget_left <= 0)
+        if max_diagnostic_calls > 0:
+            hints["diagnostic_call_budget_left"] = diagnostic_call_budget_left
+            hints["diagnostic_budget_exhausted"] = diagnostic_budget_exhausted
+            if diagnostic_budget_exhausted:
+                hints["diagnostic_budget_block_reason"] = "diagnostic_call_budget_exhausted"
         cache_backed_diagnostics = {
             "attention_readout_carrier_probe",
             "attention_head_ablation_on_frontier",
@@ -6234,9 +6464,76 @@ class HookedTransformerWorkerRuntime:
                 dict(row) for row in unavailable_diagnostic_rows[:6]
             ]
 
+        def _block_next_diagnostic(
+            request: Mapping[str, Any],
+            *,
+            reason: str,
+            priority: int = 10,
+            status: str = "blocked",
+        ) -> None:
+            diagnostic = str(request.get("diagnostic") or "")
+            if not diagnostic:
+                return
+            blocked = hints.setdefault("blocked_next_diagnostics", [])
+            if not isinstance(blocked, list):
+                blocked = []
+                hints["blocked_next_diagnostics"] = blocked
+            objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+            row = {
+                "diagnostic": diagnostic,
+                "objective_bundle_key": objective_key or None,
+                "bundle_key": request.get("bundle_key"),
+                "status": str(status),
+                "reason": str(reason),
+                "request": dict(request),
+                "priority": int(priority),
+                "permission": "diagnostic_only",
+                "production_apply_allowed": False,
+            }
+            signature = (
+                diagnostic,
+                objective_key,
+                str(request.get("next_evidence_needed") or ""),
+                str(request.get("operator_recipe_expansion_mode") or ""),
+                str(status),
+            )
+            existing_signatures = {
+                (
+                    str(item.get("diagnostic") or ""),
+                    str(item.get("objective_bundle_key") or item.get("bundle_key") or ""),
+                    str(
+                        item.get("request", {}).get("next_evidence_needed")
+                        if isinstance(item.get("request"), Mapping)
+                        else item.get("next_evidence_needed")
+                        or ""
+                    ),
+                    str(
+                        item.get("request", {}).get("operator_recipe_expansion_mode")
+                        if isinstance(item.get("request"), Mapping)
+                        else item.get("operator_recipe_expansion_mode")
+                        or ""
+                    ),
+                    str(item.get("status") or ""),
+                )
+                for item in blocked
+                if isinstance(item, Mapping)
+            }
+            if signature not in existing_signatures:
+                blocked.append(row)
+                blocked.sort(key=lambda item: (int(item.get("priority", 10) or 10), str(item.get("diagnostic") or "")))
+                del blocked[8:]
+
         def _add_available_next_diagnostic(request: Mapping[str, Any], *, reason: str, priority: int = 10) -> None:
             diagnostic = str(request.get("diagnostic") or "")
             if not diagnostic:
+                return
+            if diagnostic_budget_exhausted:
+                _block_next_diagnostic(
+                    request,
+                    reason="diagnostic_call_budget_exhausted",
+                    priority=priority,
+                    status="diagnostic_budget_exhausted",
+                )
                 return
             objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
             if (diagnostic, objective_key) in unavailable_signatures:
@@ -6453,7 +6750,10 @@ class HookedTransformerWorkerRuntime:
             (
                 result
                 for result in reversed(self._diagnostic_results)
-                if str(result.get("diagnostic") or "") == "operator_diagnostic_replay"
+                if str(result.get("diagnostic") or "") in {
+                    "operator_diagnostic_replay",
+                    "objective_rotation_pipeline",
+                }
                 and str(result.get("entity_operator_materialization_status") or "") == "materialized"
             ),
             None,
@@ -6551,11 +6851,17 @@ class HookedTransformerWorkerRuntime:
         )
         latest_entity_operator_replay_is_rotation = bool(
             isinstance(latest_entity_operator_replay, Mapping)
-            and str(
-                latest_entity_operator_replay.get("objective_bundle_key")
-                or latest_entity_operator_replay.get("bundle_key")
-                or ""
-            ).startswith("entity_rotation:")
+            and (
+                str(latest_entity_operator_replay.get("diagnostic") or "") == "objective_rotation_pipeline"
+                or bool(latest_entity_operator_replay.get("objective_rotation_pipeline", False))
+                or str(latest_entity_operator_replay.get("next_evidence_needed") or "")
+                == "operator_diagnostic_replay_for_rotated_entity_candidates"
+                or str(
+                    latest_entity_operator_replay.get("objective_bundle_key")
+                    or latest_entity_operator_replay.get("bundle_key")
+                    or ""
+                ).startswith("entity_rotation:")
+            )
         )
         entity_deepening_objective_key = (
             str(
@@ -6646,6 +6952,17 @@ class HookedTransformerWorkerRuntime:
                 ),
                 priority=2 if latest_entity_operator_replay_is_rotation else 5,
             )
+        if confirmed_gap_only_rows:
+            confirmed_gap_only_terms = [
+                str(row.get("term") or "")
+                for row in confirmed_gap_only_rows
+                if str(row.get("term") or "")
+            ]
+            hints["confirmed_gap_only_objectives"] = confirmed_gap_only_rows[:6]
+            hints["confirmed_gap_only_terms"] = confirmed_gap_only_terms[:6]
+            hints["confirmed_gap_only_count"] = len(confirmed_gap_only_rows)
+            hints["objective_rotation_excluded_terms"] = confirmed_gap_only_terms[:6]
+            hints["objective_rotation_exclusion_reason"] = "confirmed_gap_only_no_target_lift"
         latest_readout_deepening_review = next(
             (
                 result
@@ -6660,15 +6977,6 @@ class HookedTransformerWorkerRuntime:
             if isinstance(latest_readout_deepening_review, Mapping)
             and isinstance(latest_readout_deepening_review.get("readout_deepening_review_summary"), Mapping)
             else None
-        )
-        gap_confirmation_seen = any(
-            str(result.get("diagnostic") or "") in {
-                "compare_extra_operator_diagnostics",
-                "readout_gap_confirmation_or_variant_sweep",
-            }
-            and str(result.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
-            for result in self._diagnostic_results
-            if isinstance(result, Mapping)
         )
         if isinstance(readout_deepening_review_summary, Mapping):
             hints["readout_deepening_review_status"] = readout_deepening_review_summary.get(
@@ -6686,8 +6994,115 @@ class HookedTransformerWorkerRuntime:
                 readout_deepening_review_summary.get("production_trial_eligible", False)
             )
             recommended_next_action = str(readout_deepening_review_summary.get("recommended_next_action") or "")
-            if recommended_next_action == "request_readout_gap_confirmation_or_variant_sweep" and not gap_confirmation_seen:
-                objective_key = str(readout_deepening_review_summary.get("objective_bundle_key") or "")
+            objective_key = str(readout_deepening_review_summary.get("objective_bundle_key") or "")
+            gap_confirmation_seen = self._readout_gap_confirmation_seen_for_objective(objective_key)
+            hints["readout_gap_confirmation_seen_for_objective"] = bool(gap_confirmation_seen)
+            if objective_key:
+                hints["readout_gap_confirmation_objective_bundle_key"] = objective_key
+            current_role = str(readout_deepening_review_summary.get("best_candidate_role") or "")
+            current_trial_eligible = bool(readout_deepening_review_summary.get("production_trial_eligible", False))
+            try:
+                current_target_mass_delta = float(readout_deepening_review_summary.get("target_mass_delta") or 0.0)
+            except Exception:
+                current_target_mass_delta = 0.0
+            try:
+                current_target_top20_hit_delta = int(
+                    readout_deepening_review_summary.get("target_top20_hit_delta") or 0
+                )
+            except Exception:
+                current_target_top20_hit_delta = 0
+            current_has_target_lift = current_target_mass_delta > 0.00002 or current_target_top20_hit_delta > 0
+            confirmed_objective_keys = {
+                str(row.get("objective_bundle_key") or "")
+                for row in confirmed_gap_only_rows
+                if str(row.get("objective_bundle_key") or "")
+            }
+            reserve_conversion_after_one_confirmed = bool(
+                recommended_next_action == "request_readout_gap_confirmation_or_variant_sweep"
+                and not gap_confirmation_seen
+                and confirmed_gap_only_rows
+                and objective_key
+                and objective_key not in confirmed_objective_keys
+                and current_role == "gap_closer_candidate"
+                and not current_trial_eligible
+                and not current_has_target_lift
+            )
+            if reserve_conversion_after_one_confirmed:
+                objective_keys: list[str] = []
+                target_terms: list[str] = []
+
+                def _append_conversion_objective(bundle_key: str, term: str | None = None) -> None:
+                    normalized_key = str(bundle_key or "")
+                    if not normalized_key or normalized_key in objective_keys:
+                        return
+                    objective_keys.append(normalized_key)
+                    normalized_term = str(term or self._term_from_bundle_key(normalized_key) or "")
+                    if normalized_term and normalized_term not in target_terms:
+                        target_terms.append(normalized_term)
+
+                _append_conversion_objective(objective_key, self._term_from_bundle_key(objective_key))
+                for row in confirmed_gap_only_rows:
+                    _append_conversion_objective(
+                        str(row.get("objective_bundle_key") or ""),
+                        str(row.get("term") or ""),
+                    )
+                objective_keys = objective_keys[:3]
+                target_terms = target_terms[:3]
+                conversion_request = {
+                    "diagnostic": "carrier_to_actuator_conversion_sweep",
+                    "bundle_key": objective_key or None,
+                    "objective_bundle_key": objective_key or None,
+                    "objective_bundle_keys": objective_keys,
+                    "seed_objective_bundle_keys": objective_keys,
+                    "terms": target_terms,
+                    "target_terms": target_terms,
+                    "next_evidence_needed": "carrier_to_actuator_conversion_sweep",
+                    "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                    "carrier_to_actuator_conversion_sweep": True,
+                    "reason": (
+                        "one objective already confirmed gap-only and the current objective is a gap closer "
+                        "candidate without target mass/top20 lift; reserve the next diagnostic for conversion "
+                        "instead of spending it on a second confirmation"
+                    ),
+                    "permission": "diagnostic_only",
+                    "production_apply_allowed": False,
+                    "policy_candidate_ready": False,
+                }
+                conversion_request = {
+                    key: value
+                    for key, value in conversion_request.items()
+                    if value not in (None, "", [])
+                }
+                hints["carrier_to_actuator_conversion_sweep_recommended"] = True
+                hints["carrier_to_actuator_conversion_reason"] = (
+                    "one_confirmed_gap_only_plus_current_gap_closer_candidate"
+                )
+                hints["carrier_to_actuator_conversion_objective_count"] = len(objective_keys)
+                hints["carrier_to_actuator_conversion_canonical_request"] = conversion_request
+                hints["diagnostic_budget_reserved_for_conversion"] = True
+                hints["conversion_budget_reserve_reason"] = "skip_second_gap_confirmation_to_run_conversion"
+                hints["readout_gap_confirmation_skipped_for_conversion"] = True
+                hints["readout_gap_confirmation_skip_reason"] = (
+                    "one_confirmed_gap_only_plus_current_gap_closer_candidate"
+                )
+                hints["next_evidence_needed"] = "carrier_to_actuator_conversion_sweep"
+                hints["diagnostic_frontier_bundle_key"] = objective_key
+                hints["diagnostic_frontier_request"] = "carrier_to_actuator_conversion_sweep"
+                hints["diagnostic_frontier_next_evidence"] = "carrier_to_actuator_conversion_sweep"
+                hints["diagnostic_frontier_operator_recipe_expansion_mode"] = (
+                    "carrier_to_actuator_conversion_sweep"
+                )
+                hints["diagnostic_frontier_canonical_request"] = conversion_request
+                hints["diagnostic_frontier_reason_text"] = (
+                    "one objective is already confirmed gap-only and this objective is another gap-only candidate; "
+                    "skip the second confirmation and spend the reserved diagnostic on carrier-to-actuator conversion"
+                )
+                _add_available_next_diagnostic(
+                    conversion_request,
+                    reason="reserve diagnostic budget for carrier-to-actuator conversion instead of second gap confirmation",
+                    priority=2,
+                )
+            elif recommended_next_action == "request_readout_gap_confirmation_or_variant_sweep" and not gap_confirmation_seen:
                 confirmation_request = {
                     "diagnostic": "readout_gap_confirmation_or_variant_sweep",
                     "bundle_key": objective_key or None,
@@ -6726,6 +7141,18 @@ class HookedTransformerWorkerRuntime:
                     reason="gap closer candidate needs bounded confirmation/variant sweep before trial",
                     priority=4,
                 )
+        confirmed_gap_only_rows = self._confirmed_gap_only_objective_rows()
+        if confirmed_gap_only_rows:
+            confirmed_gap_only_terms = [
+                str(row.get("term") or "")
+                for row in confirmed_gap_only_rows
+                if str(row.get("term") or "")
+            ]
+            hints["confirmed_gap_only_objectives"] = confirmed_gap_only_rows[:6]
+            hints["confirmed_gap_only_terms"] = confirmed_gap_only_terms[:6]
+            hints["confirmed_gap_only_count"] = len(confirmed_gap_only_rows)
+            hints["objective_rotation_excluded_terms"] = confirmed_gap_only_terms[:6]
+            hints["objective_rotation_exclusion_reason"] = "confirmed_gap_only_no_target_lift"
         latest_gap_confirmation_review = next(
             (
                 result
@@ -6750,27 +7177,100 @@ class HookedTransformerWorkerRuntime:
                 ordered_missing_terms = self._feedback_terms(
                     ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
                 )
+                excluded_terms = {
+                    str(row.get("term") or "").lower()
+                    for row in confirmed_gap_only_rows
+                    if str(row.get("term") or "")
+                }
                 rotation_terms = [
                     term
                     for term in ordered_missing_terms
                     if term and (not current_term or str(term).lower() != current_term.lower())
+                    and str(term).lower() not in excluded_terms
                 ][:3]
                 latest_gap_step = int(latest_gap_confirmation_review.get("recorded_step", -1) or -1)
                 rotation_probe_consumed = any(
                     isinstance(result, Mapping)
-                    and str(result.get("diagnostic") or "") == "target_entity_insertion_probe"
+                    and str(result.get("diagnostic") or "") in {
+                        "target_entity_insertion_probe",
+                        "objective_rotation_pipeline",
+                        "carrier_to_actuator_conversion_sweep",
+                    }
                     and int(result.get("recorded_step", -1) or -1) > latest_gap_step
                     for result in self._diagnostic_results
                 )
-                if role == "gap_closer_candidate" and not trial_eligible and rotation_terms:
+                if role == "gap_closer_candidate" and not trial_eligible and len(confirmed_gap_only_rows) >= 2:
+                    objective_keys = [
+                        str(row.get("objective_bundle_key") or "")
+                        for row in confirmed_gap_only_rows
+                        if str(row.get("objective_bundle_key") or "")
+                    ][:3]
+                    conversion_request = {
+                        "diagnostic": "carrier_to_actuator_conversion_sweep",
+                        "objective_bundle_keys": objective_keys,
+                        "seed_objective_bundle_keys": objective_keys,
+                        "terms": [
+                            str(row.get("term") or "")
+                            for row in confirmed_gap_only_rows
+                            if str(row.get("term") or "")
+                        ][:3],
+                        "target_terms": [
+                            str(row.get("term") or "")
+                            for row in confirmed_gap_only_rows
+                            if str(row.get("term") or "")
+                        ][:3],
+                        "next_evidence_needed": "carrier_to_actuator_conversion_sweep",
+                        "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                        "carrier_to_actuator_conversion_sweep": True,
+                        "reason": (
+                            "multiple objectives confirmed gap-only movement without target mass/top20 lift; "
+                            "switch from term rotation to a strict carrier-to-actuator conversion sweep"
+                        ),
+                        "permission": "diagnostic_only",
+                        "production_apply_allowed": False,
+                    }
+                    conversion_request = {
+                        key: value
+                        for key, value in conversion_request.items()
+                        if value not in (None, "", [])
+                    }
+                    hints["carrier_to_actuator_conversion_sweep_recommended"] = True
+                    hints["carrier_to_actuator_conversion_reason"] = "multiple_confirmed_gap_only_no_target_lift"
+                    hints["carrier_to_actuator_conversion_objective_count"] = len(objective_keys)
+                    hints["carrier_to_actuator_conversion_canonical_request"] = conversion_request
+                    hints["next_evidence_needed"] = "carrier_to_actuator_conversion_sweep"
+                    hints["blocked_by"] = "all_rotation_candidates_gap_only_confirmed"
+                    if not rotation_probe_consumed:
+                        hints["diagnostic_frontier_request"] = "carrier_to_actuator_conversion_sweep"
+                        hints["diagnostic_frontier_next_evidence"] = "carrier_to_actuator_conversion_sweep"
+                        hints["diagnostic_frontier_operator_recipe_expansion_mode"] = (
+                            "carrier_to_actuator_conversion_sweep"
+                        )
+                        hints["diagnostic_frontier_canonical_request"] = conversion_request
+                        hints["diagnostic_frontier_reason_text"] = (
+                            "send/budget style objectives have confirmed gap movement but no target lift; "
+                            "run a strict carrier-to-actuator conversion sweep instead of rotating terms again"
+                        )
+                        _add_available_next_diagnostic(
+                            conversion_request,
+                            reason="multiple confirmed gap-only objectives need strict carrier-to-actuator conversion",
+                            priority=2,
+                        )
+                elif (
+                    role == "gap_closer_candidate"
+                    and not trial_eligible
+                    and rotation_terms
+                    and not bool(hints.get("diagnostic_budget_reserved_for_conversion", False))
+                ):
                     rotation_request = {
-                        "diagnostic": "target_entity_insertion_probe",
+                        "diagnostic": "objective_rotation_pipeline",
                         "terms": list(rotation_terms),
                         "target_terms": list(rotation_terms),
-                        "next_evidence_needed": "objective_rotation_target_entity_probe",
+                        "next_evidence_needed": "objective_rotation_pipeline",
+                        "objective_rotation_pipeline": True,
                         "reason": (
                             "confirmed gap movement did not become target mass/top20 lift; rotate objective terms "
-                            "instead of reusing the same gap closer"
+                            "and run probe/review/replay as a diagnostic-only pipeline"
                         ),
                         "permission": "diagnostic_only",
                         "production_apply_allowed": False,
@@ -6782,26 +7282,71 @@ class HookedTransformerWorkerRuntime:
                     hints["objective_rotation_candidates"] = [
                         {
                             "term": term,
-                            "diagnostic": "target_entity_insertion_probe",
-                            "next_evidence_needed": "objective_rotation_target_entity_probe",
+                            "diagnostic": "objective_rotation_pipeline",
+                            "next_evidence_needed": "objective_rotation_pipeline",
                         }
                         for term in rotation_terms
                     ]
                     hints["objective_rotation_canonical_request"] = rotation_request
+                    hints["objective_rotation_pipeline_recommended"] = True
                     hints["objective_rotation_probe_consumed"] = bool(rotation_probe_consumed)
                     if not rotation_probe_consumed:
-                        hints["diagnostic_frontier_request"] = "target_entity_insertion_probe"
-                        hints["diagnostic_frontier_next_evidence"] = "objective_rotation_target_entity_probe"
+                        hints["diagnostic_frontier_request"] = "objective_rotation_pipeline"
+                        hints["diagnostic_frontier_next_evidence"] = "objective_rotation_pipeline"
                         hints["diagnostic_frontier_canonical_request"] = rotation_request
                         hints["diagnostic_frontier_reason_text"] = (
                             "gap confirmation stayed diagnostic-only for the current term; rotate the target entity "
-                            "probe to other missing terms"
+                            "pipeline to other missing terms and bundle probe/review/replay without apply permission"
                         )
                         _add_available_next_diagnostic(
                             rotation_request,
-                            reason="gap confirmation did not produce target lift; rotate objective terms",
+                            reason="gap confirmation did not produce target lift; run objective rotation probe/review/replay pipeline",
                             priority=3,
                         )
+        latest_conversion_review = next(
+            (
+                result
+                for result in reversed(self._diagnostic_results)
+                if str(result.get("diagnostic") or "") == "carrier_to_actuator_conversion_sweep"
+                and isinstance(result.get("readout_deepening_review_summary"), Mapping)
+            ),
+            None,
+        )
+        if isinstance(latest_conversion_review, Mapping):
+            conversion_review = latest_conversion_review.get("readout_deepening_review_summary")
+            if isinstance(conversion_review, Mapping):
+                shift_status = str(conversion_review.get("operator_family_shift_status") or "")
+                canonical_request = conversion_review.get("operator_family_shift_canonical_request")
+                preview_rows = conversion_review.get("operator_family_shift_preview_rows")
+                if (
+                    shift_status == "needed_after_gap_carrier_conversion_failed"
+                    and isinstance(canonical_request, Mapping)
+                ):
+                    hints["operator_family_shift_status"] = shift_status
+                    hints["operator_family_shift_reason"] = conversion_review.get("operator_family_shift_reason")
+                    hints["operator_family_shift_preview_rows"] = [
+                        dict(row)
+                        for row in preview_rows[:6]
+                        if isinstance(row, Mapping)
+                    ] if isinstance(preview_rows, SequenceABC) and not isinstance(
+                        preview_rows, (str, bytes, bytearray)
+                    ) else []
+                    hints["operator_family_shift_canonical_request"] = dict(canonical_request)
+                    hints["operator_family_shift_recommended"] = True
+                    hints["next_evidence_needed"] = "non_kv_operator_search"
+                    hints["diagnostic_frontier_request"] = "compare_extra_operator_diagnostics"
+                    hints["diagnostic_frontier_next_evidence"] = "non_kv_operator_search"
+                    hints["diagnostic_frontier_operator_recipe_expansion_mode"] = "non_kv_operator_search"
+                    hints["diagnostic_frontier_canonical_request"] = dict(canonical_request)
+                    hints["diagnostic_frontier_reason_text"] = (
+                        "carrier-to-actuator conversion stayed carrier-only; inspect bounded non-KV operator "
+                        "families as diagnostic-only previews"
+                    )
+                    _add_available_next_diagnostic(
+                        canonical_request,
+                        reason="carrier conversion failed to produce target mass/top20 lift; inspect non-KV family shift previews",
+                        priority=2,
+                    )
         if self._operator_certification_table:
             hints["operator_certification_count"] = len(self._operator_certification_table)
             hints["operator_certification_families"] = [
@@ -7072,6 +7617,52 @@ class HookedTransformerWorkerRuntime:
                 hints["phase_policy"] = "Favor entity insertion and dry-run checks; avoid new loop-rescue edits unless looping returns."
         else:
             hints["phase_policy"] = "Prefer noop or monitoring unless fresh evidence justifies a small edit."
+        if diagnostic_budget_exhausted:
+            frontier_request = hints.get("diagnostic_frontier_canonical_request")
+            if isinstance(frontier_request, Mapping):
+                _block_next_diagnostic(
+                    frontier_request,
+                    reason="diagnostic_call_budget_exhausted",
+                    priority=1,
+                    status="diagnostic_budget_exhausted",
+                )
+            elif hints.get("diagnostic_frontier_request") not in (None, ""):
+                _block_next_diagnostic(
+                    {
+                        "diagnostic": hints.get("diagnostic_frontier_request"),
+                        "bundle_key": hints.get("diagnostic_frontier_bundle_key"),
+                        "objective_bundle_key": hints.get("diagnostic_frontier_bundle_key"),
+                        "next_evidence_needed": hints.get("diagnostic_frontier_next_evidence"),
+                        "operator_recipe_expansion_mode": hints.get(
+                            "diagnostic_frontier_operator_recipe_expansion_mode"
+                        ),
+                        "reason": hints.get("diagnostic_frontier_reason_text"),
+                    },
+                    reason="diagnostic_call_budget_exhausted",
+                    priority=1,
+                    status="diagnostic_budget_exhausted",
+                )
+            available = hints.pop("available_next_diagnostics", [])
+            if isinstance(available, SequenceABC) and not isinstance(available, (str, bytes, bytearray)):
+                for item in available:
+                    if not isinstance(item, Mapping):
+                        continue
+                    request = item.get("request") if isinstance(item.get("request"), Mapping) else item
+                    if isinstance(request, Mapping):
+                        _block_next_diagnostic(
+                            request,
+                            reason="diagnostic_call_budget_exhausted",
+                            priority=int(item.get("priority", 10) or 10),
+                            status="diagnostic_budget_exhausted",
+                        )
+            for key in (
+                "diagnostic_frontier_request",
+                "diagnostic_frontier_next_evidence",
+                "diagnostic_frontier_operator_recipe_expansion_mode",
+                "diagnostic_frontier_canonical_request",
+            ):
+                hints.pop(key, None)
+            hints["diagnostic_frontier_blocked_reason"] = "diagnostic_call_budget_exhausted"
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -10517,6 +11108,250 @@ class HookedTransformerWorkerRuntime:
                 break
         return rows
 
+    def _objective_rotation_pipeline_diagnostic(
+        self,
+        request: Mapping[str, Any],
+        *,
+        source: str,
+        packet: Mapping[str, Any] | None,
+        strategy_hints: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        requested_terms = request.get("terms") or request.get("target_terms")
+        if not (
+            isinstance(requested_terms, SequenceABC)
+            and not isinstance(requested_terms, (str, bytes, bytearray))
+        ):
+            candidates = strategy_hints.get("objective_rotation_candidates")
+            if isinstance(candidates, SequenceABC) and not isinstance(candidates, (str, bytes, bytearray)):
+                requested_terms = [
+                    item.get("term")
+                    for item in candidates
+                    if isinstance(item, Mapping) and item.get("term") not in (None, "")
+                ]
+        if not (
+            isinstance(requested_terms, SequenceABC)
+            and not isinstance(requested_terms, (str, bytes, bytearray))
+        ):
+            requested_terms = self._feedback_terms(
+                ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
+            )
+        terms: list[str] = []
+        for raw_term in requested_terms:
+            term = " ".join(str(raw_term).split()).strip()
+            if term and term not in terms:
+                terms.append(term)
+        if not terms:
+            return {
+                "diagnostic": "objective_rotation_pipeline",
+                "diagnostic_role": "objective_rotation_pipeline",
+                "status": "no_rotation_terms",
+                "source": str(source),
+                "recorded_step": int(getattr(self, "_steps", 0) or 0),
+                "pipeline_stages": [],
+                "pipeline_stage_count": 0,
+                "objective_rotation_pipeline": True,
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+                "operator_certified": False,
+                "next_evidence_needed": "monitor",
+                "why_not_apply": "objective rotation pipeline has no terms to diagnose",
+            }
+
+        rotation_slug = "_".join(
+            "".join(ch for ch in term.lower() if ch.isalnum()) or "term"
+            for term in terms[:4]
+        )
+        objective_bundle_key = str(
+            request.get("objective_bundle_key")
+            or request.get("bundle_key")
+            or f"entity_rotation:{rotation_slug}"
+        )
+        probe_request = {
+            "diagnostic": "target_entity_insertion_probe",
+            "terms": list(terms),
+            "target_terms": list(terms),
+            "next_evidence_needed": "objective_rotation_target_entity_probe",
+            "objective_rotation_pipeline": True,
+            "permission": "diagnostic_only",
+            "production_apply_allowed": False,
+        }
+        probe = self._target_entity_insertion_probe_diagnostic(
+            probe_request,
+            source=source,
+            strategy_hints=strategy_hints,
+        )
+        review = self._entity_insertion_operator_candidate_review_diagnostic(
+            {
+                "diagnostic": "entity_insertion_operator_candidate_review",
+                "target_entity_insertion_probe": probe,
+                "next_evidence_needed": "entity_insertion_operator_candidate_review_for_rotated_terms",
+                "objective_rotation_pipeline": True,
+                "permission": "diagnostic_only",
+                "production_apply_allowed": False,
+            },
+            source=source,
+            strategy_hints=strategy_hints,
+        )
+        candidate_blueprints = review.get("candidate_blueprints")
+        blueprint_count = int(review.get("candidate_blueprint_count", 0) or 0)
+        operator_result: dict[str, Any] | None = None
+        if (
+            blueprint_count > 0
+            and isinstance(candidate_blueprints, SequenceABC)
+            and not isinstance(candidate_blueprints, (str, bytes, bytearray))
+        ):
+            operator_request = {
+                "diagnostic": "operator_diagnostic_replay",
+                "bundle_key": objective_bundle_key,
+                "objective_bundle_key": objective_bundle_key,
+                "candidate_blueprints": [
+                    dict(item)
+                    for item in candidate_blueprints
+                    if isinstance(item, Mapping)
+                ],
+                "next_evidence_needed": "operator_diagnostic_replay_for_rotated_entity_candidates",
+                "materialize_entity_insertion_candidates": True,
+                "objective_rotation_pipeline": True,
+                "permission": "diagnostic_only",
+                "production_apply_allowed": False,
+            }
+            operator_result = self._execute_controller_diagnostic_request(
+                operator_request,
+                source=source,
+                packet=packet,
+            )
+
+        pipeline_stages = [
+            "target_entity_insertion_probe",
+            "entity_insertion_operator_candidate_review",
+        ]
+        if operator_result is not None:
+            pipeline_stages.append("operator_diagnostic_replay")
+
+        def _compact_stage(stage: Mapping[str, Any], keys: Sequence[str]) -> dict[str, Any]:
+            return {
+                key: stage.get(key)
+                for key in keys
+                if stage.get(key) not in (None, "", [])
+            }
+
+        probe_compact = _compact_stage(
+            probe,
+            (
+                "diagnostic",
+                "status",
+                "recorded_step",
+                "focus_terms",
+                "top20_reachable_count",
+                "near_reachable_count",
+                "source_body_span_count",
+                "next_evidence_needed",
+            ),
+        )
+        review_compact = _compact_stage(
+            review,
+            (
+                "diagnostic",
+                "status",
+                "recorded_step",
+                "focus_terms",
+                "candidate_terms",
+                "candidate_blueprint_count",
+                "next_evidence_needed",
+            ),
+        )
+        operator_compact = (
+            _compact_stage(
+                operator_result,
+                (
+                    "diagnostic",
+                    "status",
+                    "recorded_step",
+                    "entity_operator_materialization_status",
+                    "entity_operator_materialization_count",
+                    "next_evidence_needed",
+                    "canonical_followup_request",
+                    "diagnostic_summary",
+                    "entity_operator_deepening_plan",
+                    "positive_operator_deepening_plan",
+                ),
+            )
+            if isinstance(operator_result, Mapping)
+            else None
+        )
+
+        operator_status = (
+            str(operator_result.get("entity_operator_materialization_status") or operator_result.get("status") or "")
+            if isinstance(operator_result, Mapping)
+            else ""
+        )
+        status = (
+            "ok"
+            if isinstance(operator_result, Mapping) and operator_status not in {"", "no_rows", "no_candidate_blueprints"}
+            else str(review.get("status") or "no_candidate_blueprints")
+        )
+        next_evidence = (
+            str(operator_result.get("next_evidence_needed") or "")
+            if isinstance(operator_result, Mapping)
+            else str(review.get("next_evidence_needed") or "")
+        )
+        result: dict[str, Any] = {
+            "diagnostic": "objective_rotation_pipeline",
+            "diagnostic_role": "objective_rotation_pipeline",
+            "status": status,
+            "source": str(source),
+            "recorded_step": int(getattr(self, "_steps", 0) or 0),
+            "objective_rotation_pipeline": True,
+            "pipeline_terms": list(terms[:6]),
+            "focus_terms": list(terms[:6]),
+            "bundle_key": objective_bundle_key,
+            "objective_bundle_key": objective_bundle_key,
+            "pipeline_stages": pipeline_stages,
+            "pipeline_stage_count": len(pipeline_stages),
+            "target_entity_insertion_probe": probe_compact,
+            "entity_insertion_operator_candidate_review": review_compact,
+            "candidate_blueprint_count": blueprint_count,
+            "candidate_terms": [
+                str(term)
+                for term in review.get("candidate_terms", [])[:4]
+                if str(term)
+            ] if isinstance(review.get("candidate_terms"), SequenceABC) and not isinstance(
+                review.get("candidate_terms"), (str, bytes, bytearray)
+            ) else [],
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "operator_certified": False,
+            "production_operator_certified": False,
+            "policy_candidate_ready": False,
+            "next_evidence_needed": next_evidence or "target_entity_insertion_probe",
+            "why_not_apply": (
+                "objective rotation pipeline bundles probe/review/replay as diagnostic evidence only; "
+                "it does not grant production apply permission"
+            ),
+        }
+        if operator_compact is not None:
+            result["operator_diagnostic_replay"] = operator_compact
+        if isinstance(operator_result, Mapping):
+            for key in (
+                "entity_operator_materialization_requested",
+                "entity_operator_materialization_status",
+                "entity_operator_materialization_count",
+                "entity_operator_materialization_rows",
+                "entity_operator_deepening_plan",
+                "positive_operator_deepening_plan",
+                "canonical_followup_request",
+                "diagnostic_summary",
+                "evidence_rows",
+            ):
+                value = operator_result.get(key)
+                if value not in (None, "", []):
+                    result[key] = value
+            result["operator_diagnostic_replay_next_evidence"] = operator_result.get("next_evidence_needed")
+        else:
+            result["entity_operator_materialization_status"] = "no_candidate_blueprints"
+            result["entity_operator_materialization_count"] = 0
+        return result
+
     def _execute_controller_diagnostic_request(
         self,
         request: Mapping[str, Any],
@@ -10529,6 +11364,13 @@ class HookedTransformerWorkerRuntime:
             return None
         packet_context = packet if isinstance(packet, Mapping) else {}
         strategy_hints = packet_context.get("strategy_hints") if isinstance(packet_context.get("strategy_hints"), Mapping) else {}
+        if diagnostic_name == "objective_rotation_pipeline":
+            return self._objective_rotation_pipeline_diagnostic(
+                request,
+                source=source,
+                packet=packet_context,
+                strategy_hints=strategy_hints,
+            )
         if diagnostic_name == "target_entity_insertion_probe":
             return self._target_entity_insertion_probe_diagnostic(
                 request,
@@ -10584,13 +11426,19 @@ class HookedTransformerWorkerRuntime:
             if not isinstance(result, Mapping):
                 continue
             diagnostic_result_name = str(result.get("diagnostic") or "")
-            if diagnostic_result_name == "operator_diagnostic_replay":
+            if diagnostic_result_name in {"operator_diagnostic_replay", "objective_rotation_pipeline"}:
                 row_keys = ("evidence_rows", "entity_operator_materialization_rows")
             elif (
-                diagnostic_result_name == "compare_extra_operator_diagnostics"
+                diagnostic_result_name
+                in {
+                    "compare_extra_operator_diagnostics",
+                    "readout_gap_confirmation_or_variant_sweep",
+                    "carrier_to_actuator_conversion_sweep",
+                }
                 and str(result.get("operator_recipe_expansion_mode") or "") in {
                     "readout_steering_deepening",
                     "readout_gap_confirmation_or_variant_sweep",
+                    "carrier_to_actuator_conversion_sweep",
                 }
             ):
                 row_keys = ("evidence_rows", "operator_recipe_expansion_matrix")
@@ -10695,7 +11543,11 @@ class HookedTransformerWorkerRuntime:
             row for row in ledger_rows
             if evidence_kinds is None or str(row.get("evidence_kind", "") or "") in evidence_kinds
         ]
-        if diagnostic_name in {"compare_extra_operator_diagnostics", "readout_gap_confirmation_or_variant_sweep"}:
+        if diagnostic_name in {
+            "compare_extra_operator_diagnostics",
+            "readout_gap_confirmation_or_variant_sweep",
+            "carrier_to_actuator_conversion_sweep",
+        }:
             matching_rows = [
                 row for row in ledger_rows
                 if str(row.get("evidence_kind", "") or "") in {
@@ -10766,6 +11618,7 @@ class HookedTransformerWorkerRuntime:
         readout_steering_deepening_operator_rows: list[dict[str, Any]] = []
         readout_steering_deepening_already_replayed = False
         readout_gap_confirmation_already_replayed = False
+        carrier_to_actuator_conversion_already_replayed = False
         readout_deepening_seen_objective_keys = {
             str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
             for row in matching_rows
@@ -10796,10 +11649,15 @@ class HookedTransformerWorkerRuntime:
             if isinstance(summary, Mapping) and summary.get("objective_bundle_key") not in (None, ""):
                 readout_deepening_seen_objective_keys.add(str(summary.get("objective_bundle_key")))
         if (
-            diagnostic_name in {"compare_extra_operator_diagnostics", "readout_gap_confirmation_or_variant_sweep"}
+            diagnostic_name in {
+                "compare_extra_operator_diagnostics",
+                "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
+            }
             and str(request.get("operator_recipe_expansion_mode") or "") in {
                 "readout_steering_deepening",
                 "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
             }
         ):
             requested_objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
@@ -10826,6 +11684,19 @@ class HookedTransformerWorkerRuntime:
                 for row in matching_rows
                 if isinstance(row, Mapping)
             )
+            carrier_to_actuator_conversion_already_replayed = any(
+                (
+                    str(row.get("operator_axis") or "") == "carrier_to_actuator_conversion_sweep"
+                    or str(row.get("operator_recipe_expansion_mode") or "")
+                    == "carrier_to_actuator_conversion_sweep"
+                )
+                and (
+                    not requested_objective_key
+                    or str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == requested_objective_key
+                )
+                for row in matching_rows
+                if isinstance(row, Mapping)
+            )
             if (
                 (
                     expansion_mode == "readout_steering_deepening"
@@ -10835,20 +11706,63 @@ class HookedTransformerWorkerRuntime:
                     expansion_mode == "readout_gap_confirmation_or_variant_sweep"
                     and not readout_gap_confirmation_already_replayed
                 )
-            ):
-                readout_steering_deepening_operator_rows = self._readout_steering_deepening_operator_rows(
-                    request,
-                    matching_rows,
-                    packet_context=packet_context,
-                    max_followup_rows=4 if expansion_mode == "readout_gap_confirmation_or_variant_sweep" else 3,
-                    expansion_mode=expansion_mode,
+                or (
+                    expansion_mode == "carrier_to_actuator_conversion_sweep"
+                    and not carrier_to_actuator_conversion_already_replayed
                 )
+            ):
+                if expansion_mode == "carrier_to_actuator_conversion_sweep":
+                    raw_objective_keys = request.get("objective_bundle_keys") or request.get("seed_objective_bundle_keys")
+                    objective_keys = [
+                        str(item)
+                        for item in raw_objective_keys
+                        if str(item)
+                    ] if isinstance(raw_objective_keys, SequenceABC) and not isinstance(
+                        raw_objective_keys, (str, bytes, bytearray)
+                    ) else []
+                    if requested_objective_key and requested_objective_key not in objective_keys:
+                        objective_keys.insert(0, requested_objective_key)
+                    for objective_key in objective_keys[:3] or ([requested_objective_key] if requested_objective_key else []):
+                        already_for_objective = any(
+                            (
+                                str(row.get("operator_axis") or "") == "carrier_to_actuator_conversion_sweep"
+                                or str(row.get("operator_recipe_expansion_mode") or "")
+                                == "carrier_to_actuator_conversion_sweep"
+                            )
+                            and str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == objective_key
+                            for row in matching_rows
+                            if isinstance(row, Mapping)
+                        )
+                        if already_for_objective:
+                            continue
+                        sub_request = dict(request)
+                        sub_request["objective_bundle_key"] = objective_key
+                        sub_request["bundle_key"] = objective_key
+                        sub_request["step_actuator_bundle_key"] = objective_key
+                        sub_rows = self._readout_steering_deepening_operator_rows(
+                            sub_request,
+                            matching_rows,
+                            packet_context=packet_context,
+                            max_followup_rows=4,
+                            expansion_mode=expansion_mode,
+                        )
+                        if sub_rows:
+                            readout_steering_deepening_operator_rows.extend(sub_rows)
+                else:
+                    readout_steering_deepening_operator_rows = self._readout_steering_deepening_operator_rows(
+                        request,
+                        matching_rows,
+                        packet_context=packet_context,
+                        max_followup_rows=4 if expansion_mode == "readout_gap_confirmation_or_variant_sweep" else 3,
+                        expansion_mode=expansion_mode,
+                    )
                 if readout_steering_deepening_operator_rows:
                     matching_rows = [*matching_rows, *readout_steering_deepening_operator_rows]
         if diagnostic_name in {
             "operator_diagnostic_replay",
             "compare_extra_operator_diagnostics",
             "readout_gap_confirmation_or_variant_sweep",
+            "carrier_to_actuator_conversion_sweep",
             "cross_bundle_bridge_search",
             "activation_patch_candidate_review",
             "activation_patch_runtime_support_probe",
@@ -11397,7 +12311,11 @@ class HookedTransformerWorkerRuntime:
 
         def _post_bridge_exhaustion_recipe_expansion_report() -> dict[str, Any] | None:
             expansion_mode = str(request.get("operator_recipe_expansion_mode") or "")
-            readout_review_modes = {"readout_steering_deepening", "readout_gap_confirmation_or_variant_sweep"}
+            readout_review_modes = {
+                "readout_steering_deepening",
+                "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
+            }
             if expansion_mode not in {"post_bridge_exhaustion", *readout_review_modes}:
                 return None
             objective_key = str(request.get("objective_bundle_key") or bundle_key or "")
@@ -11413,6 +12331,8 @@ class HookedTransformerWorkerRuntime:
                     empty_status = (
                         "no_readout_gap_confirmation_rows"
                         if expansion_mode == "readout_gap_confirmation_or_variant_sweep"
+                        else "no_carrier_to_actuator_conversion_rows"
+                        if expansion_mode == "carrier_to_actuator_conversion_sweep"
                         else "no_readout_steering_rows"
                     )
                     summary = {
@@ -11592,6 +12512,10 @@ class HookedTransformerWorkerRuntime:
                         "readout_gap_closer_axis": row.get("readout_gap_closer_axis"),
                         "readout_deepening_followup": bool(row.get("readout_deepening_followup", False)),
                         "readout_gap_confirmation_variant": bool(row.get("readout_gap_confirmation_variant", False)),
+                        "carrier_to_actuator_conversion_variant": bool(
+                            row.get("carrier_to_actuator_conversion_variant", False)
+                        ),
+                        "carrier_to_actuator_success_criteria": row.get("carrier_to_actuator_success_criteria"),
                         "source_deepening_seed_recipe_name": row.get("source_deepening_seed_recipe_name"),
                         "source_deepening_seed_operator_recipe_id": row.get(
                             "source_deepening_seed_operator_recipe_id"
@@ -12394,19 +13318,27 @@ class HookedTransformerWorkerRuntime:
         )
         readout_steering_next_evidence: str | None = None
         if (
-            diagnostic_name in {"compare_extra_operator_diagnostics", "readout_gap_confirmation_or_variant_sweep"}
+            diagnostic_name in {
+                "compare_extra_operator_diagnostics",
+                "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
+            }
             and str(request.get("operator_recipe_expansion_mode") or "") in {
                 "readout_steering_deepening",
                 "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
             }
             and (
                 readout_steering_deepening_operator_rows
                 or readout_steering_deepening_already_replayed
                 or readout_gap_confirmation_already_replayed
+                or carrier_to_actuator_conversion_already_replayed
             )
         ):
             readout_steering_next_evidence = (
-                "readout_gap_confirmation_review_complete"
+                "carrier_to_actuator_conversion_review_complete"
+                if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
+                else "readout_gap_confirmation_review_complete"
                 if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
                 else "readout_steering_deepening_review_complete"
             )
@@ -12439,6 +13371,9 @@ class HookedTransformerWorkerRuntime:
             gap_delta_raw = expansion_summary.get("best_readout_gap_closer_target_top20_threshold_gap_delta")
             gap_delta = _coerce_float(gap_delta_raw, default=0.0)
             gap_moved = gap_delta_raw is not None and gap_delta < 0.0
+            conversion_mode = str(request.get("operator_recipe_expansion_mode") or "") == (
+                "carrier_to_actuator_conversion_sweep"
+            )
             has_target_actuator = bool(
                 expansion_summary.get("best_target_actuator_recipe_name")
                 or expansion_summary.get("best_target_actuator_recipe_family")
@@ -12456,10 +13391,18 @@ class HookedTransformerWorkerRuntime:
                 recommended_next_evidence = "activation_patch_production_trial_gate_review"
                 why_not_trial = None
             elif gap_moved:
-                best_candidate_role = "gap_closer_candidate"
-                recommended_next_action = "request_readout_gap_confirmation_or_variant_sweep"
-                recommended_next_evidence = "readout_gap_confirmation_or_variant_sweep"
-                why_not_trial = "gap moved, but target_mass/top20 lift is still uncertified"
+                if conversion_mode:
+                    best_candidate_role = "carrier_only_no_target_actuator"
+                    recommended_next_action = "request_non_kv_operator_search"
+                    recommended_next_evidence = "operator_family_shift_after_gap_carrier_conversion_failed"
+                    why_not_trial = (
+                        "conversion sweep moved gap/rank evidence but still did not lift target_mass/top20"
+                    )
+                else:
+                    best_candidate_role = "gap_closer_candidate"
+                    recommended_next_action = "request_readout_gap_confirmation_or_variant_sweep"
+                    recommended_next_evidence = "readout_gap_confirmation_or_variant_sweep"
+                    why_not_trial = "gap moved, but target_mass/top20 lift is still uncertified"
             elif expansion_summary.get("best_rank_carrier_recipe_name") or expansion_summary.get(
                 "best_readout_steering_rank_carrier_recipe_name"
             ):
@@ -12472,7 +13415,39 @@ class HookedTransformerWorkerRuntime:
                 recommended_next_action = "request_compare_extra_operator_diagnostics"
                 recommended_next_evidence = "operator_family_shift"
                 why_not_trial = "no safe target, gap, or rank carrier candidate was identified"
-            return {
+            operator_family_shift_preview_rows: list[dict[str, Any]] = []
+            operator_family_shift_canonical_request: dict[str, Any] | None = None
+            operator_family_shift_status = None
+            operator_family_shift_reason = None
+            if best_candidate_role == "carrier_only_no_target_actuator":
+                seed_recipe_id = str(
+                    expansion_summary.get("best_readout_gap_closer_operator_recipe_id")
+                    or expansion_summary.get("best_nonharmful_operator_recipe_id")
+                    or ""
+                )
+                seed_recipe_family = str(
+                    expansion_summary.get("best_readout_gap_closer_recipe_family")
+                    or expansion_summary.get("best_nonharmful_recipe_family")
+                    or ""
+                )
+                objective_term = self._term_from_bundle_key(objective_key)
+                operator_family_shift_preview_rows = self._operator_family_shift_preview_rows(
+                    objective_bundle_key=objective_key,
+                    objective_term=objective_term,
+                    seed_recipe_id=seed_recipe_id,
+                    seed_recipe_family=seed_recipe_family,
+                )
+                operator_family_shift_canonical_request = self._operator_family_shift_canonical_request(
+                    objective_bundle_key=objective_key,
+                    objective_term=objective_term,
+                    seed_recipe_id=seed_recipe_id,
+                    seed_recipe_family=seed_recipe_family,
+                )
+                operator_family_shift_status = "needed_after_gap_carrier_conversion_failed"
+                operator_family_shift_reason = (
+                    "conversion variants were carrier-only with no target mass/top20 lift"
+                )
+            summary = {
                 "readout_deepening_review_status": "complete",
                 "objective_bundle_key": objective_key or None,
                 "best_candidate_role": best_candidate_role,
@@ -12496,9 +13471,21 @@ class HookedTransformerWorkerRuntime:
                 "recommended_operator_recipe_expansion_mode": (
                     "readout_gap_confirmation_or_variant_sweep"
                     if recommended_next_action == "request_readout_gap_confirmation_or_variant_sweep"
+                    else "carrier_to_actuator_conversion_sweep"
+                    if recommended_next_evidence == "carrier_to_actuator_conversion_sweep"
                     else None
                 ),
             }
+            if operator_family_shift_status:
+                summary.update(
+                    {
+                        "operator_family_shift_status": operator_family_shift_status,
+                        "operator_family_shift_reason": operator_family_shift_reason,
+                        "operator_family_shift_preview_rows": operator_family_shift_preview_rows,
+                        "operator_family_shift_canonical_request": operator_family_shift_canonical_request,
+                    }
+                )
+            return summary
 
         readout_deepening_review_summary = _readout_deepening_review_summary()
         canonical_followup_request: dict[str, Any] | None = None
@@ -12538,6 +13525,37 @@ class HookedTransformerWorkerRuntime:
                 for key, value in canonical_followup_request.items()
                 if value not in (None, "", [])
             }
+        non_kv_operator_search_requested = bool(
+            diagnostic_name == "compare_extra_operator_diagnostics"
+            and (
+                str(request.get("operator_recipe_expansion_mode") or "") == "non_kv_operator_search"
+                or str(request.get("next_evidence_needed") or "") == "non_kv_operator_search"
+                or bool(request.get("operator_family_shift_requested", False))
+            )
+        )
+        non_kv_operator_search_preview_rows = (
+            [
+                dict(row)
+                for row in request.get("operator_family_shift_preview_rows", [])
+                if isinstance(row, Mapping)
+            ]
+            if isinstance(request.get("operator_family_shift_preview_rows"), SequenceABC)
+            and not isinstance(request.get("operator_family_shift_preview_rows"), (str, bytes, bytearray))
+            else []
+        )
+        if non_kv_operator_search_requested and not non_kv_operator_search_preview_rows:
+            request_objective_key = str(request.get("objective_bundle_key") or bundle_key or "")
+            non_kv_operator_search_preview_rows = self._operator_family_shift_preview_rows(
+                objective_bundle_key=request_objective_key,
+                objective_term=self._term_from_bundle_key(request_objective_key),
+                seed_recipe_id=str(request.get("seed_operator_recipe_id") or ""),
+                seed_recipe_family=str(request.get("seed_recipe_family") or ""),
+            )
+        non_kv_operator_search_next_evidence = (
+            "non_kv_operator_search_preview_complete"
+            if non_kv_operator_search_requested
+            else None
+        )
 
         result = {
             "diagnostic": diagnostic_name,
@@ -12547,7 +13565,7 @@ class HookedTransformerWorkerRuntime:
                 else "no_cached_evidence"
                 if cache_backed_without_rows
                 else "ok"
-                if matching_rows or bundle_status
+                if matching_rows or bundle_status or non_kv_operator_search_preview_rows
                 else "no_cached_evidence"
             ),
             "requested_by": str(source),
@@ -12568,6 +13586,8 @@ class HookedTransformerWorkerRuntime:
                 if diagnostic_name == "cross_bundle_bridge_search" and isinstance(cross_bundle_bridge_search, Mapping)
                 else readout_steering_next_evidence
                 if readout_steering_next_evidence
+                else non_kv_operator_search_next_evidence
+                if non_kv_operator_search_next_evidence
                 else post_bridge_recipe_expansion.get("next_evidence_needed")
                 if isinstance(post_bridge_recipe_expansion, Mapping)
                 else entity_operator_next_evidence
@@ -12583,6 +13603,44 @@ class HookedTransformerWorkerRuntime:
             or strategy_hints.get("diagnostic_frontier_next_evidence"),
             "diagnostic_request_reason": request.get("reason") or strategy_hints.get("diagnostic_frontier_reason_text"),
             "operator_recipe_expansion_mode": request.get("operator_recipe_expansion_mode"),
+            "non_kv_operator_search_requested": bool(non_kv_operator_search_requested),
+            "operator_family_shift_status": (
+                readout_deepening_review_summary.get("operator_family_shift_status")
+                if isinstance(readout_deepening_review_summary, Mapping)
+                and readout_deepening_review_summary.get("operator_family_shift_status") not in (None, "")
+                else
+                "preview_ready"
+                if non_kv_operator_search_preview_rows
+                else None
+            ),
+            "operator_family_shift_reason": (
+                readout_deepening_review_summary.get("operator_family_shift_reason")
+                if isinstance(readout_deepening_review_summary, Mapping)
+                and readout_deepening_review_summary.get("operator_family_shift_reason") not in (None, "")
+                else
+                request.get("reason")
+                if non_kv_operator_search_preview_rows
+                else None
+            ),
+            "operator_family_shift_preview_rows": (
+                list(readout_deepening_review_summary.get("operator_family_shift_preview_rows", []))
+                if isinstance(readout_deepening_review_summary, Mapping)
+                and isinstance(readout_deepening_review_summary.get("operator_family_shift_preview_rows"), SequenceABC)
+                and not isinstance(
+                    readout_deepening_review_summary.get("operator_family_shift_preview_rows"),
+                    (str, bytes, bytearray),
+                )
+                else non_kv_operator_search_preview_rows
+            ),
+            "operator_family_shift_canonical_request": (
+                dict(readout_deepening_review_summary.get("operator_family_shift_canonical_request"))
+                if isinstance(readout_deepening_review_summary, Mapping)
+                and isinstance(readout_deepening_review_summary.get("operator_family_shift_canonical_request"), Mapping)
+                else
+                dict(request)
+                if non_kv_operator_search_requested
+                else None
+            ),
             "diagnostic_unavailable_veto": bool(diagnostic_unavailable_veto),
             "diagnostic_unavailable_reason": (
                 "requires_cached_attention_rows"
@@ -12622,7 +13680,9 @@ class HookedTransformerWorkerRuntime:
                 if readout_steering_deepening_operator_rows
                 else "already_replayed"
                 if (
-                    readout_gap_confirmation_already_replayed
+                    carrier_to_actuator_conversion_already_replayed
+                    if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
+                    else readout_gap_confirmation_already_replayed
                     if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
                     else readout_steering_deepening_already_replayed
                 )
@@ -12630,12 +13690,18 @@ class HookedTransformerWorkerRuntime:
                 if str(request.get("operator_recipe_expansion_mode") or "") not in {
                     "readout_steering_deepening",
                     "readout_gap_confirmation_or_variant_sweep",
+                    "carrier_to_actuator_conversion_sweep",
                 }
                 else "no_seed_or_already_replayed"
             ),
             "readout_gap_confirmation_variant_count": (
                 len(readout_steering_deepening_operator_rows)
                 if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
+                else 0
+            ),
+            "carrier_to_actuator_conversion_variant_count": (
+                len(readout_steering_deepening_operator_rows)
+                if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                 else 0
             ),
             "entity_operator_materialization_rows": [
@@ -12960,7 +14026,9 @@ class HookedTransformerWorkerRuntime:
                     if readout_steering_deepening_operator_rows
                     else "already_replayed"
                     if (
-                        readout_gap_confirmation_already_replayed
+                        carrier_to_actuator_conversion_already_replayed
+                        if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
+                        else readout_gap_confirmation_already_replayed
                         if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
                         else readout_steering_deepening_already_replayed
                     )
@@ -12968,12 +14036,18 @@ class HookedTransformerWorkerRuntime:
                     if str(request.get("operator_recipe_expansion_mode") or "") not in {
                         "readout_steering_deepening",
                         "readout_gap_confirmation_or_variant_sweep",
+                        "carrier_to_actuator_conversion_sweep",
                     }
                     else "no_seed_or_already_replayed"
                 ),
                 "readout_gap_confirmation_variant_count": (
                     len(readout_steering_deepening_operator_rows)
                     if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
+                    else 0
+                ),
+                "carrier_to_actuator_conversion_variant_count": (
+                    len(readout_steering_deepening_operator_rows)
+                    if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                     else 0
                 ),
                 "readout_steering_next_evidence": readout_steering_next_evidence,
@@ -13253,6 +14327,8 @@ class HookedTransformerWorkerRuntime:
                         "readout_gap_closer_recipe",
                         "readout_gap_closer_axis",
                         "readout_gap_confirmation_variant",
+                        "carrier_to_actuator_conversion_variant",
+                        "carrier_to_actuator_success_criteria",
                         "readout_steering_kind",
                         "executable_diagnostic",
                         "attention_probe_source",
@@ -13333,6 +14409,11 @@ class HookedTransformerWorkerRuntime:
             )
             result["certified_for_apply"] = False
             result["production_apply_allowed"] = False
+        elif diagnostic_name == "carrier_to_actuator_conversion_sweep":
+            result["diagnostic_role"] = "carrier_to_actuator_conversion_sweep"
+            result["certified_for_apply"] = False
+            result["production_apply_allowed"] = False
+            result["production_operator_certified"] = False
         elif diagnostic_name == "cross_bundle_bridge_search":
             result["diagnostic_role"] = "cross_bundle_bridge_search"
             result["status"] = (
@@ -15639,7 +16720,14 @@ class HookedTransformerWorkerRuntime:
         if not objective_key:
             return []
         confirmation_mode = str(expansion_mode) == "readout_gap_confirmation_or_variant_sweep"
-        target_axis = "readout_gap_confirmation_variant_sweep" if confirmation_mode else "readout_steering_deepening"
+        conversion_mode = str(expansion_mode) == "carrier_to_actuator_conversion_sweep"
+        target_axis = (
+            "carrier_to_actuator_conversion_sweep"
+            if conversion_mode
+            else "readout_gap_confirmation_variant_sweep"
+            if confirmation_mode
+            else "readout_steering_deepening"
+        )
         existing_target_axis = [
             row
             for row in seed_rows
@@ -15841,6 +16929,41 @@ class HookedTransformerWorkerRuntime:
                     "alpha": 0.03,
                 },
             ]
+        elif conversion_mode:
+            followup_specs = [
+                {
+                    "recipe_name": "carrier_convert_target_pure_a080",
+                    "steering_kind": "target_readout",
+                    "contrast_mode": "target_readout_pure",
+                    "negative_terms": (),
+                    "negative_scale": 0.0,
+                    "alpha": 0.08,
+                },
+                {
+                    "recipe_name": "carrier_convert_target_l025_a080",
+                    "steering_kind": "target_readout",
+                    "contrast_mode": "target_readout_minus_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.025,
+                    "alpha": 0.08,
+                },
+                {
+                    "recipe_name": "carrier_convert_target_l050_a080",
+                    "steering_kind": "target_readout",
+                    "contrast_mode": "target_readout_minus_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.05,
+                    "alpha": 0.08,
+                },
+                {
+                    "recipe_name": "carrier_convert_attractor_suppress_l100_a040",
+                    "steering_kind": "attractor_suppression",
+                    "contrast_mode": "suppress_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.1,
+                    "alpha": 0.04,
+                },
+            ]
 
         rows: list[dict[str, Any]] = []
         seen_recipe_names: set[str] = {
@@ -15891,6 +17014,8 @@ class HookedTransformerWorkerRuntime:
                 candidate["operator_recipe_expansion_mode"] = str(expansion_mode)
                 if confirmation_mode:
                     candidate["readout_gap_confirmation_variant"] = True
+                if conversion_mode:
+                    candidate["carrier_to_actuator_conversion_variant"] = True
                 try:
                     replay = self.replay_candidate_edits_actual_delta(
                         [candidate],
@@ -15977,10 +17102,15 @@ class HookedTransformerWorkerRuntime:
                 positive_traits: list[str] = []
                 if direct_target_effect:
                     positive_traits.extend(["target_reachable", "rank_to_mass_convertible"])
+                    if conversion_mode:
+                        positive_traits.append("carrier_to_actuator_converted")
                 gap_delta = replay.get("target_top20_threshold_gap_delta")
                 if (
+                    not conversion_mode
+                    and (
                     actual_delta_class == "readout_gap_movement"
                     or (gap_delta is not None and _as_float(gap_delta, 0.0) < -0.01)
+                    )
                 ):
                     positive_traits.append("top20_gap_closer_candidate")
                 elif replay.get("target_top20_threshold_gap") is not None:
@@ -16023,6 +17153,9 @@ class HookedTransformerWorkerRuntime:
                         "operator_recipe_id": candidate.get("operator_recipe_id"),
                         "operator_family_key": candidate.get("operator_family_key"),
                         "recipe_family": (
+                            "readout_steering|carrier_to_actuator_conversion"
+                            if conversion_mode
+                            else
                             "readout_steering|target_readout_gap_confirmation"
                             if confirmation_mode
                             else "readout_steering|target_readout_deepening"
@@ -16032,6 +17165,10 @@ class HookedTransformerWorkerRuntime:
                         "readout_gap_closer_axis": "target_top20_gap",
                         "readout_deepening_followup": True,
                         "readout_gap_confirmation_variant": bool(confirmation_mode),
+                        "carrier_to_actuator_conversion_variant": bool(conversion_mode),
+                        "carrier_to_actuator_success_criteria": "target_mass_delta>tau_or_target_top20_hit_delta>0"
+                        if conversion_mode
+                        else None,
                         "readout_only_replay": True,
                         "source_deepening_seed_recipe_name": seed.get("recipe_name"),
                         "source_deepening_seed_operator_recipe_id": seed.get("operator_recipe_id"),

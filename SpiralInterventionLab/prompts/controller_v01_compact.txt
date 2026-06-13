@@ -17,7 +17,10 @@ What matters most:
 - rank_carrier != target_actuator. A rank/gap move can justify deeper diagnostics but not production apply.
 - self_rank_carrier / top20_gap_closer_candidate means visibility is improving; it is still diagnostic-only unless target mass or top20 lift is certified.
 - If readout_deepening_review_status=complete, do not request the same readout_steering_deepening again; follow readout_deepening_review_summary.recommended_next_action.
-- If objective_rotation_needed=true and objective_rotation_probe_consumed is not true, use objective_rotation_canonical_request or request_target_entity_insertion_probe for the listed terms; after it is consumed, request/review the rotated entity candidates instead of repeating the probe.
+- If objective_rotation_needed=true and objective_rotation_probe_consumed is not true, use objective_rotation_canonical_request or request_objective_rotation_pipeline for the listed terms. This bundles target_entity_insertion_probe -> candidate_review -> operator_diagnostic_replay as diagnostic-only evidence; after it is consumed, follow the resulting next evidence instead of repeating the pipeline.
+- If carrier_to_actuator_conversion_sweep_recommended=true or diagnostic_budget_reserved_for_conversion=true, stop spending diagnostics on another gap confirmation and copy carrier_to_actuator_conversion_canonical_request. This can happen after one confirmed gap-only objective plus a new gap_closer_candidate; it is strict diagnostic-only conversion testing, and target_mass/top20 lift is required for any later trial.
+- If operator_family_shift_status=needed_after_gap_carrier_conversion_failed or operator_family_shift_recommended=true, copy operator_family_shift_canonical_request / request_non_kv_operator_search. Treat operator_family_shift_preview_rows as diagnostic-only search scaffolds, not apply permission.
+- If diagnostic_budget_exhausted=true, do not request diagnostics even if a frontier is visible; use blocked_next_diagnostics as the explanation and choose noop/stop.
 - If rotated_entity_operator_deepening_recommended=true or diagnostic_budget_reserved_for_rotation=true, copy diagnostic_frontier_canonical_request first; do not spend that reserved diagnostic budget on unrelated attention/SAE/operator probes.
 - harmful, regressing, collapse_sharpener, or recent harmful family means veto/rollback/noop, not escalation.
 
@@ -41,14 +44,17 @@ Phase policy:
 
 Allowed next_action labels:
 wait, noop, apply, rollback, request_observer_check, request_operator_diagnostic, request_target_entity_insertion_probe,
-request_entity_insertion_operator_candidate_review, request_attention_readout_carrier_probe, request_attention_head_ablation,
+request_entity_insertion_operator_candidate_review, request_objective_rotation_pipeline,
+request_carrier_to_actuator_conversion_sweep,
+request_attention_readout_carrier_probe, request_attention_head_ablation,
 request_sae_feature_scan, request_compare_extra_operator_diagnostics, request_non_kv_operator_search,
 request_activation_patch_candidate_review, request_activation_patch_runtime_support_probe,
 request_activation_patch_promotion_gate_review, request_activation_patch_production_shadow_replay,
 request_activation_patch_production_trial_gate_review, request_readout_gap_confirmation_or_variant_sweep, stop.
 
 Allowed diagnostic_request labels:
-operator_diagnostic_replay, target_entity_insertion_probe, entity_insertion_operator_candidate_review,
+operator_diagnostic_replay, target_entity_insertion_probe, entity_insertion_operator_candidate_review, objective_rotation_pipeline,
+carrier_to_actuator_conversion_sweep,
 attention_readout_carrier_probe, attention_head_ablation_on_frontier, readout_logit_adjacent_probe,
 sae_feature_emitter_scan, compare_extra_operator_diagnostics, activation_patch_candidate_review,
 activation_patch_runtime_support_probe, activation_patch_promotion_gate_review,
@@ -76,3 +82,5 @@ Micro examples:
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"production_trial_followup","micro_rationale":"Trial outcome needs confirmation before production policy review.","blocked_by":"production_trial_not_confirmed","next_evidence_needed":"confirmation_replay_or_alternate_recipe","next_action":"request_compare_extra_operator_diagnostics","diagnostic_request":"compare_extra_operator_diagnostics","why_not_apply":"production trial evidence is not broad production apply permission"}}
 
 {"version":"0.1","decision":"noop","meta":{"hypothesis":"gap_closer_candidate_not_target_actuator","micro_rationale":"Gap moved, but target mass/top20 lift is uncertified.","blocked_by":"gap_closer_without_target_lift","next_evidence_needed":"readout_gap_confirmation_or_variant_sweep","next_action":"request_readout_gap_confirmation_or_variant_sweep","diagnostic_request":"readout_gap_confirmation_or_variant_sweep","why_not_apply":"gap closer is a candidate for confirmation, not production permission"}}
+
+{"version":"0.1","decision":"noop","meta":{"hypothesis":"carrier_to_actuator_conversion_needed","micro_rationale":"Multiple objectives are gap-only; switch from term rotation to conversion testing.","blocked_by":"confirmed_gap_only_no_target_lift","next_evidence_needed":"carrier_to_actuator_conversion_sweep","next_action":"request_carrier_to_actuator_conversion_sweep","diagnostic_request":"carrier_to_actuator_conversion_sweep","why_not_apply":"gap carriers are not target actuators until mass/top20 lift is certified"}}
