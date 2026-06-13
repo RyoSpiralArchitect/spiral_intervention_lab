@@ -18,9 +18,15 @@ def load_prompt_asset(asset_name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _payload_for_provider(packet: Any) -> Any:
+_COMPACT_PACKET_VIEWS = {"full", "compact"}
+
+
+def _payload_for_provider(packet: Any, *, packet_view: str = "full") -> Any:
     if is_dataclass(packet):
-        return asdict(packet)
+        packet = asdict(packet)
+    normalized_view = str(packet_view or "full").strip().lower().replace("-", "_")
+    if normalized_view == "compact":
+        return _compact_controller_payload(packet)
     return packet
 
 
@@ -36,6 +42,14 @@ def _stable_text(value: Any) -> str:
 def _stable_hash(value: Any) -> str:
     text = _stable_text(value)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _serialized_char_count(value: Any) -> int:
+    return len(_stable_text(value))
+
+
+def _rough_token_estimate_from_chars(char_count: int) -> int:
+    return max(1, (max(0, int(char_count)) + 3) // 4)
 
 
 def _truncate_text(text: Any, limit: int = 240) -> str:
@@ -58,6 +72,50 @@ def _json_ready(value: Any) -> Any:
         return str(value)
 
 
+def _bounded_json(
+    value: Any,
+    *,
+    max_depth: int = 4,
+    max_items: int = 8,
+    max_string: int = 320,
+) -> Any:
+    if max_depth <= 0:
+        if isinstance(value, Mapping):
+            return {"__truncated__": "mapping", "key_count": len(value)}
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return {"__truncated__": "sequence", "item_count": len(value)}
+        return _truncate_text(value, max_string)
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    if isinstance(value, str):
+        return _truncate_text(value, max_string)
+    if isinstance(value, Mapping):
+        items = list(value.items())
+        compact: dict[str, Any] = {}
+        for key, item in items[:max_items]:
+            compact[str(key)] = _bounded_json(
+                item,
+                max_depth=max_depth - 1,
+                max_items=max_items,
+                max_string=max_string,
+            )
+        omitted = len(items) - len(compact)
+        if omitted > 0:
+            compact["__omitted_key_count"] = omitted
+        return compact
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        items = list(value)
+        compact_items = [
+            _bounded_json(item, max_depth=max_depth - 1, max_items=max_items, max_string=max_string)
+            for item in items[:max_items]
+        ]
+        omitted = len(items) - len(compact_items)
+        if omitted > 0:
+            compact_items.append({"__omitted_item_count": omitted})
+        return compact_items
+    return _truncate_text(value, max_string)
+
+
 def _list_of_ids(items: Any, key: str) -> list[str]:
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
         return []
@@ -68,6 +126,256 @@ def _list_of_ids(items: Any, key: str) -> list[str]:
             if value is not None:
                 values.append(str(value))
     return values
+
+
+def _compact_surface_catalog(items: Any, *, limit: int = 20) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    compact: list[dict[str, Any]] = []
+    for item in list(items)[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        row: dict[str, Any] = {
+            key: _bounded_json(item.get(key), max_depth=3, max_items=8, max_string=160)
+            for key in ("surface_id", "target", "caps", "allowed_ops", "notes")
+            if item.get(key) not in (None, "", [])
+        }
+        if row:
+            compact.append(row)
+    omitted = len(items) - len(compact)
+    if omitted > 0:
+        compact.append({"__omitted_surface_count": omitted})
+    return compact
+
+
+def _compact_probe_frames(items: Any, *, limit: int = 12) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    frames: list[dict[str, Any]] = []
+    for item in list(items)[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        row: dict[str, Any] = {}
+        if item.get("surface_id") not in (None, ""):
+            row["surface_id"] = item.get("surface_id")
+        stats = item.get("stats")
+        if isinstance(stats, Mapping):
+            row["stats"] = {
+                key: stats.get(key)
+                for key in (
+                    "norm",
+                    "delta_prev",
+                    "cache_drift",
+                    "cosine_to_best_success",
+                    "cosine_to_last_success",
+                    "cosine_to_paired_baseline",
+                )
+                if stats.get(key) is not None
+            }
+        if row:
+            frames.append(row)
+    omitted = len(items) - len(frames)
+    if omitted > 0:
+        frames.append({"__omitted_probe_frame_count": omitted})
+    return frames
+
+
+def _compact_trace_bank(items: Any, *, limit: int = 6) -> list[dict[str, Any]]:
+    if not isinstance(items, Sequence) or isinstance(items, (str, bytes, bytearray)):
+        return []
+    traces: list[dict[str, Any]] = []
+    for item in list(items)[:limit]:
+        if not isinstance(item, Mapping):
+            continue
+        row = {
+            key: item.get(key)
+            for key in ("trace_id", "kind", "score", "partial_score", "label", "recorded_step")
+            if item.get(key) not in (None, "", [])
+        }
+        if row:
+            traces.append(row)
+    omitted = len(items) - len(traces)
+    if omitted > 0:
+        traces.append({"__omitted_trace_count": omitted})
+    return traces
+
+
+_STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
+    "selected_bundle_key",
+    "controller_focus_term",
+    "controller_focus_source",
+    "semantic_focus_term",
+    "reachable_focus_term",
+    "reachable_focus_rank",
+    "target_mass",
+    "target_top20_hits",
+    "attractor_family_mass",
+    "attractor_family_overlap_tokens",
+    "readout_escape_needed",
+    "readout_escape_reason",
+    "readout_escape_block_reason",
+    "diagnostic_frontier_bundle_key",
+    "diagnostic_frontier_next_evidence",
+    "diagnostic_frontier_request",
+    "diagnostic_frontier_operator_recipe_expansion_mode",
+    "diagnostic_frontier_canonical_request",
+    "diagnostic_frontier_blocked_reason",
+    "diagnostic_call_budget_left",
+    "diagnostic_budget_exhausted",
+    "diagnostic_budget_block_reason",
+    "available_next_diagnostics",
+    "blocked_next_diagnostics",
+    "diagnostic_unavailable_vetoes",
+    "diagnostic_unavailable_veto_count",
+    "diagnostic_frontier_reason_text",
+    "target_entity_insertion_probe_recommended",
+    "entity_insertion_operator_candidate_review_recommended",
+    "entity_insertion_operator_replay_recommended",
+    "entity_insertion_operator_deepening_recommended",
+    "bridge_plan_available",
+    "bridge_plan_required",
+    "bridge_plan_report",
+    "bridge_plan_objective_bundle_key",
+    "bridge_plan_actuator_bundle_key",
+    "bridge_plan_reason",
+    "bridge_plan_unavailable_reason",
+    "diagnostic_evidence_ledger",
+    "bundle_diagnostic_status",
+    "activation_patch_compile_preview",
+    "activation_patch_compile_preview_blocked_reason",
+    "activation_patch_production_denial_dossier",
+    "activation_patch_production_shadow_dossier",
+    "activation_patch_production_trial_dossier",
+    "activation_patch_production_trial_candidate",
+    "production_trial_allowed",
+    "production_apply_allowed",
+    "certified_for_apply",
+    "diagnostic_operator_supported",
+    "policy_candidate_ready",
+    "positive_operator_deepening_plan",
+    "readout_deepening_review_status",
+    "readout_deepening_review_summary",
+    "readout_deepening_best_candidate_role",
+    "readout_deepening_recommended_next_action",
+    "readout_deepening_production_trial_eligible",
+    "readout_steering_deepening_followup_status",
+    "readout_steering_deepening_followup_count",
+    "confirmed_gap_only_objectives",
+    "confirmed_gap_only_terms",
+    "confirmed_gap_only_count",
+    "objective_rotation_excluded_terms",
+    "objective_rotation_exclusion_reason",
+    "objective_rotation_needed",
+    "objective_rotation_reason",
+    "objective_rotation_from_term",
+    "objective_rotation_candidates",
+    "objective_rotation_canonical_request",
+    "objective_rotation_pipeline_recommended",
+    "objective_rotation_probe_consumed",
+    "rotated_entity_operator_deepening_recommended",
+    "diagnostic_budget_reserved_for_rotation",
+    "rotation_budget_reserve_reason",
+    "rotation_budget_reserved_diagnostics",
+    "diagnostic_budget_reserved_for_conversion",
+    "conversion_budget_reserve_reason",
+    "readout_gap_confirmation_skipped_for_conversion",
+    "readout_gap_confirmation_skip_reason",
+    "carrier_to_actuator_conversion_sweep_recommended",
+    "carrier_to_actuator_conversion_reason",
+    "carrier_to_actuator_conversion_objective_count",
+    "carrier_to_actuator_conversion_canonical_request",
+    "operator_family_shift_status",
+    "operator_family_shift_reason",
+    "operator_family_shift_preview_rows",
+    "operator_family_shift_canonical_request",
+    "operator_family_shift_recommended",
+    "finish_budget_reserve_suggested",
+    "same_family_alpha_escalation_requires_gain",
+    "suggested_noop_reason",
+)
+
+
+def _compact_strategy_hints(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        return {}
+    compact: dict[str, Any] = {}
+    for key in _STRATEGY_HINT_PRIORITY_KEYS:
+        if key in value and value.get(key) not in (None, "", []):
+            compact[key] = _bounded_json(value.get(key), max_depth=4, max_items=8, max_string=260)
+    for key, item in value.items():
+        if key in compact or item in (None, "", []):
+            continue
+        if str(key).endswith("_count") or str(key).endswith("_counts") or str(key).endswith("_status"):
+            compact[str(key)] = _bounded_json(item, max_depth=2, max_items=6, max_string=160)
+    omitted = len([key for key, item in value.items() if key not in compact and item not in (None, "", [])])
+    if omitted > 0:
+        compact["__omitted_hint_key_count"] = omitted
+    return compact
+
+
+def _compact_controller_payload(payload: Any) -> Any:
+    if not isinstance(payload, Mapping):
+        return payload
+    task_view = payload.get("task_view") if isinstance(payload.get("task_view"), Mapping) else {}
+    worker_view = payload.get("worker_view") if isinstance(payload.get("worker_view"), Mapping) else {}
+    latest_observer_check = _compact_observer_check(payload.get("latest_observer_check"))
+    recent_observer_checks = _observer_check_summaries(payload.get("recent_observer_checks"))
+    if latest_observer_check is not None and recent_observer_checks:
+        recent_observer_checks = recent_observer_checks[:-1]
+    compact: dict[str, Any] = {
+        "packet_view": "compact_v1",
+        "compaction_note": (
+            "Raw rows remain in JSONL logs; this controller view keeps bounded top-k summaries, "
+            "omitted counts, and stable digests."
+        ),
+        "source_packet_sha256": _stable_hash(payload),
+        "version": payload.get("version"),
+        "run_id": payload.get("run_id"),
+        "episode_id": payload.get("episode_id"),
+        "worker_id": payload.get("worker_id"),
+        "step": payload.get("step"),
+        "horizon": _bounded_json(payload.get("horizon"), max_depth=2, max_items=8, max_string=160),
+        "task_view": {
+            key: task_view.get(key)
+            for key in ("task_id", "mode", "prompt_hash", "constraints", "allowed_summary")
+            if task_view.get(key) not in (None, "", [])
+        },
+        "worker_view": {
+            key: _bounded_json(worker_view.get(key), max_depth=3, max_items=8, max_string=360)
+            for key in (
+                "status",
+                "generated_tail",
+                "answer_readout_canary",
+                "readout_sidecar_capture_summary",
+                "readout_analyzer_capture_summary",
+                "readout_sidecar_hints",
+                "readout_analyzer_hints",
+            )
+            if worker_view.get(key) not in (None, "", [])
+        },
+        "telemetry": _bounded_json(payload.get("telemetry"), max_depth=2, max_items=64, max_string=160),
+        "task_feedback": _bounded_json(payload.get("task_feedback"), max_depth=3, max_items=32, max_string=220),
+        "budget": _bounded_json(payload.get("budget"), max_depth=2, max_items=32, max_string=160),
+        "control_phase_hint": payload.get("control_phase_hint"),
+        "surface_catalog": _compact_surface_catalog(payload.get("surface_catalog")),
+        "surface_ids": _list_of_ids(payload.get("surface_catalog"), "surface_id"),
+        "probe_frames": _compact_probe_frames(payload.get("probe_frames")),
+        "trace_bank": _compact_trace_bank(payload.get("trace_bank")),
+        "trace_ids": _list_of_ids(payload.get("trace_bank"), "trace_id"),
+        "active_edits": _bounded_json(payload.get("active_edits"), max_depth=4, max_items=8, max_string=220),
+        "recent_effects": _recent_effect_summaries(payload.get("recent_effects"))[-5:],
+        "recent_effect_summary": _bounded_json(payload.get("recent_effect_summary"), max_depth=4, max_items=16, max_string=260),
+        "tool_catalog": _compact_tool_catalog(payload.get("tool_catalog")),
+        "latest_tool_results": _tool_result_summaries(payload.get("latest_tool_results"))[-3:],
+        "recent_tool_results": _tool_result_summaries(payload.get("recent_tool_results"))[-5:],
+        "latest_diagnostic_results": _diagnostic_result_summaries(payload.get("latest_diagnostic_results"))[-3:],
+        "recent_diagnostic_results": _diagnostic_result_summaries(payload.get("recent_diagnostic_results"))[-6:],
+        "controller_memory": _controller_memory_summaries(payload.get("controller_memory"))[-5:],
+        "strategy_hints": _compact_strategy_hints(payload.get("strategy_hints")),
+        "latest_observer_check": latest_observer_check,
+        "recent_observer_checks": recent_observer_checks[-3:],
+    }
+    return {key: item for key, item in compact.items() if item not in (None, "", [], {})}
 
 
 def _compact_controller_memory(value: Any) -> dict[str, Any] | None:
@@ -156,7 +464,7 @@ def _compact_latent_feature_scan(value: Any) -> dict[str, Any] | None:
     groups_value = value.get("groups")
     if isinstance(groups_value, Sequence) and not isinstance(groups_value, (str, bytes, bytearray)):
         groups: list[dict[str, Any]] = []
-        for item in groups_value[:3]:
+        for item in groups_value[:2]:
             if not isinstance(item, Mapping):
                 continue
             group_summary: dict[str, Any] = {}
@@ -166,7 +474,7 @@ def _compact_latent_feature_scan(value: Any) -> dict[str, Any] | None:
             top_features_value = item.get("top_features")
             if isinstance(top_features_value, Sequence) and not isinstance(top_features_value, (str, bytes, bytearray)):
                 top_features: list[dict[str, Any]] = []
-                for feature in top_features_value[:2]:
+                for feature in top_features_value[:1]:
                     if not isinstance(feature, Mapping):
                         continue
                     feature_summary = {
@@ -248,7 +556,7 @@ def _compact_kv_feature_scan(value: Any) -> dict[str, Any] | None:
                     source_positions = feature.get("source_positions")
                     if isinstance(source_positions, Sequence) and not isinstance(source_positions, (str, bytes, bytearray)):
                         compact_positions = []
-                        for position in source_positions[:2]:
+                        for position in source_positions[:1]:
                             if not isinstance(position, Mapping):
                                 continue
                             compact_positions.append(
@@ -298,7 +606,7 @@ def _compact_kv_feature_scan(value: Any) -> dict[str, Any] | None:
             source_positions = item.get("source_positions")
             if isinstance(source_positions, Sequence) and not isinstance(source_positions, (str, bytes, bytearray)):
                 compact_positions = []
-                for position in source_positions[:2]:
+                for position in source_positions[:1]:
                     if not isinstance(position, Mapping):
                         continue
                     compact_positions.append(
@@ -594,14 +902,207 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
         "certified_for_apply",
         "production_apply_allowed",
         "feature_backend",
+        "top20_reachable_count",
+        "near_reachable_count",
+        "source_body_span_count",
+        "reviewed_term_count",
+        "candidate_blueprint_count",
+        "entity_operator_materialization_count",
+        "entity_operator_materialization_status",
+        "entity_operator_deepening_reason",
+        "entity_operator_deepening_next_evidence",
+        "readout_deepening_review_status",
+        "required_term_recall",
+        "required_term_span_progress",
     ):
         if value.get(key) not in (None, "", []):
             summary[key] = value.get(key)
+    focus_terms = value.get("focus_terms")
+    if isinstance(focus_terms, Sequence) and not isinstance(focus_terms, (str, bytes, bytearray)):
+        compact_terms = [str(item) for item in focus_terms[:6] if str(item)]
+        if compact_terms:
+            summary["focus_terms"] = compact_terms
+    term_rows = value.get("term_readout_rows")
+    if isinstance(term_rows, Sequence) and not isinstance(term_rows, (str, bytes, bytearray)):
+        rows: list[dict[str, Any]] = []
+        for item in term_rows[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            rows.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "term",
+                        "first_piece",
+                        "rank",
+                        "prob",
+                        "top20_hit",
+                        "span_progress",
+                        "source_provenance",
+                        "readout_status",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if rows:
+            summary["term_readout_rows"] = rows
+    candidate_terms = value.get("candidate_terms")
+    if isinstance(candidate_terms, Sequence) and not isinstance(candidate_terms, (str, bytes, bytearray)):
+        compact_candidate_terms = [str(item) for item in candidate_terms[:6] if str(item)]
+        if compact_candidate_terms:
+            summary["candidate_terms"] = compact_candidate_terms
+    candidate_blueprints = value.get("candidate_blueprints")
+    if isinstance(candidate_blueprints, Sequence) and not isinstance(candidate_blueprints, (str, bytes, bytearray)):
+        compact_blueprints: list[dict[str, Any]] = []
+        for item in candidate_blueprints[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_blueprints.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "kind",
+                        "objective_term",
+                        "first_piece",
+                        "readout_status",
+                        "rank",
+                        "source_provenance",
+                        "candidate_status",
+                        "recommended_operator_families",
+                        "recommended_next_diagnostic",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if compact_blueprints:
+            summary["candidate_blueprints"] = compact_blueprints
+    review_matrix = value.get("review_matrix")
+    if isinstance(review_matrix, Sequence) and not isinstance(review_matrix, (str, bytes, bytearray)):
+        compact_review_rows: list[dict[str, Any]] = []
+        for item in review_matrix[:4]:
+            if not isinstance(item, Mapping):
+                continue
+            compact_review_rows.append(
+                {
+                    key: item.get(key)
+                    for key in (
+                        "term",
+                        "rank",
+                        "readout_status",
+                        "source_provenance",
+                        "review_decision",
+                        "blocked_by",
+                        "recommended_operator_families",
+                    )
+                    if item.get(key) not in (None, "", [])
+                }
+            )
+        if compact_review_rows:
+            summary["entity_candidate_review_rows"] = compact_review_rows
     blocked_by = value.get("blocked_by")
     if isinstance(blocked_by, Sequence) and not isinstance(blocked_by, (str, bytes, bytearray)):
         compact_blocked = [str(item) for item in blocked_by[:4] if str(item)]
         if compact_blocked:
             summary["blocked_by"] = compact_blocked
+    entity_plan = value.get("entity_operator_deepening_plan")
+    if isinstance(entity_plan, Mapping):
+        compact_entity_plan = {
+            key: entity_plan.get(key)
+            for key in (
+                "kind",
+                "source",
+                "permission",
+                "objective_bundle_key",
+                "step_actuator_bundle_key",
+                "intended_term",
+                "recipe_family",
+                "recipe_name",
+                "operator_recipe_id",
+                "next_action",
+                "suggested_next_evidence",
+                "suggested_operator_recipe_expansion_mode",
+                "deepening_axis",
+                "reason_code",
+                "best_target_top20_threshold_gap_delta",
+                "best_target_piece_logit_delta",
+                "best_focus_rank_delta",
+                "traits",
+            )
+            if entity_plan.get(key) not in (None, "", [])
+        }
+        if compact_entity_plan:
+            summary["entity_operator_deepening_plan"] = compact_entity_plan
+    canonical_followup = value.get("canonical_followup_request")
+    if isinstance(canonical_followup, Mapping):
+        compact_followup = {
+            key: canonical_followup.get(key)
+            for key in (
+                "diagnostic",
+                "bundle_key",
+                "objective_bundle_key",
+                "step_actuator_bundle_key",
+                "next_evidence_needed",
+                "operator_recipe_expansion_mode",
+                "seed_operator_recipe_id",
+                "seed_recipe_family",
+                "seed_recipe_name",
+                "reason",
+                "permission",
+            )
+            if canonical_followup.get(key) not in (None, "", [])
+        }
+        if compact_followup:
+            summary["canonical_followup_request"] = compact_followup
+    readout_review = value.get("readout_deepening_review_summary")
+    if isinstance(readout_review, Mapping):
+        compact_review = {
+            key: readout_review.get(key)
+            for key in (
+                "readout_deepening_review_status",
+                "objective_bundle_key",
+                "best_candidate_role",
+                "best_recipe_id",
+                "best_recipe_name",
+                "best_recipe_family",
+                "gap_delta",
+                "target_piece_logit_delta",
+                "target_mass_delta",
+                "target_top20_hit_delta",
+                "collapse_safe",
+                "production_trial_eligible",
+                "why_not_trial",
+                "recommended_next_action",
+                "recommended_next_evidence",
+                "recommended_operator_recipe_expansion_mode",
+            )
+            if readout_review.get(key) not in (None, "", [])
+        }
+        if compact_review:
+            summary["readout_deepening_review_summary"] = compact_review
+    positive_plan = value.get("positive_operator_deepening_plan")
+    if isinstance(positive_plan, Mapping):
+        compact_positive_plan = {
+            key: positive_plan.get(key)
+            for key in (
+                "kind",
+                "source",
+                "permission",
+                "objective_bundle_key",
+                "intended_term",
+                "recipe_family",
+                "recipe_name",
+                "next_action",
+                "suggested_next_evidence",
+                "suggested_operator_recipe_expansion_mode",
+                "deepening_axis",
+                "reason_code",
+                "curiosity_signal",
+                "traits",
+            )
+            if positive_plan.get(key) not in (None, "", [])
+        }
+        if compact_positive_plan:
+            summary["positive_operator_deepening_plan"] = compact_positive_plan
     evidence_rows = value.get("evidence_rows")
     if isinstance(evidence_rows, Sequence) and not isinstance(evidence_rows, (str, bytes, bytearray)):
         rows: list[dict[str, Any]] = []
@@ -616,11 +1117,20 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
                         "diagnostic_family",
                         "status",
                         "actuator_class",
+                        "ownership_role",
+                        "effect_role",
+                        "safety_role",
+                        "operator_axis",
+                        "recipe_family",
                         "recipe_name",
+                        "actual_delta_class",
                         "target_mass_delta",
                         "target_top20_hit_delta",
+                        "target_piece_logit_delta",
+                        "target_top20_threshold_gap_delta",
                         "focus_rank_delta",
                         "support_score",
+                        "positive_traits",
                         "blocked_by",
                     )
                     if item.get(key) not in (None, "", [])
@@ -685,6 +1195,8 @@ def _observation_summary(payload: Any) -> dict[str, Any]:
     worker_view = payload.get("worker_view") if isinstance(payload.get("worker_view"), Mapping) else {}
     summary.update(
         {
+            "packet_view": payload.get("packet_view"),
+            "source_packet_sha256": payload.get("source_packet_sha256"),
             "run_id": payload.get("run_id"),
             "episode_id": payload.get("episode_id"),
             "worker_id": payload.get("worker_id"),
@@ -1137,12 +1649,17 @@ class ProviderControllerClient:
         *,
         system_prompt: str | None = None,
         prompt_asset: str = "controller_v01.txt",
+        packet_view: str = "full",
         max_output_tokens: int = 800,
         temperature: float = 0.0,
         max_attempts: int = 2,
     ) -> None:
         self.provider = provider
         self.system_prompt = system_prompt or load_prompt_asset(prompt_asset)
+        normalized_packet_view = str(packet_view or "full").strip().lower().replace("-", "_")
+        if normalized_packet_view not in _COMPACT_PACKET_VIEWS:
+            raise ValueError("packet_view must be 'full' or 'compact'")
+        self.packet_view = normalized_packet_view
         self.max_output_tokens = int(max_output_tokens)
         self.temperature = float(temperature)
         self.max_attempts = max(1, int(max_attempts))
@@ -1152,7 +1669,11 @@ class ProviderControllerClient:
         return self._last_trace
 
     def invoke(self, packet: Any) -> ControllerCommand:
-        payload = _payload_for_provider(packet)
+        raw_payload = _payload_for_provider(packet, packet_view="full")
+        payload = _payload_for_provider(packet, packet_view=self.packet_view)
+        raw_payload_chars = _serialized_char_count(raw_payload)
+        provider_payload_chars = _serialized_char_count(payload)
+        system_prompt_chars = len(self.system_prompt)
         effective_max_output_tokens = max(
             _controller_output_token_budget(payload, self.max_output_tokens),
             _controller_model_output_token_floor(self.provider.model_name),
@@ -1162,6 +1683,16 @@ class ProviderControllerClient:
             "model": self.provider.model_name,
             "max_attempts": self.max_attempts,
             "effective_max_output_tokens": effective_max_output_tokens,
+            "packet_view": self.packet_view,
+            "raw_payload_char_count": raw_payload_chars,
+            "provider_payload_char_count": provider_payload_chars,
+            "payload_reduction_ratio": round(provider_payload_chars / raw_payload_chars, 6)
+            if raw_payload_chars > 0
+            else None,
+            "system_prompt_char_count": system_prompt_chars,
+            "rough_input_token_estimate": _rough_token_estimate_from_chars(
+                system_prompt_chars + provider_payload_chars
+            ),
             "system_prompt_sha256": _stable_hash(self.system_prompt),
             "observation": _observation_summary(payload),
             "attempts": [],
@@ -1183,6 +1714,7 @@ class ProviderControllerClient:
             started = perf_counter()
             response = self.provider.complete(request)
             latency_ms = (perf_counter() - started) * 1000.0
+            effective_system_prompt_chars = len(request.effective_system_prompt())
             attempt_trace: dict[str, Any] = {
                 "attempt": attempt_index,
                 "latency_ms": round(latency_ms, 3),
@@ -1191,11 +1723,21 @@ class ProviderControllerClient:
                     "max_output_tokens": effective_max_output_tokens,
                     "temperature": self.temperature,
                     "retry_note": retry_note,
+                    "packet_view": self.packet_view,
+                    "payload_char_count": provider_payload_chars,
+                    "raw_payload_char_count": raw_payload_chars,
+                    "system_prompt_char_count": system_prompt_chars,
+                    "effective_system_prompt_char_count": effective_system_prompt_chars,
+                    "rough_input_token_estimate": _rough_token_estimate_from_chars(
+                        effective_system_prompt_chars + provider_payload_chars
+                    ),
                 },
                 "provider": response.provider,
                 "model": response.model,
                 "usage": _json_ready(dict(response.usage)),
                 "response_metadata": _json_ready(dict(getattr(response, "metadata", {}) or {})),
+                "response_char_count": len(str(response.text)),
+                "rough_response_token_estimate": _rough_token_estimate_from_chars(len(str(response.text))),
                 "response_sha256": _stable_hash(response.text),
                 "response_text": str(response.text),
             }

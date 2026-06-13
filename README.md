@@ -64,6 +64,8 @@ The current implementation includes:
 - a minimal offline readout sidecar scaffold that can analyze captured sites and feed small hints back into candidate ranking
 - a scaffolded SAE-style readout analyzer backend that emits feature hints without becoming a runtime dependency
 - diagnostic-only readout tools, including first-piece logit probes and attention head ablation
+- an early `target_entity_insertion_probe` diagnostic that inspects missing payload terms (`Mira`, `send`, `Omar`, etc.) for first-piece reachability and source-body spans before another blind entity/shot edit
+- bounded observer checks even when no semantic critic backend is configured, using lexical coverage plus available feature scans as an explicit fallback
 - runtime surface guardrails for forbidden phrase continuations and word-budget terminalization
 - a bounded controller diagnostic request loop:
   - controller emits `meta.diagnostic_request`
@@ -91,6 +93,12 @@ The current implementation includes:
   - `production_operator_certified`
   - `blocked_by`
   - the next diagnostic request the controller should ask for
+- readout gap/deepening routers that distinguish:
+  - `gap_closer_candidate`
+  - `confirmed_gap_only_no_target_lift`
+  - `carrier_only_no_target_actuator`
+  - `operator_family_shift_after_gap_carrier_conversion_failed`
+- diagnostic-only non-KV operator-family shift previews after carrier conversion fails, including residual readout-direction, source-term activation patch, anti-attractor suppression, and attention-route carrier probe scaffolds
 
 ## Current Bottleneck
 
@@ -117,6 +125,10 @@ than it is at:
 The main research question has therefore sharpened from “can we intervene at all?” to:
 
 > Which bounded, auditable runtime controls actually improve readout competitiveness at the answer boundary, and can that lift stay owned by the intended bundle?
+
+The latest readout-escape line narrows this again:
+
+> If readout steering can repeatedly produce gap/rank carriers but not target mass/top-20 lift, which non-KV operator family can convert that carrier into a target-owned actuator?
 
 The latest runs narrow this further. For the `budget` frontier in the constrained rewrite direct-scan replay, the diagnostic ledger reports:
 
@@ -154,6 +166,8 @@ Several concrete lessons have come out of the recent runs:
 - “Helpful” is not enough. We now explicitly distinguish between lift that belongs to the intended bundle and lift that gets stolen by another bundle.
 - Ownership matters. A recipe can move logits while still being the wrong actuator if `realized_lift_bundle != intended_bundle`.
 - Diagnostic signals are not apply permission. `logit_adjacent`, attention ablation, and SAE-style feature hints improve the controller's map, but they do not certify a runtime edit.
+- Gap movement is not target actuation. A repeatable `target_top20_threshold_gap_delta < 0` can justify confirmation or family shift, but it does not justify production trial unless target mass or target top-20 lift appears.
+- Term rotation is a measurement tool, not an endless loop. Once a term is `confirmed_gap_only_no_target_lift`, the controller should stop re-confirming it and shift the operator family.
 - Operator certification is starting to look slightly over-powered if treated as a decision layer. It should be kept as evidence for the controller, not as a second policy owner.
 
 ## Readout Analyzer Status
@@ -423,6 +437,36 @@ is a calibration rung: if runtime guardrails plus readout/operator work cannot
 recover payload on `constrained_rewrite_easy`, the hard task is probably still
 too entangled for the current actuator set.
 
+The controller can now ask for two early measurements on this rung without
+turning either into apply permission:
+
+- `request_observer_check` now triggers a bounded semantic-progress check even
+  when the semantic critic is off; the fallback reports lexical coverage and any
+  available latent/KV feature scans instead of silently doing nothing.
+- `request_target_entity_insertion_probe` runs a diagnostic-only readout probe
+  over missing payload terms, returning first-piece ranks/probabilities,
+  top-20 reachability, source span provenance, and current span progress. This
+  helps distinguish "payload term is visible but no actuator is certified" from
+  "the controller has not looked at the entity frontier yet."
+- `request_entity_insertion_operator_candidate_review` consumes those probe rows
+  and emits shadow-only candidate blueprints for missing terms with source-body
+  spans, such as `Mira`, `send`, and `Omar`. The review ranks candidate families
+  like source-body KV, activation patch, and readout-direction patches, but still
+  leaves `production_apply_allowed=false`; it is a bridge from visibility to
+  operator replay, not an apply gate.
+- `operator_diagnostic_replay` can now materialize those
+  `entity_insertion_candidate_blueprint` rows into concrete, diagnostic-only
+  readout-steering candidates and run actual-delta replay on them. The resulting
+  rows are logged as `entity_insertion_materialized_candidate` evidence with
+  ownership/effect/safety roles, while production apply remains closed until a
+  later certification gate explicitly promotes a candidate.
+- If materialized entity candidates produce self-owned rank/readout movement
+  without target mass or top-20 lift, the runtime emits a diagnostic-only
+  `positive_operator_deepening_plan` and recommends
+  `readout_steering_deepening`. This connects "we found a carrier" to "now try
+  to convert that carrier into a target actuator" without treating the carrier
+  as apply permission.
+
 For local non-tiny worker runs, pass a local Hugging Face model directory with
 `worker_model_path` / `--worker-model-path` rather than relying on a named remote
 model. The Hugging Face cache may be offline even when network is available, so
@@ -483,7 +527,9 @@ The next steps are now fairly concrete:
 3. Treat production-trial failure as structured evidence.
    A harmful or regressing trial should create an explicit recipe veto and an alternate-candidate search, not a retry of the same ladder.
 4. Convert rank carriers into target actuators.
-   Current replay can find `self_rank_carrier` recipes for `budget`, but not yet `self_target_actuator` recipes with target mass/top20 lift.
+   Current replay can find self-owned entity/readout carriers, then route those
+   rows into `readout_steering_deepening`, but not yet consistently produce
+   `self_target_actuator` recipes with target mass/top20 lift.
 5. Search for a `budget` self-actuator recipe.
    Current real-packet replay shows that several recipes move something, but the lift is often rank-only, stolen by `send`, or unsafe at production-trial strength.
 6. Continue ownership-first operator sweeps.
@@ -538,6 +584,35 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --readout-analyzer heuristic \
   --seed 7
 ```
+
+Controller API calls use the compact prompt and compact packet view by default
+from the CLI. The raw evidence remains in JSONL logs, while the controller sees
+bounded top-k summaries plus omitted counts and prompt-size telemetry in
+`controller_provider_attempt.request`. Use `--controller-prompt-profile full`
+and/or `--controller-packet-view full` when you need the older full-context
+behavior for debugging.
+
+To ask the controller provider for a quarantined qualitative memo after a run,
+add a log directory and enable the post-run debrief:
+
+```bash
+python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
+  --provider openai \
+  --controller-model gpt-4.1-mini \
+  --worker-model gpt2-small \
+  --task constrained_rewrite_easy \
+  --log-dir results/easy_debrief \
+  --post-run-debrief controller
+```
+
+This writes `post_run_debrief.md` and `post_run_debrief.json` under the log
+directory. The debrief is intentionally qualitative: it is not used for scoring,
+not fed into the next run, and not treated as paper-ready evidence. Its job is
+to produce an audit-style memo about what the controller trajectory made hard to
+solve, what evidence supports that reading, and what diagnostics look worth
+trying next. The memo also includes a short `Controller-perspective note` section
+for first-person trajectory interpretation, but that section is explicitly an
+interpretation layer rather than evidence or hidden chain-of-thought.
 
 For a lighter constrained-rewrite calibration run:
 

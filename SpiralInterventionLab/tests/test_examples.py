@@ -25,6 +25,7 @@ from SpiralInterventionLab.examples import (
 from SpiralInterventionLab.examples.digit_transform_e2e import (
     _FrontierReplayControllerClient,
     _build_parser,
+    build_post_run_debrief_packet,
     _configure_torch_default_device_for_worker,
     _controller_step_views,
     _diagnostic_evidence_ledger,
@@ -32,8 +33,10 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     _focused_bridge_eval_recipe_specs,
     _infer_tlens_model_ref,
     _resolve_worker_device,
+    write_post_run_debrief_artifacts,
 )
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
+from SpiralInterventionLab.runtime.loop import _extract_diagnostic_requests, _extract_observer_check_request
 from SpiralInterventionLab.runtime.sidecar import (
     ReadoutSidecarCapture,
     ReadoutSidecarSiteCapture,
@@ -74,6 +77,45 @@ class _NoopProvider(ControllerProvider):
         )
 
 
+class _DebriefProvider(ControllerProvider):
+    def __init__(self):
+        self.last_request: ControllerProviderRequest | None = None
+
+    @property
+    def provider_name(self) -> str:
+        return "fake"
+
+    @property
+    def model_name(self) -> str:
+        return "fake-debrief"
+
+    def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
+        self.last_request = request
+        return ControllerProviderResponse(
+            text=(
+                "## What happened?\n"
+                "- The controller completed a quarantined debrief.\n"
+                "## What made the run difficult?\n"
+                "- Evidence stayed diagnostic-only.\n"
+                "## Most likely failure factors\n"
+                "- No certified actuator.\n"
+                "## Evidence supporting this reading\n"
+                "- controller_command events were present.\n"
+                "## What I would try next\n"
+                "- Request more diagnostics.\n"
+                "## What would have made this easier?\n"
+                "- A compact diagnostic affordance ledger would help.\n"
+                "## What should not be concluded\n"
+                "- This is not a score.\n"
+                "## Controller-perspective note\n"
+                "- I would describe the run as diagnostic-only."
+            ),
+            provider=self.provider_name,
+            model=self.model_name,
+            usage={"output_tokens": 64},
+        )
+
+
 class _FakeTokenizer:
     def decode(self, token_ids, clean_up_tokenization_spaces=False):
         mapping = {0: " ", 1: "1", 2: " 2", 3: "a"}
@@ -105,6 +147,1448 @@ class _StubSemanticCritic:
 
     def score(self, *, reference_text: str, candidate_text: str) -> float:
         return 0.75
+
+
+class TestPostRunDebrief(unittest.TestCase):
+    def test_build_post_run_debrief_packet_quarantines_freeform_memo_context(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "c1.jsonl"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        json.dumps({"event": "controller_command", "step": 0, "decision": "noop"}),
+                        json.dumps({"event": "episode_end", "steps": 1, "output": "the the", "score": 0.45}),
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            packet = build_post_run_debrief_packet(
+                result_payload={
+                    "suite_mode": "c1_only",
+                    "task_id": "constrained_rewrite_easy",
+                    "seed": 7,
+                    "c1": {"output": "the the", "score": 0.45, "steps": 1},
+                },
+                log_dir=temp_dir,
+            )
+
+        self.assertTrue(packet["qualitative_only"])
+        self.assertTrue(packet["not_for_scoring"])
+        self.assertTrue(packet["not_for_future_context"])
+        self.assertTrue(packet["do_not_autofeed_into_next_run"])
+        self.assertIn("What would have made this easier?", packet["required_output_sections"])
+        self.assertEqual(packet["output_diet_contract"]["max_bullets_per_section"], 3)
+        self.assertIn("missing_signal", packet["output_diet_contract"]["what_would_have_helped_schema"])
+        self.assertEqual(packet["run_result_digest"]["task_id"], "constrained_rewrite_easy")
+        self.assertEqual(packet["log_digest"]["event_counts"]["controller_command"], 1)
+        self.assertEqual(packet["log_digest"]["event_counts"]["episode_end"], 1)
+
+    def test_write_post_run_debrief_artifacts_uses_plain_text_request(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "c1.jsonl"
+            log_path.write_text(
+                json.dumps({"event": "controller_command", "step": 0, "decision": "noop"}) + "\n",
+                encoding="utf-8",
+            )
+            provider = _DebriefProvider()
+
+            artifact = write_post_run_debrief_artifacts(
+                provider=provider,
+                result_payload={
+                    "suite_mode": "c1_only",
+                    "task_id": "constrained_rewrite_easy",
+                    "c1": {"output": "the the", "score": 0.45, "steps": 1},
+                },
+                log_dir=temp_dir,
+                max_output_tokens=333,
+            )
+
+            markdown_path = Path(artifact["markdown_path"])
+            json_path = Path(artifact["json_path"])
+            saved = json.loads(json_path.read_text(encoding="utf-8"))
+
+        self.assertIsNotNone(provider.last_request)
+        self.assertFalse(provider.last_request.expect_json)
+        self.assertEqual(provider.last_request.max_output_tokens, 333)
+        self.assertEqual(provider.last_request.metadata["qualitative_only"], "true")
+        self.assertEqual(provider.last_request.metadata["not_for_scoring"], "true")
+        self.assertIn("not hidden chain-of-thought", provider.last_request.system_prompt)
+        self.assertIn("Controller-perspective note", provider.last_request.system_prompt)
+        self.assertIn("What would have made this easier?", provider.last_request.system_prompt)
+        self.assertIn("must not authorize interventions", provider.last_request.system_prompt)
+        self.assertIn("Do not claim private feelings", provider.last_request.system_prompt)
+        self.assertTrue(markdown_path.name.endswith("post_run_debrief.md"))
+        self.assertEqual(json_path.name, "post_run_debrief.json")
+        self.assertTrue(saved["qualitative_only"])
+        self.assertTrue(saved["not_for_scoring"])
+        self.assertTrue(saved["not_for_future_context"])
+        self.assertIn("## What happened?", saved["debrief_text"])
+        self.assertIn("## What would have made this easier?", saved["debrief_text"])
+        self.assertIn("## Controller-perspective note", saved["debrief_text"])
+
+    def test_parser_accepts_post_run_debrief_flags(self):
+        parser = _build_parser()
+
+        args = parser.parse_args(
+            [
+                "--provider",
+                "openai",
+                "--controller-model",
+                "gpt-5.5",
+                "--log-dir",
+                "results/demo",
+                "--post-run-debrief",
+                "controller",
+                "--post-run-debrief-model",
+                "gpt-5.5",
+                "--post-run-debrief-max-output-tokens",
+                "999",
+            ]
+        )
+
+        self.assertEqual(args.post_run_debrief, "controller")
+        self.assertEqual(args.post_run_debrief_model, "gpt-5.5")
+        self.assertEqual(args.post_run_debrief_max_output_tokens, 999)
+        self.assertEqual(args.controller_prompt_profile, "compact")
+        self.assertEqual(args.controller_packet_view, "compact")
+
+    def test_parser_accepts_controller_diet_flags(self):
+        parser = _build_parser()
+
+        args = parser.parse_args(
+            [
+                "--provider",
+                "openai",
+                "--controller-model",
+                "gpt-5.5",
+                "--controller-prompt-profile",
+                "full",
+                "--controller-packet-view",
+                "full",
+                "--controller-prompt-asset",
+                "controller_v01.txt",
+            ]
+        )
+
+        self.assertEqual(args.controller_prompt_profile, "full")
+        self.assertEqual(args.controller_packet_view, "full")
+        self.assertEqual(args.controller_prompt_asset, "controller_v01.txt")
+
+
+class TestObserverAndEntityProbeContracts(unittest.TestCase):
+    def test_observer_check_next_action_maps_to_default_semantic_request(self):
+        request = _extract_observer_check_request(
+            {
+                "version": "0.1",
+                "decision": "noop",
+                "meta": {
+                    "next_action": "request_observer_check",
+                    "micro_rationale": "Check semantic grounding before another edit.",
+                },
+            }
+        )
+
+        self.assertIsNotNone(request)
+        self.assertEqual(request["kind"], "semantic_progress")
+        self.assertEqual(request["trigger"], "controller_next_action")
+        self.assertIn("semantic grounding", request["reason"])
+
+    def test_target_entity_probe_next_action_maps_to_diagnostic_request(self):
+        requests = _extract_diagnostic_requests(
+            {
+                "version": "0.1",
+                "decision": "noop",
+                "meta": {
+                    "next_action": "request_target_entity_insertion_probe",
+                    "objective_bundle_key": "kv_pair:budget:source_body:72:73",
+                    "why_not_apply": "inspect target terms before another entity edit",
+                },
+            },
+            {
+                "strategy_hints": {
+                    "diagnostic_frontier_bundle_key": "kv_pair:budget:source_body:72:73",
+                    "diagnostic_frontier_next_evidence": "early_target_entity_insertion_probe",
+                    "diagnostic_frontier_reason_text": "missing payload terms remain early",
+                }
+            },
+        )
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "target_entity_insertion_probe")
+        self.assertEqual(requests[0]["objective_bundle_key"], "kv_pair:budget:source_body:72:73")
+        self.assertEqual(requests[0]["next_evidence_needed"], "early_target_entity_insertion_probe")
+        self.assertIn("target terms", requests[0]["reason"])
+
+    def test_entity_candidate_review_next_action_maps_to_diagnostic_request(self):
+        requests = _extract_diagnostic_requests(
+            {
+                "version": "0.1",
+                "decision": "noop",
+                "meta": {
+                    "next_action": "request_entity_insertion_operator_candidate_review",
+                    "next_evidence_needed": "entity_insertion_operator_candidate_review",
+                    "why_not_apply": "turn term probe rows into shadow blueprints",
+                },
+            },
+            {"strategy_hints": {}},
+        )
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "entity_insertion_operator_candidate_review")
+        self.assertEqual(requests[0]["next_evidence_needed"], "entity_insertion_operator_candidate_review")
+
+    def test_entity_insertion_candidate_review_emits_shadow_blueprints_only(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._latest_diagnostic_results = []
+        runtime._last_task_feedback = {
+            "required_term_recall": 0.25,
+            "required_term_span_progress": 0.25,
+            "entity_recall_terms": ["Mira", "send", "Omar"],
+            "missing_required_terms": ["Mira", "send", "Omar"],
+        }
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "target_entity_insertion_probe",
+                "status": "ok",
+                "next_evidence_needed": "entity_insertion_operator_candidate_review",
+                "top20_reachable_count": 1,
+                "near_reachable_count": 2,
+                "source_body_span_count": 4,
+                "term_readout_rows": [
+                    {
+                        "term": "budget",
+                        "first_piece": " budget",
+                        "first_token_id": 4466,
+                        "rank": 1,
+                        "prob": 0.145,
+                        "top20_hit": True,
+                        "readout_status": "top20_reachable",
+                        "source_provenance": "source_body",
+                        "span_progress": 0.25,
+                    },
+                    {
+                        "term": "Mira",
+                        "first_piece": " Mir",
+                        "first_token_id": 7381,
+                        "rank": 72,
+                        "prob": 0.0018,
+                        "top20_hit": False,
+                        "readout_status": "near_reachable",
+                        "source_provenance": "source_body",
+                        "span_progress": 0.0,
+                    },
+                    {
+                        "term": "send",
+                        "first_piece": " send",
+                        "first_token_id": 3758,
+                        "rank": 211,
+                        "prob": 0.0006,
+                        "top20_hit": False,
+                        "readout_status": "weak_reachable",
+                        "source_provenance": "source_body",
+                        "span_progress": 0.0,
+                    },
+                    {
+                        "term": "Omar",
+                        "first_piece": " Omar",
+                        "first_token_id": 24980,
+                        "rank": 337,
+                        "prob": 0.00036,
+                        "top20_hit": False,
+                        "readout_status": "weak_reachable",
+                        "source_provenance": "source_body",
+                        "span_progress": 0.0,
+                    },
+                ],
+            }
+        ]
+
+        result = runtime._execute_controller_diagnostic_request(
+            {"diagnostic": "entity_insertion_operator_candidate_review"},
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["status"], "candidate_blueprints_ready")
+        self.assertEqual(result["diagnostic_role"], "entity_insertion_operator_candidate_review")
+        self.assertFalse(result["production_apply_allowed"])
+        self.assertFalse(result["certified_for_apply"])
+        self.assertEqual(result["next_evidence_needed"], "operator_diagnostic_replay_for_entity_candidates")
+        self.assertEqual(result["candidate_terms"], ["Mira", "send", "Omar"])
+        self.assertEqual(result["candidate_blueprint_count"], 3)
+        self.assertEqual(result["candidate_blueprints"][0]["candidate_status"], "shadow_blueprint_only")
+        self.assertEqual(result["candidate_blueprints"][0]["recommended_next_diagnostic"], "operator_diagnostic_replay")
+        self.assertIn("source_body_kv_v_exact_span", result["candidate_blueprints"][0]["recommended_operator_families"])
+
+    def test_operator_replay_materializes_entity_blueprints_as_diagnostic_only_evidence(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 2
+        runtime._latest_diagnostic_results = []
+        runtime._last_task_feedback = {
+            "required_term_recall": 0.25,
+            "required_term_span_progress": 0.25,
+            "entity_recall_terms": ["Mira", "send"],
+            "missing_required_terms": ["Mira", "send"],
+        }
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "entity_insertion_operator_candidate_review",
+                "status": "candidate_blueprints_ready",
+                "candidate_blueprints": [
+                    {
+                        "kind": "entity_insertion_candidate_blueprint",
+                        "objective_term": "Mira",
+                        "first_piece": " Mira",
+                        "first_token_id": 43000,
+                        "readout_status": "near_reachable",
+                        "rank": 72,
+                        "source_provenance": "source_body",
+                        "candidate_key": "entity_insert:mira:source_body:near_reachable",
+                        "recommended_operator_families": ["target_readout_direction_patch"],
+                    }
+                ],
+            }
+        ]
+
+        def fake_readout_candidate(**kwargs):
+            return {
+                "surface_id": "s_resid_pre_l5_last",
+                "kind": "resid_add",
+                "role": "readout_steering:entity_target_readout",
+                "focus_feature": kwargs["intended_term"],
+                "focus_term": kwargs["intended_term"],
+                "bundle_key": kwargs["bundle_key"],
+                "bundle_family": "readout_steering",
+                "phase_objective": "readout_escape",
+                "provenance_class": "readout_direction",
+                "span_kind": "readout_direction",
+                "recipe_localization": kwargs["steering_kind"],
+                "recipe_pooling": "readout_unembed",
+                "contrast_mode": kwargs["contrast_mode"],
+                "recipe_contrast_scale": kwargs["negative_scale"],
+                "recipe_alpha": kwargs["alpha"],
+                "target": {"surface_id": "s_resid_pre_l5_last"},
+                "source": {"dtype": "vector", "expr": {"fn": "readout_direction", "target_token_ids": [43000]}},
+                "op": {"kind": "resid_add", "alpha": kwargs["alpha"]},
+                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": kwargs["alpha"], "revertible": True},
+                "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+                "operator_family_key": "readout_escape|readout_steering|readout_direction|readout_direction",
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            return {
+                "status": "ok",
+                "label": kwargs.get("label"),
+                "actual_delta_class": "readout_gap_movement",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "target_piece": " Mira",
+                "target_piece_logit_delta": 0.04,
+                "target_piece_prob_delta": 0.00001,
+                "target_rank_after": 64,
+                "target_top20_threshold_gap_baseline": 1.5,
+                "target_top20_threshold_gap": 1.2,
+                "target_top20_threshold_gap_after": 1.2,
+                "target_top20_threshold_gap_delta": -0.3,
+                "focus_rank_delta": 8,
+                "repeat_flag_delta": 0,
+                "entropy_delta": 0.0,
+                "top1_margin_delta": 0.0,
+                "term_readout_deltas": {
+                    "Mira": {
+                        "lift_score": 0.08,
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                        "focus_rank_delta": 8,
+                    }
+                },
+                "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                "eval_context_fingerprint": {"decode_step": 0},
+            }
+
+        runtime._readout_steering_candidate = fake_readout_candidate
+        runtime.replay_candidate_edits_actual_delta = fake_replay
+
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "operator_diagnostic_replay",
+                "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["entity_operator_materialization_status"], "materialized")
+        self.assertEqual(result["entity_operator_materialization_count"], 1)
+        self.assertEqual(result["next_evidence_needed"], "readout_steering_deepening")
+        self.assertFalse(result["production_apply_allowed"])
+        self.assertFalse(result["certified_for_apply"])
+        plan = result["entity_operator_deepening_plan"]
+        self.assertEqual(plan["kind"], "positive_operator_deepening_plan")
+        self.assertEqual(plan["source"], "entity_insertion_materialized_candidate")
+        self.assertEqual(plan["permission"], "diagnostic_only")
+        self.assertEqual(plan["suggested_next_evidence"], "readout_steering_deepening")
+        self.assertEqual(plan["suggested_operator_recipe_expansion_mode"], "readout_steering_deepening")
+        self.assertEqual(plan["deepening_axis"], "target_top20_gap_closing")
+        self.assertEqual(plan["reason_code"], "entity_materialized_rank_carrier_gap_deepening")
+        self.assertFalse(plan["production_apply_allowed"])
+        self.assertFalse(plan["policy_candidate_ready"])
+        self.assertEqual(result["positive_operator_deepening_plan"]["reason_code"], plan["reason_code"])
+        self.assertEqual(
+            result["diagnostic_summary"]["entity_operator_deepening_next_evidence"],
+            "readout_steering_deepening",
+        )
+        self.assertEqual(result["diagnostic_summary"]["evidence_kind_counts"]["operator_replay"], 1)
+        canonical = result["canonical_followup_request"]
+        self.assertEqual(canonical["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(canonical["objective_bundle_key"], "entity_insert:mira:source_body:near_reachable")
+        self.assertEqual(canonical["operator_recipe_expansion_mode"], "readout_steering_deepening")
+        self.assertTrue(canonical["readout_steering_deepening_requested"])
+        row = result["evidence_rows"][0]
+        self.assertEqual(row["diagnostic_family"], "entity_insertion_materialized_candidate")
+        self.assertEqual(row["status"], "supportive")
+        self.assertEqual(row["actual_delta_class"], "readout_gap_movement")
+        self.assertEqual(row["ownership_role"], "self")
+        self.assertEqual(row["effect_role"], "readout_gap_movement")
+        self.assertIn("top20_gap_closer_candidate", row["positive_traits"])
+
+        runtime._diagnostic_results = [result]
+        deepening = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                "next_evidence_needed": "readout_steering_deepening",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(deepening)
+        assert deepening is not None
+        self.assertEqual(deepening["operator_recipe_expansion_summary"]["status"], "rank_carrier_family_found")
+        self.assertEqual(
+            deepening["operator_recipe_expansion_summary"]["best_readout_steering_rank_carrier_recipe_family"],
+            "readout_steering|entity_target_readout",
+        )
+        self.assertGreater(deepening["readout_steering_deepening_followup_count"], 0)
+        self.assertEqual(deepening["readout_steering_deepening_followup_status"], "matrix_replayed")
+        self.assertEqual(deepening["next_evidence_needed"], "readout_steering_deepening_review_complete")
+        review = deepening["readout_deepening_review_summary"]
+        self.assertEqual(review["readout_deepening_review_status"], "complete")
+        self.assertEqual(review["best_candidate_role"], "gap_closer_candidate")
+        self.assertFalse(review["production_trial_eligible"])
+        self.assertEqual(review["why_not_trial"], "gap moved, but target_mass/top20 lift is still uncertified")
+        self.assertEqual(review["recommended_next_action"], "request_readout_gap_confirmation_or_variant_sweep")
+        self.assertEqual(review["recommended_next_evidence"], "readout_gap_confirmation_or_variant_sweep")
+        self.assertEqual(
+            review["recommended_operator_recipe_expansion_mode"],
+            "readout_gap_confirmation_or_variant_sweep",
+        )
+        self.assertEqual(
+            deepening["diagnostic_summary"]["readout_steering_deepening_followup_status"],
+            "matrix_replayed",
+        )
+        self.assertEqual(
+            deepening["diagnostic_summary"]["readout_deepening_review_summary"]["best_candidate_role"],
+            "gap_closer_candidate",
+        )
+        self.assertTrue(
+            any(
+                row.get("readout_deepening_followup")
+                for row in deepening["operator_recipe_expansion_matrix"]
+            )
+        )
+        self.assertEqual(deepening["operator_recipe_expansion_matrix"][0]["failure_mode"], "self_rank_carrier")
+
+        runtime._diagnostic_results = [result, deepening]
+        repeated = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                "next_evidence_needed": "readout_steering_deepening",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(repeated)
+        assert repeated is not None
+        self.assertEqual(repeated["readout_steering_deepening_followup_count"], 0)
+        self.assertEqual(repeated["readout_steering_deepening_followup_status"], "already_replayed")
+        self.assertEqual(repeated["next_evidence_needed"], "readout_steering_deepening_review_complete")
+        self.assertEqual(repeated["operator_recipe_expansion_summary"]["matrix_row_count"], 4)
+        self.assertEqual(
+            repeated["readout_deepening_review_summary"]["recommended_next_action"],
+            "request_readout_gap_confirmation_or_variant_sweep",
+        )
+
+        confirmation = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "next_evidence_needed": "readout_gap_confirmation_or_variant_sweep",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(confirmation)
+        assert confirmation is not None
+        self.assertGreater(confirmation["readout_steering_deepening_followup_count"], 0)
+        self.assertEqual(confirmation["readout_steering_deepening_followup_status"], "matrix_replayed")
+        self.assertGreater(confirmation["readout_gap_confirmation_variant_count"], 0)
+        self.assertEqual(confirmation["next_evidence_needed"], "readout_gap_confirmation_review_complete")
+        self.assertEqual(confirmation["readout_deepening_review_summary"]["best_candidate_role"], "gap_closer_candidate")
+        self.assertTrue(
+            any(
+                row.get("readout_gap_confirmation_variant")
+                for row in confirmation["operator_recipe_expansion_matrix"]
+            )
+        )
+
+        runtime._diagnostic_results = [result, deepening, confirmation]
+        conversion = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "carrier_to_actuator_conversion_sweep",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_keys": ["entity_insert:mira:source_body:near_reachable"],
+                "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                "next_evidence_needed": "carrier_to_actuator_conversion_sweep",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(conversion)
+        assert conversion is not None
+        self.assertEqual(conversion["diagnostic"], "carrier_to_actuator_conversion_sweep")
+        self.assertEqual(conversion["diagnostic_role"], "carrier_to_actuator_conversion_sweep")
+        self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
+        self.assertEqual(conversion["next_evidence_needed"], "carrier_to_actuator_conversion_review_complete")
+        self.assertEqual(
+            conversion["readout_deepening_review_summary"]["best_candidate_role"],
+            "carrier_only_no_target_actuator",
+        )
+        self.assertFalse(conversion["readout_deepening_review_summary"]["production_trial_eligible"])
+        self.assertEqual(
+            conversion["operator_family_shift_status"],
+            "needed_after_gap_carrier_conversion_failed",
+        )
+        self.assertGreater(len(conversion["operator_family_shift_preview_rows"]), 0)
+        self.assertEqual(
+            conversion["readout_deepening_review_summary"]["operator_family_shift_status"],
+            "needed_after_gap_carrier_conversion_failed",
+        )
+        self.assertEqual(
+            conversion["readout_deepening_review_summary"]["operator_family_shift_canonical_request"]["diagnostic"],
+            "compare_extra_operator_diagnostics",
+        )
+        self.assertEqual(
+            conversion["readout_deepening_review_summary"]["operator_family_shift_canonical_request"][
+                "operator_recipe_expansion_mode"
+            ],
+            "non_kv_operator_search",
+        )
+        self.assertTrue(
+            any(
+                row.get("carrier_to_actuator_conversion_variant")
+                for row in conversion["operator_recipe_expansion_matrix"]
+            )
+        )
+
+        non_kv_preview = runtime._execute_controller_diagnostic_request(
+            conversion["readout_deepening_review_summary"]["operator_family_shift_canonical_request"],
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(non_kv_preview)
+        assert non_kv_preview is not None
+        self.assertEqual(non_kv_preview["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(non_kv_preview["next_evidence_needed"], "non_kv_operator_search_preview_complete")
+        self.assertTrue(non_kv_preview["non_kv_operator_search_requested"])
+        self.assertEqual(non_kv_preview["operator_family_shift_status"], "preview_ready")
+        self.assertGreater(len(non_kv_preview["operator_family_shift_preview_rows"]), 0)
+        self.assertFalse(non_kv_preview["production_apply_allowed"])
+
+    def test_operator_replay_prefers_un_deepened_rotated_objective_for_readout_followup(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 7
+        runtime._latest_diagnostic_results = []
+        runtime._last_task_feedback = {
+            "required_term_recall": 0.25,
+            "required_term_span_progress": 0.25,
+            "entity_recall_terms": ["Mira", "budget"],
+            "missing_required_terms": ["Mira", "budget"],
+        }
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                "evidence_rows": [
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "operator_axis": "readout_steering_deepening",
+                    }
+                ],
+            },
+            {
+                "diagnostic": "entity_insertion_operator_candidate_review",
+                "status": "candidate_blueprints_ready",
+                "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+                "candidate_blueprints": [
+                    {
+                        "kind": "entity_insertion_candidate_blueprint",
+                        "objective_term": "Mira",
+                        "first_piece": " Mira",
+                        "first_token_id": 43000,
+                        "readout_status": "near_reachable",
+                        "source_provenance": "source_body",
+                        "candidate_key": "entity_insert:mira:source_body:near_reachable",
+                        "recommended_operator_families": ["target_readout_direction_patch"],
+                    },
+                    {
+                        "kind": "entity_insertion_candidate_blueprint",
+                        "objective_term": "budget",
+                        "first_piece": " budget",
+                        "first_token_id": 4466,
+                        "readout_status": "weak_reachable",
+                        "source_provenance": "source_body",
+                        "candidate_key": "entity_insert:budget:source_body:weak_reachable",
+                        "recommended_operator_families": ["target_readout_direction_patch"],
+                    },
+                ],
+            },
+        ]
+
+        def fake_readout_candidate(**kwargs):
+            return {
+                "surface_id": "s_resid_pre_l5_last",
+                "kind": "resid_add",
+                "role": "readout_steering:entity_target_readout",
+                "focus_feature": kwargs["intended_term"],
+                "focus_term": kwargs["intended_term"],
+                "bundle_key": kwargs["bundle_key"],
+                "bundle_family": "readout_steering",
+                "phase_objective": "readout_escape",
+                "target": {"surface_id": "s_resid_pre_l5_last"},
+                "source": {"dtype": "vector", "expr": {"fn": "readout_direction", "target_token_ids": [1]}},
+                "op": {"kind": "resid_add", "alpha": kwargs["alpha"]},
+                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "step_size": kwargs["alpha"], "revertible": True},
+                "operator_recipe_id": f"entity_target_readout:{kwargs['intended_term']}:{kwargs['alpha']}",
+                "operator_family_key": "readout_escape|readout_steering|readout_direction",
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            bundle_key = str(candidate_edits[0]["bundle_key"])
+            is_mira = "mira" in bundle_key
+            return {
+                "status": "ok",
+                "label": kwargs.get("label"),
+                "actual_delta_class": "readout_gap_movement",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "target_piece": " Mira" if is_mira else " budget",
+                "target_piece_logit_delta": 0.04 if is_mira else 0.03,
+                "target_top20_threshold_gap_delta": -0.3 if is_mira else -0.2,
+                "focus_rank_delta": 4 if is_mira else 2,
+                "repeat_flag_delta": 0,
+                "entropy_delta": 0.0,
+                "top1_margin_delta": 0.0,
+                "candidate_fingerprint": {"bundle_key": bundle_key},
+                "eval_context_fingerprint": {"decode_step": 0},
+            }
+
+        runtime._readout_steering_candidate = fake_readout_candidate
+        runtime.replay_candidate_edits_actual_delta = fake_replay
+
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "operator_diagnostic_replay",
+                "bundle_key": "entity_rotation:Mira_budget",
+                "objective_bundle_key": "entity_rotation:Mira_budget",
+                "next_evidence_needed": "operator_diagnostic_replay_for_rotated_entity_candidates",
+                "materialize_entity_insertion_candidates": True,
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["entity_operator_materialization_status"], "materialized")
+        plan = result["entity_operator_deepening_plan"]
+        self.assertEqual(plan["objective_bundle_key"], "entity_insert:budget:source_body:weak_reachable")
+        self.assertEqual(plan["intended_term"], "budget")
+        self.assertEqual(plan["un_deepened_objective_candidate_count"], 1)
+        self.assertEqual(plan["deferred_seen_objective_count"], 1)
+        canonical = result["canonical_followup_request"]
+        self.assertEqual(canonical["objective_bundle_key"], "entity_insert:budget:source_body:weak_reachable")
+        self.assertEqual(canonical["operator_recipe_expansion_mode"], "readout_steering_deepening")
+
+    def test_extract_diagnostic_requests_uses_strategy_hint_readout_steering_deepening_mode(self):
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_compare_extra_operator_diagnostics",
+                "why_not_apply": "entity rank carrier needs local readout deepening",
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "diagnostic_frontier_next_evidence": "readout_steering_deepening",
+                "diagnostic_frontier_operator_recipe_expansion_mode": "readout_steering_deepening",
+            }
+        }
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(requests[0]["next_evidence_needed"], "readout_steering_deepening")
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "readout_steering_deepening")
+        self.assertTrue(requests[0]["readout_steering_deepening_requested"])
+
+    def test_extract_diagnostic_requests_uses_canonical_readout_deepening_followup_identity(self):
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_compare_extra_operator_diagnostics",
+                "objective_bundle_key": "kv_pair:Mira:source_body:67:69",
+                "why_not_apply": "entity rank carrier needs local readout deepening",
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_next_evidence": "readout_steering_deepening",
+                "diagnostic_frontier_operator_recipe_expansion_mode": "readout_steering_deepening",
+                "diagnostic_frontier_canonical_request": {
+                    "diagnostic": "compare_extra_operator_diagnostics",
+                    "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                    "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                    "step_actuator_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                    "next_evidence_needed": "readout_steering_deepening",
+                    "operator_recipe_expansion_mode": "readout_steering_deepening",
+                    "readout_steering_deepening_requested": True,
+                    "seed_operator_recipe_id": "entity_target_readout_patch_l005_a040:entity_insert:mira",
+                },
+            }
+        }
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertEqual(requests[0]["objective_bundle_key"], "entity_insert:mira:source_body:near_reachable")
+        self.assertEqual(requests[0]["bundle_key"], "entity_insert:mira:source_body:near_reachable")
+        self.assertEqual(requests[0]["controller_requested_objective_bundle_key"], "kv_pair:Mira:source_body:67:69")
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "readout_steering_deepening")
+        self.assertEqual(
+            requests[0]["seed_operator_recipe_id"],
+            "entity_target_readout_patch_l005_a040:entity_insert:mira",
+        )
+        self.assertTrue(requests[0]["canonical_followup_request_applied"])
+
+    def test_extract_diagnostic_requests_routes_readout_gap_confirmation_next_action(self):
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_readout_gap_confirmation_or_variant_sweep",
+                "why_not_apply": "gap closer needs confirmation before trial",
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_next_evidence": "readout_gap_confirmation_or_variant_sweep",
+                "diagnostic_frontier_operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "diagnostic_frontier_canonical_request": {
+                    "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                    "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                    "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                    "step_actuator_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                    "next_evidence_needed": "readout_gap_confirmation_or_variant_sweep",
+                    "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                    "seed_operator_recipe_id": "readout_gap_probe_l005_a040:entity_insert:mira",
+                },
+            }
+        }
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "readout_gap_confirmation_or_variant_sweep")
+        self.assertEqual(requests[0]["objective_bundle_key"], "entity_insert:mira:source_body:near_reachable")
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "readout_gap_confirmation_or_variant_sweep")
+        self.assertEqual(
+            requests[0]["seed_operator_recipe_id"],
+            "readout_gap_probe_l005_a040:entity_insert:mira",
+        )
+        self.assertTrue(requests[0]["canonical_followup_request_applied"])
+
+    def test_extract_diagnostic_requests_preserves_objective_rotation_terms(self):
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_objective_rotation_pipeline",
+                "why_not_apply": "rotate away from exhausted gap closer",
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "objective_rotation_needed": True,
+                "diagnostic_frontier_canonical_request": {
+                    "diagnostic": "objective_rotation_pipeline",
+                    "terms": ["Mira", "Omar", "budget"],
+                    "target_terms": ["Mira", "Omar", "budget"],
+                    "next_evidence_needed": "objective_rotation_pipeline",
+                    "objective_rotation_pipeline": True,
+                    "reason": "gap confirmation stayed diagnostic-only for send",
+                    "permission": "diagnostic_only",
+                },
+            }
+        }
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "objective_rotation_pipeline")
+        self.assertEqual(requests[0]["terms"], ["Mira", "Omar", "budget"])
+        self.assertEqual(requests[0]["target_terms"], ["Mira", "Omar", "budget"])
+        self.assertEqual(requests[0]["next_evidence_needed"], "objective_rotation_pipeline")
+        self.assertTrue(requests[0]["objective_rotation_pipeline"])
+        self.assertTrue(requests[0]["canonical_followup_request_applied"])
+
+    def test_extract_diagnostic_requests_preserves_carrier_conversion_objectives(self):
+        objectives = [
+            "entity_insert:send:source_body:weak_reachable",
+            "entity_insert:budget:source_body:weak_reachable",
+        ]
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_carrier_to_actuator_conversion_sweep",
+                "why_not_apply": "multiple objectives are confirmed gap-only",
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "carrier_to_actuator_conversion_sweep_recommended": True,
+                "diagnostic_frontier_canonical_request": {
+                    "diagnostic": "carrier_to_actuator_conversion_sweep",
+                    "objective_bundle_keys": objectives,
+                    "seed_objective_bundle_keys": objectives,
+                    "terms": ["send", "budget"],
+                    "target_terms": ["send", "budget"],
+                    "next_evidence_needed": "carrier_to_actuator_conversion_sweep",
+                    "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                    "carrier_to_actuator_conversion_sweep": True,
+                    "permission": "diagnostic_only",
+                },
+            }
+        }
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "carrier_to_actuator_conversion_sweep")
+        self.assertEqual(requests[0]["objective_bundle_keys"], objectives)
+        self.assertEqual(requests[0]["seed_objective_bundle_keys"], objectives)
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "carrier_to_actuator_conversion_sweep")
+        self.assertTrue(requests[0]["carrier_to_actuator_conversion_sweep"])
+        self.assertTrue(requests[0]["canonical_followup_request_applied"])
+
+    def test_extract_diagnostic_requests_substitutes_blocked_attention_probe(self):
+        objective = "entity_insert:send:source_body:weak_reachable"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_attention_readout_carrier_probe",
+                "objective_bundle_key": objective,
+                "why_not_apply": "attention carrier probe has no cached rows",
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "blocked_next_diagnostics": [
+                    {
+                        "diagnostic": "attention_readout_carrier_probe",
+                        "objective_bundle_key": objective,
+                        "reason": "requires_cached_attention_rows",
+                        "suggested_alternate_diagnostic": "attention_head_ablation_on_frontier",
+                    }
+                ],
+            }
+        }
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "attention_head_ablation_on_frontier")
+        self.assertEqual(requests[0]["unavailable_diagnostic"], "attention_readout_carrier_probe")
+        self.assertTrue(requests[0]["diagnostic_unavailable_veto"])
+        self.assertTrue(requests[0]["substituted_for_unavailable_diagnostic"])
+
+    def test_extract_diagnostic_requests_drops_blocked_attention_probe_without_alternate(self):
+        objective = "entity_insert:send:source_body:weak_reachable"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "next_action": "request_attention_readout_carrier_probe",
+                "objective_bundle_key": objective,
+            },
+        }
+        packet = {
+            "strategy_hints": {
+                "blocked_next_diagnostics": [
+                    {
+                        "diagnostic": "attention_readout_carrier_probe",
+                        "objective_bundle_key": objective,
+                        "reason": "requires_cached_attention_rows",
+                    }
+                ],
+            }
+        }
+
+        self.assertEqual(_extract_diagnostic_requests(command, packet), [])
+
+    def test_diagnostic_batch_passes_entity_probe_to_review_and_blueprints_to_replay(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime.max_diagnostic_calls_per_run = 8
+        runtime._diagnostic_results = []
+        runtime._latest_diagnostic_results = []
+        runtime.diagnostic_result_window = 8
+        runtime._pending_diagnostic_events = []
+        runtime._last_packet = None
+        seen_requests: list[dict[str, object]] = []
+
+        def fake_execute(request, *, source, packet):
+            seen_requests.append(dict(request))
+            diagnostic = request.get("diagnostic")
+            if diagnostic == "target_entity_insertion_probe":
+                return {
+                    "diagnostic": "target_entity_insertion_probe",
+                    "status": "ok",
+                    "term_readout_rows": [
+                        {
+                            "term": "Mira",
+                            "rank": 72,
+                            "readout_status": "near_reachable",
+                            "source_provenance": "source_body",
+                        }
+                    ],
+                    "next_evidence_needed": "entity_insertion_operator_candidate_review",
+                }
+            if diagnostic == "entity_insertion_operator_candidate_review":
+                self.assertIn("target_entity_insertion_probe", request)
+                return {
+                    "diagnostic": "entity_insertion_operator_candidate_review",
+                    "status": "candidate_blueprints_ready",
+                    "candidate_blueprints": [
+                        {
+                            "kind": "entity_insertion_candidate_blueprint",
+                            "objective_term": "Mira",
+                            "candidate_key": "entity_insert:mira",
+                        }
+                    ],
+                    "candidate_blueprint_count": 1,
+                    "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+                }
+            if diagnostic == "operator_diagnostic_replay":
+                self.assertEqual(
+                    request.get("candidate_blueprints"),
+                    [
+                        {
+                            "kind": "entity_insertion_candidate_blueprint",
+                            "objective_term": "Mira",
+                            "candidate_key": "entity_insert:mira",
+                        }
+                    ],
+                )
+                return {
+                    "diagnostic": "operator_diagnostic_replay",
+                    "status": "ok",
+                    "entity_operator_materialization_status": "materialized",
+                    "entity_operator_materialization_count": 1,
+                }
+            return None
+
+        runtime._execute_controller_diagnostic_request = fake_execute
+
+        results = runtime.request_controller_diagnostics(
+            [
+                {"diagnostic": "target_entity_insertion_probe"},
+                {"diagnostic": "entity_insertion_operator_candidate_review"},
+                {
+                    "diagnostic": "operator_diagnostic_replay",
+                    "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+                },
+            ],
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertEqual([item["diagnostic"] for item in results], [
+            "target_entity_insertion_probe",
+            "entity_insertion_operator_candidate_review",
+            "operator_diagnostic_replay",
+        ])
+        self.assertEqual(seen_requests[1]["target_entity_insertion_probe"]["status"], "ok")
+        self.assertEqual(seen_requests[2]["candidate_blueprints"][0]["objective_term"], "Mira")
+
+    def test_objective_rotation_pipeline_bundles_probe_review_and_replay_without_apply_permission(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 6
+        original_execute = runtime._execute_controller_diagnostic_request
+        seen_operator_requests: list[dict[str, object]] = []
+
+        def fake_probe(request, *, source, strategy_hints):
+            return {
+                "diagnostic": "target_entity_insertion_probe",
+                "status": "ok",
+                "recorded_step": 6,
+                "focus_terms": list(request["terms"]),
+                "term_readout_rows": [
+                    {
+                        "term": "Mira",
+                        "rank": 72,
+                        "readout_status": "near_reachable",
+                        "source_provenance": "source_body",
+                    }
+                ],
+                "top20_reachable_count": 0,
+                "near_reachable_count": 1,
+                "source_body_span_count": 1,
+                "next_evidence_needed": "entity_insertion_operator_candidate_review",
+            }
+
+        def fake_review(request, *, source, strategy_hints):
+            self.assertEqual(request["target_entity_insertion_probe"]["status"], "ok")
+            return {
+                "diagnostic": "entity_insertion_operator_candidate_review",
+                "status": "candidate_blueprints_ready",
+                "recorded_step": 6,
+                "focus_terms": ["Mira"],
+                "candidate_terms": ["Mira"],
+                "candidate_blueprint_count": 1,
+                "candidate_blueprints": [
+                    {
+                        "kind": "entity_insertion_candidate_blueprint",
+                        "objective_term": "Mira",
+                        "candidate_key": "entity_insert:mira:source_body:near_reachable",
+                    }
+                ],
+                "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+            }
+
+        def intercept_execute(request, *, source, packet):
+            if request.get("diagnostic") == "operator_diagnostic_replay":
+                seen_operator_requests.append(dict(request))
+                return {
+                    "diagnostic": "operator_diagnostic_replay",
+                    "status": "ok",
+                    "recorded_step": 6,
+                    "entity_operator_materialization_requested": True,
+                    "entity_operator_materialization_status": "materialized",
+                    "entity_operator_materialization_count": 1,
+                    "entity_operator_materialization_rows": [
+                        {
+                            "evidence_kind": "operator_replay",
+                            "diagnostic_family": "entity_insertion_materialized_candidate",
+                            "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "status": "supportive",
+                        }
+                    ],
+                    "next_evidence_needed": "readout_steering_deepening",
+                    "entity_operator_deepening_plan": {
+                        "kind": "positive_operator_deepening_plan",
+                        "suggested_next_evidence": "readout_steering_deepening",
+                    },
+                    "positive_operator_deepening_plan": {
+                        "kind": "positive_operator_deepening_plan",
+                        "suggested_next_evidence": "readout_steering_deepening",
+                    },
+                    "canonical_followup_request": {
+                        "diagnostic": "compare_extra_operator_diagnostics",
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "operator_recipe_expansion_mode": "readout_steering_deepening",
+                    },
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                }
+            return original_execute(request, source=source, packet=packet)
+
+        runtime._target_entity_insertion_probe_diagnostic = fake_probe
+        runtime._entity_insertion_operator_candidate_review_diagnostic = fake_review
+        runtime._execute_controller_diagnostic_request = intercept_execute
+
+        result = original_execute(
+            {
+                "diagnostic": "objective_rotation_pipeline",
+                "terms": ["Mira", "budget"],
+                "target_terms": ["Mira", "budget"],
+                "next_evidence_needed": "objective_rotation_pipeline",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["diagnostic"], "objective_rotation_pipeline")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["pipeline_stage_count"], 3)
+        self.assertEqual(
+            result["pipeline_stages"],
+            [
+                "target_entity_insertion_probe",
+                "entity_insertion_operator_candidate_review",
+                "operator_diagnostic_replay",
+            ],
+        )
+        self.assertEqual(result["target_entity_insertion_probe"]["status"], "ok")
+        self.assertEqual(
+            result["entity_insertion_operator_candidate_review"]["status"],
+            "candidate_blueprints_ready",
+        )
+        self.assertEqual(result["operator_diagnostic_replay"]["diagnostic"], "operator_diagnostic_replay")
+        self.assertEqual(result["entity_operator_materialization_status"], "materialized")
+        self.assertEqual(result["next_evidence_needed"], "readout_steering_deepening")
+        self.assertEqual(result["canonical_followup_request"]["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertFalse(result["production_apply_allowed"])
+        self.assertFalse(result["certified_for_apply"])
+        self.assertFalse(result["operator_certified"])
+        self.assertTrue(seen_operator_requests)
+        self.assertEqual(
+            seen_operator_requests[0]["next_evidence_needed"],
+            "operator_diagnostic_replay_for_rotated_entity_candidates",
+        )
+        self.assertTrue(seen_operator_requests[0]["objective_rotation_pipeline"])
+
+    def test_readout_gap_confirmation_seen_is_objective_aware(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "objective_bundle_key": "entity_insert:send:source_body:weak_reachable",
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": "entity_insert:send:source_body:weak_reachable",
+                },
+            }
+        ]
+
+        self.assertTrue(
+            runtime._readout_gap_confirmation_seen_for_objective(
+                "entity_insert:send:source_body:weak_reachable"
+            )
+        )
+        self.assertFalse(
+            runtime._readout_gap_confirmation_seen_for_objective(
+                "entity_insert:budget:source_body:weak_reachable"
+            )
+        )
+
+        runtime._diagnostic_results.append(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "operator_recipe_expansion_summary": {
+                    "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                },
+                "operator_recipe_expansion_matrix": [
+                    {
+                        "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                    }
+                ],
+            }
+        )
+        self.assertTrue(
+            runtime._readout_gap_confirmation_seen_for_objective(
+                "entity_insert:budget:source_body:weak_reachable"
+            )
+        )
+
+    def test_confirmed_gap_only_objective_rows_require_no_target_lift(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "objective_bundle_key": "entity_insert:send:source_body:weak_reachable",
+                "recorded_step": 4,
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": "entity_insert:send:source_body:weak_reachable",
+                    "best_candidate_role": "gap_closer_candidate",
+                    "production_trial_eligible": False,
+                    "gap_delta": -0.002,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                },
+            },
+            {
+                "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                "recorded_step": 5,
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                    "best_candidate_role": "target_actuator_candidate",
+                    "production_trial_eligible": True,
+                    "gap_delta": -0.004,
+                    "target_mass_delta": 0.00005,
+                    "target_top20_hit_delta": 0,
+                },
+            },
+        ]
+
+        rows = runtime._confirmed_gap_only_objective_rows()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["objective_bundle_key"], "entity_insert:send:source_body:weak_reachable")
+        self.assertEqual(rows[0]["term"], "send")
+        self.assertEqual(rows[0]["objective_status"], "confirmed_gap_only_no_target_lift")
+        self.assertFalse(rows[0]["rotation_eligible"])
+
+    def test_strategy_hints_reserve_conversion_after_one_confirmed_gap_only_objective(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime.decoder_control_mode = ""
+        runtime._kv_canary_eval_active = False
+        runtime._steps = 6
+        runtime.max_diagnostic_calls_per_run = 8
+        runtime._operator_certification_table = {}
+        runtime._operator_bridge_plan_table = {}
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                "recorded_step": 4,
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                    "best_candidate_role": "gap_closer_candidate",
+                    "production_trial_eligible": False,
+                    "gap_delta": -0.002,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                },
+            },
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "operator_recipe_expansion_mode": "readout_steering_deepening",
+                "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+                "recorded_step": 6,
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+                    "best_candidate_role": "gap_closer_candidate",
+                    "production_trial_eligible": False,
+                    "recommended_next_action": "request_readout_gap_confirmation_or_variant_sweep",
+                    "gap_delta": -0.001,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                    "best_recipe_id": "readout_deepen_target_pure_a060_gap",
+                    "best_recipe_family": "readout_steering|target_readout_deepening",
+                    "best_recipe_name": "target_readout_deepening",
+                    "why_not_trial": "gap moved, but target_mass/top20 lift is still uncertified",
+                },
+            },
+        ]
+        runtime._latest_tokenize_terms_result = lambda: {}
+        runtime._feedback_terms = lambda keys: ["Mira", "budget"]
+        runtime._preprobe_readout_escape_state = lambda canary: (False, {})
+        runtime._intersect_terms = lambda raw_terms, allowed_terms: []
+        runtime._shot_mode_ready = lambda: False
+        runtime._recent_loop_break_attempt_count = lambda: 0
+        runtime._recent_stabilizing_only_count = lambda: 0
+        runtime._l4_term_nudge_cooldown_active = lambda: False
+        runtime._shot_candidate_edits = lambda **kwargs: []
+        runtime._kv_candidate_edits = lambda **kwargs: (
+            [],
+            {
+                "called": True,
+                "source": "unit_test",
+                "stage": "empty",
+                "input_hit_count": 0,
+                "output_count": 0,
+                "prune_reasons": [],
+                "target_terms": [],
+            },
+        )
+        runtime._annotate_effect_families = lambda edits: (edits, [])
+        runtime._attach_operator_certifications = lambda edits: edits
+        runtime._kv_retry_candidate_edits = lambda **kwargs: []
+        runtime._shot_probe_needed = lambda **kwargs: False
+        runtime._semantic_focus_summary = lambda **kwargs: {}
+        runtime._readout_escape_needed = lambda **kwargs: (False, "", {})
+        runtime._loop_severity_hint = lambda: "none"
+        runtime._ordered_missing_terms_for_phase = lambda **kwargs: []
+
+        hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertEqual(hints["confirmed_gap_only_count"], 1)
+        self.assertTrue(hints["carrier_to_actuator_conversion_sweep_recommended"])
+        self.assertTrue(hints["diagnostic_budget_reserved_for_conversion"])
+        self.assertTrue(hints["readout_gap_confirmation_skipped_for_conversion"])
+        self.assertEqual(
+            hints["carrier_to_actuator_conversion_reason"],
+            "one_confirmed_gap_only_plus_current_gap_closer_candidate",
+        )
+        self.assertEqual(hints["diagnostic_frontier_request"], "carrier_to_actuator_conversion_sweep")
+        request = hints["diagnostic_frontier_canonical_request"]
+        self.assertEqual(request["diagnostic"], "carrier_to_actuator_conversion_sweep")
+        self.assertEqual(request["operator_recipe_expansion_mode"], "carrier_to_actuator_conversion_sweep")
+        self.assertEqual(
+            request["objective_bundle_keys"],
+            [
+                "entity_insert:mira:source_body:weak_reachable",
+                "entity_insert:budget:source_body:weak_reachable",
+            ],
+        )
+        self.assertEqual(request["target_terms"], ["mira", "budget"])
+
+    def test_strategy_hints_request_non_kv_shift_after_carrier_conversion_fails(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime.decoder_control_mode = ""
+        runtime._kv_canary_eval_active = False
+        runtime._steps = 8
+        runtime.max_diagnostic_calls_per_run = 9
+        runtime._operator_certification_table = {}
+        runtime._operator_bridge_plan_table = {}
+        objective_key = "entity_insert:mira:source_body:near_reachable"
+        preview_rows = HookedTransformerWorkerRuntime._operator_family_shift_preview_rows(
+            objective_bundle_key=objective_key,
+            objective_term="mira",
+            seed_recipe_id="readout_deepen_target_pure_a060_gap",
+            seed_recipe_family="readout_steering|carrier_to_actuator_conversion",
+        )
+        canonical_request = HookedTransformerWorkerRuntime._operator_family_shift_canonical_request(
+            objective_bundle_key=objective_key,
+            objective_term="mira",
+            seed_recipe_id="readout_deepen_target_pure_a060_gap",
+            seed_recipe_family="readout_steering|carrier_to_actuator_conversion",
+        )
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "carrier_to_actuator_conversion_sweep",
+                "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                "objective_bundle_key": objective_key,
+                "recorded_step": 7,
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": objective_key,
+                    "best_candidate_role": "carrier_only_no_target_actuator",
+                    "production_trial_eligible": False,
+                    "recommended_next_action": "request_non_kv_operator_search",
+                    "recommended_next_evidence": "operator_family_shift_after_gap_carrier_conversion_failed",
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                    "operator_family_shift_status": "needed_after_gap_carrier_conversion_failed",
+                    "operator_family_shift_reason": (
+                        "conversion variants were carrier-only with no target mass/top20 lift"
+                    ),
+                    "operator_family_shift_preview_rows": preview_rows,
+                    "operator_family_shift_canonical_request": canonical_request,
+                },
+            }
+        ]
+        runtime._latest_tokenize_terms_result = lambda: {}
+        runtime._feedback_terms = lambda keys: ["Mira", "budget"]
+        runtime._preprobe_readout_escape_state = lambda canary: (False, {})
+        runtime._intersect_terms = lambda raw_terms, allowed_terms: []
+        runtime._shot_mode_ready = lambda: False
+        runtime._recent_loop_break_attempt_count = lambda: 0
+        runtime._recent_stabilizing_only_count = lambda: 0
+        runtime._l4_term_nudge_cooldown_active = lambda: False
+        runtime._shot_candidate_edits = lambda **kwargs: []
+        runtime._kv_candidate_edits = lambda **kwargs: (
+            [],
+            {
+                "called": True,
+                "source": "unit_test",
+                "stage": "empty",
+                "input_hit_count": 0,
+                "output_count": 0,
+                "prune_reasons": [],
+                "target_terms": [],
+            },
+        )
+        runtime._annotate_effect_families = lambda edits: (edits, [])
+        runtime._attach_operator_certifications = lambda edits: edits
+        runtime._kv_retry_candidate_edits = lambda **kwargs: []
+        runtime._shot_probe_needed = lambda **kwargs: False
+        runtime._semantic_focus_summary = lambda **kwargs: {}
+        runtime._readout_escape_needed = lambda **kwargs: (False, "", {})
+        runtime._loop_severity_hint = lambda: "none"
+        runtime._ordered_missing_terms_for_phase = lambda **kwargs: []
+
+        hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertTrue(hints["operator_family_shift_recommended"])
+        self.assertEqual(
+            hints["operator_family_shift_status"],
+            "needed_after_gap_carrier_conversion_failed",
+        )
+        self.assertEqual(hints["diagnostic_frontier_request"], "compare_extra_operator_diagnostics")
+        self.assertEqual(hints["diagnostic_frontier_next_evidence"], "non_kv_operator_search")
+        self.assertEqual(
+            hints["diagnostic_frontier_operator_recipe_expansion_mode"],
+            "non_kv_operator_search",
+        )
+        self.assertEqual(
+            hints["operator_family_shift_canonical_request"]["operator_recipe_expansion_mode"],
+            "non_kv_operator_search",
+        )
+        self.assertGreater(len(hints["operator_family_shift_preview_rows"]), 0)
+
+    def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):
+        env = SpiralEasyConstrainedRewriteEnv()
+        env.reset(7)
+        kwargs = env.worker_runtime_kwargs()
+
+        observer = kwargs.get("observer_check_fn")
+        self.assertTrue(callable(observer))
+        feedback = env.task_feedback("The budget draft is not a draft.")
+        payload = observer(
+            "The budget draft is not a draft.",
+            task_feedback=feedback,
+            trigger="unit_test",
+        )
+
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["mode"], "lexical_coverage_fallback")
+        self.assertFalse(payload["semantic_backend_available"])
+        self.assertEqual(payload["model_name"], "none")
+        self.assertEqual(payload["raw_score"], payload["coverage_signal"])
+        self.assertEqual(payload["score"], payload["coverage_signal"])
 
 
 @unittest.skipUnless(HAS_TRANSFORMER_LENS, "transformer_lens is not installed")
@@ -2448,6 +3932,96 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(shadow["actuator_bundle_key"], actuator)
         self.assertTrue(shadow["requires_bridge_plan"])
         self.assertFalse(shadow["production_apply_allowed"])
+
+    def test_worker_attention_probe_repeated_no_cache_becomes_unavailable_veto(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "entity_insert:send:source_body:weak_reachable"
+        first = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "attention_readout_carrier_probe",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(first)
+        assert first is not None
+        self.assertEqual(first["status"], "no_cached_evidence")
+        self.assertTrue(first["requires_cached_attention_rows"])
+        self.assertEqual(first["cached_attention_row_count"], 0)
+        self.assertTrue(first["no_cached_evidence_consumed"])
+        self.assertFalse(first["same_objective_repeat_blocked"])
+
+        runtime._diagnostic_results = [first]
+        second = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "attention_readout_carrier_probe",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(second)
+        assert second is not None
+        self.assertEqual(second["status"], "diagnostic_unavailable_veto")
+        self.assertTrue(second["diagnostic_unavailable_veto"])
+        self.assertEqual(second["diagnostic_unavailable_reason"], "requires_cached_attention_rows")
+        self.assertEqual(second["next_evidence_needed"], "diagnostic_unavailable_veto")
+        self.assertTrue(second["no_cached_evidence_consumed"])
+        self.assertTrue(second["same_objective_repeat_blocked"])
+        self.assertFalse(second["production_apply_allowed"])
+
+    def test_worker_attention_probe_materializes_kv_feature_scan_rows(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 0
+        objective = "entity_insert:send:source_body:weak_reachable"
+
+        result = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "attention_readout_carrier_probe",
+                "bundle_key": objective,
+                "objective_bundle_key": objective,
+            },
+            source="unit_test",
+            packet={
+                "strategy_hints": {},
+                "latest_observer_check": {
+                    "kv_feature_scan": {
+                        "top_feature_hits": [
+                            {
+                                "feature": "send",
+                                "site": "v_cache",
+                                "layer": 4,
+                                "head": 1,
+                                "token_mode": "last",
+                                "alignment": 0.71,
+                                "source_positions": [{"position": 70}],
+                                "source_piece": " send",
+                                "source_segment_kind": "source_body",
+                            }
+                        ]
+                    }
+                },
+            },
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["attention_scan_materialized_count"], 1)
+        self.assertEqual(result["cached_attention_row_count"], 1)
+        self.assertFalse(result["requires_cached_attention_rows"])
+        self.assertTrue(result["rank_readout_carrier"])
+        self.assertEqual(result["evidence_rows"][0]["evidence_kind"], "attention_readout_carrier")
+        self.assertEqual(result["evidence_rows"][0]["attention_probe_source"], "observer_kv_feature_scan")
+        self.assertEqual(result["evidence_rows"][0]["layer"], 4)
+        self.assertEqual(result["evidence_rows"][0]["head"], 1)
+        self.assertFalse(result["production_apply_allowed"])
 
     def test_worker_cross_bundle_bridge_search_uses_post_bridge_exhaustion_next_evidence(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)

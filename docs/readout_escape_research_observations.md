@@ -1,6 +1,6 @@
 # Readout Escape Research Observations
 
-Status date: 2026-05-17
+Status date: 2026-06-13
 
 This note summarizes the current research state of the readout-escape line. It is intentionally about observations and interpretation, not just implementation history.
 
@@ -258,6 +258,152 @@ harmful span/term patch
 ```
 
 But the last arrow is not yet established.
+
+## June 2026 Update: Gap-Only Carriers And Family Shift
+
+The newest live runs sharpen the bottleneck again. The controller can now move
+through this diagnostic sequence under the compact prompt:
+
+```text
+target_entity_insertion_probe
+-> entity_insertion_operator_candidate_review
+-> operator_diagnostic_replay
+-> readout_steering_deepening
+-> readout_gap_confirmation_or_variant_sweep
+-> objective_rotation_pipeline
+-> readout_steering_deepening on a rotated objective
+-> carrier_to_actuator_conversion_sweep
+```
+
+The important change is not task success. It is routing discipline.
+
+Earlier runs spent the final diagnostic slot confirming a second gap-only
+objective, then discovered too late that `carrier_to_actuator_conversion_sweep`
+was the next needed measurement. The current router now switches after:
+
+```text
+one confirmed_gap_only_no_target_lift objective
++ one additional gap_closer_candidate
+```
+
+That saves one diagnostic call and lets the conversion sweep run before the
+episode closes.
+
+### Observed Local Run
+
+In the latest GPT-5.5-controller / local GPT-2 compact run, the stack reached:
+
+```text
+budget readout_steering_deepening
+-> budget gap confirmation
+-> objective rotation
+-> Mira readout_steering_deepening
+-> carrier_to_actuator_conversion_sweep
+```
+
+The conversion sweep produced four variants and returned:
+
+```text
+best_candidate_role = carrier_only_no_target_actuator
+target_mass_delta ~= 0.000003
+target_top20_hit_delta = 0
+production_trial_eligible = false
+recommended_next_action = request_non_kv_operator_search
+recommended_next_evidence = operator_family_shift_after_gap_carrier_conversion_failed
+```
+
+This is a better negative result than the previous budget-exhausted run. The
+system no longer merely says "conversion would have been useful if budget
+remained." It actually runs the conversion sweep and observes that the readout
+steering family is still only a carrier, not a target actuator.
+
+### Interpretation
+
+The current readout-steering family can repeatedly produce small gap movement:
+
+```text
+target_top20_threshold_gap_delta < 0
+target_mass_delta ~= tiny positive
+target_top20_hit_delta = 0
+```
+
+That pattern is now stable enough to name:
+
+```text
+gap_closer_candidate != target_actuator_candidate
+carrier_to_actuator_conversion_failed != no evidence
+```
+
+The model is not blind to the target. The problem is that the available
+readout-steering primitive is not strong or geometrically direct enough to turn
+visibility into answer-boundary target mass/top-20 lift.
+
+### New Router State
+
+The newest runtime state is:
+
+```json
+{
+  "operator_family_shift_status": "needed_after_gap_carrier_conversion_failed",
+  "operator_family_shift_reason": "conversion variants were carrier-only with no target mass/top20 lift",
+  "recommended_next_action": "request_non_kv_operator_search",
+  "production_apply_allowed": false
+}
+```
+
+The result also carries diagnostic-only `operator_family_shift_preview_rows`:
+
+- `resid_readout_direction_patch`
+- `activation_patch_source_term_token`
+- `anti_attractor_suppression_patch`
+- `attention_route_carrier_probe`
+
+These rows are not candidate applications. They are scaffolds for the next
+measurement axis. The controller can request them through
+`operator_family_shift_canonical_request`, but they do not grant production
+apply permission.
+
+### Updated Research Reading
+
+The project has now moved from:
+
+```text
+can we see a frontier?
+```
+
+to:
+
+```text
+can a gap/rank carrier be converted into target-owned readout lift?
+```
+
+and now to:
+
+```text
+if readout steering cannot do that conversion, which non-KV operator family can?
+```
+
+This is a narrower and more useful failure mode. The current evidence suggests:
+
+- term rotation is useful, but should not endlessly re-confirm the same
+  gap-only pattern
+- readout steering can find the edge of the target basin
+- current readout-steering conversion variants still fail to create target
+  mass/top-20 lift
+- the next experimental axis should shift operator family, not keep rotating
+  terms or scaling the same readout direction
+
+### What This Does Not Claim
+
+This update still does not claim that the task is solved, that GPT-2 recipes
+transfer, or that non-KV preview rows are safe actuators.
+
+The current claim is:
+
+> The controller/runtime loop can now distinguish confirmed gap-only visibility,
+> rotated objective visibility, failed carrier-to-actuator conversion, and the
+> need for a bounded non-KV operator-family shift without turning any of those
+> diagnostic states into production apply permission.
 
 ## Latest GPT-2 Observation: Rank Carrier Split
 

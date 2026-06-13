@@ -152,14 +152,25 @@ def _semantic_observer_payload(
         coverage_signal=coverage_signal,
     )
     if semantic_progress is None:
-        return None
-    raw_score, coverage_weight, weighted_score = semantic_progress
+        bounded_coverage = round(float(max(0.0, min(1.0, coverage_signal))), 6)
+        raw_score = bounded_coverage
+        coverage_weight = 1.0
+        weighted_score = bounded_coverage
+        mode = "lexical_coverage_fallback"
+        model_name = "none"
+        semantic_backend_available = False
+    else:
+        raw_score, coverage_weight, weighted_score = semantic_progress
+        mode = str(getattr(critic, "mode", "unknown") or "unknown")
+        model_name = str(getattr(critic, "model_name", "unknown") or "unknown")
+        semantic_backend_available = True
     payload = {
         "check_type": "semantic_progress",
         "trigger": str(trigger),
         "reference_kind": str(reference_kind),
-        "mode": str(getattr(critic, "mode", "unknown") or "unknown"),
-        "model_name": str(getattr(critic, "model_name", "unknown") or "unknown"),
+        "mode": mode,
+        "model_name": model_name,
+        "semantic_backend_available": semantic_backend_available,
         "raw_score": raw_score,
         "coverage_signal": round(float(max(0.0, min(1.0, coverage_signal))), 6),
         "coverage_weight": coverage_weight,
@@ -624,8 +635,7 @@ class SpiralConstrainedRewriteEnv:
             "stop_checker": self.stop_checker,
             "task_feedback_fn": self.task_feedback,
         }
-        if self.semantic_critic is not None:
-            kwargs["observer_check_fn"] = self.semantic_observer_check
+        kwargs["observer_check_fn"] = self.semantic_observer_check
         return kwargs
 
     def _episode(self) -> ConstrainedRewriteEpisode:
@@ -916,8 +926,7 @@ class SpiralStructuredSummaryEnv:
             "stop_checker": self.stop_checker,
             "task_feedback_fn": self.task_feedback,
         }
-        if self.semantic_critic is not None:
-            kwargs["observer_check_fn"] = self.semantic_observer_check
+        kwargs["observer_check_fn"] = self.semantic_observer_check
         return kwargs
 
     def _parse_output(self, output: str) -> dict[str, Any]:

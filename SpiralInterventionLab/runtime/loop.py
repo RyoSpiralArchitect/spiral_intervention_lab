@@ -126,6 +126,24 @@ def _log_controller_trace(
     if logger is None or trace is None:
         return
 
+    telemetry_keys = (
+        "provider",
+        "model",
+        "packet_view",
+        "raw_payload_char_count",
+        "provider_payload_char_count",
+        "payload_reduction_ratio",
+        "system_prompt_char_count",
+        "rough_input_token_estimate",
+        "effective_max_output_tokens",
+        "success",
+        "attempt_count",
+        "error",
+    )
+    telemetry = {key: trace.get(key) for key in telemetry_keys if trace.get(key) is not None}
+    if telemetry:
+        logger.log({"event": "controller_prompt_telemetry", "step": step, **telemetry})
+
     observation = trace.get("observation")
     if isinstance(observation, Mapping):
         logger.log({"event": "controller_observation", "step": step, **dict(observation)})
@@ -459,6 +477,12 @@ def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
         return {"kind": "semantic_progress"}
     if isinstance(request, Mapping):
         return dict(request)
+    if str(meta.get("next_action") or "").strip().lower().replace("-", "_") == "request_observer_check":
+        return {
+            "kind": "semantic_progress",
+            "trigger": "controller_next_action",
+            "reason": str(meta.get("why_not_apply") or meta.get("micro_rationale") or "controller requested observer check"),
+        }
     return None
 
 
@@ -488,13 +512,145 @@ def _diagnostic_request_from_next_action(value: Any) -> str | None:
         "request_sae_feature_scan": "sae_feature_emitter_scan",
         "request_compare_extra_operator_diagnostics": "compare_extra_operator_diagnostics",
         "request_non_kv_operator_search": "compare_extra_operator_diagnostics",
+        "request_target_entity_insertion_probe": "target_entity_insertion_probe",
+        "request_entity_insertion_operator_candidate_review": "entity_insertion_operator_candidate_review",
+        "request_objective_rotation_pipeline": "objective_rotation_pipeline",
+        "request_carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_sweep",
         "request_cross_bundle_bridge_search": "cross_bundle_bridge_search",
         "request_activation_patch_candidate_review": "activation_patch_candidate_review",
         "request_activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
         "request_activation_patch_promotion_gate_review": "activation_patch_promotion_gate_review",
         "request_activation_patch_production_shadow_replay": "activation_patch_production_shadow_replay",
         "request_activation_patch_production_trial_gate_review": "activation_patch_production_trial_gate_review",
+        "request_readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_or_variant_sweep",
     }.get(text)
+
+
+def _strategy_canonical_diagnostic_request(strategy_hints: Mapping[str, Any]) -> dict[str, Any] | None:
+    raw = strategy_hints.get("diagnostic_frontier_canonical_request") or strategy_hints.get("canonical_followup_request")
+    if isinstance(raw, Mapping):
+        request = dict(raw)
+    else:
+        request = {}
+    if not request and str(strategy_hints.get("diagnostic_frontier_request") or ""):
+        request = {
+            "diagnostic": strategy_hints.get("diagnostic_frontier_request"),
+            "bundle_key": strategy_hints.get("diagnostic_frontier_bundle_key"),
+            "objective_bundle_key": strategy_hints.get("diagnostic_frontier_bundle_key"),
+            "next_evidence_needed": strategy_hints.get("diagnostic_frontier_next_evidence"),
+            "operator_recipe_expansion_mode": strategy_hints.get(
+                "diagnostic_frontier_operator_recipe_expansion_mode"
+            ),
+            "reason": strategy_hints.get("diagnostic_frontier_reason_text"),
+        }
+    diagnostic = str(
+        request.get("diagnostic")
+        or request.get("diagnostic_request")
+        or request.get("request")
+        or request.get("kind")
+        or ""
+    )
+    if not diagnostic:
+        return None
+    request["diagnostic"] = diagnostic
+    return {key: value for key, value in request.items() if value not in (None, "", [])}
+
+
+def _diagnostic_name(value: Any) -> str:
+    if isinstance(value, Mapping):
+        return str(
+            value.get("diagnostic")
+            or value.get("diagnostic_request")
+            or value.get("request")
+            or value.get("kind")
+            or value.get("name")
+            or ""
+        )
+    return str(value or "")
+
+
+def _canonicalize_diagnostic_request_row(
+    row: dict[str, Any],
+    *,
+    meta: Mapping[str, Any],
+    strategy_hints: Mapping[str, Any],
+    canonical_request: Mapping[str, Any] | None,
+) -> None:
+    if not isinstance(canonical_request, Mapping):
+        return
+    diagnostic = str(row.get("diagnostic") or "")
+    if not diagnostic or diagnostic != str(canonical_request.get("diagnostic") or ""):
+        return
+    canonical_next = str(canonical_request.get("next_evidence_needed") or "")
+    canonical_mode = str(canonical_request.get("operator_recipe_expansion_mode") or "")
+    if not canonical_next and not canonical_mode:
+        return
+    row_next = str(row.get("next_evidence_needed") or meta.get("next_evidence_needed") or "")
+    row_mode = str(row.get("operator_recipe_expansion_mode") or meta.get("operator_recipe_expansion_mode") or "")
+    strategy_next = str(strategy_hints.get("diagnostic_frontier_next_evidence") or "")
+    strategy_mode = str(strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode") or "")
+    applies = (
+        (canonical_next and canonical_next in {row_next, strategy_next})
+        or (canonical_mode and canonical_mode in {row_mode, strategy_mode})
+        or (not row_next and not row_mode)
+    )
+    if not applies:
+        return
+    for key in ("bundle_key", "objective_bundle_key", "step_actuator_bundle_key"):
+        meta_current = meta.get(key)
+        current = row.get(key) or meta_current
+        canonical_value = canonical_request.get(key)
+        if canonical_value not in (None, "", []):
+            if meta_current not in (None, "", []) and str(meta_current) != str(canonical_value):
+                row.setdefault(f"controller_requested_{key}", meta_current)
+            elif current not in (None, "", []) and str(current) != str(canonical_value):
+                row.setdefault(f"controller_requested_{key}", current)
+            row[key] = canonical_value
+    for key in (
+        "next_evidence_needed",
+        "operator_recipe_expansion_mode",
+        "readout_steering_deepening_requested",
+        "seed_operator_recipe_id",
+        "seed_recipe_family",
+        "seed_recipe_name",
+        "terms",
+        "target_terms",
+        "objective_bundle_keys",
+        "seed_objective_bundle_keys",
+        "objective_rotation_pipeline",
+        "carrier_to_actuator_conversion_sweep",
+        "operator_family_shift_requested",
+        "operator_family_shift_source",
+        "operator_family_shift_preview_rows",
+        "reason",
+        "permission",
+    ):
+        value = canonical_request.get(key)
+        if value not in (None, "", []):
+            row[key] = value
+    row["canonical_followup_request_applied"] = True
+
+
+def _blocked_diagnostic_row(
+    row: Mapping[str, Any],
+    *,
+    strategy_hints: Mapping[str, Any],
+) -> Mapping[str, Any] | None:
+    diagnostic = str(row.get("diagnostic") or "")
+    objective = str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+    blocked_rows = strategy_hints.get("blocked_next_diagnostics")
+    if not isinstance(blocked_rows, Sequence) or isinstance(blocked_rows, (str, bytes, bytearray)):
+        return None
+    for blocked in blocked_rows:
+        if not isinstance(blocked, Mapping):
+            continue
+        if str(blocked.get("diagnostic") or "") != diagnostic:
+            continue
+        blocked_objective = str(blocked.get("objective_bundle_key") or blocked.get("bundle_key") or "")
+        if objective and blocked_objective and objective != blocked_objective:
+            continue
+        return blocked
+    return None
 
 
 def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -502,22 +658,43 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
     if not isinstance(meta, Mapping):
         meta = {}
     strategy_hints = _packet_strategy_hints(packet)
+    canonical_request = _strategy_canonical_diagnostic_request(strategy_hints)
     raw_requests: list[Any] = []
     diagnostic_request = meta.get("diagnostic_request")
     if diagnostic_request not in (None, ""):
-        raw_requests.append(diagnostic_request)
+        if (
+            canonical_request is not None
+            and not isinstance(diagnostic_request, Mapping)
+            and _diagnostic_name(diagnostic_request) == str(canonical_request.get("diagnostic") or "")
+        ):
+            raw_requests.append(dict(canonical_request))
+        else:
+            raw_requests.append(diagnostic_request)
     diagnostic_request_defaults = diagnostic_request if isinstance(diagnostic_request, Mapping) else {}
     mapped_next_action = _diagnostic_request_from_next_action(meta.get("next_action"))
     if mapped_next_action is not None:
-        raw_requests.append(mapped_next_action)
+        if canonical_request is not None and mapped_next_action == str(canonical_request.get("diagnostic") or ""):
+            raw_requests.append(dict(canonical_request))
+        else:
+            raw_requests.append(mapped_next_action)
     controller_memory = meta.get("controller_memory")
     if isinstance(controller_memory, Mapping):
         memory_request = controller_memory.get("diagnostic_request")
         if memory_request not in (None, ""):
-            raw_requests.append(memory_request)
+            if (
+                canonical_request is not None
+                and not isinstance(memory_request, Mapping)
+                and _diagnostic_name(memory_request) == str(canonical_request.get("diagnostic") or "")
+            ):
+                raw_requests.append(dict(canonical_request))
+            else:
+                raw_requests.append(memory_request)
         memory_next_action = _diagnostic_request_from_next_action(controller_memory.get("next_action"))
         if memory_next_action is not None:
-            raw_requests.append(memory_next_action)
+            if canonical_request is not None and memory_next_action == str(canonical_request.get("diagnostic") or ""):
+                raw_requests.append(dict(canonical_request))
+            else:
+                raw_requests.append(memory_next_action)
 
     normalized: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -532,6 +709,12 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         if not name_text:
             continue
         row.setdefault("diagnostic", name_text)
+        _canonicalize_diagnostic_request_row(
+            row,
+            meta=meta,
+            strategy_hints=strategy_hints,
+            canonical_request=canonical_request,
+        )
         row.setdefault(
             "bundle_key",
             meta.get("objective_bundle_key")
@@ -561,6 +744,22 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         row.setdefault("reason", meta.get("why_not_apply") or strategy_hints.get("diagnostic_frontier_reason_text"))
         if meta.get("operator_recipe_expansion_mode") not in (None, ""):
             row.setdefault("operator_recipe_expansion_mode", meta.get("operator_recipe_expansion_mode"))
+        elif strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode") not in (None, ""):
+            row.setdefault(
+                "operator_recipe_expansion_mode",
+                strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode"),
+            )
+        blocked = _blocked_diagnostic_row(row, strategy_hints=strategy_hints)
+        if blocked is not None:
+            alternate = str(blocked.get("suggested_alternate_diagnostic") or "")
+            if not alternate:
+                continue
+            row["diagnostic_unavailable_veto"] = True
+            row["unavailable_diagnostic"] = row.get("diagnostic")
+            row["diagnostic"] = alternate
+            row.setdefault("next_evidence_needed", "diagnostic_unavailable_veto")
+            row.setdefault("reason", blocked.get("reason") or "diagnostic unavailable for this objective")
+            row["substituted_for_unavailable_diagnostic"] = True
         post_bridge_requested = (
             str(row.get("next_evidence_needed") or "") == "post_bridge_exhaustion_recipe_expansion"
             or bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False))
@@ -568,6 +767,25 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         )
         if post_bridge_requested and str(row.get("diagnostic") or "") == "compare_extra_operator_diagnostics":
             row.setdefault("operator_recipe_expansion_mode", "post_bridge_exhaustion")
+        readout_steering_deepening_requested = (
+            str(row.get("next_evidence_needed") or "") == "readout_steering_deepening"
+            or str(row.get("operator_recipe_expansion_mode") or "") == "readout_steering_deepening"
+            or bool(meta.get("readout_steering_deepening_requested", False))
+        )
+        if (
+            readout_steering_deepening_requested
+            and str(row.get("diagnostic") or "") == "compare_extra_operator_diagnostics"
+        ):
+            row.setdefault("operator_recipe_expansion_mode", "readout_steering_deepening")
+            row.setdefault("readout_steering_deepening_requested", True)
+        carrier_conversion_requested = (
+            str(row.get("next_evidence_needed") or "") == "carrier_to_actuator_conversion_sweep"
+            or str(row.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
+            or bool(meta.get("carrier_to_actuator_conversion_sweep", False))
+        )
+        if carrier_conversion_requested and str(row.get("diagnostic") or "") == "carrier_to_actuator_conversion_sweep":
+            row.setdefault("operator_recipe_expansion_mode", "carrier_to_actuator_conversion_sweep")
+            row.setdefault("carrier_to_actuator_conversion_sweep", True)
         if bool(meta.get("post_bridge_exhaustion_recipe_expansion_requested", False)) or (
             str(row.get("operator_recipe_expansion_mode") or "") == "post_bridge_exhaustion"
         ):
