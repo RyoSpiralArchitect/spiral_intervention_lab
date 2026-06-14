@@ -885,7 +885,17 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertTrue(conversion["inline_suppress_then_target_after_calibration_executed"])
         self.assertGreater(
             len(conversion["inline_suppress_then_target_after_calibration_rows"]),
-            0,
+            1,
+        )
+        self.assertGreater(
+            len(
+                {
+                    row.get("recipe_name")
+                    for row in conversion["inline_suppress_then_target_after_calibration_rows"]
+                    if row.get("recipe_name")
+                }
+            ),
+            1,
         )
         self.assertEqual(
             conversion["inline_suppress_then_target_after_calibration_summary"][
@@ -1887,6 +1897,85 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(
             mini_hints["diagnostic_frontier_canonical_request"]["operator_recipe_expansion_mode"],
             "non_kv_variant_or_two_stage_design",
+        )
+
+        runtime._diagnostic_results[0].update(
+            {
+                "inline_suppress_then_target_after_calibration_executed": True,
+                "inline_suppress_then_target_after_calibration_summary": {
+                    "inline_suppress_then_target_after_calibration_executed": True,
+                    "inline_suppress_then_target_after_calibration_rows": 3,
+                    "best_inline_suppress_then_target_role": "collapse_suppressor",
+                    "best_inline_suppress_then_target_recipe_name": (
+                        "calibrated_non_kv_two_stage_suppress_l100_then_target_l025_a070"
+                    ),
+                    "best_inline_suppress_then_target_target_mass_delta": 0.0,
+                    "best_inline_suppress_then_target_target_top20_hit_delta": 0,
+                    "best_inline_suppress_then_target_gap_delta": -0.002897,
+                    "best_inline_suppress_then_target_attractor_mass_delta": -0.000012,
+                },
+                "inline_suppress_then_target_after_calibration_rows": [
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "recipe_name": "calibrated_non_kv_two_stage_suppress_l100_then_target_l025_a050",
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "recipe_name": "calibrated_non_kv_two_stage_suppress_l100_then_target_pure_a060",
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "recipe_name": "calibrated_non_kv_two_stage_suppress_l100_then_target_l025_a070",
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                ],
+            }
+        )
+
+        saturated_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertTrue(saturated_hints["suppress_then_target_after_calibration_review_complete"])
+        self.assertTrue(saturated_hints["suppress_then_target_after_calibration_saturation_detected"])
+        self.assertEqual(
+            saturated_hints["suppress_then_target_after_calibration_outcome"],
+            "saturated_collapse_suppressor_no_target_lift",
+        )
+        self.assertEqual(
+            saturated_hints["next_evidence_needed"],
+            "new_runtime_operator_needed_after_suppressor_saturation",
+        )
+        self.assertEqual(
+            saturated_hints["operator_family_shift_status"],
+            "suppress_then_target_saturated_no_target_lift",
+        )
+        self.assertEqual(
+            saturated_hints.get("diagnostic_frontier_blocked_reason"),
+            "suppress_then_target_after_calibration_saturated_no_target_lift",
+        )
+        self.assertNotEqual(
+            saturated_hints.get("diagnostic_frontier_operator_recipe_expansion_mode"),
+            "two_stage_suppress_then_target_review",
+        )
+        blocked = saturated_hints.get("blocked_next_diagnostics", [])
+        self.assertTrue(
+            any(
+                row.get("status") == "diagnostic_saturated"
+                and row.get("reason") == "suppress_then_target_after_calibration_saturated_no_target_lift"
+                for row in blocked
+                if isinstance(row, dict)
+            )
         )
 
     def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):

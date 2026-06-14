@@ -7428,6 +7428,151 @@ class HookedTransformerWorkerRuntime:
                         ),
                         priority=2,
                     )
+        latest_suppress_then_target_review = next(
+            (
+                result
+                for result in reversed(self._diagnostic_results)
+                if isinstance(result, Mapping)
+                and bool(result.get("inline_suppress_then_target_after_calibration_executed", False))
+                and isinstance(
+                    result.get("inline_suppress_then_target_after_calibration_summary"),
+                    Mapping,
+                )
+            ),
+            None,
+        )
+        if isinstance(latest_suppress_then_target_review, Mapping):
+            two_stage_summary = latest_suppress_then_target_review.get(
+                "inline_suppress_then_target_after_calibration_summary"
+            )
+            two_stage_rows_raw = latest_suppress_then_target_review.get(
+                "inline_suppress_then_target_after_calibration_rows"
+            )
+            two_stage_rows = [
+                dict(row)
+                for row in two_stage_rows_raw
+                if isinstance(row, Mapping)
+            ] if isinstance(two_stage_rows_raw, SequenceABC) and not isinstance(
+                two_stage_rows_raw,
+                (str, bytes, bytearray),
+            ) else []
+            if isinstance(two_stage_summary, Mapping):
+                best_role = str(two_stage_summary.get("best_inline_suppress_then_target_role") or "")
+                best_mass = _hint_float(
+                    two_stage_summary.get("best_inline_suppress_then_target_target_mass_delta")
+                )
+                best_top20 = _hint_int(
+                    two_stage_summary.get("best_inline_suppress_then_target_target_top20_hit_delta")
+                )
+                objective_key = str(
+                    latest_suppress_then_target_review.get("objective_bundle_key")
+                    or latest_suppress_then_target_review.get("bundle_key")
+                    or ""
+                )
+                row_count = int(
+                    two_stage_summary.get("inline_suppress_then_target_after_calibration_rows", 0)
+                    or len(two_stage_rows)
+                    or 0
+                )
+                no_target_lift = bool(best_mass < 0.00002 and best_top20 <= 0)
+                saturated_roles = {
+                    str(row.get("non_kv_variant_role") or "")
+                    for row in two_stage_rows
+                    if str(row.get("non_kv_variant_role") or "")
+                }
+                saturation_detected = bool(
+                    row_count >= 2
+                    and no_target_lift
+                    and best_role in {"collapse_suppressor", "gap_closer_candidate"}
+                    and saturated_roles
+                    and saturated_roles.issubset({"collapse_suppressor", "gap_closer_candidate"})
+                )
+                hints["suppress_then_target_after_calibration_review_complete"] = True
+                hints["suppress_then_target_after_calibration_rows"] = row_count
+                hints["best_suppress_then_target_after_calibration_role"] = best_role or None
+                hints["best_suppress_then_target_after_calibration_recipe_name"] = (
+                    two_stage_summary.get("best_inline_suppress_then_target_recipe_name")
+                )
+                hints["best_suppress_then_target_after_calibration_target_mass_delta"] = best_mass
+                hints["best_suppress_then_target_after_calibration_target_top20_hit_delta"] = best_top20
+                hints["best_suppress_then_target_after_calibration_gap_delta"] = (
+                    two_stage_summary.get("best_inline_suppress_then_target_gap_delta")
+                )
+                hints["best_suppress_then_target_after_calibration_attractor_mass_delta"] = (
+                    two_stage_summary.get("best_inline_suppress_then_target_attractor_mass_delta")
+                )
+                hints["suppress_then_target_after_calibration_saturation_detected"] = saturation_detected
+                if saturation_detected:
+                    hints["suppress_then_target_after_calibration_outcome"] = (
+                        "saturated_collapse_suppressor_no_target_lift"
+                    )
+                    hints["next_evidence_needed"] = (
+                        "new_runtime_operator_needed_after_suppressor_saturation"
+                    )
+                    hints["operator_family_shift_status"] = (
+                        "suppress_then_target_saturated_no_target_lift"
+                    )
+                    hints["operator_family_shift_reason"] = (
+                        "calibrated suppress-then-target variants stayed collapse-suppressor/gap-only "
+                        "without target mass/top20 lift"
+                    )
+                    if objective_key:
+                        saturated_request = {
+                            "diagnostic": "compare_extra_operator_diagnostics",
+                            "bundle_key": objective_key,
+                            "objective_bundle_key": objective_key,
+                            "step_actuator_bundle_key": objective_key,
+                            "next_evidence_needed": "two_stage_suppress_then_target_review",
+                            "operator_recipe_expansion_mode": "two_stage_suppress_then_target_review",
+                            "reason": (
+                                "calibrated suppress-then-target variants already saturated without "
+                                "target lift; do not repeat this two-stage family"
+                            ),
+                            "permission": "diagnostic_only",
+                            "production_apply_allowed": False,
+                            "policy_candidate_ready": False,
+                        }
+                        _block_next_diagnostic(
+                            saturated_request,
+                            reason="suppress_then_target_after_calibration_saturated_no_target_lift",
+                            priority=2,
+                            status="diagnostic_saturated",
+                        )
+                        available = hints.get("available_next_diagnostics")
+                        if isinstance(available, list):
+                            hints["available_next_diagnostics"] = [
+                                item
+                                for item in available
+                                if not (
+                                    isinstance(item, Mapping)
+                                    and isinstance(item.get("request"), Mapping)
+                                    and str(
+                                        item.get("request", {}).get("operator_recipe_expansion_mode")
+                                        or ""
+                                    )
+                                    in {
+                                        "non_kv_variant_or_two_stage_design",
+                                        "two_stage_suppress_then_target_review",
+                                    }
+                                )
+                            ]
+                        if (
+                            str(hints.get("diagnostic_frontier_operator_recipe_expansion_mode") or "")
+                            in {
+                                "non_kv_variant_or_two_stage_design",
+                                "two_stage_suppress_then_target_review",
+                            }
+                        ):
+                            for key in (
+                                "diagnostic_frontier_request",
+                                "diagnostic_frontier_next_evidence",
+                                "diagnostic_frontier_operator_recipe_expansion_mode",
+                                "diagnostic_frontier_canonical_request",
+                            ):
+                                hints.pop(key, None)
+                            hints["diagnostic_frontier_blocked_reason"] = (
+                                "suppress_then_target_after_calibration_saturated_no_target_lift"
+                            )
         if self._operator_certification_table:
             hints["operator_certification_count"] = len(self._operator_certification_table)
             hints["operator_certification_families"] = [
@@ -14033,7 +14178,7 @@ class HookedTransformerWorkerRuntime:
                                             *inline_anti_attractor_suppression_calibration_rows,
                                         ],
                                         packet_context=packet_context,
-                                        max_rows=2,
+                                        max_rows=3,
                                         expansion_mode="two_stage_suppress_then_target_review",
                                     )
                                 )
@@ -18213,6 +18358,24 @@ class HookedTransformerWorkerRuntime:
                 "suppress_alpha": 0.03,
                 "target_negative_scale": 0.025,
                 "target_alpha": 0.05,
+                "target_contrast_mode": "target_readout_minus_attractor",
+            },
+            {
+                "recipe_name": "non_kv_two_stage_suppress_l100_then_target_pure_a060",
+                "stage": "suppress_then_target",
+                "suppress_negative_scale": 0.1,
+                "suppress_alpha": 0.03,
+                "target_negative_scale": 0.0,
+                "target_alpha": 0.06,
+                "target_contrast_mode": "target_readout_pure",
+            },
+            {
+                "recipe_name": "non_kv_two_stage_suppress_l100_then_target_l025_a070",
+                "stage": "suppress_then_target",
+                "suppress_negative_scale": 0.1,
+                "suppress_alpha": 0.03,
+                "target_negative_scale": 0.025,
+                "target_alpha": 0.07,
                 "target_contrast_mode": "target_readout_minus_attractor",
             },
         ]
