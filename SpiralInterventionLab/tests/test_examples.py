@@ -558,7 +558,42 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
             }
 
         runtime._readout_steering_candidate = fake_readout_candidate
-        runtime.replay_candidate_edits_actual_delta = fake_replay
+
+        def fake_replay_with_dead_non_kv(candidate_edits, **kwargs):
+            label = str(kwargs.get("label") or "")
+            if "mini_non_kv_anti_attractor_suppress" in label:
+                return {
+                    "status": "ok",
+                    "label": label,
+                    "actual_delta_class": "dead_actuator",
+                    "target_mass_delta": -0.000001,
+                    "target_top20_hit_delta": 0,
+                    "target_piece": " Mira",
+                    "target_piece_logit_delta": 0.0003,
+                    "target_piece_prob_delta": 0.0,
+                    "target_rank_after": 64,
+                    "target_top20_threshold_gap_baseline": 1.5,
+                    "target_top20_threshold_gap": 1.4997,
+                    "target_top20_threshold_gap_after": 1.4997,
+                    "target_top20_threshold_gap_delta": -0.0003,
+                    "focus_rank_delta": 0,
+                    "repeat_flag_delta": 0,
+                    "entropy_delta": 0.0,
+                    "top1_margin_delta": 0.0,
+                    "term_readout_deltas": {
+                        "Mira": {
+                            "lift_score": 0.0,
+                            "target_mass_delta": -0.000001,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 0,
+                        }
+                    },
+                    "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                    "eval_context_fingerprint": {"decode_step": 0},
+                }
+            return fake_replay(candidate_edits, **kwargs)
+
+        runtime.replay_candidate_edits_actual_delta = fake_replay_with_dead_non_kv
 
         result = runtime._execute_controller_diagnostic_request(
             {
@@ -725,7 +760,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(conversion["diagnostic"], "carrier_to_actuator_conversion_sweep")
         self.assertEqual(conversion["diagnostic_role"], "carrier_to_actuator_conversion_sweep")
         self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
-        self.assertEqual(conversion["next_evidence_needed"], "carrier_to_actuator_conversion_review_complete")
+        self.assertEqual(conversion["next_evidence_needed"], "non_kv_operator_search_review_complete")
         self.assertEqual(
             conversion["readout_deepening_review_summary"]["best_candidate_role"],
             "carrier_only_no_target_actuator",
@@ -749,6 +784,28 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
                 "operator_recipe_expansion_mode"
             ],
             "non_kv_operator_search",
+        )
+        self.assertTrue(conversion["mini_non_kv_first_pass_executed"])
+        self.assertEqual(conversion["mini_non_kv_first_pass_rows"], 2)
+        self.assertEqual(conversion["mini_non_kv_first_pass_source"], "carrier_to_actuator_conversion_failed")
+        self.assertEqual(conversion["best_non_kv_candidate_role"], "gap_closer_candidate")
+        self.assertFalse(conversion["mini_non_kv_first_pass_summary"]["production_apply_allowed"])
+        self.assertGreater(len(conversion["mini_non_kv_first_pass_evidence_rows"]), 0)
+        anti_rows = [
+            row
+            for row in conversion["mini_non_kv_first_pass_evidence_rows"]
+            if row.get("operator_family") == "anti_attractor_suppression_patch"
+        ]
+        self.assertEqual(anti_rows[0]["actual_delta_class"], "dead_actuator")
+        self.assertEqual(anti_rows[0]["non_kv_candidate_role"], "dead")
+        self.assertTrue(
+            all(
+                row.get("candidate_fingerprint")
+                for row in conversion["mini_non_kv_first_pass_evidence_rows"]
+            )
+        )
+        self.assertTrue(
+            conversion["readout_deepening_review_summary"]["mini_non_kv_first_pass_executed"]
         )
         self.assertTrue(
             any(
@@ -1616,6 +1673,57 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
             "non_kv_operator_search",
         )
         self.assertGreater(len(hints["operator_family_shift_preview_rows"]), 0)
+
+        mini_summary = {
+            "mini_non_kv_first_pass_executed": True,
+            "mini_non_kv_first_pass_rows": 2,
+            "mini_non_kv_first_pass_source": "carrier_to_actuator_conversion_failed",
+            "best_non_kv_actual_delta_class": "rank_carrier",
+            "best_non_kv_candidate_role": "gap_closer_candidate",
+            "best_non_kv_operator_family": "resid_readout_direction_patch",
+            "best_non_kv_recipe_name": "mini_non_kv_resid_readout_direction_a060",
+            "best_non_kv_target_mass_delta": 0.000002,
+            "best_non_kv_target_top20_hit_delta": 0,
+            "best_non_kv_target_top20_threshold_gap_delta": -0.002235,
+            "production_apply_allowed": False,
+        }
+        runtime._diagnostic_results[0].update(
+            {
+                "mini_non_kv_first_pass_executed": True,
+                "mini_non_kv_first_pass_rows": 2,
+                "mini_non_kv_first_pass_summary": dict(mini_summary),
+                "best_non_kv_candidate_role": "gap_closer_candidate",
+            }
+        )
+        runtime._diagnostic_results[0]["readout_deepening_review_summary"].update(mini_summary)
+
+        mini_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertEqual(mini_hints["mini_non_kv_first_pass_review_status"], "complete")
+        self.assertTrue(mini_hints["mini_non_kv_first_pass_executed"])
+        self.assertEqual(mini_hints["mini_non_kv_first_pass_rows"], 2)
+        self.assertEqual(mini_hints["best_non_kv_candidate_role"], "gap_closer_candidate")
+        self.assertEqual(
+            mini_hints["best_non_kv_operator_family"],
+            "resid_readout_direction_patch",
+        )
+        self.assertEqual(
+            mini_hints["non_kv_operator_search_outcome"],
+            "non_kv_gap_carrier_no_target_actuator",
+        )
+        self.assertEqual(
+            mini_hints["operator_family_shift_status"],
+            "mini_first_pass_review_complete",
+        )
+        self.assertFalse(mini_hints["operator_family_shift_recommended"])
+        self.assertTrue(mini_hints["non_kv_operator_search_review_complete"])
+        self.assertEqual(mini_hints["next_evidence_needed"], "non_kv_variant_or_two_stage_design")
+        self.assertNotIn("diagnostic_frontier_request", mini_hints)
+        self.assertNotIn("diagnostic_frontier_next_evidence", mini_hints)
 
     def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):
         env = SpiralEasyConstrainedRewriteEnv()
