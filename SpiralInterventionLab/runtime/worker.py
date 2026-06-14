@@ -8684,6 +8684,32 @@ class HookedTransformerWorkerRuntime:
         max_positions = max(1, int(max_positions))
         rows: list[dict[str, Any]] = []
         projection_cache: dict[int, torch.Tensor | None] = {}
+        base_projected: torch.Tensor | None = None
+        projection = self._kv_projection_tensor(
+            layer=layer,
+            site=site,
+            head_count=head_count,
+            d_model=int(prototype.numel()),
+            width=width,
+        )
+        if projection is not None and projection.shape[0] > head:
+            proto = prototype.detach().cpu().float().reshape(-1)
+            projected_once = torch.matmul(proto, projection[int(head)].cpu().float())
+            if projected_once.numel() == int(width):
+                base_projected = projected_once.detach().cpu().float()
+
+        def _fast_projected_for_position(position: int) -> torch.Tensor | None:
+            if base_projected is None:
+                return None
+            projected = base_projected
+            if site == "k_cache":
+                projected = self._apply_k_rotary_projection(projected, layer=layer, token_index=position, head=head)
+                if projected is None:
+                    return None
+            norm = float(projected.norm().item())
+            if norm <= 0.0:
+                return None
+            return (projected / norm).detach().cpu().float()
 
         def _segment_priority(kind: str) -> int:
             if kind == "hint":
@@ -8725,8 +8751,10 @@ class HookedTransformerWorkerRuntime:
 
         for position in range(seq_len):
             projection_key = position if site == "k_cache" else -1
-            projected = projection_cache.get(projection_key)
-            if projection_key not in projection_cache:
+            projected = _fast_projected_for_position(position)
+            if projected is None:
+                projected = projection_cache.get(projection_key)
+            if projected is None and projection_key not in projection_cache:
                 projected = self._project_feature_into_kv_head(
                     prototype,
                     layer=layer,
@@ -13576,6 +13604,56 @@ class HookedTransformerWorkerRuntime:
                 if mini_non_kv_first_pass_rows
                 else None
             )
+            best_non_kv_role = (
+                str(best_non_kv_row.get("non_kv_candidate_role") or "")
+                if isinstance(best_non_kv_row, Mapping)
+                else ""
+            )
+            best_non_kv_gap_delta = (
+                _coerce_float(best_non_kv_row.get("target_top20_threshold_gap_delta"))
+                if isinstance(best_non_kv_row, Mapping)
+                else 0.0
+            )
+            mini_followup_mode = (
+                "two_stage_suppress_then_target_review"
+                if best_non_kv_role == "collapse_suppressor"
+                else "non_kv_variant_or_two_stage_design"
+                if best_non_kv_role == "gap_closer_candidate" or best_non_kv_gap_delta < 0.0
+                else ""
+            )
+            if (
+                mini_non_kv_first_pass_rows
+                and mini_followup_mode
+                and not non_kv_variant_or_two_stage_already_replayed
+            ):
+                inline_variant_request = dict(request)
+                inline_variant_request["operator_recipe_expansion_mode"] = mini_followup_mode
+                inline_variant_request["next_evidence_needed"] = mini_followup_mode
+                inline_variant_request["objective_bundle_key"] = (
+                    inline_variant_request.get("objective_bundle_key")
+                    or inline_variant_request.get("bundle_key")
+                    or bundle_key
+                )
+                inline_variant_request["bundle_key"] = (
+                    inline_variant_request.get("bundle_key")
+                    or inline_variant_request.get("objective_bundle_key")
+                    or bundle_key
+                )
+                inline_variant_request["step_actuator_bundle_key"] = (
+                    inline_variant_request.get("step_actuator_bundle_key")
+                    or inline_variant_request.get("objective_bundle_key")
+                    or inline_variant_request.get("bundle_key")
+                    or bundle_key
+                )
+                non_kv_variant_or_two_stage_rows = self._non_kv_variant_or_two_stage_rows(
+                    inline_variant_request,
+                    [*matching_rows, *mini_non_kv_first_pass_rows],
+                    packet_context=packet_context,
+                    max_rows=4,
+                    expansion_mode=mini_followup_mode,
+                )
+                if non_kv_variant_or_two_stage_rows:
+                    matching_rows = [*matching_rows, *non_kv_variant_or_two_stage_rows]
             mini_non_kv_first_pass_summary = {
                 "mini_non_kv_first_pass_executed": bool(mini_non_kv_first_pass_rows),
                 "mini_non_kv_first_pass_rows": len(mini_non_kv_first_pass_rows),
@@ -13630,7 +13708,11 @@ class HookedTransformerWorkerRuntime:
                 "production_apply_allowed": False,
                 "policy_candidate_ready": False,
                 "next_evidence_needed": (
-                    "non_kv_operator_search_review_complete"
+                    "non_kv_variant_or_two_stage_review_complete"
+                    if non_kv_variant_or_two_stage_rows
+                    else mini_followup_mode
+                    if mini_followup_mode
+                    else "non_kv_operator_search_review_complete"
                     if mini_non_kv_first_pass_rows
                     else None
                 ),
@@ -13706,9 +13788,12 @@ class HookedTransformerWorkerRuntime:
             else None
         )
         non_kv_variant_or_two_stage_requested = bool(
-            diagnostic_name == "compare_extra_operator_diagnostics"
-            and str(request.get("operator_recipe_expansion_mode") or "")
-            in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+            non_kv_variant_or_two_stage_rows
+            or (
+                diagnostic_name == "compare_extra_operator_diagnostics"
+                and str(request.get("operator_recipe_expansion_mode") or "")
+                in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+            )
         )
         non_kv_variant_or_two_stage_next_evidence = (
             "non_kv_variant_or_two_stage_review_complete"

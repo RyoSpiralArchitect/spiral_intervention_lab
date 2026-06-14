@@ -760,7 +760,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(conversion["diagnostic"], "carrier_to_actuator_conversion_sweep")
         self.assertEqual(conversion["diagnostic_role"], "carrier_to_actuator_conversion_sweep")
         self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
-        self.assertEqual(conversion["next_evidence_needed"], "non_kv_operator_search_review_complete")
+        self.assertEqual(conversion["next_evidence_needed"], "non_kv_variant_or_two_stage_review_complete")
         self.assertEqual(
             conversion["readout_deepening_review_summary"]["best_candidate_role"],
             "carrier_only_no_target_actuator",
@@ -807,6 +807,19 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertTrue(
             conversion["readout_deepening_review_summary"]["mini_non_kv_first_pass_executed"]
         )
+        self.assertTrue(conversion["non_kv_variant_or_two_stage_requested"])
+        self.assertEqual(conversion["non_kv_variant_or_two_stage_review_status"], "matrix_replayed")
+        self.assertGreater(
+            conversion["non_kv_variant_or_two_stage_summary"]["non_kv_variant_or_two_stage_rows"],
+            0,
+        )
+        self.assertGreater(len(conversion["non_kv_variant_or_two_stage_rows"]), 0)
+        self.assertTrue(
+            any(
+                row.get("two_stage_patch")
+                for row in conversion["non_kv_variant_or_two_stage_rows"]
+            )
+        )
         self.assertTrue(
             any(
                 row.get("carrier_to_actuator_conversion_variant")
@@ -829,7 +842,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertGreater(len(non_kv_preview["operator_family_shift_preview_rows"]), 0)
         self.assertFalse(non_kv_preview["production_apply_allowed"])
 
-        runtime._diagnostic_results = [result, deepening, confirmation, conversion]
+        runtime._diagnostic_results = [result, deepening, confirmation]
         variant = runtime._execute_controller_diagnostic_request(
             {
                 "diagnostic": "compare_extra_operator_diagnostics",
