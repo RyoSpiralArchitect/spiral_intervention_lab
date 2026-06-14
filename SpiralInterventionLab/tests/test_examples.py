@@ -725,7 +725,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(conversion["diagnostic"], "carrier_to_actuator_conversion_sweep")
         self.assertEqual(conversion["diagnostic_role"], "carrier_to_actuator_conversion_sweep")
         self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
-        self.assertEqual(conversion["next_evidence_needed"], "carrier_to_actuator_conversion_review_complete")
+        self.assertEqual(conversion["next_evidence_needed"], "non_kv_operator_search_review_complete")
         self.assertEqual(
             conversion["readout_deepening_review_summary"]["best_candidate_role"],
             "carrier_only_no_target_actuator",
@@ -749,6 +749,21 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
                 "operator_recipe_expansion_mode"
             ],
             "non_kv_operator_search",
+        )
+        self.assertTrue(conversion["mini_non_kv_first_pass_executed"])
+        self.assertEqual(conversion["mini_non_kv_first_pass_rows"], 2)
+        self.assertEqual(conversion["mini_non_kv_first_pass_source"], "carrier_to_actuator_conversion_failed")
+        self.assertEqual(conversion["best_non_kv_candidate_role"], "gap_closer_candidate")
+        self.assertFalse(conversion["mini_non_kv_first_pass_summary"]["production_apply_allowed"])
+        self.assertGreater(len(conversion["mini_non_kv_first_pass_evidence_rows"]), 0)
+        self.assertTrue(
+            all(
+                row.get("candidate_fingerprint")
+                for row in conversion["mini_non_kv_first_pass_evidence_rows"]
+            )
+        )
+        self.assertTrue(
+            conversion["readout_deepening_review_summary"]["mini_non_kv_first_pass_executed"]
         )
         self.assertTrue(
             any(

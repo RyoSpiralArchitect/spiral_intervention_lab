@@ -13328,6 +13328,109 @@ class HookedTransformerWorkerRuntime:
             return summary
 
         readout_deepening_review_summary = _readout_deepening_review_summary()
+        mini_non_kv_first_pass_rows: list[dict[str, Any]] = []
+        mini_non_kv_first_pass_summary: dict[str, Any] = {
+            "mini_non_kv_first_pass_executed": False,
+            "mini_non_kv_first_pass_rows": 0,
+            "mini_non_kv_first_pass_source": None,
+            "best_non_kv_candidate_role": None,
+            "next_evidence_needed": None,
+        }
+        if (
+            diagnostic_name == "carrier_to_actuator_conversion_sweep"
+            and isinstance(readout_deepening_review_summary, Mapping)
+            and str(readout_deepening_review_summary.get("best_candidate_role") or "")
+            == "carrier_only_no_target_actuator"
+        ):
+            preview_rows = readout_deepening_review_summary.get("operator_family_shift_preview_rows")
+            mini_non_kv_first_pass_rows = self._mini_non_kv_first_pass_rows(
+                request,
+                [
+                    row
+                    for row in preview_rows
+                    if isinstance(row, Mapping)
+                ] if isinstance(preview_rows, SequenceABC) and not isinstance(
+                    preview_rows,
+                    (str, bytes, bytearray),
+                ) else [],
+                packet_context=packet_context,
+                max_rows=2,
+            )
+
+            def _mini_non_kv_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+                role = str(row.get("non_kv_candidate_role") or "")
+                return (
+                    4.0
+                    if role == "target_actuator_candidate"
+                    else 3.0
+                    if role == "collapse_suppressor"
+                    else 2.0
+                    if role == "gap_closer_candidate"
+                    else 1.0
+                    if role == "dead"
+                    else 0.0,
+                    _coerce_float(row.get("target_mass_delta")),
+                    -_coerce_float(row.get("target_top20_threshold_gap_delta")),
+                    _coerce_float(row.get("self_delta")),
+                    -_coerce_float(row.get("repeat_delta")),
+                )
+
+            best_non_kv_row = (
+                max(mini_non_kv_first_pass_rows, key=_mini_non_kv_rank)
+                if mini_non_kv_first_pass_rows
+                else None
+            )
+            mini_non_kv_first_pass_summary = {
+                "mini_non_kv_first_pass_executed": bool(mini_non_kv_first_pass_rows),
+                "mini_non_kv_first_pass_rows": len(mini_non_kv_first_pass_rows),
+                "mini_non_kv_first_pass_source": "carrier_to_actuator_conversion_failed"
+                if mini_non_kv_first_pass_rows
+                else None,
+                "best_non_kv_candidate_role": (
+                    best_non_kv_row.get("non_kv_candidate_role")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_recipe_name": (
+                    best_non_kv_row.get("recipe_name")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_operator_family": (
+                    best_non_kv_row.get("operator_family")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_target_mass_delta": (
+                    best_non_kv_row.get("target_mass_delta")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_target_top20_hit_delta": (
+                    best_non_kv_row.get("target_top20_hit_delta")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_target_top20_threshold_gap_delta": (
+                    best_non_kv_row.get("target_top20_threshold_gap_delta")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_actual_delta_class": (
+                    best_non_kv_row.get("actual_delta_class")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "production_apply_allowed": False,
+                "policy_candidate_ready": False,
+                "next_evidence_needed": (
+                    "non_kv_operator_search_review_complete"
+                    if mini_non_kv_first_pass_rows
+                    else None
+                ),
+            }
+            readout_deepening_review_summary = dict(readout_deepening_review_summary)
+            readout_deepening_review_summary.update(mini_non_kv_first_pass_summary)
         canonical_followup_request: dict[str, Any] | None = None
         if (
             isinstance(effective_positive_operator_deepening_plan, Mapping)
@@ -13424,6 +13527,8 @@ class HookedTransformerWorkerRuntime:
                 if diagnostic_name == "activation_patch_production_trial_gate_review"
                 else cross_bundle_bridge_search.get("next_evidence_needed")
                 if diagnostic_name == "cross_bundle_bridge_search" and isinstance(cross_bundle_bridge_search, Mapping)
+                else mini_non_kv_first_pass_summary.get("next_evidence_needed")
+                if mini_non_kv_first_pass_summary.get("next_evidence_needed")
                 else readout_steering_next_evidence
                 if readout_steering_next_evidence
                 else non_kv_operator_search_next_evidence
@@ -13481,6 +13586,60 @@ class HookedTransformerWorkerRuntime:
                 if non_kv_operator_search_requested
                 else None
             ),
+            "mini_non_kv_first_pass_executed": bool(
+                mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_executed", False)
+            ),
+            "mini_non_kv_first_pass_rows": int(
+                mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_rows", 0) or 0
+            ),
+            "mini_non_kv_first_pass_source": mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_source"),
+            "best_non_kv_candidate_role": mini_non_kv_first_pass_summary.get("best_non_kv_candidate_role"),
+            "mini_non_kv_first_pass_summary": dict(mini_non_kv_first_pass_summary),
+            "mini_non_kv_first_pass_evidence_rows": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "intended_term",
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "operator_axis",
+                        "operator_family",
+                        "candidate_kind",
+                        "status",
+                        "actuator_class",
+                        "ownership_role",
+                        "effect_role",
+                        "safety_role",
+                        "recipe_family",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "actual_delta_class",
+                        "non_kv_candidate_role",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "target_piece",
+                        "target_piece_logit_delta",
+                        "target_rank_after",
+                        "target_top20_threshold_gap_baseline",
+                        "target_top20_threshold_gap_after",
+                        "target_top20_threshold_gap_delta",
+                        "focus_rank_delta",
+                        "repeat_delta",
+                        "self_delta",
+                        "cross_delta",
+                        "alignment_margin",
+                        "blocked_by",
+                        "candidate_fingerprint",
+                        "eval_context_fingerprint",
+                        "mini_non_kv_first_pass",
+                        "mini_non_kv_first_pass_source",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in mini_non_kv_first_pass_rows[:4]
+            ],
             "diagnostic_unavailable_veto": bool(diagnostic_unavailable_veto),
             "diagnostic_unavailable_reason": (
                 "requires_cached_attention_rows"
@@ -13890,6 +14049,15 @@ class HookedTransformerWorkerRuntime:
                     if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                     else 0
                 ),
+                "mini_non_kv_first_pass_executed": bool(
+                    mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_executed", False)
+                ),
+                "mini_non_kv_first_pass_rows": int(
+                    mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_rows", 0) or 0
+                ),
+                "mini_non_kv_first_pass_source": mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_source"),
+                "best_non_kv_candidate_role": mini_non_kv_first_pass_summary.get("best_non_kv_candidate_role"),
+                "mini_non_kv_first_pass_summary": dict(mini_non_kv_first_pass_summary),
                 "readout_steering_next_evidence": readout_steering_next_evidence,
                 "readout_deepening_review_summary": (
                     dict(readout_deepening_review_summary)
@@ -16538,6 +16706,274 @@ class HookedTransformerWorkerRuntime:
                     "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
                     "source_blueprint": dict(blueprint),
                     "operator_recipe_expansion_mode": "entity_insertion_candidate_materialization",
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                    "policy_candidate_ready": False,
+                    "diagnostic_only": True,
+                }
+            )
+        return rows
+
+    def _mini_non_kv_first_pass_rows(
+        self,
+        request: Mapping[str, Any],
+        preview_rows: Sequence[Mapping[str, Any]],
+        *,
+        packet_context: Mapping[str, Any] | None = None,
+        max_rows: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Actual-delta probe for the first non-KV doors after conversion stalls."""
+
+        objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+        if not objective_key:
+            return []
+        objective_term = str(request.get("objective_term") or self._term_from_bundle_key(objective_key) or "").strip()
+        if not objective_term:
+            return []
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        def _candidate_role(*, actual_delta_class: str, target_mass_delta: float, target_top20_hit_delta: int, gap_delta: Any) -> str:
+            if actual_delta_class in {"collapse_sharpener", "harmful", "collapse_isomorphic"}:
+                return "collapse_sharpener"
+            if target_mass_delta > 0.00002 or target_top20_hit_delta > 0:
+                return "target_actuator_candidate"
+            if actual_delta_class == "collapse_suppressor":
+                return "collapse_suppressor"
+            if actual_delta_class == "readout_gap_movement" or (
+                gap_delta is not None and _as_float(gap_delta, 0.0) < 0.0
+            ):
+                return "gap_closer_candidate"
+            return "dead"
+
+        packet_for_surfaces = packet_context if isinstance(packet_context, Mapping) else getattr(self, "_last_packet", {})
+        raw_surface_ids = packet_for_surfaces.get("surface_ids") if isinstance(packet_for_surfaces, Mapping) else None
+        preferred_surface_ids = [
+            str(surface_id)
+            for surface_id in raw_surface_ids
+            if str(surface_id)
+        ] if isinstance(raw_surface_ids, SequenceABC) and not isinstance(raw_surface_ids, (str, bytes, bytearray)) else []
+
+        spec_by_family = {
+            "resid_readout_direction_patch": {
+                "recipe_name": "mini_non_kv_resid_readout_direction_a060",
+                "steering_kind": "target_readout",
+                "target_terms": (objective_term,),
+                "negative_terms": (),
+                "negative_scale": 0.0,
+                "alpha": 0.06,
+                "contrast_mode": "target_readout_pure",
+            },
+            "anti_attractor_suppression_patch": {
+                "recipe_name": "mini_non_kv_anti_attractor_suppress_l100_a040",
+                "steering_kind": "attractor_suppression",
+                "target_terms": (),
+                "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                "negative_scale": 0.1,
+                "alpha": 0.04,
+                "contrast_mode": "suppress_attractor",
+            },
+        }
+        selected_preview_rows: list[dict[str, Any]] = []
+        for preview in preview_rows:
+            if not isinstance(preview, Mapping):
+                continue
+            family = str(preview.get("operator_family") or "")
+            if family not in spec_by_family:
+                continue
+            if any(str(row.get("operator_family") or "") == family for row in selected_preview_rows):
+                continue
+            selected_preview_rows.append(dict(preview))
+            if len(selected_preview_rows) >= max(1, int(max_rows)):
+                break
+
+        rows: list[dict[str, Any]] = []
+        for preview in selected_preview_rows:
+            family = str(preview.get("operator_family") or "")
+            spec = spec_by_family[family]
+            recipe_name = str(spec["recipe_name"])
+            candidate = self._readout_steering_candidate(
+                bundle_key=objective_key,
+                members=(),
+                intended_term=objective_term,
+                recipe_name=recipe_name,
+                steering_kind=str(spec["steering_kind"]),
+                target_terms=spec.get("target_terms", ()),
+                negative_terms=spec.get("negative_terms", ()),
+                negative_scale=float(spec.get("negative_scale", 0.0) or 0.0),
+                target_scale=1.0,
+                alpha=float(spec.get("alpha", 0.0) or 0.0),
+                contrast_mode=str(spec.get("contrast_mode") or "none"),
+                preferred_surface_ids=preferred_surface_ids,
+            )
+            if candidate is None:
+                rows.append(
+                    {
+                        "bundle_key": objective_key,
+                        "objective_bundle_key": objective_key,
+                        "actuator_bundle_key": objective_key,
+                        "intended_bundle_key": objective_key,
+                        "intended_term": objective_term,
+                        "evidence_kind": "operator_replay",
+                        "diagnostic_family": str(preview.get("diagnostic_family") or family),
+                        "operator_axis": "mini_non_kv_first_pass",
+                        "operator_family": family,
+                        "candidate_kind": preview.get("candidate_kind"),
+                        "status": "blocked",
+                        "actuator_class": "dead_actuator",
+                        "ownership_role": "unknown",
+                        "effect_role": "dead",
+                        "safety_role": "neutral",
+                        "recipe_name": recipe_name,
+                        "recipe_family": f"non_kv_operator_search|{family}",
+                        "actual_delta_class": "materialization_failed",
+                        "non_kv_candidate_role": "dead",
+                        "mini_non_kv_first_pass": True,
+                        "mini_non_kv_first_pass_source": "carrier_to_actuator_conversion_failed",
+                        "source_preview_row": dict(preview),
+                        "blocked_by": ["no_concrete_non_kv_candidate"],
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                        "policy_candidate_ready": False,
+                        "diagnostic_only": True,
+                    }
+                )
+                continue
+
+            try:
+                replay = self.replay_candidate_edits_actual_delta(
+                    [candidate],
+                    max_new_tokens=1,
+                    top_k=6,
+                    max_edits_per_step_override=1,
+                    score_candidate_text=False,
+                    label=f"{recipe_name}:{objective_key}",
+                    ownership_terms=(objective_term,),
+                    intended_bundle_key=objective_key,
+                    intended_term=objective_term,
+                )
+            except Exception as exc:
+                replay = {
+                    "status": "error",
+                    "error": f"{type(exc).__name__}:{exc}",
+                    "actual_delta_class": "replay_error",
+                }
+
+            actual_delta_class = str(replay.get("actual_delta_class") or replay.get("status") or "unknown")
+            target_mass_delta = _as_float(replay.get("target_mass_delta"), 0.0)
+            target_top20_hit_delta = _as_int(replay.get("target_top20_hit_delta"), 0)
+            focus_rank_delta = _as_int(replay.get("focus_rank_delta"), 0)
+            gap_delta = replay.get("target_top20_threshold_gap_delta")
+            role = _candidate_role(
+                actual_delta_class=actual_delta_class,
+                target_mass_delta=target_mass_delta,
+                target_top20_hit_delta=target_top20_hit_delta,
+                gap_delta=gap_delta,
+            )
+            status = "supportive" if role in {"target_actuator_candidate", "collapse_suppressor", "gap_closer_candidate"} else "blocked"
+            repeat_delta = max(
+                _as_float(replay.get("repeat_flag_delta"), 0.0),
+                _as_float(replay.get("repeat_delta"), 0.0),
+                _as_float(replay.get("repetition_score_delta"), 0.0),
+            )
+            self_delta = self._term_readout_lift_score(replay)
+            cross_delta = 0.0
+            role_axes = _derive_operator_role_axes(
+                actuator_class=(
+                    "self_actuator"
+                    if role == "target_actuator_candidate"
+                    else "collapse_suppressor"
+                    if role == "collapse_suppressor"
+                    else "dead_actuator"
+                    if role == "dead"
+                    else "noisy_or_harmful"
+                ),
+                actual_delta_class=actual_delta_class,
+                objective_bundle_key=objective_key,
+                realized_lift_bundle_key=objective_key,
+                target_mass_delta=target_mass_delta,
+                target_top20_hit_delta=target_top20_hit_delta,
+                focus_rank_delta=focus_rank_delta,
+                self_delta=self_delta,
+                cross_delta=cross_delta,
+                repeat_delta=repeat_delta,
+                entropy_delta=replay.get("entropy_delta"),
+                top1_margin_delta=replay.get("top1_margin_delta"),
+                status=status,
+            )
+            blocked_by: list[str] = []
+            if str(replay.get("status") or "") != "ok":
+                blocked_by.append(f"replay_error:{replay.get('error') or replay.get('status') or 'unknown'}")
+            elif role in {"dead", "collapse_sharpener"}:
+                blocked_by.append(str(actual_delta_class or role))
+            rows.append(
+                {
+                    "bundle_key": objective_key,
+                    "objective_bundle_key": objective_key,
+                    "actuator_bundle_key": objective_key,
+                    "intended_bundle_key": objective_key,
+                    "intended_term": objective_term,
+                    "evidence_kind": "operator_replay",
+                    "diagnostic_family": str(preview.get("diagnostic_family") or family),
+                    "operator_axis": "mini_non_kv_first_pass",
+                    "operator_family": family,
+                    "candidate_kind": preview.get("candidate_kind"),
+                    "status": status,
+                    "actuator_class": (
+                        "self_actuator"
+                        if role == "target_actuator_candidate"
+                        else "collapse_suppressor"
+                        if role == "collapse_suppressor"
+                        else "dead_actuator"
+                        if role == "dead"
+                        else "noisy_or_harmful"
+                    ),
+                    **role_axes,
+                    "recipe_name": recipe_name,
+                    "operator_recipe_id": candidate.get("operator_recipe_id"),
+                    "operator_family_key": candidate.get("operator_family_key"),
+                    "recipe_family": f"non_kv_operator_search|{family}",
+                    "readout_steering_kind": candidate.get("readout_steering_kind"),
+                    "actual_delta_class": actual_delta_class,
+                    "non_kv_candidate_role": role,
+                    "mini_non_kv_first_pass": True,
+                    "mini_non_kv_first_pass_source": "carrier_to_actuator_conversion_failed",
+                    "source_preview_row": dict(preview),
+                    "target_mass_delta": round(float(target_mass_delta), 8),
+                    "target_top20_hit_delta": int(target_top20_hit_delta),
+                    "target_piece": replay.get("target_piece"),
+                    "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
+                    "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
+                    "target_rank_after": replay.get("target_rank_after"),
+                    "target_top20_threshold_gap_baseline": replay.get("target_top20_threshold_gap_baseline"),
+                    "target_top20_threshold_gap": replay.get("target_top20_threshold_gap"),
+                    "target_top20_threshold_gap_after": replay.get("target_top20_threshold_gap_after"),
+                    "target_top20_threshold_gap_delta": replay.get("target_top20_threshold_gap_delta"),
+                    "target_top20_margin": replay.get("target_top20_margin"),
+                    "focus_rank_delta": int(focus_rank_delta),
+                    "repeat_delta": round(float(repeat_delta), 6),
+                    "self_delta": round(float(self_delta), 6),
+                    "cross_delta": 0.0,
+                    "alignment_margin": round(float(self_delta), 6),
+                    "blocked_by": blocked_by,
+                    "replay_error": replay.get("error"),
+                    "simulate_error": replay.get("simulate_error"),
+                    "candidate_fingerprint": replay.get("candidate_fingerprint"),
+                    "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
                     "production_apply_allowed": False,
                     "certified_for_apply": False,
                     "policy_candidate_ready": False,
