@@ -558,7 +558,42 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
             }
 
         runtime._readout_steering_candidate = fake_readout_candidate
-        runtime.replay_candidate_edits_actual_delta = fake_replay
+
+        def fake_replay_with_dead_non_kv(candidate_edits, **kwargs):
+            label = str(kwargs.get("label") or "")
+            if "mini_non_kv_anti_attractor_suppress" in label:
+                return {
+                    "status": "ok",
+                    "label": label,
+                    "actual_delta_class": "dead_actuator",
+                    "target_mass_delta": -0.000001,
+                    "target_top20_hit_delta": 0,
+                    "target_piece": " Mira",
+                    "target_piece_logit_delta": 0.0003,
+                    "target_piece_prob_delta": 0.0,
+                    "target_rank_after": 64,
+                    "target_top20_threshold_gap_baseline": 1.5,
+                    "target_top20_threshold_gap": 1.4997,
+                    "target_top20_threshold_gap_after": 1.4997,
+                    "target_top20_threshold_gap_delta": -0.0003,
+                    "focus_rank_delta": 0,
+                    "repeat_flag_delta": 0,
+                    "entropy_delta": 0.0,
+                    "top1_margin_delta": 0.0,
+                    "term_readout_deltas": {
+                        "Mira": {
+                            "lift_score": 0.0,
+                            "target_mass_delta": -0.000001,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 0,
+                        }
+                    },
+                    "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                    "eval_context_fingerprint": {"decode_step": 0},
+                }
+            return fake_replay(candidate_edits, **kwargs)
+
+        runtime.replay_candidate_edits_actual_delta = fake_replay_with_dead_non_kv
 
         result = runtime._execute_controller_diagnostic_request(
             {
@@ -756,6 +791,13 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(conversion["best_non_kv_candidate_role"], "gap_closer_candidate")
         self.assertFalse(conversion["mini_non_kv_first_pass_summary"]["production_apply_allowed"])
         self.assertGreater(len(conversion["mini_non_kv_first_pass_evidence_rows"]), 0)
+        anti_rows = [
+            row
+            for row in conversion["mini_non_kv_first_pass_evidence_rows"]
+            if row.get("operator_family") == "anti_attractor_suppression_patch"
+        ]
+        self.assertEqual(anti_rows[0]["actual_delta_class"], "dead_actuator")
+        self.assertEqual(anti_rows[0]["non_kv_candidate_role"], "dead")
         self.assertTrue(
             all(
                 row.get("candidate_fingerprint")

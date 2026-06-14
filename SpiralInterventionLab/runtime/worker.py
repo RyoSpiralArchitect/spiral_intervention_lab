@@ -16839,16 +16839,24 @@ class HookedTransformerWorkerRuntime:
             except Exception:
                 return default
 
-        def _candidate_role(*, actual_delta_class: str, target_mass_delta: float, target_top20_hit_delta: int, gap_delta: Any) -> str:
+        def _candidate_role(
+            *,
+            actual_delta_class: str,
+            target_mass_delta: float,
+            target_top20_hit_delta: int,
+            gap_delta: Any,
+        ) -> str:
+            gap_delta_value = _as_float(gap_delta, 0.0) if gap_delta is not None else 0.0
+            meaningful_gap_moved = gap_delta is not None and gap_delta_value <= -0.001
             if actual_delta_class in {"collapse_sharpener", "harmful", "collapse_isomorphic"}:
                 return "collapse_sharpener"
             if target_mass_delta > 0.00002 or target_top20_hit_delta > 0:
                 return "target_actuator_candidate"
             if actual_delta_class == "collapse_suppressor":
                 return "collapse_suppressor"
-            if actual_delta_class == "readout_gap_movement" or (
-                gap_delta is not None and _as_float(gap_delta, 0.0) < 0.0
-            ):
+            if actual_delta_class in {"dead_actuator", "materialization_failed", "replay_error", "neutral"}:
+                return "dead"
+            if actual_delta_class in {"readout_gap_movement", "rank_carrier"} and meaningful_gap_moved:
                 return "gap_closer_candidate"
             return "dead"
 
