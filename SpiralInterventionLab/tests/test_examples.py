@@ -794,7 +794,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
         self.assertEqual(
             conversion["next_evidence_needed"],
-            "anti_attractor_suppression_calibration_review_complete",
+            "suppress_then_target_after_calibration_review_complete",
         )
         self.assertEqual(
             conversion["readout_deepening_review_summary"]["best_candidate_role"],
@@ -864,7 +864,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertTrue(conversion["inline_anti_attractor_suppression_calibration_executed"])
         self.assertEqual(
             conversion["anti_attractor_suppression_calibration_review_status"],
-            "inline_matrix_replayed",
+            "inline_suppress_then_target_replayed",
         )
         self.assertGreater(conversion["anti_attractor_suppression_calibration_row_count"], 0)
         self.assertGreater(
@@ -880,6 +880,22 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertTrue(
             conversion["readout_deepening_review_summary"][
                 "inline_anti_attractor_suppression_calibration_executed"
+            ]
+        )
+        self.assertTrue(conversion["inline_suppress_then_target_after_calibration_executed"])
+        self.assertGreater(
+            len(conversion["inline_suppress_then_target_after_calibration_rows"]),
+            0,
+        )
+        self.assertEqual(
+            conversion["inline_suppress_then_target_after_calibration_summary"][
+                "best_inline_suppress_then_target_role"
+            ],
+            "gap_closer_candidate",
+        )
+        self.assertTrue(
+            conversion["readout_deepening_review_summary"][
+                "inline_suppress_then_target_after_calibration_executed"
             ]
         )
 

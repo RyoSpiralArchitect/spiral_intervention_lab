@@ -5550,6 +5550,9 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(result["actual_delta_class"], "required_term_progress")
         policy_override = simulate_mock.call_args_list[1].kwargs["policy_override"]
         self.assertEqual(policy_override.global_budget.max_edits_per_step, 2)
+        self.assertFalse(simulate_mock.call_args_list[0].kwargs["score_observer_check"])
+        self.assertFalse(simulate_mock.call_args_list[1].kwargs["score_observer_check"])
+        self.assertTrue(result["observer_check_skipped"])
         self.assertEqual(result["operator_family_key"], "composition|resid_add|source_body|exact_prompt_span_mean")
         self.assertEqual(result["candidate_fingerprint"]["recipe_name"], "pair")
         self.assertEqual(result["eval_context_fingerprint"]["decode_step"], 0)

@@ -11560,6 +11560,7 @@ class HookedTransformerWorkerRuntime:
                     "mini_non_kv_first_pass_evidence_rows",
                     "non_kv_variant_or_two_stage_rows",
                     "inline_anti_attractor_suppression_calibration_rows",
+                    "inline_suppress_then_target_after_calibration_rows",
                 )
             else:
                 continue
@@ -11598,6 +11599,14 @@ class HookedTransformerWorkerRuntime:
                         row.setdefault(
                             "operator_recipe_expansion_mode",
                             "anti_attractor_suppression_calibration_sweep",
+                        )
+                    elif row_key == "inline_suppress_then_target_after_calibration_rows":
+                        row.setdefault("evidence_kind", "operator_replay")
+                        row.setdefault("diagnostic_family", "non_kv_variant_or_two_stage")
+                        row.setdefault("operator_axis", "two_stage_suppress_then_target_review")
+                        row.setdefault(
+                            "operator_recipe_expansion_mode",
+                            "two_stage_suppress_then_target_review",
                         )
                     if (
                         str(row.get("diagnostic_family") or "") == "entity_insertion_materialized_candidate"
@@ -13771,6 +13780,14 @@ class HookedTransformerWorkerRuntime:
             "best_inline_anti_attractor_suppression_role": None,
             "next_evidence_needed": None,
         }
+        inline_suppress_then_target_after_calibration_rows: list[dict[str, Any]] = []
+        inline_suppress_then_target_after_calibration_summary: dict[str, Any] = {
+            "inline_suppress_then_target_after_calibration_executed": False,
+            "inline_suppress_then_target_after_calibration_rows": 0,
+            "inline_suppress_then_target_after_calibration_source": None,
+            "best_inline_suppress_then_target_role": None,
+            "next_evidence_needed": None,
+        }
         if (
             diagnostic_name == "carrier_to_actuator_conversion_sweep"
             and isinstance(readout_deepening_review_summary, Mapping)
@@ -14007,6 +14024,81 @@ class HookedTransformerWorkerRuntime:
                                     "anti_attractor_suppression_calibration_review_complete"
                                 ),
                             }
+                            if best_inline_calibration_role == "collapse_suppressor_candidate":
+                                inline_suppress_then_target_after_calibration_rows = (
+                                    self._non_kv_variant_or_two_stage_rows(
+                                        inline_calibration_request,
+                                        [
+                                            *matching_rows,
+                                            *inline_anti_attractor_suppression_calibration_rows,
+                                        ],
+                                        packet_context=packet_context,
+                                        max_rows=2,
+                                        expansion_mode="two_stage_suppress_then_target_review",
+                                    )
+                                )
+                                if inline_suppress_then_target_after_calibration_rows:
+                                    matching_rows = [
+                                        *matching_rows,
+                                        *inline_suppress_then_target_after_calibration_rows,
+                                    ]
+
+                                    def _inline_two_stage_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+                                        role = str(row.get("non_kv_variant_role") or "")
+                                        return (
+                                            4.0
+                                            if role == "target_actuator_candidate"
+                                            else 3.0
+                                            if role == "collapse_suppressor"
+                                            else 2.0
+                                            if role == "gap_closer_candidate"
+                                            else 1.0
+                                            if role == "dead"
+                                            else 0.0,
+                                            _coerce_float(row.get("target_mass_delta")),
+                                            -_coerce_float(row.get("target_top20_threshold_gap_delta")),
+                                            -_coerce_float(row.get("repeat_delta")),
+                                        )
+
+                                    best_inline_two_stage_row = max(
+                                        inline_suppress_then_target_after_calibration_rows,
+                                        key=_inline_two_stage_rank,
+                                    )
+                                    inline_suppress_then_target_after_calibration_summary = {
+                                        "inline_suppress_then_target_after_calibration_executed": True,
+                                        "inline_suppress_then_target_after_calibration_rows": len(
+                                            inline_suppress_then_target_after_calibration_rows
+                                        ),
+                                        "inline_suppress_then_target_after_calibration_source": (
+                                            "anti_attractor_suppression_calibration"
+                                        ),
+                                        "best_inline_suppress_then_target_role": (
+                                            best_inline_two_stage_row.get("non_kv_variant_role")
+                                        ),
+                                        "best_inline_suppress_then_target_recipe_name": (
+                                            best_inline_two_stage_row.get("recipe_name")
+                                        ),
+                                        "best_inline_suppress_then_target_operator_recipe_id": (
+                                            best_inline_two_stage_row.get("operator_recipe_id")
+                                        ),
+                                        "best_inline_suppress_then_target_target_mass_delta": (
+                                            best_inline_two_stage_row.get("target_mass_delta")
+                                        ),
+                                        "best_inline_suppress_then_target_target_top20_hit_delta": (
+                                            best_inline_two_stage_row.get("target_top20_hit_delta")
+                                        ),
+                                        "best_inline_suppress_then_target_gap_delta": (
+                                            best_inline_two_stage_row.get("target_top20_threshold_gap_delta")
+                                        ),
+                                        "best_inline_suppress_then_target_attractor_mass_delta": (
+                                            best_inline_two_stage_row.get("attractor_family_mass_delta")
+                                        ),
+                                        "production_apply_allowed": False,
+                                        "policy_candidate_ready": False,
+                                        "next_evidence_needed": (
+                                            "suppress_then_target_after_calibration_review_complete"
+                                        ),
+                                    }
             mini_non_kv_first_pass_summary = {
                 "mini_non_kv_first_pass_executed": bool(mini_non_kv_first_pass_rows),
                 "mini_non_kv_first_pass_rows": len(mini_non_kv_first_pass_rows),
@@ -14061,6 +14153,9 @@ class HookedTransformerWorkerRuntime:
                 "production_apply_allowed": False,
                 "policy_candidate_ready": False,
                 "next_evidence_needed": (
+                    "suppress_then_target_after_calibration_review_complete"
+                    if inline_suppress_then_target_after_calibration_rows
+                    else
                     "anti_attractor_suppression_calibration_review_complete"
                     if inline_anti_attractor_suppression_calibration_rows
                     else
@@ -14077,6 +14172,9 @@ class HookedTransformerWorkerRuntime:
             readout_deepening_review_summary.update(mini_non_kv_first_pass_summary)
             readout_deepening_review_summary.update(
                 inline_anti_attractor_suppression_calibration_summary
+            )
+            readout_deepening_review_summary.update(
+                inline_suppress_then_target_after_calibration_summary
             )
         canonical_followup_request: dict[str, Any] | None = None
         if (
@@ -14374,6 +14472,55 @@ class HookedTransformerWorkerRuntime:
                 }
                 for row in inline_anti_attractor_suppression_calibration_rows[:4]
             ],
+            "inline_suppress_then_target_after_calibration_executed": bool(
+                inline_suppress_then_target_after_calibration_rows
+            ),
+            "inline_suppress_then_target_after_calibration_summary": dict(
+                inline_suppress_then_target_after_calibration_summary
+            ),
+            "inline_suppress_then_target_after_calibration_rows": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "intended_term",
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "operator_axis",
+                        "operator_family",
+                        "candidate_kind",
+                        "status",
+                        "actuator_class",
+                        "ownership_role",
+                        "effect_role",
+                        "safety_role",
+                        "recipe_family",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "actual_delta_class",
+                        "non_kv_variant_role",
+                        "two_stage_patch",
+                        "edit_count",
+                        "source_seed_recipe_name",
+                        "source_seed_operator_recipe_id",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "target_top20_threshold_gap_delta",
+                        "attractor_family_mass_delta",
+                        "attractor_top20_hit_delta",
+                        "focus_rank_delta",
+                        "repeat_delta",
+                        "self_delta",
+                        "alignment_margin",
+                        "blocked_by",
+                        "candidate_fingerprint",
+                        "eval_context_fingerprint",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in inline_suppress_then_target_after_calibration_rows[:4]
+            ],
             "operator_family_shift_status": (
                 readout_deepening_review_summary.get("operator_family_shift_status")
                 if isinstance(readout_deepening_review_summary, Mapping)
@@ -14541,6 +14688,8 @@ class HookedTransformerWorkerRuntime:
                 if readout_steering_deepening_operator_rows
                 and str(request.get("operator_recipe_expansion_mode") or "")
                 == "anti_attractor_suppression_calibration_sweep"
+                else "inline_suppress_then_target_replayed"
+                if inline_suppress_then_target_after_calibration_rows
                 else "inline_matrix_replayed"
                 if inline_anti_attractor_suppression_calibration_rows
                 else "already_replayed"
@@ -14924,6 +15073,15 @@ class HookedTransformerWorkerRuntime:
                 ),
                 "inline_anti_attractor_suppression_calibration_summary": dict(
                     inline_anti_attractor_suppression_calibration_summary
+                ),
+                "inline_suppress_then_target_after_calibration_executed": bool(
+                    inline_suppress_then_target_after_calibration_rows
+                ),
+                "inline_suppress_then_target_after_calibration_rows": len(
+                    inline_suppress_then_target_after_calibration_rows
+                ),
+                "inline_suppress_then_target_after_calibration_summary": dict(
+                    inline_suppress_then_target_after_calibration_summary
                 ),
                 "mini_non_kv_first_pass_executed": bool(
                     mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_executed", False)
@@ -15538,6 +15696,7 @@ class HookedTransformerWorkerRuntime:
         *,
         trigger: str,
         constraints: Mapping[str, Any] | None = None,
+        run_observer_check: bool = True,
     ) -> dict[str, Any]:
         feedback: dict[str, Any] = {}
         if self.task_feedback_fn is not None:
@@ -15548,7 +15707,11 @@ class HookedTransformerWorkerRuntime:
         if not feedback:
             feedback = self._generic_constraint_feedback(candidate_text, constraints)
 
-        observer_result = self._invoke_observer_check(candidate_text, trigger=trigger, task_feedback=feedback)
+        observer_result = (
+            self._invoke_observer_check(candidate_text, trigger=trigger, task_feedback=feedback)
+            if run_observer_check
+            else None
+        )
         semantic_progress_score = None
         if isinstance(observer_result, Mapping):
             score = observer_result.get("score")
@@ -15600,6 +15763,7 @@ class HookedTransformerWorkerRuntime:
             "explanation_tags": explanation_tags[:6],
             "progress_label": progress_label,
             "constraint_violations": list(feedback.get("constraint_violations", []) or ()),
+            "observer_check_skipped": bool(not run_observer_check),
         }
 
     def _dry_run_decode_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -15689,6 +15853,7 @@ class HookedTransformerWorkerRuntime:
         top_k: int = 8,
         max_edits_per_step_override: int | None = None,
         score_candidate_text: bool = True,
+        score_observer_check: bool = False,
         label: str | None = None,
         ownership_terms: Sequence[str] | None = None,
         intended_bundle_key: str | None = None,
@@ -15699,7 +15864,12 @@ class HookedTransformerWorkerRuntime:
         edits = [dict(item) for item in candidate_edits if isinstance(item, Mapping)]
         if not edits:
             return {"status": "error", "error": "missing_candidate_edits", "label": label}
-        baseline = self._simulate_decode(max_new_tokens=max_new_tokens, top_k=top_k, score_candidate_text=score_candidate_text)
+        baseline = self._simulate_decode(
+            max_new_tokens=max_new_tokens,
+            top_k=top_k,
+            score_candidate_text=score_candidate_text,
+            score_observer_check=score_observer_check,
+        )
         if baseline is None:
             return {
                 "status": "error",
@@ -15752,6 +15922,7 @@ class HookedTransformerWorkerRuntime:
             command=command,
             policy_override=policy_override,
             score_candidate_text=score_candidate_text,
+            score_observer_check=score_observer_check,
         )
         if edited is None:
             return {
@@ -15779,6 +15950,8 @@ class HookedTransformerWorkerRuntime:
             "operator_recipe_id": operator_recipe_ids[0] if operator_recipe_ids else "unknown",
             "operator_recipe_ids": sorted({str(key) for key in operator_recipe_ids if str(key)}),
             "score_candidate_text": bool(score_candidate_text),
+            "score_observer_check": bool(score_observer_check),
+            "observer_check_skipped": bool(score_candidate_text and not score_observer_check),
             "focus_terms": list(focus_terms),
             "continuation_baseline": baseline["continuation"],
             "continuation_candidate": edited["continuation"],
@@ -16717,6 +16890,7 @@ class HookedTransformerWorkerRuntime:
         command: Mapping[str, Any] | None = None,
         policy_override: HarnessPolicy | None = None,
         score_candidate_text: bool = True,
+        score_observer_check: bool = True,
     ) -> dict[str, Any] | None:
         if max_new_tokens <= 0:
             return None
@@ -16794,7 +16968,11 @@ class HookedTransformerWorkerRuntime:
             if first_logits is None:
                 return None
             scoring = (
-                self._score_candidate_text(self.final_text(), trigger="tool_dry_run_candidate")
+                self._score_candidate_text(
+                    self.final_text(),
+                    trigger="tool_dry_run_candidate",
+                    run_observer_check=score_observer_check,
+                )
                 if score_candidate_text
                 else {}
             )
@@ -17935,11 +18113,14 @@ class HookedTransformerWorkerRuntime:
             and (
                 bool(row.get("mini_non_kv_first_pass", False))
                 or str(row.get("operator_axis") or "") == "mini_non_kv_first_pass"
+                or bool(row.get("anti_attractor_suppression_calibration", False))
+                or str(row.get("operator_axis") or "") == "anti_attractor_suppression_calibration_sweep"
                 or str(row.get("non_kv_candidate_role") or "") in {
                     "gap_closer_candidate",
                     "collapse_suppressor",
                     "target_actuator_candidate",
                 }
+                or str(row.get("actual_delta_class") or "") == "collapse_suppressor"
             )
         ]
         if not candidate_seed_rows:
@@ -17961,8 +18142,22 @@ class HookedTransformerWorkerRuntime:
 
         def _seed_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
             role = str(row.get("non_kv_candidate_role") or "")
+            actual = str(row.get("actual_delta_class") or "")
+            is_calibrated_suppressor = bool(row.get("anti_attractor_suppression_calibration", False)) or (
+                str(row.get("operator_axis") or "") == "anti_attractor_suppression_calibration_sweep"
+                and actual == "collapse_suppressor"
+            )
             return (
-                3.0 if role == "target_actuator_candidate" else 2.0 if role == "gap_closer_candidate" else 1.5 if role == "collapse_suppressor" else 0.0,
+                3.0
+                if role == "target_actuator_candidate"
+                else 2.5
+                if is_calibrated_suppressor
+                else 2.0
+                if role == "gap_closer_candidate"
+                else 1.5
+                if role == "collapse_suppressor"
+                else 0.0,
+                -_as_float(row.get("attractor_family_mass_delta"), 0.0),
                 -_as_float(row.get("target_top20_threshold_gap_delta"), 0.0),
                 _as_float(row.get("target_mass_delta"), 0.0),
                 _as_float(row.get("self_delta"), 0.0),
@@ -17970,6 +18165,11 @@ class HookedTransformerWorkerRuntime:
 
         candidate_seed_rows.sort(key=_seed_rank, reverse=True)
         seed = candidate_seed_rows[0]
+        seed_is_calibrated_suppressor = bool(seed.get("anti_attractor_suppression_calibration", False)) or (
+            str(seed.get("operator_axis") or "") == "anti_attractor_suppression_calibration_sweep"
+        )
+        seed_suppress_negative_scale = _as_float(seed.get("contrast_scale"), default=0.1)
+        seed_suppress_alpha = _as_float(seed.get("recipe_alpha"), default=0.03)
 
         packet_for_surfaces = packet_context if isinstance(packet_context, Mapping) else getattr(self, "_last_packet", {})
         raw_surface_ids = packet_for_surfaces.get("surface_ids") if isinstance(packet_for_surfaces, Mapping) else None
@@ -18018,6 +18218,20 @@ class HookedTransformerWorkerRuntime:
         ]
         if str(expansion_mode) == "two_stage_suppress_then_target_review":
             variant_specs = [spec for spec in variant_specs if spec["stage"] == "suppress_then_target"]
+            if seed_is_calibrated_suppressor:
+                variant_specs = [
+                    {
+                        **spec,
+                        "recipe_name": (
+                            f"calibrated_{spec['recipe_name']}"
+                            if not str(spec["recipe_name"]).startswith("calibrated_")
+                            else spec["recipe_name"]
+                        ),
+                        "suppress_negative_scale": seed_suppress_negative_scale,
+                        "suppress_alpha": seed_suppress_alpha,
+                    }
+                    for spec in variant_specs
+                ]
 
         rows: list[dict[str, Any]] = []
         for spec in variant_specs[: max(1, int(max_rows))]:
@@ -18746,6 +18960,9 @@ class HookedTransformerWorkerRuntime:
                             else "readout_steering|target_readout_deepening"
                         ),
                         "readout_steering_kind": steering_kind,
+                        "contrast_mode": str(spec.get("contrast_mode") or "none"),
+                        "contrast_scale": round(float(spec.get("negative_scale", 0.0) or 0.0), 6),
+                        "recipe_alpha": round(float(spec.get("alpha", 0.0) or 0.0), 6),
                         "readout_gap_closer_recipe": not calibration_mode,
                         "readout_gap_closer_axis": (
                             "anti_attractor_suppression"
