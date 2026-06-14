@@ -829,6 +829,41 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertGreater(len(non_kv_preview["operator_family_shift_preview_rows"]), 0)
         self.assertFalse(non_kv_preview["production_apply_allowed"])
 
+        runtime._diagnostic_results = [result, deepening, confirmation, conversion]
+        variant = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "non_kv_variant_or_two_stage_design",
+                "next_evidence_needed": "non_kv_variant_or_two_stage_design",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(variant)
+        assert variant is not None
+        self.assertEqual(variant["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertTrue(variant["non_kv_variant_or_two_stage_requested"])
+        self.assertEqual(variant["next_evidence_needed"], "non_kv_variant_or_two_stage_review_complete")
+        self.assertEqual(variant["non_kv_variant_or_two_stage_review_status"], "matrix_replayed")
+        self.assertGreater(variant["non_kv_variant_or_two_stage_summary"]["non_kv_variant_or_two_stage_rows"], 0)
+        self.assertFalse(variant["non_kv_variant_or_two_stage_summary"]["production_apply_allowed"])
+        self.assertGreater(len(variant["non_kv_variant_or_two_stage_rows"]), 0)
+        self.assertTrue(
+            any(
+                row.get("two_stage_patch")
+                for row in variant["non_kv_variant_or_two_stage_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row.get("candidate_fingerprint")
+                for row in variant["non_kv_variant_or_two_stage_rows"]
+            )
+        )
+
     def test_operator_replay_prefers_un_deepened_rotated_objective_for_readout_followup(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
         runtime._steps = 7
@@ -1722,8 +1757,16 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertFalse(mini_hints["operator_family_shift_recommended"])
         self.assertTrue(mini_hints["non_kv_operator_search_review_complete"])
         self.assertEqual(mini_hints["next_evidence_needed"], "non_kv_variant_or_two_stage_design")
-        self.assertNotIn("diagnostic_frontier_request", mini_hints)
-        self.assertNotIn("diagnostic_frontier_next_evidence", mini_hints)
+        self.assertEqual(mini_hints["diagnostic_frontier_request"], "compare_extra_operator_diagnostics")
+        self.assertEqual(mini_hints["diagnostic_frontier_next_evidence"], "non_kv_variant_or_two_stage_design")
+        self.assertEqual(
+            mini_hints["diagnostic_frontier_operator_recipe_expansion_mode"],
+            "non_kv_variant_or_two_stage_design",
+        )
+        self.assertEqual(
+            mini_hints["diagnostic_frontier_canonical_request"]["operator_recipe_expansion_mode"],
+            "non_kv_variant_or_two_stage_design",
+        )
 
     def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):
         env = SpiralEasyConstrainedRewriteEnv()

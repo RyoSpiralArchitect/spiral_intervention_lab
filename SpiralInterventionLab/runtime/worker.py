@@ -7158,6 +7158,12 @@ class HookedTransformerWorkerRuntime:
                 shift_status = str(conversion_review.get("operator_family_shift_status") or "")
                 canonical_request = conversion_review.get("operator_family_shift_canonical_request")
                 preview_rows = conversion_review.get("operator_family_shift_preview_rows")
+                mini_objective_key = str(
+                    conversion_review.get("objective_bundle_key")
+                    or latest_conversion_review.get("objective_bundle_key")
+                    or latest_conversion_review.get("bundle_key")
+                    or ""
+                )
                 mini_summary = latest_conversion_review.get("mini_non_kv_first_pass_summary")
                 if not isinstance(mini_summary, Mapping):
                     mini_summary = conversion_review.get("mini_non_kv_first_pass_summary")
@@ -7199,18 +7205,23 @@ class HookedTransformerWorkerRuntime:
                     if best_top20 > 0 or best_mass >= 1e-5 or best_role == "target_actuator_candidate":
                         mini_outcome = "non_kv_target_actuator_candidate"
                         mini_next_evidence = "activation_patch_production_trial_gate_review"
+                        mini_followup_mode = ""
                     elif best_role == "collapse_suppressor":
                         mini_outcome = "non_kv_collapse_suppressor_candidate"
                         mini_next_evidence = "two_stage_suppress_then_target_review"
+                        mini_followup_mode = "two_stage_suppress_then_target_review"
                     elif best_role == "gap_closer_candidate" or best_gap_delta < 0.0:
                         mini_outcome = "non_kv_gap_carrier_no_target_actuator"
                         mini_next_evidence = "non_kv_variant_or_two_stage_design"
+                        mini_followup_mode = "non_kv_variant_or_two_stage_design"
                     elif best_role in {"dead", "dead_actuator"}:
                         mini_outcome = "non_kv_first_pass_dead"
                         mini_next_evidence = "operator_recipe_family_shift_after_non_kv_dead"
+                        mini_followup_mode = ""
                     else:
                         mini_outcome = "non_kv_first_pass_review_complete"
                         mini_next_evidence = "non_kv_operator_search_review_complete"
+                        mini_followup_mode = ""
                     hints["mini_non_kv_first_pass_review_status"] = "complete"
                     hints["mini_non_kv_first_pass_executed"] = True
                     hints["mini_non_kv_first_pass_rows"] = _mini_int(
@@ -7247,6 +7258,43 @@ class HookedTransformerWorkerRuntime:
                         "diagnostic_frontier_canonical_request",
                     ):
                         hints.pop(key, None)
+                    if mini_followup_mode and mini_objective_key:
+                        variant_request = {
+                            "diagnostic": "compare_extra_operator_diagnostics",
+                            "bundle_key": mini_objective_key,
+                            "objective_bundle_key": mini_objective_key,
+                            "step_actuator_bundle_key": mini_objective_key,
+                            "next_evidence_needed": mini_next_evidence,
+                            "operator_recipe_expansion_mode": mini_followup_mode,
+                            "seed_operator_recipe_id": _mini_value("best_non_kv_operator_recipe_id"),
+                            "seed_recipe_name": _mini_value("best_non_kv_recipe_name"),
+                            "seed_recipe_family": _mini_value("best_non_kv_recipe_family"),
+                            "seed_operator_family": _mini_value("best_non_kv_operator_family"),
+                            "reason": (
+                                "mini non-KV first pass found a gap/collapse carrier without target lift; "
+                                "run bounded target-readout variants and suppress-then-target two-stage diagnostics"
+                            ),
+                            "permission": "diagnostic_only",
+                            "production_apply_allowed": False,
+                            "policy_candidate_ready": False,
+                        }
+                        variant_request = {
+                            key: value
+                            for key, value in variant_request.items()
+                            if value not in (None, "", [])
+                        }
+                        hints["non_kv_variant_or_two_stage_canonical_request"] = dict(variant_request)
+                        hints["diagnostic_frontier_bundle_key"] = mini_objective_key
+                        hints["diagnostic_frontier_request"] = "compare_extra_operator_diagnostics"
+                        hints["diagnostic_frontier_next_evidence"] = mini_next_evidence
+                        hints["diagnostic_frontier_operator_recipe_expansion_mode"] = mini_followup_mode
+                        hints["diagnostic_frontier_canonical_request"] = dict(variant_request)
+                        hints["diagnostic_frontier_reason_text"] = str(variant_request["reason"])
+                        _add_available_next_diagnostic(
+                            variant_request,
+                            reason="mini non-KV first pass stayed gap/collapse-only; run bounded variant/two-stage diagnostics",
+                            priority=2,
+                        )
                 if (
                     not mini_executed
                     and
@@ -11371,9 +11419,16 @@ class HookedTransformerWorkerRuntime:
                     "readout_steering_deepening",
                     "readout_gap_confirmation_or_variant_sweep",
                     "carrier_to_actuator_conversion_sweep",
+                    "non_kv_variant_or_two_stage_design",
+                    "two_stage_suppress_then_target_review",
                 }
             ):
-                row_keys = ("evidence_rows", "operator_recipe_expansion_matrix")
+                row_keys = (
+                    "evidence_rows",
+                    "operator_recipe_expansion_matrix",
+                    "mini_non_kv_first_pass_evidence_rows",
+                    "non_kv_variant_or_two_stage_rows",
+                )
             else:
                 continue
             for row_key in row_keys:
@@ -11394,10 +11449,27 @@ class HookedTransformerWorkerRuntime:
                         row.setdefault("diagnostic_family", "readout_steering")
                         row.setdefault("operator_axis", "readout_steering_deepening")
                         row.setdefault("operator_recipe_expansion_mode", "readout_steering_deepening")
+                    elif row_key == "mini_non_kv_first_pass_evidence_rows":
+                        row.setdefault("evidence_kind", "operator_replay")
+                        row.setdefault("diagnostic_family", "non_kv_operator_search")
+                        row.setdefault("operator_axis", "mini_non_kv_first_pass")
+                        row.setdefault("operator_recipe_expansion_mode", "non_kv_operator_search")
+                    elif row_key == "non_kv_variant_or_two_stage_rows":
+                        row.setdefault("evidence_kind", "operator_replay")
+                        row.setdefault("diagnostic_family", "non_kv_variant_or_two_stage")
+                        row.setdefault("operator_axis", "non_kv_variant_or_two_stage_design")
+                        row.setdefault("operator_recipe_expansion_mode", "non_kv_variant_or_two_stage_design")
                     if (
                         str(row.get("diagnostic_family") or "") == "entity_insertion_materialized_candidate"
                         or str(row.get("recipe_family") or "").startswith("readout_steering")
+                        or str(row.get("recipe_family") or "").startswith("non_kv_variant_or_two_stage")
+                        or str(row.get("recipe_family") or "").startswith("non_kv_operator_search")
                         or str(row.get("operator_axis") or "") == "readout_steering_deepening"
+                        or str(row.get("operator_axis") or "") in {
+                            "mini_non_kv_first_pass",
+                            "non_kv_variant_or_two_stage_design",
+                            "two_stage_suppress_then_target_review",
+                        }
                     ):
                         historical_diagnostic_rows.append(row)
         if historical_diagnostic_rows:
@@ -11548,9 +11620,11 @@ class HookedTransformerWorkerRuntime:
             if entity_materialized_operator_rows:
                 matching_rows = [*matching_rows, *entity_materialized_operator_rows]
         readout_steering_deepening_operator_rows: list[dict[str, Any]] = []
+        non_kv_variant_or_two_stage_rows: list[dict[str, Any]] = []
         readout_steering_deepening_already_replayed = False
         readout_gap_confirmation_already_replayed = False
         carrier_to_actuator_conversion_already_replayed = False
+        non_kv_variant_or_two_stage_already_replayed = False
         readout_deepening_seen_objective_keys = {
             str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
             for row in matching_rows
@@ -11590,6 +11664,8 @@ class HookedTransformerWorkerRuntime:
                 "readout_steering_deepening",
                 "readout_gap_confirmation_or_variant_sweep",
                 "carrier_to_actuator_conversion_sweep",
+                "non_kv_variant_or_two_stage_design",
+                "two_stage_suppress_then_target_review",
             }
         ):
             requested_objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
@@ -11629,6 +11705,20 @@ class HookedTransformerWorkerRuntime:
                 for row in matching_rows
                 if isinstance(row, Mapping)
             )
+            non_kv_variant_or_two_stage_already_replayed = any(
+                (
+                    str(row.get("operator_axis") or "")
+                    in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+                    or str(row.get("operator_recipe_expansion_mode") or "")
+                    in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+                )
+                and (
+                    not requested_objective_key
+                    or str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == requested_objective_key
+                )
+                for row in matching_rows
+                if isinstance(row, Mapping)
+            )
             if (
                 (
                     expansion_mode == "readout_steering_deepening"
@@ -11642,8 +11732,22 @@ class HookedTransformerWorkerRuntime:
                     expansion_mode == "carrier_to_actuator_conversion_sweep"
                     and not carrier_to_actuator_conversion_already_replayed
                 )
+                or (
+                    expansion_mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+                    and not non_kv_variant_or_two_stage_already_replayed
+                )
             ):
-                if expansion_mode == "carrier_to_actuator_conversion_sweep":
+                if expansion_mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}:
+                    non_kv_variant_or_two_stage_rows = self._non_kv_variant_or_two_stage_rows(
+                        request,
+                        matching_rows,
+                        packet_context=packet_context,
+                        max_rows=4,
+                        expansion_mode=expansion_mode,
+                    )
+                    if non_kv_variant_or_two_stage_rows:
+                        matching_rows = [*matching_rows, *non_kv_variant_or_two_stage_rows]
+                elif expansion_mode == "carrier_to_actuator_conversion_sweep":
                     raw_objective_keys = request.get("objective_bundle_keys") or request.get("seed_objective_bundle_keys")
                     objective_keys = [
                         str(item)
@@ -13488,8 +13592,18 @@ class HookedTransformerWorkerRuntime:
                     if isinstance(best_non_kv_row, Mapping)
                     else None
                 ),
+                "best_non_kv_operator_recipe_id": (
+                    best_non_kv_row.get("operator_recipe_id")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
                 "best_non_kv_operator_family": (
                     best_non_kv_row.get("operator_family")
+                    if isinstance(best_non_kv_row, Mapping)
+                    else None
+                ),
+                "best_non_kv_recipe_family": (
+                    best_non_kv_row.get("recipe_family")
                     if isinstance(best_non_kv_row, Mapping)
                     else None
                 ),
@@ -13591,6 +13705,82 @@ class HookedTransformerWorkerRuntime:
             if non_kv_operator_search_requested
             else None
         )
+        non_kv_variant_or_two_stage_requested = bool(
+            diagnostic_name == "compare_extra_operator_diagnostics"
+            and str(request.get("operator_recipe_expansion_mode") or "")
+            in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+        )
+        non_kv_variant_or_two_stage_next_evidence = (
+            "non_kv_variant_or_two_stage_review_complete"
+            if non_kv_variant_or_two_stage_rows
+            else None
+        )
+
+        def _non_kv_variant_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+            role = str(row.get("non_kv_variant_role") or "")
+            return (
+                4.0
+                if role == "target_actuator_candidate"
+                else 3.0
+                if role == "collapse_suppressor"
+                else 2.0
+                if role == "gap_closer_candidate"
+                else 1.0
+                if role == "dead"
+                else 0.0,
+                _coerce_float(row.get("target_mass_delta")),
+                -_coerce_float(row.get("target_top20_threshold_gap_delta")),
+                -_coerce_float(row.get("repeat_delta")),
+                _coerce_float(row.get("self_delta")),
+            )
+
+        best_non_kv_variant_row = (
+            max(non_kv_variant_or_two_stage_rows, key=_non_kv_variant_rank)
+            if non_kv_variant_or_two_stage_rows
+            else None
+        )
+        non_kv_variant_or_two_stage_summary = {
+            "non_kv_variant_or_two_stage_executed": bool(non_kv_variant_or_two_stage_rows),
+            "non_kv_variant_or_two_stage_rows": len(non_kv_variant_or_two_stage_rows),
+            "best_non_kv_variant_role": (
+                best_non_kv_variant_row.get("non_kv_variant_role")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "best_non_kv_variant_recipe_name": (
+                best_non_kv_variant_row.get("recipe_name")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "best_non_kv_variant_operator_family": (
+                best_non_kv_variant_row.get("operator_family")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "best_non_kv_variant_target_mass_delta": (
+                best_non_kv_variant_row.get("target_mass_delta")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "best_non_kv_variant_target_top20_hit_delta": (
+                best_non_kv_variant_row.get("target_top20_hit_delta")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "best_non_kv_variant_target_top20_threshold_gap_delta": (
+                best_non_kv_variant_row.get("target_top20_threshold_gap_delta")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "best_non_kv_variant_actual_delta_class": (
+                best_non_kv_variant_row.get("actual_delta_class")
+                if isinstance(best_non_kv_variant_row, Mapping)
+                else None
+            ),
+            "production_apply_allowed": False,
+            "policy_candidate_ready": False,
+            "next_evidence_needed": non_kv_variant_or_two_stage_next_evidence,
+        }
 
         result = {
             "diagnostic": diagnostic_name,
@@ -13621,6 +13811,8 @@ class HookedTransformerWorkerRuntime:
                 if diagnostic_name == "cross_bundle_bridge_search" and isinstance(cross_bundle_bridge_search, Mapping)
                 else mini_non_kv_first_pass_summary.get("next_evidence_needed")
                 if mini_non_kv_first_pass_summary.get("next_evidence_needed")
+                else non_kv_variant_or_two_stage_next_evidence
+                if non_kv_variant_or_two_stage_next_evidence
                 else readout_steering_next_evidence
                 if readout_steering_next_evidence
                 else non_kv_operator_search_next_evidence
@@ -13641,6 +13833,57 @@ class HookedTransformerWorkerRuntime:
             "diagnostic_request_reason": request.get("reason") or strategy_hints.get("diagnostic_frontier_reason_text"),
             "operator_recipe_expansion_mode": request.get("operator_recipe_expansion_mode"),
             "non_kv_operator_search_requested": bool(non_kv_operator_search_requested),
+            "non_kv_variant_or_two_stage_requested": bool(non_kv_variant_or_two_stage_requested),
+            "non_kv_variant_or_two_stage_review_status": (
+                "matrix_replayed"
+                if non_kv_variant_or_two_stage_rows
+                else "already_replayed"
+                if non_kv_variant_or_two_stage_already_replayed
+                else "not_requested"
+                if not non_kv_variant_or_two_stage_requested
+                else "no_seed_or_already_replayed"
+            ),
+            "non_kv_variant_or_two_stage_summary": dict(non_kv_variant_or_two_stage_summary),
+            "non_kv_variant_or_two_stage_rows": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "intended_term",
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "operator_axis",
+                        "operator_family",
+                        "candidate_kind",
+                        "status",
+                        "actuator_class",
+                        "ownership_role",
+                        "effect_role",
+                        "safety_role",
+                        "recipe_family",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "actual_delta_class",
+                        "non_kv_variant_role",
+                        "two_stage_patch",
+                        "edit_count",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "target_top20_threshold_gap_delta",
+                        "attractor_family_mass_delta",
+                        "focus_rank_delta",
+                        "repeat_delta",
+                        "self_delta",
+                        "alignment_margin",
+                        "blocked_by",
+                        "candidate_fingerprint",
+                        "eval_context_fingerprint",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in non_kv_variant_or_two_stage_rows[:4]
+            ],
             "operator_family_shift_status": (
                 readout_deepening_review_summary.get("operator_family_shift_status")
                 if isinstance(readout_deepening_review_summary, Mapping)
@@ -14475,12 +14718,18 @@ class HookedTransformerWorkerRuntime:
                         "operator_recipe_expansion_mode",
                         "post_bridge_exhaustion_recipe",
                         "actual_delta_class",
+                        "non_kv_variant_role",
+                        "non_kv_variant_or_two_stage",
+                        "two_stage_patch",
+                        "edit_count",
                         "realized_lift_bundle_key",
                         "realized_lift_term",
                         "bridge_plan_bundle_key",
                         "self_delta",
                         "cross_delta",
                         "alignment_margin",
+                        "attractor_family_mass_delta",
+                        "attractor_top20_hit_delta",
                         "bundle_lift_scores",
                         "activation_patch_shadow_actuator",
                         "activation_patch_actuator_class",
@@ -17074,6 +17323,366 @@ class HookedTransformerWorkerRuntime:
                     "simulate_error": replay.get("simulate_error"),
                     "candidate_fingerprint": replay.get("candidate_fingerprint"),
                     "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                    "policy_candidate_ready": False,
+                    "diagnostic_only": True,
+                }
+            )
+        return rows
+
+    def _non_kv_variant_or_two_stage_rows(
+        self,
+        request: Mapping[str, Any],
+        seed_rows: Sequence[Mapping[str, Any]],
+        *,
+        packet_context: Mapping[str, Any] | None = None,
+        max_rows: int = 4,
+        expansion_mode: str = "non_kv_variant_or_two_stage_design",
+    ) -> list[dict[str, Any]]:
+        """Second-pass diagnostics for gap carriers that failed the first non-KV pass."""
+
+        objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+        if not objective_key:
+            return []
+        objective_term = str(request.get("objective_term") or self._term_from_bundle_key(objective_key) or "").strip()
+        if not objective_term:
+            return []
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        def _candidate_role(
+            *,
+            actual_delta_class: str,
+            target_mass_delta: float,
+            target_top20_hit_delta: int,
+            gap_delta: Any,
+            attractor_mass_delta: Any,
+            repeat_delta: float,
+        ) -> str:
+            gap_delta_value = _as_float(gap_delta, 0.0) if gap_delta is not None else 0.0
+            attractor_delta = _as_float(attractor_mass_delta, 0.0) if attractor_mass_delta is not None else 0.0
+            if actual_delta_class in {"collapse_sharpener", "harmful", "collapse_isomorphic"} or repeat_delta > 0.0:
+                return "collapse_sharpener"
+            if target_mass_delta > 0.00002 or target_top20_hit_delta > 0:
+                return "target_actuator_candidate"
+            if actual_delta_class == "collapse_suppressor" or attractor_delta < -0.00001:
+                return "collapse_suppressor"
+            if gap_delta is not None and gap_delta_value <= -0.001:
+                return "gap_closer_candidate"
+            return "dead"
+
+        candidate_seed_rows = [
+            dict(row)
+            for row in seed_rows
+            if isinstance(row, Mapping)
+            and str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == objective_key
+            and (
+                bool(row.get("mini_non_kv_first_pass", False))
+                or str(row.get("operator_axis") or "") == "mini_non_kv_first_pass"
+                or str(row.get("non_kv_candidate_role") or "") in {
+                    "gap_closer_candidate",
+                    "collapse_suppressor",
+                    "target_actuator_candidate",
+                }
+            )
+        ]
+        if not candidate_seed_rows:
+            candidate_seed_rows = [
+                dict(row)
+                for row in seed_rows
+                if isinstance(row, Mapping)
+                and str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == objective_key
+                and (
+                    str(row.get("operator_axis") or "")
+                    in {"carrier_to_actuator_conversion_sweep", "readout_gap_confirmation_variant_sweep"}
+                    or str(row.get("operator_recipe_expansion_mode") or "")
+                    in {"carrier_to_actuator_conversion_sweep", "readout_gap_confirmation_or_variant_sweep"}
+                )
+                and str(row.get("actual_delta_class") or "") in {"rank_carrier", "readout_gap_movement"}
+            ]
+        if not candidate_seed_rows:
+            return []
+
+        def _seed_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+            role = str(row.get("non_kv_candidate_role") or "")
+            return (
+                3.0 if role == "target_actuator_candidate" else 2.0 if role == "gap_closer_candidate" else 1.5 if role == "collapse_suppressor" else 0.0,
+                -_as_float(row.get("target_top20_threshold_gap_delta"), 0.0),
+                _as_float(row.get("target_mass_delta"), 0.0),
+                _as_float(row.get("self_delta"), 0.0),
+            )
+
+        candidate_seed_rows.sort(key=_seed_rank, reverse=True)
+        seed = candidate_seed_rows[0]
+
+        packet_for_surfaces = packet_context if isinstance(packet_context, Mapping) else getattr(self, "_last_packet", {})
+        raw_surface_ids = packet_for_surfaces.get("surface_ids") if isinstance(packet_for_surfaces, Mapping) else None
+        preferred_surface_ids = [
+            str(surface_id)
+            for surface_id in raw_surface_ids
+            if str(surface_id)
+        ] if isinstance(raw_surface_ids, SequenceABC) and not isinstance(raw_surface_ids, (str, bytes, bytearray)) else []
+        fingerprint = seed.get("candidate_fingerprint")
+        if isinstance(fingerprint, Mapping):
+            surface_id = fingerprint.get("target_surface_id") or fingerprint.get("surface_id")
+            if surface_id not in (None, "") and str(surface_id) not in preferred_surface_ids:
+                preferred_surface_ids.insert(0, str(surface_id))
+
+        variant_specs = [
+            {
+                "recipe_name": "non_kv_variant_target_pure_a050",
+                "stage": "target_variant",
+                "target_negative_scale": 0.0,
+                "target_alpha": 0.05,
+                "target_contrast_mode": "target_readout_pure",
+            },
+            {
+                "recipe_name": "non_kv_variant_target_l025_a060",
+                "stage": "target_variant",
+                "target_negative_scale": 0.025,
+                "target_alpha": 0.06,
+                "target_contrast_mode": "target_readout_minus_attractor",
+            },
+            {
+                "recipe_name": "non_kv_variant_target_l050_a060",
+                "stage": "target_variant",
+                "target_negative_scale": 0.05,
+                "target_alpha": 0.06,
+                "target_contrast_mode": "target_readout_minus_attractor",
+            },
+            {
+                "recipe_name": "non_kv_two_stage_suppress_l100_then_target_l025_a050",
+                "stage": "suppress_then_target",
+                "suppress_negative_scale": 0.1,
+                "suppress_alpha": 0.03,
+                "target_negative_scale": 0.025,
+                "target_alpha": 0.05,
+                "target_contrast_mode": "target_readout_minus_attractor",
+            },
+        ]
+        if str(expansion_mode) == "two_stage_suppress_then_target_review":
+            variant_specs = [spec for spec in variant_specs if spec["stage"] == "suppress_then_target"]
+
+        rows: list[dict[str, Any]] = []
+        for spec in variant_specs[: max(1, int(max_rows))]:
+            recipe_name = str(spec["recipe_name"])
+            target_candidate = self._readout_steering_candidate(
+                bundle_key=objective_key,
+                members=(),
+                intended_term=objective_term,
+                recipe_name=f"{recipe_name}:target",
+                steering_kind="target_readout",
+                target_terms=(objective_term,),
+                negative_terms=_DEFAULT_BAD_ATTRACTOR_TERMS
+                if float(spec.get("target_negative_scale", 0.0) or 0.0) > 0.0
+                else (),
+                negative_scale=float(spec.get("target_negative_scale", 0.0) or 0.0),
+                target_scale=1.0,
+                alpha=float(spec.get("target_alpha", 0.0) or 0.0),
+                contrast_mode=str(spec.get("target_contrast_mode") or "target_readout_pure"),
+                preferred_surface_ids=preferred_surface_ids,
+            )
+            candidates: list[dict[str, Any]] = []
+            if str(spec["stage"]) == "suppress_then_target":
+                suppress_candidate = self._readout_steering_candidate(
+                    bundle_key=objective_key,
+                    members=(),
+                    intended_term=objective_term,
+                    recipe_name=f"{recipe_name}:suppress",
+                    steering_kind="attractor_suppression",
+                    target_terms=(),
+                    negative_terms=_DEFAULT_BAD_ATTRACTOR_TERMS,
+                    negative_scale=float(spec.get("suppress_negative_scale", 0.0) or 0.0),
+                    target_scale=1.0,
+                    alpha=float(spec.get("suppress_alpha", 0.0) or 0.0),
+                    contrast_mode="suppress_attractor",
+                    preferred_surface_ids=preferred_surface_ids,
+                )
+                if suppress_candidate is not None:
+                    candidates.append(suppress_candidate)
+            if target_candidate is not None:
+                candidates.append(target_candidate)
+            if not candidates:
+                rows.append(
+                    {
+                        "bundle_key": objective_key,
+                        "objective_bundle_key": objective_key,
+                        "actuator_bundle_key": objective_key,
+                        "intended_bundle_key": objective_key,
+                        "intended_term": objective_term,
+                        "evidence_kind": "operator_replay",
+                        "diagnostic_family": "non_kv_variant_or_two_stage",
+                        "operator_axis": str(expansion_mode),
+                        "operator_family": "non_kv_two_stage" if spec["stage"] == "suppress_then_target" else "resid_readout_direction_patch",
+                        "candidate_kind": spec["stage"],
+                        "status": "blocked",
+                        "actuator_class": "dead_actuator",
+                        "ownership_role": "unknown",
+                        "effect_role": "dead",
+                        "safety_role": "neutral",
+                        "recipe_name": recipe_name,
+                        "recipe_family": f"non_kv_variant_or_two_stage|{spec['stage']}",
+                        "actual_delta_class": "materialization_failed",
+                        "non_kv_variant_role": "dead",
+                        "source_seed_recipe_name": seed.get("recipe_name"),
+                        "source_seed_operator_recipe_id": seed.get("operator_recipe_id"),
+                        "blocked_by": ["no_concrete_non_kv_variant_candidate"],
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                        "policy_candidate_ready": False,
+                        "diagnostic_only": True,
+                    }
+                )
+                continue
+
+            try:
+                replay = self.replay_candidate_edits_actual_delta(
+                    candidates,
+                    max_new_tokens=1,
+                    top_k=6,
+                    max_edits_per_step_override=max(1, len(candidates)),
+                    score_candidate_text=False,
+                    label=f"{recipe_name}:{objective_key}",
+                    ownership_terms=(objective_term,),
+                    intended_bundle_key=objective_key,
+                    intended_term=objective_term,
+                )
+            except Exception as exc:
+                replay = {
+                    "status": "error",
+                    "error": f"{type(exc).__name__}:{exc}",
+                    "actual_delta_class": "replay_error",
+                }
+
+            actual_delta_class = str(replay.get("actual_delta_class") or replay.get("status") or "unknown")
+            target_mass_delta = _as_float(replay.get("target_mass_delta"), 0.0)
+            target_top20_hit_delta = _as_int(replay.get("target_top20_hit_delta"), 0)
+            focus_rank_delta = _as_int(replay.get("focus_rank_delta"), 0)
+            repeat_delta = max(
+                _as_float(replay.get("repeat_flag_delta"), 0.0),
+                _as_float(replay.get("repeat_delta"), 0.0),
+                _as_float(replay.get("repetition_score_delta"), 0.0),
+            )
+            gap_delta = replay.get("target_top20_threshold_gap_delta")
+            role = _candidate_role(
+                actual_delta_class=actual_delta_class,
+                target_mass_delta=target_mass_delta,
+                target_top20_hit_delta=target_top20_hit_delta,
+                gap_delta=gap_delta,
+                attractor_mass_delta=replay.get("attractor_family_mass_delta"),
+                repeat_delta=repeat_delta,
+            )
+            status = "supportive" if role in {"target_actuator_candidate", "collapse_suppressor", "gap_closer_candidate"} else "blocked"
+            self_delta = self._term_readout_lift_score(replay)
+            actuator_class = (
+                "self_actuator"
+                if role == "target_actuator_candidate"
+                else "collapse_suppressor"
+                if role == "collapse_suppressor"
+                else "dead_actuator"
+                if role == "dead"
+                else "collapse_sharpener"
+                if role == "collapse_sharpener"
+                else "noisy_or_harmful"
+            )
+            role_axes = _derive_operator_role_axes(
+                actuator_class=actuator_class,
+                actual_delta_class=actual_delta_class,
+                objective_bundle_key=objective_key,
+                realized_lift_bundle_key=objective_key,
+                target_mass_delta=target_mass_delta,
+                target_top20_hit_delta=target_top20_hit_delta,
+                focus_rank_delta=focus_rank_delta,
+                self_delta=self_delta,
+                cross_delta=0.0,
+                repeat_delta=repeat_delta,
+                entropy_delta=replay.get("entropy_delta"),
+                top1_margin_delta=replay.get("top1_margin_delta"),
+                status=status,
+            )
+            blocked_by: list[str] = []
+            if str(replay.get("status") or "") != "ok":
+                blocked_by.append(f"replay_error:{replay.get('error') or replay.get('status') or 'unknown'}")
+            elif role in {"dead", "collapse_sharpener"}:
+                blocked_by.append(str(actual_delta_class or role))
+            rows.append(
+                {
+                    "bundle_key": objective_key,
+                    "objective_bundle_key": objective_key,
+                    "actuator_bundle_key": objective_key,
+                    "intended_bundle_key": objective_key,
+                    "intended_term": objective_term,
+                    "evidence_kind": "operator_replay",
+                    "diagnostic_family": "non_kv_variant_or_two_stage",
+                    "operator_axis": str(expansion_mode),
+                    "operator_family": "non_kv_two_stage" if spec["stage"] == "suppress_then_target" else "resid_readout_direction_patch",
+                    "candidate_kind": spec["stage"],
+                    "status": status,
+                    "actuator_class": actuator_class,
+                    **role_axes,
+                    "recipe_name": recipe_name,
+                    "operator_recipe_id": " + ".join(
+                        str(candidate.get("operator_recipe_id") or "")
+                        for candidate in candidates
+                        if str(candidate.get("operator_recipe_id") or "")
+                    )
+                    or recipe_name,
+                    "operator_family_key": " + ".join(
+                        str(candidate.get("operator_family_key") or "")
+                        for candidate in candidates
+                        if str(candidate.get("operator_family_key") or "")
+                    )
+                    or "non_kv_variant_or_two_stage",
+                    "recipe_family": f"non_kv_variant_or_two_stage|{spec['stage']}",
+                    "readout_steering_kind": "suppress_then_target"
+                    if spec["stage"] == "suppress_then_target"
+                    else "target_readout",
+                    "actual_delta_class": actual_delta_class,
+                    "non_kv_variant_role": role,
+                    "non_kv_variant_or_two_stage": True,
+                    "two_stage_patch": bool(spec["stage"] == "suppress_then_target"),
+                    "edit_count": len(candidates),
+                    "source_seed_recipe_name": seed.get("recipe_name"),
+                    "source_seed_operator_recipe_id": seed.get("operator_recipe_id"),
+                    "target_mass_delta": round(float(target_mass_delta), 8),
+                    "target_top20_hit_delta": int(target_top20_hit_delta),
+                    "target_piece": replay.get("target_piece"),
+                    "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
+                    "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
+                    "target_rank_after": replay.get("target_rank_after"),
+                    "target_top20_threshold_gap_baseline": replay.get("target_top20_threshold_gap_baseline"),
+                    "target_top20_threshold_gap": replay.get("target_top20_threshold_gap"),
+                    "target_top20_threshold_gap_after": replay.get("target_top20_threshold_gap_after"),
+                    "target_top20_threshold_gap_delta": replay.get("target_top20_threshold_gap_delta"),
+                    "target_top20_margin": replay.get("target_top20_margin"),
+                    "attractor_family_mass_delta": replay.get("attractor_family_mass_delta"),
+                    "attractor_top20_hit_delta": replay.get("attractor_top20_hit_delta"),
+                    "focus_rank_delta": int(focus_rank_delta),
+                    "repeat_delta": round(float(repeat_delta), 6),
+                    "self_delta": round(float(self_delta), 6),
+                    "cross_delta": 0.0,
+                    "alignment_margin": round(float(self_delta), 6),
+                    "blocked_by": blocked_by,
+                    "replay_error": replay.get("error"),
+                    "simulate_error": replay.get("simulate_error"),
+                    "candidate_fingerprint": replay.get("candidate_fingerprint"),
+                    "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
+                    "operator_recipe_expansion_mode": str(expansion_mode),
                     "production_apply_allowed": False,
                     "certified_for_apply": False,
                     "policy_candidate_ready": False,
