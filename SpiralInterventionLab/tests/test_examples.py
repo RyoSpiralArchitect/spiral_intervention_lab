@@ -1632,6 +1632,57 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         )
         self.assertGreater(len(hints["operator_family_shift_preview_rows"]), 0)
 
+        mini_summary = {
+            "mini_non_kv_first_pass_executed": True,
+            "mini_non_kv_first_pass_rows": 2,
+            "mini_non_kv_first_pass_source": "carrier_to_actuator_conversion_failed",
+            "best_non_kv_actual_delta_class": "rank_carrier",
+            "best_non_kv_candidate_role": "gap_closer_candidate",
+            "best_non_kv_operator_family": "resid_readout_direction_patch",
+            "best_non_kv_recipe_name": "mini_non_kv_resid_readout_direction_a060",
+            "best_non_kv_target_mass_delta": 0.000002,
+            "best_non_kv_target_top20_hit_delta": 0,
+            "best_non_kv_target_top20_threshold_gap_delta": -0.002235,
+            "production_apply_allowed": False,
+        }
+        runtime._diagnostic_results[0].update(
+            {
+                "mini_non_kv_first_pass_executed": True,
+                "mini_non_kv_first_pass_rows": 2,
+                "mini_non_kv_first_pass_summary": dict(mini_summary),
+                "best_non_kv_candidate_role": "gap_closer_candidate",
+            }
+        )
+        runtime._diagnostic_results[0]["readout_deepening_review_summary"].update(mini_summary)
+
+        mini_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertEqual(mini_hints["mini_non_kv_first_pass_review_status"], "complete")
+        self.assertTrue(mini_hints["mini_non_kv_first_pass_executed"])
+        self.assertEqual(mini_hints["mini_non_kv_first_pass_rows"], 2)
+        self.assertEqual(mini_hints["best_non_kv_candidate_role"], "gap_closer_candidate")
+        self.assertEqual(
+            mini_hints["best_non_kv_operator_family"],
+            "resid_readout_direction_patch",
+        )
+        self.assertEqual(
+            mini_hints["non_kv_operator_search_outcome"],
+            "non_kv_gap_carrier_no_target_actuator",
+        )
+        self.assertEqual(
+            mini_hints["operator_family_shift_status"],
+            "mini_first_pass_review_complete",
+        )
+        self.assertFalse(mini_hints["operator_family_shift_recommended"])
+        self.assertTrue(mini_hints["non_kv_operator_search_review_complete"])
+        self.assertEqual(mini_hints["next_evidence_needed"], "non_kv_variant_or_two_stage_design")
+        self.assertNotIn("diagnostic_frontier_request", mini_hints)
+        self.assertNotIn("diagnostic_frontier_next_evidence", mini_hints)
+
     def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):
         env = SpiralEasyConstrainedRewriteEnv()
         env.reset(7)

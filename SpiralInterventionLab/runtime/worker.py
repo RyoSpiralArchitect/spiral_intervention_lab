@@ -7158,7 +7158,98 @@ class HookedTransformerWorkerRuntime:
                 shift_status = str(conversion_review.get("operator_family_shift_status") or "")
                 canonical_request = conversion_review.get("operator_family_shift_canonical_request")
                 preview_rows = conversion_review.get("operator_family_shift_preview_rows")
+                mini_summary = latest_conversion_review.get("mini_non_kv_first_pass_summary")
+                if not isinstance(mini_summary, Mapping):
+                    mini_summary = conversion_review.get("mini_non_kv_first_pass_summary")
+                if not isinstance(mini_summary, Mapping):
+                    mini_summary = {}
+                mini_executed = bool(
+                    latest_conversion_review.get("mini_non_kv_first_pass_executed", False)
+                    or conversion_review.get("mini_non_kv_first_pass_executed", False)
+                    or mini_summary.get("mini_non_kv_first_pass_executed", False)
+                )
+                if mini_executed:
+                    def _mini_value(key: str, default: Any = None) -> Any:
+                        if key in mini_summary and mini_summary.get(key) not in (None, ""):
+                            return mini_summary.get(key)
+                        if key in latest_conversion_review and latest_conversion_review.get(key) not in (None, ""):
+                            return latest_conversion_review.get(key)
+                        if key in conversion_review and conversion_review.get(key) not in (None, ""):
+                            return conversion_review.get(key)
+                        return default
+
+                    def _mini_float(value: Any, default: float = 0.0) -> float:
+                        try:
+                            return float(value)
+                        except (TypeError, ValueError):
+                            return default
+
+                    def _mini_int(value: Any, default: int = 0) -> int:
+                        try:
+                            return int(value)
+                        except (TypeError, ValueError):
+                            return default
+
+                    best_role = str(_mini_value("best_non_kv_candidate_role", "") or "")
+                    best_mass = _mini_float(_mini_value("best_non_kv_target_mass_delta", 0.0))
+                    best_top20 = _mini_int(_mini_value("best_non_kv_target_top20_hit_delta", 0))
+                    best_gap_delta = _mini_float(
+                        _mini_value("best_non_kv_target_top20_threshold_gap_delta", 0.0)
+                    )
+                    if best_top20 > 0 or best_mass >= 1e-5 or best_role == "target_actuator_candidate":
+                        mini_outcome = "non_kv_target_actuator_candidate"
+                        mini_next_evidence = "activation_patch_production_trial_gate_review"
+                    elif best_role == "collapse_suppressor":
+                        mini_outcome = "non_kv_collapse_suppressor_candidate"
+                        mini_next_evidence = "two_stage_suppress_then_target_review"
+                    elif best_role == "gap_closer_candidate" or best_gap_delta < 0.0:
+                        mini_outcome = "non_kv_gap_carrier_no_target_actuator"
+                        mini_next_evidence = "non_kv_variant_or_two_stage_design"
+                    elif best_role in {"dead", "dead_actuator"}:
+                        mini_outcome = "non_kv_first_pass_dead"
+                        mini_next_evidence = "operator_recipe_family_shift_after_non_kv_dead"
+                    else:
+                        mini_outcome = "non_kv_first_pass_review_complete"
+                        mini_next_evidence = "non_kv_operator_search_review_complete"
+                    hints["mini_non_kv_first_pass_review_status"] = "complete"
+                    hints["mini_non_kv_first_pass_executed"] = True
+                    hints["mini_non_kv_first_pass_rows"] = _mini_int(
+                        _mini_value("mini_non_kv_first_pass_rows", 0)
+                    )
+                    hints["mini_non_kv_first_pass_source"] = _mini_value("mini_non_kv_first_pass_source")
+                    hints["best_non_kv_candidate_role"] = best_role or None
+                    hints["best_non_kv_actual_delta_class"] = _mini_value("best_non_kv_actual_delta_class")
+                    hints["best_non_kv_operator_family"] = _mini_value("best_non_kv_operator_family")
+                    hints["best_non_kv_recipe_name"] = _mini_value("best_non_kv_recipe_name")
+                    hints["best_non_kv_target_mass_delta"] = best_mass
+                    hints["best_non_kv_target_top20_hit_delta"] = best_top20
+                    hints["best_non_kv_target_top20_threshold_gap_delta"] = best_gap_delta
+                    hints["non_kv_operator_search_review_complete"] = True
+                    hints["non_kv_operator_search_outcome"] = mini_outcome
+                    hints["operator_family_shift_status"] = "mini_first_pass_review_complete"
+                    hints["operator_family_shift_review_status"] = "complete"
+                    hints["operator_family_shift_recommended"] = False
+                    hints["operator_family_shift_reason"] = (
+                        "mini non-KV first pass already executed; use its measured role instead of "
+                        "requesting the same non-KV search again"
+                    )
+                    hints["next_evidence_needed"] = mini_next_evidence
+                    if isinstance(preview_rows, SequenceABC) and not isinstance(
+                        preview_rows, (str, bytes, bytearray)
+                    ):
+                        hints["operator_family_shift_preview_rows"] = [
+                            dict(row) for row in preview_rows[:6] if isinstance(row, Mapping)
+                        ]
+                    for key in (
+                        "diagnostic_frontier_request",
+                        "diagnostic_frontier_next_evidence",
+                        "diagnostic_frontier_operator_recipe_expansion_mode",
+                        "diagnostic_frontier_canonical_request",
+                    ):
+                        hints.pop(key, None)
                 if (
+                    not mini_executed
+                    and
                     shift_status == "needed_after_gap_carrier_conversion_failed"
                     and isinstance(canonical_request, Mapping)
                 ):
