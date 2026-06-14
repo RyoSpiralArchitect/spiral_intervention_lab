@@ -591,6 +591,38 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
                     "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
                     "eval_context_fingerprint": {"decode_step": 0},
                 }
+            if "anti_attractor_calibrate_l075_a030" in label:
+                return {
+                    "status": "ok",
+                    "label": label,
+                    "actual_delta_class": "collapse_suppressor",
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                    "target_piece": " Mira",
+                    "target_piece_logit_delta": 0.0001,
+                    "target_piece_prob_delta": 0.0,
+                    "target_rank_after": 64,
+                    "target_top20_threshold_gap_baseline": 1.5,
+                    "target_top20_threshold_gap": 1.499,
+                    "target_top20_threshold_gap_after": 1.499,
+                    "target_top20_threshold_gap_delta": -0.001,
+                    "attractor_family_mass_delta": -0.00002,
+                    "attractor_top20_hit_delta": -1,
+                    "focus_rank_delta": 0,
+                    "repeat_flag_delta": 0,
+                    "entropy_delta": 0.0,
+                    "top1_margin_delta": 0.0,
+                    "term_readout_deltas": {
+                        "Mira": {
+                            "lift_score": 0.0,
+                            "target_mass_delta": 0.0,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 0,
+                        }
+                    },
+                    "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                    "eval_context_fingerprint": {"decode_step": 0},
+                }
             return fake_replay(candidate_edits, **kwargs)
 
         runtime.replay_candidate_edits_actual_delta = fake_replay_with_dead_non_kv
@@ -659,7 +691,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(deepening["operator_recipe_expansion_summary"]["status"], "rank_carrier_family_found")
         self.assertEqual(
             deepening["operator_recipe_expansion_summary"]["best_readout_steering_rank_carrier_recipe_family"],
-            "readout_steering|entity_target_readout",
+            "readout_steering|target_readout_deepening",
         )
         self.assertGreater(deepening["readout_steering_deepening_followup_count"], 0)
         self.assertEqual(deepening["readout_steering_deepening_followup_status"], "matrix_replayed")
@@ -709,7 +741,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(repeated["readout_steering_deepening_followup_count"], 0)
         self.assertEqual(repeated["readout_steering_deepening_followup_status"], "already_replayed")
         self.assertEqual(repeated["next_evidence_needed"], "readout_steering_deepening_review_complete")
-        self.assertEqual(repeated["operator_recipe_expansion_summary"]["matrix_row_count"], 4)
+        self.assertEqual(repeated["operator_recipe_expansion_summary"]["matrix_row_count"], 3)
         self.assertEqual(
             repeated["readout_deepening_review_summary"]["recommended_next_action"],
             "request_readout_gap_confirmation_or_variant_sweep",
@@ -760,7 +792,10 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(conversion["diagnostic"], "carrier_to_actuator_conversion_sweep")
         self.assertEqual(conversion["diagnostic_role"], "carrier_to_actuator_conversion_sweep")
         self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
-        self.assertEqual(conversion["next_evidence_needed"], "non_kv_variant_or_two_stage_review_complete")
+        self.assertEqual(
+            conversion["next_evidence_needed"],
+            "anti_attractor_suppression_calibration_review_complete",
+        )
         self.assertEqual(
             conversion["readout_deepening_review_summary"]["best_candidate_role"],
             "carrier_only_no_target_actuator",
@@ -826,6 +861,27 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
                 for row in conversion["operator_recipe_expansion_matrix"]
             )
         )
+        self.assertTrue(conversion["inline_anti_attractor_suppression_calibration_executed"])
+        self.assertEqual(
+            conversion["anti_attractor_suppression_calibration_review_status"],
+            "inline_matrix_replayed",
+        )
+        self.assertGreater(conversion["anti_attractor_suppression_calibration_row_count"], 0)
+        self.assertGreater(
+            len(conversion["inline_anti_attractor_suppression_calibration_rows"]),
+            0,
+        )
+        self.assertEqual(
+            conversion["inline_anti_attractor_suppression_calibration_summary"][
+                "best_inline_anti_attractor_suppression_role"
+            ],
+            "collapse_suppressor_candidate",
+        )
+        self.assertTrue(
+            conversion["readout_deepening_review_summary"][
+                "inline_anti_attractor_suppression_calibration_executed"
+            ]
+        )
 
         non_kv_preview = runtime._execute_controller_diagnostic_request(
             conversion["readout_deepening_review_summary"]["operator_family_shift_canonical_request"],
@@ -874,6 +930,42 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
             all(
                 row.get("candidate_fingerprint")
                 for row in variant["non_kv_variant_or_two_stage_rows"]
+            )
+        )
+
+        runtime._diagnostic_results = [result, deepening, confirmation, variant]
+        calibration = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "anti_attractor_suppression_calibration_sweep",
+                "next_evidence_needed": "anti_attractor_suppression_calibration_sweep",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(calibration)
+        assert calibration is not None
+        self.assertEqual(
+            calibration["next_evidence_needed"],
+            "anti_attractor_suppression_calibration_review_complete",
+        )
+        self.assertTrue(calibration["anti_attractor_suppression_calibration_requested"])
+        self.assertEqual(
+            calibration["anti_attractor_suppression_calibration_review_status"],
+            "matrix_replayed",
+        )
+        self.assertGreater(calibration["anti_attractor_suppression_calibration_row_count"], 0)
+        self.assertEqual(
+            calibration["readout_deepening_review_summary"]["best_candidate_role"],
+            "collapse_suppressor_candidate",
+        )
+        self.assertTrue(
+            any(
+                row.get("anti_attractor_suppression_calibration")
+                for row in calibration["operator_recipe_expansion_matrix"]
             )
         )
 

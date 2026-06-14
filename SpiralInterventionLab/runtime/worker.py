@@ -6154,6 +6154,18 @@ class HookedTransformerWorkerRuntime:
         answer_readout_canary: Mapping[str, Any] | None = None,
         readout_sidecar_hints: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
+        def _hint_float(value: Any, default: float = 0.0) -> float:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return default
+
+        def _hint_int(value: Any, default: int = 0) -> int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
         latest_tokenize = self._latest_tokenize_terms_result()
         missing_terms = set(
             self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms"))
@@ -7324,6 +7336,96 @@ class HookedTransformerWorkerRuntime:
                     _add_available_next_diagnostic(
                         canonical_request,
                         reason="carrier conversion failed to produce target mass/top20 lift; inspect non-KV family shift previews",
+                        priority=2,
+                    )
+        latest_variant_review = next(
+            (
+                result
+                for result in reversed(self._diagnostic_results)
+                if isinstance(result, Mapping)
+                and isinstance(result.get("non_kv_variant_or_two_stage_summary"), Mapping)
+                and int(
+                    result.get("non_kv_variant_or_two_stage_summary", {}).get(
+                        "non_kv_variant_or_two_stage_rows",
+                        0,
+                    )
+                    or 0
+                )
+                > 0
+            ),
+            None,
+        )
+        if isinstance(latest_variant_review, Mapping):
+            variant_summary = latest_variant_review.get("non_kv_variant_or_two_stage_summary")
+            if isinstance(variant_summary, Mapping):
+                anti_calibration_already_done = any(
+                    isinstance(result, Mapping)
+                    and (
+                        str(result.get("operator_recipe_expansion_mode") or "")
+                        == "anti_attractor_suppression_calibration_sweep"
+                        or bool(result.get("inline_anti_attractor_suppression_calibration_executed", False))
+                    )
+                    for result in self._diagnostic_results
+                )
+                best_role = str(variant_summary.get("best_non_kv_variant_role") or "")
+                best_mass = _hint_float(variant_summary.get("best_non_kv_variant_target_mass_delta"))
+                best_top20 = _hint_int(variant_summary.get("best_non_kv_variant_target_top20_hit_delta"))
+                objective_key = str(
+                    latest_variant_review.get("objective_bundle_key")
+                    or latest_variant_review.get("bundle_key")
+                    or ""
+                )
+                if (
+                    not anti_calibration_already_done
+                    and objective_key
+                    and best_role in {"gap_closer_candidate", "collapse_suppressor"}
+                    and best_mass < 0.00002
+                    and best_top20 <= 0
+                ):
+                    calibration_request = {
+                        "diagnostic": "compare_extra_operator_diagnostics",
+                        "bundle_key": objective_key,
+                        "objective_bundle_key": objective_key,
+                        "step_actuator_bundle_key": objective_key,
+                        "next_evidence_needed": "anti_attractor_suppression_calibration_sweep",
+                        "operator_recipe_expansion_mode": "anti_attractor_suppression_calibration_sweep",
+                        "seed_recipe_name": variant_summary.get("best_non_kv_variant_recipe_name"),
+                        "seed_operator_family": variant_summary.get("best_non_kv_variant_operator_family"),
+                        "reason": (
+                            "non-KV variant/two-stage replay stayed gap-only; calibrate suppress-only "
+                            "anti-attractor lanes before trying another target push"
+                        ),
+                        "permission": "diagnostic_only",
+                        "production_apply_allowed": False,
+                        "policy_candidate_ready": False,
+                    }
+                    calibration_request = {
+                        key: value
+                        for key, value in calibration_request.items()
+                        if value not in (None, "", [])
+                    }
+                    hints["non_kv_variant_or_two_stage_review_complete"] = True
+                    hints["non_kv_variant_or_two_stage_outcome"] = "gap_only_no_target_actuator"
+                    hints["next_evidence_needed"] = "anti_attractor_suppression_calibration_sweep"
+                    hints["anti_attractor_suppression_calibration_canonical_request"] = dict(
+                        calibration_request
+                    )
+                    hints["diagnostic_frontier_bundle_key"] = objective_key
+                    hints["diagnostic_frontier_request"] = "compare_extra_operator_diagnostics"
+                    hints["diagnostic_frontier_next_evidence"] = (
+                        "anti_attractor_suppression_calibration_sweep"
+                    )
+                    hints["diagnostic_frontier_operator_recipe_expansion_mode"] = (
+                        "anti_attractor_suppression_calibration_sweep"
+                    )
+                    hints["diagnostic_frontier_canonical_request"] = dict(calibration_request)
+                    hints["diagnostic_frontier_reason_text"] = str(calibration_request["reason"])
+                    _add_available_next_diagnostic(
+                        calibration_request,
+                        reason=(
+                            "non-KV variants remained gap-only; calibrate suppress-only anti-attractor "
+                            "diagnostics before further target steering"
+                        ),
                         priority=2,
                     )
         if self._operator_certification_table:
@@ -11449,6 +11551,7 @@ class HookedTransformerWorkerRuntime:
                     "carrier_to_actuator_conversion_sweep",
                     "non_kv_variant_or_two_stage_design",
                     "two_stage_suppress_then_target_review",
+                    "anti_attractor_suppression_calibration_sweep",
                 }
             ):
                 row_keys = (
@@ -11456,6 +11559,7 @@ class HookedTransformerWorkerRuntime:
                     "operator_recipe_expansion_matrix",
                     "mini_non_kv_first_pass_evidence_rows",
                     "non_kv_variant_or_two_stage_rows",
+                    "inline_anti_attractor_suppression_calibration_rows",
                 )
             else:
                 continue
@@ -11487,6 +11591,14 @@ class HookedTransformerWorkerRuntime:
                         row.setdefault("diagnostic_family", "non_kv_variant_or_two_stage")
                         row.setdefault("operator_axis", "non_kv_variant_or_two_stage_design")
                         row.setdefault("operator_recipe_expansion_mode", "non_kv_variant_or_two_stage_design")
+                    elif row_key == "inline_anti_attractor_suppression_calibration_rows":
+                        row.setdefault("evidence_kind", "operator_replay")
+                        row.setdefault("diagnostic_family", "readout_steering")
+                        row.setdefault("operator_axis", "anti_attractor_suppression_calibration_sweep")
+                        row.setdefault(
+                            "operator_recipe_expansion_mode",
+                            "anti_attractor_suppression_calibration_sweep",
+                        )
                     if (
                         str(row.get("diagnostic_family") or "") == "entity_insertion_materialized_candidate"
                         or str(row.get("recipe_family") or "").startswith("readout_steering")
@@ -11497,6 +11609,7 @@ class HookedTransformerWorkerRuntime:
                             "mini_non_kv_first_pass",
                             "non_kv_variant_or_two_stage_design",
                             "two_stage_suppress_then_target_review",
+                            "anti_attractor_suppression_calibration_sweep",
                         }
                     ):
                         historical_diagnostic_rows.append(row)
@@ -11653,6 +11766,7 @@ class HookedTransformerWorkerRuntime:
         readout_gap_confirmation_already_replayed = False
         carrier_to_actuator_conversion_already_replayed = False
         non_kv_variant_or_two_stage_already_replayed = False
+        anti_attractor_suppression_calibration_already_replayed = False
         readout_deepening_seen_objective_keys = {
             str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
             for row in matching_rows
@@ -11694,6 +11808,7 @@ class HookedTransformerWorkerRuntime:
                 "carrier_to_actuator_conversion_sweep",
                 "non_kv_variant_or_two_stage_design",
                 "two_stage_suppress_then_target_review",
+                "anti_attractor_suppression_calibration_sweep",
             }
         ):
             requested_objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
@@ -11747,6 +11862,19 @@ class HookedTransformerWorkerRuntime:
                 for row in matching_rows
                 if isinstance(row, Mapping)
             )
+            anti_attractor_suppression_calibration_already_replayed = any(
+                (
+                    str(row.get("operator_axis") or "") == "anti_attractor_suppression_calibration_sweep"
+                    or str(row.get("operator_recipe_expansion_mode") or "")
+                    == "anti_attractor_suppression_calibration_sweep"
+                )
+                and (
+                    not requested_objective_key
+                    or str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == requested_objective_key
+                )
+                for row in matching_rows
+                if isinstance(row, Mapping)
+            )
             if (
                 (
                     expansion_mode == "readout_steering_deepening"
@@ -11763,6 +11891,10 @@ class HookedTransformerWorkerRuntime:
                 or (
                     expansion_mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
                     and not non_kv_variant_or_two_stage_already_replayed
+                )
+                or (
+                    expansion_mode == "anti_attractor_suppression_calibration_sweep"
+                    and not anti_attractor_suppression_calibration_already_replayed
                 )
             ):
                 if expansion_mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}:
@@ -11817,7 +11949,13 @@ class HookedTransformerWorkerRuntime:
                         request,
                         matching_rows,
                         packet_context=packet_context,
-                        max_followup_rows=4 if expansion_mode == "readout_gap_confirmation_or_variant_sweep" else 3,
+                        max_followup_rows=4
+                        if expansion_mode
+                        in {
+                            "readout_gap_confirmation_or_variant_sweep",
+                            "anti_attractor_suppression_calibration_sweep",
+                        }
+                        else 3,
                         expansion_mode=expansion_mode,
                     )
                 if readout_steering_deepening_operator_rows:
@@ -12379,12 +12517,27 @@ class HookedTransformerWorkerRuntime:
                 "readout_steering_deepening",
                 "readout_gap_confirmation_or_variant_sweep",
                 "carrier_to_actuator_conversion_sweep",
+                "anti_attractor_suppression_calibration_sweep",
             }
             if expansion_mode not in {"post_bridge_exhaustion", *readout_review_modes}:
                 return None
             objective_key = str(request.get("objective_bundle_key") or bundle_key or "")
             if expansion_mode in readout_review_modes:
-                expansion_rows = [
+                mode_axis = {
+                    "readout_steering_deepening": "readout_steering_deepening",
+                    "readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_variant_sweep",
+                    "carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_sweep",
+                    "anti_attractor_suppression_calibration_sweep": (
+                        "anti_attractor_suppression_calibration_sweep"
+                    ),
+                }.get(expansion_mode, expansion_mode)
+                dedicated_expansion_rows = [
+                    row
+                    for row in matching_rows
+                    if str(row.get("operator_axis") or "") == mode_axis
+                    or str(row.get("operator_recipe_expansion_mode") or "") == expansion_mode
+                ]
+                expansion_rows = dedicated_expansion_rows or [
                     row
                     for row in matching_rows
                     if str(row.get("diagnostic_family") or row.get("operator_axis") or "") == "readout_steering"
@@ -12397,6 +12550,8 @@ class HookedTransformerWorkerRuntime:
                         if expansion_mode == "readout_gap_confirmation_or_variant_sweep"
                         else "no_carrier_to_actuator_conversion_rows"
                         if expansion_mode == "carrier_to_actuator_conversion_sweep"
+                        else "no_anti_attractor_suppression_calibration_rows"
+                        if expansion_mode == "anti_attractor_suppression_calibration_sweep"
                         else "no_readout_steering_rows"
                     )
                     summary = {
@@ -12466,6 +12621,7 @@ class HookedTransformerWorkerRuntime:
                 alignment = _coerce_float(row.get("alignment_margin"))
                 target_mass = _coerce_float(row.get("target_mass_delta"))
                 target_top20 = _coerce_int(row.get("target_top20_hit_delta"))
+                attractor_mass = _coerce_float(row.get("attractor_family_mass_delta"))
                 focus_rank = _coerce_int(row.get("focus_rank_delta"))
                 repeat_delta = max(
                     _coerce_float(row.get("repeat_delta")),
@@ -12492,6 +12648,8 @@ class HookedTransformerWorkerRuntime:
                 }:
                     return "collapse_sharpener"
                 if actuator_class == "collapse_suppressor" or actual_delta_class == "collapse_suppressor":
+                    return "collapse_suppressor"
+                if attractor_mass < -0.000005 and repeat_delta <= 0.0 and target_mass >= -0.00002:
                     return "collapse_suppressor"
                 if repeat_delta > 0 and entropy_delta < -0.01 and top1_margin_delta > 0.001:
                     return "collapse_sharpener"
@@ -12579,6 +12737,9 @@ class HookedTransformerWorkerRuntime:
                         "carrier_to_actuator_conversion_variant": bool(
                             row.get("carrier_to_actuator_conversion_variant", False)
                         ),
+                        "anti_attractor_suppression_calibration": bool(
+                            row.get("anti_attractor_suppression_calibration", False)
+                        ),
                         "carrier_to_actuator_success_criteria": row.get("carrier_to_actuator_success_criteria"),
                         "source_deepening_seed_recipe_name": row.get("source_deepening_seed_recipe_name"),
                         "source_deepening_seed_operator_recipe_id": row.get(
@@ -12631,6 +12792,16 @@ class HookedTransformerWorkerRuntime:
                             if row.get("target_top20_margin") is None
                             else round(_coerce_float(row.get("target_top20_margin")), 6)
                         ),
+                        "attractor_family_mass_delta": (
+                            None
+                            if row.get("attractor_family_mass_delta") is None
+                            else round(_coerce_float(row.get("attractor_family_mass_delta")), 8)
+                        ),
+                        "attractor_top20_hit_delta": (
+                            None
+                            if row.get("attractor_top20_hit_delta") is None
+                            else _coerce_int(row.get("attractor_top20_hit_delta"))
+                        ),
                         "focus_rank_delta": int(focus_rank),
                         "repeat_delta": round(float(repeat_delta), 6),
                     }
@@ -12678,6 +12849,7 @@ class HookedTransformerWorkerRuntime:
                 self_delta = _coerce_float(item.get("self_delta"))
                 cross_delta = _coerce_float(item.get("cross_delta"))
                 repeat_delta = _coerce_float(item.get("repeat_delta"))
+                attractor_mass_delta = _coerce_float(item.get("attractor_family_mass_delta"))
                 if ownership == "self" and alignment > 0.0:
                     _add("ownership_preserving")
                 if effect == "rank_carrier" or focus_rank > 0 or self_delta >= 0.02:
@@ -12700,7 +12872,11 @@ class HookedTransformerWorkerRuntime:
                 if safety == "neutral" and repeat_delta <= 0.0:
                     _add("anti_collapse")
                     _add("neutral_stable")
-                if failure == "collapse_suppressor" or effect == "collapse_suppressor":
+                if (
+                    failure == "collapse_suppressor"
+                    or effect == "collapse_suppressor"
+                    or (attractor_mass_delta < -0.000005 and repeat_delta <= 0.0)
+                ):
                     _add("collapse_suppressor")
                 if ownership in {"bridge", "wrong_direction"} and cross_delta > 0.005:
                     _add("bridge_compatible")
@@ -13391,15 +13567,21 @@ class HookedTransformerWorkerRuntime:
                 "readout_steering_deepening",
                 "readout_gap_confirmation_or_variant_sweep",
                 "carrier_to_actuator_conversion_sweep",
+                "anti_attractor_suppression_calibration_sweep",
             }
             and (
                 readout_steering_deepening_operator_rows
                 or readout_steering_deepening_already_replayed
                 or readout_gap_confirmation_already_replayed
                 or carrier_to_actuator_conversion_already_replayed
+                or anti_attractor_suppression_calibration_already_replayed
             )
         ):
             readout_steering_next_evidence = (
+                "anti_attractor_suppression_calibration_review_complete"
+                if str(request.get("operator_recipe_expansion_mode") or "")
+                == "anti_attractor_suppression_calibration_sweep"
+                else
                 "carrier_to_actuator_conversion_review_complete"
                 if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                 else "readout_gap_confirmation_review_complete"
@@ -13417,6 +13599,11 @@ class HookedTransformerWorkerRuntime:
                 return None
             objective_key = str(expansion_summary.get("objective_bundle_key") or bundle_key or "")
             dominant_failure = str(expansion_summary.get("dominant_failure_mode") or "none")
+            failure_counts = (
+                dict(expansion_summary.get("failure_mode_counts"))
+                if isinstance(expansion_summary.get("failure_mode_counts"), Mapping)
+                else {}
+            )
             safety_counts = (
                 dict(expansion_summary.get("safety_role_counts"))
                 if isinstance(expansion_summary.get("safety_role_counts"), Mapping)
@@ -13438,13 +13625,29 @@ class HookedTransformerWorkerRuntime:
             conversion_mode = str(request.get("operator_recipe_expansion_mode") or "") == (
                 "carrier_to_actuator_conversion_sweep"
             )
+            calibration_mode = str(request.get("operator_recipe_expansion_mode") or "") == (
+                "anti_attractor_suppression_calibration_sweep"
+            )
             has_target_actuator = bool(
                 expansion_summary.get("best_target_actuator_recipe_name")
                 or expansion_summary.get("best_target_actuator_recipe_family")
                 or target_mass_delta > 0.00002
                 or target_top20_hit_delta > 0
             )
-            if not collapse_safe or dominant_failure in {"collapse_sharpener", "harmful"}:
+            if calibration_mode:
+                if int(failure_counts.get("collapse_suppressor", 0) or 0) > 0:
+                    best_candidate_role = "collapse_suppressor_candidate"
+                    recommended_next_action = "hold_for_suppress_then_target_design"
+                    recommended_next_evidence = "anti_attractor_suppression_calibration_review_complete"
+                    why_not_trial = (
+                        "suppression moved attractor evidence but remains diagnostic-only until paired with a target actuator"
+                    )
+                else:
+                    best_candidate_role = "anti_attractor_calibration_no_clear_suppressor"
+                    recommended_next_action = "request_operator_family_shift"
+                    recommended_next_evidence = "anti_attractor_suppression_calibration_review_complete"
+                    why_not_trial = "suppression calibration did not produce a certified collapse suppressor"
+            elif not collapse_safe or dominant_failure in {"collapse_sharpener", "harmful"}:
                 best_candidate_role = "collapse_or_harmful"
                 recommended_next_action = "request_compare_extra_operator_diagnostics"
                 recommended_next_evidence = "lower_alpha_or_anti_attractor_only"
@@ -13560,6 +13763,14 @@ class HookedTransformerWorkerRuntime:
             "best_non_kv_candidate_role": None,
             "next_evidence_needed": None,
         }
+        inline_anti_attractor_suppression_calibration_rows: list[dict[str, Any]] = []
+        inline_anti_attractor_suppression_calibration_summary: dict[str, Any] = {
+            "inline_anti_attractor_suppression_calibration_executed": False,
+            "inline_anti_attractor_suppression_calibration_rows": 0,
+            "inline_anti_attractor_suppression_calibration_source": None,
+            "best_inline_anti_attractor_suppression_role": None,
+            "next_evidence_needed": None,
+        }
         if (
             diagnostic_name == "carrier_to_actuator_conversion_sweep"
             and isinstance(readout_deepening_review_summary, Mapping)
@@ -13654,6 +13865,148 @@ class HookedTransformerWorkerRuntime:
                 )
                 if non_kv_variant_or_two_stage_rows:
                     matching_rows = [*matching_rows, *non_kv_variant_or_two_stage_rows]
+
+                    def _inline_variant_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+                        role = str(row.get("non_kv_variant_role") or "")
+                        return (
+                            4.0
+                            if role == "target_actuator_candidate"
+                            else 3.0
+                            if role == "collapse_suppressor"
+                            else 2.0
+                            if role == "gap_closer_candidate"
+                            else 1.0
+                            if role == "dead"
+                            else 0.0,
+                            _coerce_float(row.get("target_mass_delta")),
+                            -_coerce_float(row.get("target_top20_threshold_gap_delta")),
+                            -_coerce_float(row.get("repeat_delta")),
+                        )
+
+                    best_inline_variant_row = max(
+                        non_kv_variant_or_two_stage_rows,
+                        key=_inline_variant_rank,
+                    )
+                    best_inline_variant_role = str(
+                        best_inline_variant_row.get("non_kv_variant_role") or ""
+                    )
+                    best_inline_variant_mass = _coerce_float(
+                        best_inline_variant_row.get("target_mass_delta")
+                    )
+                    best_inline_variant_top20 = _coerce_int(
+                        best_inline_variant_row.get("target_top20_hit_delta")
+                    )
+                    if (
+                        best_inline_variant_role in {"gap_closer_candidate", "collapse_suppressor"}
+                        and best_inline_variant_mass < 0.00002
+                        and best_inline_variant_top20 <= 0
+                        and not anti_attractor_suppression_calibration_already_replayed
+                    ):
+                        inline_calibration_request = dict(request)
+                        inline_calibration_request["operator_recipe_expansion_mode"] = (
+                            "anti_attractor_suppression_calibration_sweep"
+                        )
+                        inline_calibration_request["next_evidence_needed"] = (
+                            "anti_attractor_suppression_calibration_sweep"
+                        )
+                        inline_calibration_request["objective_bundle_key"] = (
+                            inline_calibration_request.get("objective_bundle_key")
+                            or inline_calibration_request.get("bundle_key")
+                            or bundle_key
+                        )
+                        inline_calibration_request["bundle_key"] = (
+                            inline_calibration_request.get("bundle_key")
+                            or inline_calibration_request.get("objective_bundle_key")
+                            or bundle_key
+                        )
+                        inline_calibration_request["step_actuator_bundle_key"] = (
+                            inline_calibration_request.get("step_actuator_bundle_key")
+                            or inline_calibration_request.get("objective_bundle_key")
+                            or inline_calibration_request.get("bundle_key")
+                            or bundle_key
+                        )
+                        inline_anti_attractor_suppression_calibration_rows = (
+                            self._readout_steering_deepening_operator_rows(
+                                inline_calibration_request,
+                                [*matching_rows, *mini_non_kv_first_pass_rows],
+                                packet_context=packet_context,
+                                max_followup_rows=4,
+                                expansion_mode="anti_attractor_suppression_calibration_sweep",
+                            )
+                        )
+                        if inline_anti_attractor_suppression_calibration_rows:
+                            matching_rows = [
+                                *matching_rows,
+                                *inline_anti_attractor_suppression_calibration_rows,
+                            ]
+
+                            def _inline_calibration_role(row: Mapping[str, Any]) -> str:
+                                attractor_mass = _coerce_float(row.get("attractor_family_mass_delta"))
+                                repeat_delta = _coerce_float(row.get("repeat_delta"))
+                                if (
+                                    str(row.get("actuator_class") or "") == "collapse_suppressor"
+                                    or str(row.get("actual_delta_class") or "") == "collapse_suppressor"
+                                    or (attractor_mass < -0.000005 and repeat_delta <= 0.0)
+                                ):
+                                    return "collapse_suppressor_candidate"
+                                if _coerce_float(row.get("target_top20_threshold_gap_delta")) < 0.0:
+                                    return "gap_closer_candidate"
+                                if str(row.get("actuator_class") or "") in {"collapse_sharpener", "harmful"}:
+                                    return "collapse_or_harmful"
+                                return "dead_or_flat"
+
+                            def _inline_calibration_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+                                role = _inline_calibration_role(row)
+                                return (
+                                    3.0
+                                    if role == "collapse_suppressor_candidate"
+                                    else 2.0
+                                    if role == "gap_closer_candidate"
+                                    else 1.0
+                                    if role == "dead_or_flat"
+                                    else 0.0,
+                                    -_coerce_float(row.get("attractor_family_mass_delta")),
+                                    -_coerce_float(row.get("target_top20_threshold_gap_delta")),
+                                    -_coerce_float(row.get("repeat_delta")),
+                                )
+
+                            best_inline_calibration_row = max(
+                                inline_anti_attractor_suppression_calibration_rows,
+                                key=_inline_calibration_rank,
+                            )
+                            best_inline_calibration_role = _inline_calibration_role(
+                                best_inline_calibration_row
+                            )
+                            inline_anti_attractor_suppression_calibration_summary = {
+                                "inline_anti_attractor_suppression_calibration_executed": True,
+                                "inline_anti_attractor_suppression_calibration_rows": len(
+                                    inline_anti_attractor_suppression_calibration_rows
+                                ),
+                                "inline_anti_attractor_suppression_calibration_source": (
+                                    "carrier_to_actuator_conversion_failed_after_non_kv_variant"
+                                ),
+                                "best_inline_anti_attractor_suppression_role": best_inline_calibration_role,
+                                "best_inline_anti_attractor_suppression_recipe_name": (
+                                    best_inline_calibration_row.get("recipe_name")
+                                ),
+                                "best_inline_anti_attractor_suppression_operator_recipe_id": (
+                                    best_inline_calibration_row.get("operator_recipe_id")
+                                ),
+                                "best_inline_anti_attractor_suppression_attractor_mass_delta": (
+                                    best_inline_calibration_row.get("attractor_family_mass_delta")
+                                ),
+                                "best_inline_anti_attractor_suppression_target_mass_delta": (
+                                    best_inline_calibration_row.get("target_mass_delta")
+                                ),
+                                "best_inline_anti_attractor_suppression_target_top20_hit_delta": (
+                                    best_inline_calibration_row.get("target_top20_hit_delta")
+                                ),
+                                "production_apply_allowed": False,
+                                "policy_candidate_ready": False,
+                                "next_evidence_needed": (
+                                    "anti_attractor_suppression_calibration_review_complete"
+                                ),
+                            }
             mini_non_kv_first_pass_summary = {
                 "mini_non_kv_first_pass_executed": bool(mini_non_kv_first_pass_rows),
                 "mini_non_kv_first_pass_rows": len(mini_non_kv_first_pass_rows),
@@ -13708,6 +14061,9 @@ class HookedTransformerWorkerRuntime:
                 "production_apply_allowed": False,
                 "policy_candidate_ready": False,
                 "next_evidence_needed": (
+                    "anti_attractor_suppression_calibration_review_complete"
+                    if inline_anti_attractor_suppression_calibration_rows
+                    else
                     "non_kv_variant_or_two_stage_review_complete"
                     if non_kv_variant_or_two_stage_rows
                     else mini_followup_mode
@@ -13719,6 +14075,9 @@ class HookedTransformerWorkerRuntime:
             }
             readout_deepening_review_summary = dict(readout_deepening_review_summary)
             readout_deepening_review_summary.update(mini_non_kv_first_pass_summary)
+            readout_deepening_review_summary.update(
+                inline_anti_attractor_suppression_calibration_summary
+            )
         canonical_followup_request: dict[str, Any] | None = None
         if (
             isinstance(effective_positive_operator_deepening_plan, Mapping)
@@ -13969,6 +14328,52 @@ class HookedTransformerWorkerRuntime:
                 }
                 for row in non_kv_variant_or_two_stage_rows[:4]
             ],
+            "inline_anti_attractor_suppression_calibration_executed": bool(
+                inline_anti_attractor_suppression_calibration_rows
+            ),
+            "inline_anti_attractor_suppression_calibration_summary": dict(
+                inline_anti_attractor_suppression_calibration_summary
+            ),
+            "inline_anti_attractor_suppression_calibration_rows": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "intended_term",
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "operator_axis",
+                        "operator_recipe_expansion_mode",
+                        "operator_family",
+                        "candidate_kind",
+                        "status",
+                        "actuator_class",
+                        "ownership_role",
+                        "effect_role",
+                        "safety_role",
+                        "recipe_family",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "actual_delta_class",
+                        "anti_attractor_suppression_calibration",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "target_top20_threshold_gap_delta",
+                        "attractor_family_mass_delta",
+                        "attractor_top20_hit_delta",
+                        "focus_rank_delta",
+                        "repeat_delta",
+                        "self_delta",
+                        "alignment_margin",
+                        "blocked_by",
+                        "candidate_fingerprint",
+                        "eval_context_fingerprint",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in inline_anti_attractor_suppression_calibration_rows[:4]
+            ],
             "operator_family_shift_status": (
                 readout_deepening_review_summary.get("operator_family_shift_status")
                 if isinstance(readout_deepening_review_summary, Mapping)
@@ -14103,6 +14508,9 @@ class HookedTransformerWorkerRuntime:
                     if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                     else readout_gap_confirmation_already_replayed
                     if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
+                    else anti_attractor_suppression_calibration_already_replayed
+                    if str(request.get("operator_recipe_expansion_mode") or "")
+                    == "anti_attractor_suppression_calibration_sweep"
                     else readout_steering_deepening_already_replayed
                 )
                 else "not_requested"
@@ -14110,6 +14518,7 @@ class HookedTransformerWorkerRuntime:
                     "readout_steering_deepening",
                     "readout_gap_confirmation_or_variant_sweep",
                     "carrier_to_actuator_conversion_sweep",
+                    "anti_attractor_suppression_calibration_sweep",
                 }
                 else "no_seed_or_already_replayed"
             ),
@@ -14121,6 +14530,32 @@ class HookedTransformerWorkerRuntime:
             "carrier_to_actuator_conversion_variant_count": (
                 len(readout_steering_deepening_operator_rows)
                 if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
+                else 0
+            ),
+            "anti_attractor_suppression_calibration_requested": bool(
+                str(request.get("operator_recipe_expansion_mode") or "")
+                == "anti_attractor_suppression_calibration_sweep"
+            ),
+            "anti_attractor_suppression_calibration_review_status": (
+                "matrix_replayed"
+                if readout_steering_deepening_operator_rows
+                and str(request.get("operator_recipe_expansion_mode") or "")
+                == "anti_attractor_suppression_calibration_sweep"
+                else "inline_matrix_replayed"
+                if inline_anti_attractor_suppression_calibration_rows
+                else "already_replayed"
+                if anti_attractor_suppression_calibration_already_replayed
+                else "not_requested"
+                if str(request.get("operator_recipe_expansion_mode") or "")
+                != "anti_attractor_suppression_calibration_sweep"
+                else "no_seed_or_already_replayed"
+            ),
+            "anti_attractor_suppression_calibration_row_count": (
+                len(readout_steering_deepening_operator_rows)
+                if str(request.get("operator_recipe_expansion_mode") or "")
+                == "anti_attractor_suppression_calibration_sweep"
+                else len(inline_anti_attractor_suppression_calibration_rows)
+                if inline_anti_attractor_suppression_calibration_rows
                 else 0
             ),
             "entity_operator_materialization_rows": [
@@ -14449,6 +14884,9 @@ class HookedTransformerWorkerRuntime:
                         if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                         else readout_gap_confirmation_already_replayed
                         if str(request.get("operator_recipe_expansion_mode") or "") == "readout_gap_confirmation_or_variant_sweep"
+                        else anti_attractor_suppression_calibration_already_replayed
+                        if str(request.get("operator_recipe_expansion_mode") or "")
+                        == "anti_attractor_suppression_calibration_sweep"
                         else readout_steering_deepening_already_replayed
                     )
                     else "not_requested"
@@ -14456,6 +14894,7 @@ class HookedTransformerWorkerRuntime:
                         "readout_steering_deepening",
                         "readout_gap_confirmation_or_variant_sweep",
                         "carrier_to_actuator_conversion_sweep",
+                        "anti_attractor_suppression_calibration_sweep",
                     }
                     else "no_seed_or_already_replayed"
                 ),
@@ -14468,6 +14907,23 @@ class HookedTransformerWorkerRuntime:
                     len(readout_steering_deepening_operator_rows)
                     if str(request.get("operator_recipe_expansion_mode") or "") == "carrier_to_actuator_conversion_sweep"
                     else 0
+                ),
+                "anti_attractor_suppression_calibration_row_count": (
+                    len(readout_steering_deepening_operator_rows)
+                    if str(request.get("operator_recipe_expansion_mode") or "")
+                    == "anti_attractor_suppression_calibration_sweep"
+                    else len(inline_anti_attractor_suppression_calibration_rows)
+                    if inline_anti_attractor_suppression_calibration_rows
+                    else 0
+                ),
+                "inline_anti_attractor_suppression_calibration_executed": bool(
+                    inline_anti_attractor_suppression_calibration_rows
+                ),
+                "inline_anti_attractor_suppression_calibration_rows": len(
+                    inline_anti_attractor_suppression_calibration_rows
+                ),
+                "inline_anti_attractor_suppression_calibration_summary": dict(
+                    inline_anti_attractor_suppression_calibration_summary
                 ),
                 "mini_non_kv_first_pass_executed": bool(
                     mini_non_kv_first_pass_summary.get("mini_non_kv_first_pass_executed", False)
@@ -17791,7 +18247,11 @@ class HookedTransformerWorkerRuntime:
             return []
         confirmation_mode = str(expansion_mode) == "readout_gap_confirmation_or_variant_sweep"
         conversion_mode = str(expansion_mode) == "carrier_to_actuator_conversion_sweep"
+        calibration_mode = str(expansion_mode) == "anti_attractor_suppression_calibration_sweep"
         target_axis = (
+            "anti_attractor_suppression_calibration_sweep"
+            if calibration_mode
+            else
             "carrier_to_actuator_conversion_sweep"
             if conversion_mode
             else "readout_gap_confirmation_variant_sweep"
@@ -17854,6 +18314,18 @@ class HookedTransformerWorkerRuntime:
                 str(row.get("diagnostic_family") or row.get("operator_axis") or "") == "readout_steering"
                 or str(row.get("diagnostic_family") or "") == "entity_insertion_materialized_candidate"
                 or str(row.get("recipe_family") or "").startswith("readout_steering")
+                or (
+                    calibration_mode
+                    and (
+                        str(row.get("recipe_family") or "").startswith("non_kv_variant_or_two_stage")
+                        or str(row.get("operator_axis") or "")
+                        in {
+                            "mini_non_kv_first_pass",
+                            "non_kv_variant_or_two_stage_design",
+                            "two_stage_suppress_then_target_review",
+                        }
+                    )
+                )
             )
             and str(row.get("operator_axis") or "") != target_axis
             and (confirmation_mode or str(row.get("operator_axis") or "") != "readout_steering_deepening")
@@ -17999,6 +18471,41 @@ class HookedTransformerWorkerRuntime:
                     "alpha": 0.03,
                 },
             ]
+        elif calibration_mode:
+            followup_specs = [
+                {
+                    "recipe_name": "anti_attractor_calibrate_l025_a020",
+                    "steering_kind": "attractor_suppression",
+                    "contrast_mode": "suppress_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.025,
+                    "alpha": 0.02,
+                },
+                {
+                    "recipe_name": "anti_attractor_calibrate_l050_a025",
+                    "steering_kind": "attractor_suppression",
+                    "contrast_mode": "suppress_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.05,
+                    "alpha": 0.025,
+                },
+                {
+                    "recipe_name": "anti_attractor_calibrate_l075_a030",
+                    "steering_kind": "attractor_suppression",
+                    "contrast_mode": "suppress_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.075,
+                    "alpha": 0.03,
+                },
+                {
+                    "recipe_name": "anti_attractor_calibrate_l100_a035",
+                    "steering_kind": "attractor_suppression",
+                    "contrast_mode": "suppress_attractor",
+                    "negative_terms": _DEFAULT_BAD_ATTRACTOR_TERMS,
+                    "negative_scale": 0.1,
+                    "alpha": 0.035,
+                },
+            ]
         elif conversion_mode:
             followup_specs = [
                 {
@@ -18136,13 +18643,17 @@ class HookedTransformerWorkerRuntime:
                     _as_float(replay.get("repeat_delta"), 0.0),
                     _as_float(replay.get("repetition_score_delta"), 0.0),
                 )
+                attractor_mass_delta = _as_float(replay.get("attractor_family_mass_delta"), 0.0)
                 direct_target_effect = target_mass_delta > 0.00002 or target_top20_hit_delta > 0
                 collapse_like = actual_delta_class in {"collapse_sharpener", "harmful", "collapse_isomorphic"}
                 if actual_delta_class == "collapse_sharpener":
                     actuator_class = "collapse_sharpener"
                 elif actual_delta_class == "harmful":
                     actuator_class = "harmful"
-                elif actual_delta_class == "collapse_suppressor":
+                elif (
+                    actual_delta_class == "collapse_suppressor"
+                    or (calibration_mode and attractor_mass_delta < -0.000005 and repeat_delta <= 0.0)
+                ):
                     actuator_class = "collapse_suppressor"
                 elif direct_target_effect or actual_delta_class in {"rank_carrier", "readout_gap_movement"} or (
                     self_delta > 0.005 and alignment_margin >= -0.002
@@ -18163,6 +18674,7 @@ class HookedTransformerWorkerRuntime:
                 elif (
                     direct_target_effect
                     or actual_delta_class in {"rank_carrier", "readout_gap_movement", "collapse_suppressor"}
+                    or actuator_class == "collapse_suppressor"
                     or self_delta > 0.005
                 ):
                     status = "supportive"
@@ -18187,7 +18699,7 @@ class HookedTransformerWorkerRuntime:
                     positive_traits.append("top20_gap_measured")
                 if actual_delta_class == "rank_carrier" or focus_rank_delta > 0:
                     positive_traits.append("rank_carrier")
-                if actual_delta_class == "collapse_suppressor":
+                if actual_delta_class == "collapse_suppressor" or actuator_class == "collapse_suppressor":
                     positive_traits.extend(["anti_collapse", "collapse_suppressor"])
                 if status in {"supportive", "observed"} and actuator_class == "self_actuator":
                     positive_traits.append("ownership_preserving")
@@ -18223,6 +18735,9 @@ class HookedTransformerWorkerRuntime:
                         "operator_recipe_id": candidate.get("operator_recipe_id"),
                         "operator_family_key": candidate.get("operator_family_key"),
                         "recipe_family": (
+                            "readout_steering|anti_attractor_suppression_calibration"
+                            if calibration_mode
+                            else
                             "readout_steering|carrier_to_actuator_conversion"
                             if conversion_mode
                             else
@@ -18231,11 +18746,16 @@ class HookedTransformerWorkerRuntime:
                             else "readout_steering|target_readout_deepening"
                         ),
                         "readout_steering_kind": steering_kind,
-                        "readout_gap_closer_recipe": True,
-                        "readout_gap_closer_axis": "target_top20_gap",
+                        "readout_gap_closer_recipe": not calibration_mode,
+                        "readout_gap_closer_axis": (
+                            "anti_attractor_suppression"
+                            if calibration_mode
+                            else "target_top20_gap"
+                        ),
                         "readout_deepening_followup": True,
                         "readout_gap_confirmation_variant": bool(confirmation_mode),
                         "carrier_to_actuator_conversion_variant": bool(conversion_mode),
+                        "anti_attractor_suppression_calibration": bool(calibration_mode),
                         "carrier_to_actuator_success_criteria": "target_mass_delta>tau_or_target_top20_hit_delta>0"
                         if conversion_mode
                         else None,
@@ -18253,6 +18773,8 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_threshold_gap_after": replay.get("target_top20_threshold_gap_after"),
                         "target_top20_threshold_gap_delta": replay.get("target_top20_threshold_gap_delta"),
                         "target_top20_margin": replay.get("target_top20_margin"),
+                        "attractor_family_mass_delta": replay.get("attractor_family_mass_delta"),
+                        "attractor_top20_hit_delta": replay.get("attractor_top20_hit_delta"),
                         "bad_attractor_terms": candidate.get("bad_attractor_terms"),
                         "focus_rank_delta": int(focus_rank_delta),
                         "actual_delta_class": actual_delta_class,
