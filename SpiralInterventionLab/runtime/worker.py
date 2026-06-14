@@ -8676,8 +8676,9 @@ class HookedTransformerWorkerRuntime:
             return float(quality)
 
         for position in range(seq_len):
-            projected = projection_cache.get(position)
-            if position not in projection_cache:
+            projection_key = position if site == "k_cache" else -1
+            projected = projection_cache.get(projection_key)
+            if projection_key not in projection_cache:
                 projected = self._project_feature_into_kv_head(
                     prototype,
                     layer=layer,
@@ -8687,7 +8688,7 @@ class HookedTransformerWorkerRuntime:
                     width=width,
                     head_count=head_count,
                 )
-                projection_cache[position] = projected
+                projection_cache[projection_key] = projected
             if projected is None:
                 continue
             cache_vector = cache_tensor[0, position, head, :].detach().reshape(-1).cpu().float()
