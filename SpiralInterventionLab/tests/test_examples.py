@@ -36,6 +36,11 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     write_post_run_debrief_artifacts,
 )
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
+from SpiralInterventionLab.runtime.diagnostic_orchestration import (
+    confirmed_gap_only_objective_rows,
+    operator_family_shift_canonical_request,
+    readout_gap_confirmation_seen_for_objective,
+)
 from SpiralInterventionLab.runtime.loop import _extract_diagnostic_requests, _extract_observer_check_request
 from SpiralInterventionLab.runtime.sidecar import (
     ReadoutSidecarCapture,
@@ -277,6 +282,49 @@ class TestPostRunDebrief(unittest.TestCase):
 
 
 class TestObserverAndEntityProbeContracts(unittest.TestCase):
+    def test_diagnostic_orchestration_helpers_keep_evidence_apply_closed(self):
+        diagnostic_results = [
+            {
+                "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                "recorded_step": 4,
+                "readout_deepening_review_summary": {
+                    "objective_bundle_key": "entity_insert:budget:source_body:weak_reachable",
+                    "best_candidate_role": "gap_closer_candidate",
+                    "production_trial_eligible": False,
+                    "gap_delta": -0.002,
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                },
+            }
+        ]
+
+        self.assertTrue(
+            readout_gap_confirmation_seen_for_objective(
+                diagnostic_results,
+                "entity_insert:budget:source_body:weak_reachable",
+            )
+        )
+        rows = confirmed_gap_only_objective_rows(
+            diagnostic_results,
+            term_resolver=lambda objective_key: objective_key.split(":")[1],
+        )
+        self.assertEqual(rows[0]["objective_status"], "confirmed_gap_only_no_target_lift")
+        self.assertFalse(rows[0]["rotation_eligible"])
+
+        request = operator_family_shift_canonical_request(
+            objective_bundle_key=rows[0]["objective_bundle_key"],
+            objective_term=rows[0]["term"],
+            seed_recipe_id="readout_deepen_target_pure_a060_gap",
+            seed_recipe_family="readout_steering|carrier_to_actuator_conversion",
+        )
+
+        self.assertEqual(request["operator_recipe_expansion_mode"], "non_kv_operator_search")
+        self.assertFalse(request["production_apply_allowed"])
+        self.assertFalse(request["policy_candidate_ready"])
+        self.assertGreater(len(request["operator_family_shift_preview_rows"]), 0)
+
     def test_observer_check_next_action_maps_to_default_semantic_request(self):
         request = _extract_observer_check_request(
             {
