@@ -35,6 +35,7 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     _resolve_worker_device,
     write_post_run_debrief_artifacts,
 )
+from SpiralInterventionLab.examples.summarize_activation_patch_jsonl import summarize_activation_patch_jsonl
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
 from SpiralInterventionLab.runtime.diagnostic_orchestration import (
     confirmed_gap_only_objective_rows,
@@ -273,12 +274,18 @@ class TestPostRunDebrief(unittest.TestCase):
                 "full",
                 "--controller-prompt-asset",
                 "controller_v01.txt",
+                "--max-diagnostic-calls-per-run",
+                "12",
+                "--diagnostic-result-window",
+                "12",
             ]
         )
 
         self.assertEqual(args.controller_prompt_profile, "full")
         self.assertEqual(args.controller_packet_view, "full")
         self.assertEqual(args.controller_prompt_asset, "controller_v01.txt")
+        self.assertEqual(args.max_diagnostic_calls_per_run, 12)
+        self.assertEqual(args.diagnostic_result_window, 12)
 
 
 class TestObserverAndEntityProbeContracts(unittest.TestCase):
@@ -1954,15 +1961,21 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         )
         self.assertEqual(
             saturated_hints["next_evidence_needed"],
-            "new_runtime_operator_needed_after_suppressor_saturation",
+            "activation_patch_candidate_review",
+        )
+        self.assertTrue(saturated_hints["new_runtime_operator_needed_after_suppressor_saturation"])
+        self.assertTrue(saturated_hints["activation_patch_candidate_review_recommended"])
+        self.assertEqual(
+            saturated_hints["diagnostic_frontier_request"],
+            "activation_patch_candidate_review",
+        )
+        self.assertEqual(
+            saturated_hints["diagnostic_frontier_next_evidence"],
+            "activation_patch_candidate_review",
         )
         self.assertEqual(
             saturated_hints["operator_family_shift_status"],
             "suppress_then_target_saturated_no_target_lift",
-        )
-        self.assertEqual(
-            saturated_hints.get("diagnostic_frontier_blocked_reason"),
-            "suppress_then_target_after_calibration_saturated_no_target_lift",
         )
         self.assertNotEqual(
             saturated_hints.get("diagnostic_frontier_operator_recipe_expansion_mode"),
@@ -2037,6 +2050,80 @@ class TestExamples(unittest.TestCase):
         self.assertIn("step_size", catalog[0]["caps"])
         self.assertEqual(catalog[1]["surface_id"], "s_resid_pre_l1_prev")
         self.assertEqual(catalog[1]["target"]["token"], {"mode": "index", "value": -2})
+
+    def test_expanded_activation_surface_catalog_exposes_late_multisite_surfaces(self):
+        model, _codec = self._make_model_and_codec()
+
+        catalog = build_default_activation_surface_catalog(
+            model,
+            worker_id="os_0",
+            profile="activation_patch_expanded",
+        )
+
+        last_surfaces = [surface for surface in catalog if surface["target"]["token"] == {"mode": "last"}]
+        self.assertEqual({surface["target"]["site"] for surface in last_surfaces}, {"resid_pre", "resid_post", "mlp_out"})
+        self.assertTrue(
+            all("activation_patch" in surface["allow_ops"] for surface in last_surfaces)
+        )
+        self.assertEqual(catalog[-1]["target"]["token"], {"mode": "index", "value": -2})
+
+    def test_activation_patch_jsonl_summary_groups_candidate_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "c1.jsonl"
+            event = {
+                "event": "controller_diagnostic_result",
+                "activation_patch_candidate_pool": [
+                    {
+                        "diagnostic_family": "activation_patch",
+                        "activation_patch_op_kind": "activation_patch",
+                        "activation_patch_site": "resid_post",
+                        "activation_patch_layer": 11,
+                        "activation_patch_source_localization": "source_term_token",
+                        "activation_patch_alpha": 0.03,
+                        "activation_patch_step_size": 0.03,
+                        "activation_patch_hook_call_count": 1,
+                        "activation_patch_source_target_cosine": 0.42,
+                        "activation_patch_blend_delta_norm": 0.0015,
+                        "activation_patch_step_size_clip_saturated": False,
+                        "actual_delta_class": "dead_actuator",
+                        "actuator_class": "dead_actuator",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                        "target_top20_threshold_gap_delta": float("nan"),
+                        "recipe_name": "activation_patch_resid_post_l11_source_term_token_a030",
+                    },
+                    {
+                        "diagnostic_family": "activation_patch",
+                        "activation_patch_op_kind": "activation_patch",
+                        "activation_patch_site": "mlp_out",
+                        "activation_patch_layer": 11,
+                        "activation_patch_source_localization": "source_centered_pm1",
+                        "activation_patch_alpha": 0.04,
+                        "activation_patch_step_size": 0.08,
+                        "actual_delta_class": "readout_gap_movement",
+                        "actuator_class": "self_actuator",
+                        "target_mass_delta": 0.00001,
+                        "target_top20_hit_delta": 0,
+                        "target_top20_threshold_gap_delta": -0.002,
+                        "recipe_name": "activation_patch_mlp_out_l11_source_centered_pm1_a040",
+                    },
+                ],
+            }
+            log_path.write_text(json.dumps(event, allow_nan=True) + "\n", encoding="utf-8")
+
+            summary = summarize_activation_patch_jsonl([log_path])
+
+        self.assertEqual(summary["activation_patch_row_count"], 2)
+        self.assertEqual(summary["by_actual_delta_class"]["dead_actuator"], 1)
+        self.assertEqual(summary["by_actual_delta_class"]["readout_gap_movement"], 1)
+        self.assertEqual(summary["by_site"]["mlp_out"], 1)
+        self.assertIsNone(summary["best_rows"]["gap_delta"][-1]["gap_delta"])
+        self.assertEqual(summary["best_rows"]["gap_delta"][0]["gap_delta"], -0.002)
+        resid_post_row = next(row for row in summary["matrix"] if row["site"] == "resid_post")
+        self.assertEqual(resid_post_row["hooked_rows"], 1)
+        self.assertAlmostEqual(resid_post_row["max_blend_delta_norm"], 0.0015)
+        mlp_row = next(row for row in summary["matrix"] if row["site"] == "mlp_out")
+        self.assertEqual(mlp_row["max_step_size"], 0.08)
 
     def test_build_hooked_transformer_worker_runtime_smoke(self):
         model, codec = self._make_model_and_codec()

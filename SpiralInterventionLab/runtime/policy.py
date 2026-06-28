@@ -12,6 +12,7 @@ from .edit_budget import (
     estimate_edit_cost,
 )
 from .schema import (
+    ActivationPatchOp,
     CachePairSource,
     ControllerCommand,
     ControllerObservationPacket,
@@ -66,7 +67,7 @@ class GlobalBudget:
 class HarnessPolicy:
     version: str = "0.1"
     controller_view: HarnessControllerView = field(default_factory=HarnessControllerView)
-    allow_ops: tuple[str, ...] = ("resid_add", "kv_mix", "rank1_patch")
+    allow_ops: tuple[str, ...] = ("resid_add", "kv_mix", "rank1_patch", "activation_patch")
     deny_targets: tuple[DenyTargetRule, ...] = (
         DenyTargetRule(kind="embedding"),
         DenyTargetRule(kind="logits"),
@@ -238,32 +239,6 @@ def validate_command_against_packet(
         if surface.caps.revertible_only and not edit.budget.revertible:
             raise PolicyViolation(f"edit '{edit.id}' must be revertible on this surface")
 
-        alpha = float(edit.op.alpha)
-        if alpha > surface.caps.max_alpha:
-            raise PolicyViolation(f"edit '{edit.id}' exceeds surface alpha cap")
-        if edit.budget.norm_clip is not None and surface.caps.norm_clip is not None:
-            if edit.budget.norm_clip > surface.caps.norm_clip:
-                raise PolicyViolation(f"edit '{edit.id}' exceeds surface norm clip cap")
-        if edit.budget.step_size is not None and surface.caps.step_size is not None:
-            if edit.budget.step_size > surface.caps.step_size:
-                raise PolicyViolation(f"edit '{edit.id}' exceeds surface step_size cap")
-
-        if isinstance(edit.op, Rank1PatchOp):
-            rank_patch_count += 1
-            requested_rank = edit.budget.rank_cap or 1
-            if requested_rank > pol.global_budget.max_rank_per_edit:
-                raise PolicyViolation(f"edit '{edit.id}' exceeds policy rank cap")
-            if surface.caps.rank_cap is not None and requested_rank > surface.caps.rank_cap:
-                raise PolicyViolation(f"edit '{edit.id}' exceeds surface rank cap")
-
-        if isinstance(edit.op, KvMixOp):
-            if edit.op.which == "k" and not getattr(edit.source, "k", None) and edit.source.dtype == "cache_pair":
-                raise PolicyViolation(f"edit '{edit.id}' requires source.k for kv_mix which='k'")
-            if edit.op.which == "v" and not getattr(edit.source, "v", None) and edit.source.dtype == "cache_pair":
-                raise PolicyViolation(f"edit '{edit.id}' requires source.v for kv_mix which='v'")
-            if edit.op.which == "kv" and edit.source.dtype != "cache_pair":
-                raise PolicyViolation(f"edit '{edit.id}' requires cache_pair source for kv_mix which='kv'")
-
         edit_meta = edit.meta if isinstance(getattr(edit, "meta", None), Mapping) else {}
         apply_kind = str(
             edit_meta.get("apply_kind")
@@ -275,6 +250,54 @@ def validate_command_against_packet(
             or cmd.meta.get("production_trial_budget_class")
             or ""
         ).strip().lower()
+        diagnostic_step_size_cap_release = (
+            isinstance(edit.op, ActivationPatchOp)
+            and apply_kind == "diagnostic_probe"
+            and production_trial_budget_class == "diagnostic_only"
+            and bool(edit_meta.get("step_size_cap_release_allowed", False))
+            and not bool(edit_meta.get("production_apply_allowed", False))
+            and not bool(edit_meta.get("certified_for_apply", False))
+        )
+
+        alpha = float(edit.op.alpha)
+        if alpha > surface.caps.max_alpha:
+            raise PolicyViolation(f"edit '{edit.id}' exceeds surface alpha cap")
+        if edit.budget.norm_clip is not None and surface.caps.norm_clip is not None:
+            if edit.budget.norm_clip > surface.caps.norm_clip:
+                raise PolicyViolation(f"edit '{edit.id}' exceeds surface norm clip cap")
+        if edit.budget.step_size is not None and surface.caps.step_size is not None:
+            if edit.budget.step_size > surface.caps.step_size and not diagnostic_step_size_cap_release:
+                raise PolicyViolation(f"edit '{edit.id}' exceeds surface step_size cap")
+
+        if isinstance(edit.op, Rank1PatchOp):
+            rank_patch_count += 1
+            requested_rank = edit.budget.rank_cap or 1
+            if requested_rank > pol.global_budget.max_rank_per_edit:
+                raise PolicyViolation(f"edit '{edit.id}' exceeds policy rank cap")
+            if surface.caps.rank_cap is not None and requested_rank > surface.caps.rank_cap:
+                raise PolicyViolation(f"edit '{edit.id}' exceeds surface rank cap")
+
+        if isinstance(edit.op, ActivationPatchOp):
+            if getattr(surface.target, "kind", None) != "activation":
+                raise PolicyViolation(f"edit '{edit.id}' activation_patch requires an activation target")
+            if getattr(surface.target, "site", None) not in {"resid_pre", "resid_post", "mlp_out"}:
+                raise PolicyViolation(f"edit '{edit.id}' activation_patch target site is unsupported")
+            token = getattr(surface.target, "token", None)
+            if token is None or str(getattr(token, "mode", "") or "") != "last":
+                raise PolicyViolation(f"edit '{edit.id}' activation_patch requires answer-boundary last token")
+            if edit.budget.ttl_steps != 1:
+                raise PolicyViolation(f"edit '{edit.id}' activation_patch requires ttl_steps=1")
+            if not isinstance(edit.source, VectorSource):
+                raise PolicyViolation(f"edit '{edit.id}' activation_patch requires a vector source")
+
+        if isinstance(edit.op, KvMixOp):
+            if edit.op.which == "k" and not getattr(edit.source, "k", None) and edit.source.dtype == "cache_pair":
+                raise PolicyViolation(f"edit '{edit.id}' requires source.k for kv_mix which='k'")
+            if edit.op.which == "v" and not getattr(edit.source, "v", None) and edit.source.dtype == "cache_pair":
+                raise PolicyViolation(f"edit '{edit.id}' requires source.v for kv_mix which='v'")
+            if edit.op.which == "kv" and edit.source.dtype != "cache_pair":
+                raise PolicyViolation(f"edit '{edit.id}' requires cache_pair source for kv_mix which='kv'")
+
         expr_depth_limit = pol.max_expr_depth
         if apply_kind == "production_trial" and production_trial_budget_class == "alternate_followup":
             expr_depth_limit = max(expr_depth_limit, 8)

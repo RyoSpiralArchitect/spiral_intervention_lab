@@ -9,6 +9,7 @@ from .adapter import ModelAdapter
 from .edit_budget import MAIN_EDIT_BUDGET_POOL, budget_metadata, classify_edit_budget_pool
 from .policy import HarnessPolicy, validate_command_against_packet
 from .schema import (
+    ActivationPatchOp,
     CachePairSource,
     ControllerCommand,
     ControllerObservationPacket,
@@ -277,6 +278,11 @@ def compile_edit(
             raise ValueError("resid_add requires a vector source")
         expr_fn = compile_expr(dict(edit.source.expr))
         return _compile_resid_add(edit, surface, expr_fn, ctx, command_meta=command_meta)
+    if isinstance(op, ActivationPatchOp):
+        if not isinstance(edit.source, VectorSource):
+            raise ValueError("activation_patch requires a vector source")
+        expr_fn = compile_expr(dict(edit.source.expr))
+        return _compile_activation_patch(edit, surface, expr_fn, ctx, command_meta=command_meta)
     if isinstance(op, KvMixOp):
         return _compile_kv_mix(edit, surface, ctx, command_meta=command_meta)
     if isinstance(op, Rank1PatchOp):
@@ -370,6 +376,10 @@ def _registration_metadata(
         "production_apply_allowed",
         "production_policy_would_apply",
         "certified_for_apply",
+        "activation_patch_op_kind",
+        "activation_patch_mode",
+        "activation_patch_runtime_supported",
+        "activation_patch_effect_role",
         "source_localization",
         "patch_mode",
         "base_localization",
@@ -424,6 +434,56 @@ def _compile_resid_add(
         ttl_steps=edit.budget.ttl_steps,
         revertible=edit.budget.revertible,
         kind="resid_add",
+        apply=apply,
+        rollback=rollback,
+    )
+
+
+def _compile_activation_patch(
+    edit: Any,
+    surface: Any,
+    expr_fn: TensorThunk,
+    ctx: StepContext,
+    *,
+    command_meta: Mapping[str, Any] | None = None,
+) -> CompiledEdit:
+    alpha = float(edit.op.alpha)
+    budget = _runtime_budget(edit, surface)
+    metadata = _registration_metadata(edit, surface, ctx.packet, command_meta)
+    metadata["activation_patch_mode"] = edit.op.mode
+    telemetry: dict[str, Any] = {
+        "hook_call_count": 0,
+        "selected_token_count": 0,
+    }
+    metadata["activation_patch_telemetry"] = telemetry
+    hook_name, hook_fn = ctx.adapter.make_activation_patch_hook(
+        surface=surface,
+        tensor_fn=expr_fn,
+        alpha=alpha,
+        mode=edit.op.mode,
+        budget=budget,
+        telemetry=telemetry,
+    )
+
+    def apply(step_ctx: StepContext) -> None:
+        step_ctx.adapter.set_step_context(step_ctx)
+        step_ctx.runtime_state.register_hook(
+            hook_name=hook_name,
+            hook_fn=hook_fn,
+            edit_id=edit.id,
+            ttl_steps=edit.budget.ttl_steps,
+            revertible=edit.budget.revertible,
+            metadata=metadata,
+        )
+
+    def rollback(step_ctx: StepContext) -> None:
+        step_ctx.runtime_state.remove_edit(edit.id)
+
+    return CompiledEdit(
+        edit_id=edit.id,
+        ttl_steps=edit.budget.ttl_steps,
+        revertible=edit.budget.revertible,
+        kind="activation_patch",
         apply=apply,
         rollback=rollback,
     )

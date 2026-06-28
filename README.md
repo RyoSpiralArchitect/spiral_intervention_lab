@@ -99,6 +99,9 @@ The current implementation includes:
   - `carrier_only_no_target_actuator`
   - `operator_family_shift_after_gap_carrier_conversion_failed`
 - diagnostic-only non-KV operator-family shift previews after carrier conversion fails, including residual readout-direction, source-term activation patch, anti-attractor suppression, and attention-route carrier probe scaffolds
+- first-class diagnostic `activation_patch` runtime support with blend-mode hooks,
+  step-size telemetry, forced/canonical cap-response curves, and JSONL summary
+  extraction for activation-patch rows
 
 ## Current Bottleneck
 
@@ -129,6 +132,25 @@ The main research question has therefore sharpened from “can we intervene at a
 The latest readout-escape line narrows this again:
 
 > If readout steering can repeatedly produce gap/rank carriers but not target mass/top-20 lift, which non-KV operator family can convert that carrier into a target-owned actuator?
+
+The newest activation-patch diagnostics narrow that one more step:
+
+> If a source-term activation blend can be forced through larger diagnostic
+> step sizes at the answer boundary, does it become a target actuator, a gap
+> carrier, a collapse sharpener, or a dead actuator?
+
+In the latest GPT-2 constrained-rewrite live run, forced canonical
+`activation_patch` response-curve probes reached:
+
+- `mlp_out L11 source_term_token` at `step_size=0.16`
+- `mlp_out L11 source_term_token` at `step_size=0.20`
+- `resid_pre L11 source_term_token` at `step_size=0.16`
+
+All three remained `dead_actuator`, with no target mass/top-20 lift and no
+collapse. This is a useful negative result: the immediate bottleneck is no
+longer just the surface step-size cap. Canonical source-term activation blending
+can be made executable and auditable, but this specific forced seed does not
+convert a visible carrier into answer-boundary actuation.
 
 The latest runs narrow this further. For the `budget` frontier in the constrained rewrite direct-scan replay, the diagnostic ledger reports:
 

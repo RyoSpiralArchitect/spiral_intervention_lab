@@ -5,7 +5,7 @@ from typing import Any, Callable, TYPE_CHECKING
 
 import torch
 
-from .edit_budget import prepare_direction
+from .edit_budget import clip_norm, prepare_direction
 from .overlays import LinearRank1OverlayHandle, OverlayHandle, ParameterRank1OverlayHandle
 from .rank1_bridge import HybridRank1VectorBridge, Rank1Geometry, Rank1VectorBridge
 from .schema import (
@@ -76,6 +76,17 @@ class ModelAdapter:
         tensor_fn: Callable[["StepContext"], torch.Tensor],
         alpha: float,
         budget: dict[str, Any],
+    ) -> tuple[str, Callable[[torch.Tensor, Any], torch.Tensor]]:
+        raise NotImplementedError
+
+    def make_activation_patch_hook(
+        self,
+        surface: BoundSurface,
+        tensor_fn: Callable[["StepContext"], torch.Tensor],
+        alpha: float,
+        mode: str,
+        budget: dict[str, Any],
+        telemetry: dict[str, Any] | None = None,
     ) -> tuple[str, Callable[[torch.Tensor, Any], torch.Tensor]]:
         raise NotImplementedError
 
@@ -172,6 +183,64 @@ class ModelAdapter:
         vec = self._coerce_vector(vec, width, device=out.device, dtype=out.dtype)
         for pos in self._select_positions(out, token_selector):
             out[..., pos, :] = ((1.0 - alpha) * out[..., pos, :]) + (alpha * vec)
+        return out
+
+    def _set_telemetry_float(self, telemetry: dict[str, Any], key: str, value: float | None) -> None:
+        if value is None:
+            return
+        telemetry[key] = round(float(value), 8)
+
+    def _tensor_norm_float(self, value: torch.Tensor) -> float:
+        return float(value.detach().float().norm().cpu().item())
+
+    def _cosine_float(self, left: torch.Tensor, right: torch.Tensor) -> float | None:
+        left_flat = left.detach().float().reshape(-1)
+        right_flat = right.detach().float().reshape(-1)
+        if left_flat.numel() != right_flat.numel():
+            if left_flat.numel() > 0 and right_flat.numel() % left_flat.numel() == 0:
+                left_flat = left_flat.repeat(right_flat.numel() // left_flat.numel())
+            else:
+                return None
+        denom = left_flat.norm() * right_flat.norm()
+        if float(denom) <= 1e-12:
+            return None
+        return float((torch.dot(left_flat, right_flat) / denom).cpu().item())
+
+    def _blend_selected_tokens(
+        self,
+        act: torch.Tensor,
+        vec: torch.Tensor,
+        token_selector: Any | None,
+        alpha: float,
+        *,
+        step_size: float | None = None,
+        telemetry: dict[str, Any] | None = None,
+    ) -> torch.Tensor:
+        out = act.clone()
+        width = out.shape[-1]
+        vec = self._coerce_vector(vec, width, device=out.device, dtype=out.dtype)
+        positions = self._select_positions(out, token_selector)
+        if telemetry is not None:
+            telemetry["selected_token_count"] = int(telemetry.get("selected_token_count", 0) or 0) + len(positions)
+            self._set_telemetry_float(telemetry, "source_norm", self._tensor_norm_float(vec))
+        for pos in positions:
+            current = out[..., pos, :]
+            source_target_delta = vec - current
+            raw_delta = float(alpha) * source_target_delta
+            raw_delta_norm = self._tensor_norm_float(raw_delta)
+            delta = clip_norm(raw_delta, step_size)
+            if telemetry is not None:
+                self._set_telemetry_float(telemetry, "target_norm_before", self._tensor_norm_float(current))
+                self._set_telemetry_float(telemetry, "source_target_delta_norm", self._tensor_norm_float(source_target_delta))
+                self._set_telemetry_float(telemetry, "raw_blend_delta_norm", raw_delta_norm)
+                self._set_telemetry_float(telemetry, "blend_delta_norm", self._tensor_norm_float(delta))
+                self._set_telemetry_float(telemetry, "source_target_cosine", self._cosine_float(vec, current))
+                telemetry["step_size_clip_saturated"] = bool(
+                    step_size is not None and raw_delta_norm > (float(step_size) + 1e-8)
+                )
+            out[..., pos, :] = current + delta
+            if telemetry is not None:
+                self._set_telemetry_float(telemetry, "target_norm_after", self._tensor_norm_float(out[..., pos, :]))
         return out
 
     def _mix_cache_selected_tokens(
@@ -369,6 +438,39 @@ class HookedTransformerAdapter(ModelAdapter):
             vec = tensor_fn(self._current_step_ctx)
             vec = prepare_direction(vec, alpha=alpha, norm_clip=norm_clip, step_size=step_size)
             return self._add_to_selected_tokens(act, vec, surface.token_selector, alpha)
+
+        return surface.hook_name, hook_fn
+
+    def make_activation_patch_hook(
+        self,
+        surface: BoundSurface,
+        tensor_fn: Callable[["StepContext"], torch.Tensor],
+        alpha: float,
+        mode: str,
+        budget: dict[str, Any],
+        telemetry: dict[str, Any] | None = None,
+    ) -> tuple[str, Callable[[torch.Tensor, Any], torch.Tensor]]:
+        if surface.hook_name is None:
+            raise ValueError(f"surface '{surface.surface_id}' does not expose an activation hook")
+        if mode != "blend":
+            raise ValueError("activation_patch v1 only supports mode='blend'")
+        norm_clip = budget.get("norm_clip")
+        step_size = budget.get("step_size")
+
+        def hook_fn(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
+            if self._current_step_ctx is None:
+                raise RuntimeError("step context is not bound before hook execution")
+            if telemetry is not None:
+                telemetry["hook_call_count"] = int(telemetry.get("hook_call_count", 0) or 0) + 1
+            vec = tensor_fn(self._current_step_ctx)
+            return self._blend_selected_tokens(
+                act,
+                vec,
+                surface.token_selector,
+                alpha,
+                step_size=step_size,
+                telemetry=telemetry,
+            )
 
         return surface.hook_name, hook_fn
 
