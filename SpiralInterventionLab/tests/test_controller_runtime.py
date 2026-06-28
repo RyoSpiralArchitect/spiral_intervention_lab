@@ -92,7 +92,7 @@ def _make_packet(*, rollbackable_ids=None):
                     "layer": 11,
                     "token": {"mode": "last"},
                 },
-                "allow_ops": ["resid_add"],
+                "allow_ops": ["resid_add", "activation_patch"],
                 "caps": {
                     "max_alpha": 0.2,
                     "max_ttl_steps": 3,
@@ -220,6 +220,41 @@ def _resid_command():
                 "op": {"kind": "resid_add", "alpha": 0.2},
                 "budget": {"ttl_steps": 2, "norm_clip": 1.5, "revertible": True},
                 "meta": {"expected_effect": "break_loop"},
+            }
+        ],
+    }
+
+
+def _activation_patch_command():
+    return {
+        "version": "0.1",
+        "decision": "apply",
+        "meta": {"hypothesis": "activation_patch_probe", "confidence": 0.6},
+        "edits": [
+            {
+                "id": "e_activation_patch",
+                "target": {"surface_id": "s_resid_l11_last"},
+                "source": {
+                    "dtype": "vector",
+                    "expr": {
+                        "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "hidden",
+                            "layer": 11,
+                            "token": {"mode": "last"},
+                        }
+                    },
+                },
+                "op": {"kind": "activation_patch", "alpha": 0.2, "mode": "blend"},
+                "budget": {"ttl_steps": 1, "revertible": True},
+                "meta": {
+                    "expected_effect": "activation_patch_blend_probe",
+                    "activation_patch_op_kind": "activation_patch",
+                    "activation_patch_mode": "blend",
+                    "source_localization": "source_term_token",
+                    "patch_mode": "blend",
+                },
             }
         ],
     }
@@ -604,6 +639,24 @@ class FakeAdapter(ModelAdapter):
 
         return surface.hook_name, hook_fn
 
+    def make_activation_patch_hook(self, surface, tensor_fn, alpha, mode, budget, telemetry=None):
+        self._last_activation_patch_args = (surface, mode, alpha, budget, telemetry)
+
+        def hook_fn(act, _hook):
+            if telemetry is not None:
+                telemetry["hook_call_count"] = int(telemetry.get("hook_call_count", 0) or 0) + 1
+            vec = tensor_fn(self._current_step_ctx)
+            return self._blend_selected_tokens(
+                act,
+                vec,
+                surface.token_selector,
+                alpha,
+                step_size=budget.get("step_size"),
+                telemetry=telemetry,
+            )
+
+        return surface.hook_name, hook_fn
+
     def make_kv_hook(self, surface, tensor_fn, alpha, which, budget):
         self._last_kv_args = (surface, which, alpha, budget)
 
@@ -626,6 +679,41 @@ class TestSchemaAndPolicy(unittest.TestCase):
         self.assertEqual(command.decision, "apply")
         self.assertIsInstance(command.edits[0].target, SurfaceTargetRef)
         self.assertEqual(command.edits[0].budget.ttl_steps, 2)
+
+    def test_parse_activation_patch_blend_command(self):
+        command = parse_controller_command(_activation_patch_command())
+        self.assertEqual(command.edits[0].op.kind, "activation_patch")
+        self.assertEqual(command.edits[0].op.mode, "blend")
+
+    def test_activation_patch_rejects_unsupported_mode(self):
+        command = _activation_patch_command()
+        command["edits"][0]["op"]["mode"] = "delta"
+        with self.assertRaises(SchemaError):
+            parse_controller_command(command)
+
+    def test_activation_patch_policy_requires_activation_last_surface(self):
+        packet = _make_packet()
+        packet["surface_catalog"][0]["allow_ops"] = ["resid_add", "activation_patch"]
+        command = _activation_patch_command()
+        validate_command_against_packet(command, packet)
+
+        weight_command = _activation_patch_command()
+        weight_command["edits"][0]["target"] = {"surface_id": "s_weight_l7_mlp"}
+        weight_command["edits"][0]["op"]["alpha"] = 0.05
+        packet["surface_catalog"][1]["allow_ops"] = ["rank1_patch", "activation_patch"]
+        with self.assertRaisesRegex(PolicyViolation, "activation target"):
+            validate_command_against_packet(weight_command, packet)
+
+        prev_packet = _make_packet()
+        prev_packet["surface_catalog"][0]["target"]["token"] = {"mode": "index", "value": -2}
+        prev_packet["surface_catalog"][0]["allow_ops"] = ["resid_add", "activation_patch"]
+        with self.assertRaisesRegex(PolicyViolation, "last token"):
+            validate_command_against_packet(command, prev_packet)
+
+        ttl_command = _activation_patch_command()
+        ttl_command["edits"][0]["budget"]["ttl_steps"] = 2
+        with self.assertRaisesRegex(PolicyViolation, "ttl_steps=1"):
+            validate_command_against_packet(ttl_command, packet)
 
     def test_parse_observation_packet(self):
         packet = parse_observation_packet(_make_packet())
@@ -730,6 +818,61 @@ class TestCompiler(unittest.TestCase):
 
         self.assertTrue(torch.allclose(out[0, -1], 0.2 * expected_vec))
         self.assertTrue(torch.allclose(out[0, 0], torch.zeros(3)))
+
+    def test_compile_activation_patch_registers_blend_hook(self):
+        adapter = FakeAdapter()
+        runtime_state = FakeRuntimeState()
+        packet_payload = _make_packet()
+        packet_payload["surface_catalog"][0]["allow_ops"] = ["resid_add", "activation_patch"]
+        packet = parse_observation_packet(packet_payload)
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+
+        compiled = compile_command(_activation_patch_command(), packet, ctx)
+        self.assertEqual(len(compiled), 1)
+        self.assertEqual(compiled[0].kind, "activation_patch")
+        compiled[0].apply(ctx)
+        self.assertTrue(runtime_state.has_edit("e_activation_patch"))
+
+        hook_record = runtime_state.hooks["e_activation_patch"]
+        self.assertEqual(hook_record["metadata"]["op"], "activation_patch")
+        self.assertEqual(hook_record["metadata"]["activation_patch_mode"], "blend")
+        self.assertEqual(hook_record["metadata"]["source_localization"], "source_term_token")
+        self.assertIn("activation_patch_telemetry", hook_record["metadata"])
+        act = torch.full((1, 4, 3), 10.0)
+        out = hook_record["hook_fn"](act, None)
+        expected_last = (0.8 * torch.tensor([10.0, 10.0, 10.0])) + (0.2 * torch.tensor([1.0, 2.0, 3.0]))
+        self.assertTrue(torch.allclose(out[0, -1], expected_last))
+        self.assertTrue(torch.allclose(out[0, 0], torch.full((3,), 10.0)))
+        telemetry = hook_record["metadata"]["activation_patch_telemetry"]
+        self.assertEqual(telemetry["hook_call_count"], 1)
+        self.assertGreater(telemetry["blend_delta_norm"], 0.0)
+        self.assertFalse(telemetry["step_size_clip_saturated"])
+
+    def test_activation_patch_blends_toward_raw_source_activation(self):
+        adapter = HookedTransformerAdapter(model=object())
+        runtime_state = FakeRuntimeState()
+        packet_payload = _make_packet()
+        packet = parse_observation_packet(packet_payload)
+        surface = adapter.bind_surface(packet.surface_catalog[0])
+        ctx = StepContext(packet=packet, runtime_state=runtime_state, traces={}, stats={}, adapter=adapter)
+        adapter.set_step_context(ctx)
+        telemetry: dict[str, object] = {}
+
+        _hook_name, hook_fn = adapter.make_activation_patch_hook(
+            surface,
+            lambda _ctx: torch.tensor([100.0, 0.0, 0.0]),
+            alpha=0.2,
+            mode="blend",
+            budget={"norm_clip": 1.0, "step_size": None},
+            telemetry=telemetry,
+        )
+
+        out = hook_fn(torch.zeros(1, 4, 3), None)
+
+        self.assertTrue(torch.allclose(out[0, -1], torch.tensor([20.0, 0.0, 0.0])))
+        self.assertEqual(telemetry["hook_call_count"], 1)
+        self.assertEqual(telemetry["source_norm"], 100.0)
+        self.assertFalse(telemetry["step_size_clip_saturated"])
 
     def test_compile_rank1_patch_registers_overlay_and_rolls_back(self):
         adapter = FakeAdapter()
@@ -2409,7 +2552,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                     "layer": 3,
                     "token": {"mode": "last"},
                 },
-                "allow_ops": ["resid_add"],
+                "allow_ops": ["resid_add", "activation_patch"],
                 "caps": {
                     "max_alpha": 0.12,
                     "max_ttl_steps": 1,
@@ -2427,7 +2570,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                     "layer": 4,
                     "token": {"mode": "last"},
                 },
-                "allow_ops": ["resid_add"],
+                "allow_ops": ["resid_add", "activation_patch"],
                 "caps": {
                     "max_alpha": 0.12,
                     "max_ttl_steps": 1,
@@ -2503,6 +2646,515 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(packet["budget"]["edit_cost_left_total"], 0.5)
         self.assertEqual(packet["surface_catalog"][0]["surface_id"], "s_resid_l11_last")
         self.assertEqual(packet["recent_effect_summary"]["window_size"], 0)
+
+    def test_activation_patch_trial_materializes_as_activation_patch_op(self):
+        worker_runtime = self._make_worker_runtime()
+        candidate = {
+            "objective_bundle_key": "entity_insert:a:source_body:0:1",
+            "objective_term": "a",
+            "actuator_bundle_key": "entity_insert:a:source_body:0:1",
+            "site": "resid_pre",
+            "layer": 3,
+            "alpha": 0.05,
+            "source_localization": "source_term_token",
+            "patch_mode": "blend",
+            "operator_recipe_id": "activation_patch_test_recipe",
+        }
+        trial_contract = {
+            "max_alpha": 0.15,
+            "norm_clip": None,
+            "trial_budget_class": "primary",
+            "production_trial_followup_allowed": False,
+        }
+
+        trial_edit = worker_runtime._activation_patch_trial_edit_from_candidate(
+            candidate,
+            trial_contract=trial_contract,
+        )
+
+        self.assertIsNotNone(trial_edit)
+        assert trial_edit is not None
+        self.assertEqual(trial_edit["op"], {"kind": "activation_patch", "alpha": 0.05, "mode": "blend"})
+        self.assertEqual(trial_edit["budget"]["ttl_steps"], 1)
+        self.assertIsNone(trial_edit["budget"]["norm_clip"])
+        self.assertEqual(trial_edit["target"], {"surface_id": "s_resid_pre_l3_last"})
+        self.assertEqual(trial_edit["source"]["expr"]["ref"]["token"], {"mode": "index", "value": 0})
+        self.assertEqual(trial_edit["meta"]["activation_patch_op_kind"], "activation_patch")
+        self.assertEqual(trial_edit["meta"]["activation_patch_mode"], "blend")
+        self.assertFalse(trial_edit["meta"]["production_apply_allowed"])
+
+        cap_release_candidate = dict(candidate)
+        cap_release_candidate["step_size"] = 0.12
+        cap_release_edit = worker_runtime._activation_patch_trial_edit_from_candidate(
+            cap_release_candidate,
+            trial_contract=trial_contract,
+        )
+        self.assertIsNotNone(cap_release_edit)
+        assert cap_release_edit is not None
+        self.assertEqual(cap_release_edit["budget"]["step_size"], 0.08)
+        self.assertEqual(cap_release_edit["meta"]["step_size"], 0.08)
+
+        diagnostic_cap_release_contract = dict(trial_contract)
+        diagnostic_cap_release_contract["trial_budget_class"] = "diagnostic_only"
+        diagnostic_cap_release_contract["allow_step_size_cap_release"] = True
+        diagnostic_cap_release_contract["max_step_size"] = 0.2
+        diagnostic_cap_release_edit = worker_runtime._activation_patch_trial_edit_from_candidate(
+            cap_release_candidate,
+            trial_contract=diagnostic_cap_release_contract,
+        )
+        self.assertIsNotNone(diagnostic_cap_release_edit)
+        assert diagnostic_cap_release_edit is not None
+        self.assertEqual(diagnostic_cap_release_edit["budget"]["step_size"], 0.12)
+        self.assertEqual(diagnostic_cap_release_edit["meta"]["apply_kind"], "diagnostic_probe")
+        self.assertFalse(diagnostic_cap_release_edit["meta"]["production_trial_allowed"])
+        self.assertEqual(diagnostic_cap_release_edit["meta"]["surface_step_size_cap"], 0.08)
+        self.assertTrue(diagnostic_cap_release_edit["meta"]["step_size_cap_release_allowed"])
+
+    def test_activation_patch_review_materializes_entity_blueprint_without_cached_rows(self):
+        worker_runtime = self._make_worker_runtime()
+        blueprint = {
+            "kind": "entity_insertion_candidate_blueprint",
+            "objective_term": "a",
+            "first_piece": "a",
+            "first_token_id": 1,
+            "readout_status": "near_reachable",
+            "rank": 88,
+            "source_provenance": "source_body",
+            "source_span": {
+                "start": 0,
+                "end": 1,
+                "provenance_class": "source_body",
+                "text": "a",
+            },
+            "candidate_key": "entity_insert:a:source_body:near_reachable",
+            "candidate_status": "shadow_blueprint_only",
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        worker_runtime._diagnostic_results = [
+            {
+                "diagnostic": "entity_insertion_operator_candidate_review",
+                "candidate_blueprints": [blueprint],
+            }
+        ]
+        worker_runtime._latest_diagnostic_results = []
+
+        def fake_trial_edit(candidate, *, trial_contract):
+            self.assertEqual(candidate["site"], "resid_pre")
+            self.assertEqual(candidate["layer"], 11)
+            self.assertEqual(candidate["patch_mode"], "blend")
+            return {
+                "id": "diag_activation_patch",
+                "target": {"surface_id": "s_resid_l11_last"},
+                "source": {"dtype": "vector", "expr": {"ref": {"scope": "runtime"}}},
+                "op": {"kind": "activation_patch", "alpha": candidate["alpha"], "mode": "blend"},
+                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "revertible": True},
+                "meta": {"operator_recipe_id": candidate["operator_recipe_id"]},
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            self.assertEqual(candidate_edits[0]["op"]["kind"], "activation_patch")
+            self.assertEqual(kwargs["intended_bundle_key"], "entity_insert:a:source_body:near_reachable")
+            return {
+                "status": "ok",
+                "actual_delta_class": "readout_gap_movement",
+                "target_mass_delta": 0.00003,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 6,
+                "target_piece": "a",
+                "target_piece_logit_delta": 0.002,
+                "target_top20_threshold_gap_delta": -0.01,
+                "term_readout_deltas": {"a": {"lift_score": 0.04}},
+                "candidate_fingerprint": {"bundle_key": kwargs["intended_bundle_key"]},
+                "eval_context_fingerprint": {"max_new_tokens": kwargs["max_new_tokens"]},
+            }
+
+        with patch.object(worker_runtime, "_activation_patch_trial_edit_from_candidate", side_effect=fake_trial_edit):
+            with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
+                result = worker_runtime._execute_controller_diagnostic_request(
+                    {
+                        "diagnostic": "activation_patch_candidate_review",
+                        "bundle_key": "entity_insert:a:source_body:near_reachable",
+                        "objective_bundle_key": "entity_insert:a:source_body:near_reachable",
+                        "next_evidence_needed": "activation_patch_candidate_review",
+                    },
+                    source="unit_test",
+                    packet={"strategy_hints": {"diagnostic_frontier_bundle_key": "entity_insert:a:source_body:near_reachable"}},
+                )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["activation_patch_blueprint_materialization_count"], 3)
+        self.assertTrue(result["activation_patch_candidate_pool"])
+        first = result["activation_patch_candidate_pool"][0]
+        self.assertEqual(first["evidence_kind"], "activation_patch_certification")
+        self.assertEqual(first["diagnostic_family"], "activation_patch")
+        self.assertEqual(first["activation_patch_mode"], "blend")
+        self.assertEqual(first["activation_patch_op_kind"], "activation_patch")
+        self.assertIn(
+            "source_span_mean",
+            {row["activation_patch_source_localization"] for row in result["activation_patch_candidate_pool"]},
+        )
+        self.assertEqual(result["activation_patch_candidate_review"]["status"], "shadow_blueprint_ready")
+        self.assertTrue(result["activation_patch_compile_preview_created"])
+        self.assertFalse(result["activation_patch_candidate_review"]["compile_preview"]["production_apply_allowed"])
+
+    def test_activation_patch_review_honors_expansion_mode_when_diagnostic_name_is_stale(self):
+        worker_runtime = self._make_worker_runtime()
+        blueprint = {
+            "kind": "entity_insertion_candidate_blueprint",
+            "objective_term": "a",
+            "first_piece": "a",
+            "first_token_id": 1,
+            "readout_status": "near_reachable",
+            "rank": 88,
+            "source_provenance": "source_body",
+            "source_span": {
+                "start": 0,
+                "end": 1,
+                "provenance_class": "source_body",
+                "text": "a",
+            },
+            "candidate_key": "entity_insert:a:source_body:near_reachable",
+            "candidate_status": "shadow_blueprint_only",
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+        }
+        worker_runtime._diagnostic_results = [
+            {
+                "diagnostic": "entity_insertion_operator_candidate_review",
+                "candidate_blueprints": [blueprint],
+            }
+        ]
+
+        def fake_trial_edit(candidate, *, trial_contract):
+            return {
+                "id": "diag_activation_patch",
+                "target": {"surface_id": "s_resid_l11_last"},
+                "source": {"dtype": "vector", "expr": {"ref": {"scope": "runtime"}}},
+                "op": {"kind": "activation_patch", "alpha": candidate["alpha"], "mode": "blend"},
+                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "revertible": True},
+                "meta": {"operator_recipe_id": candidate["operator_recipe_id"]},
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            self.assertEqual(candidate_edits[0]["op"]["kind"], "activation_patch")
+            return {
+                "status": "ok",
+                "actual_delta_class": "readout_gap_movement",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 4,
+                "target_top20_threshold_gap_delta": -0.004,
+                "term_readout_deltas": {"a": {"lift_score": 0.02}},
+            }
+
+        with patch.object(worker_runtime, "_activation_patch_trial_edit_from_candidate", side_effect=fake_trial_edit):
+            with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
+                result = worker_runtime._execute_controller_diagnostic_request(
+                    {
+                        "diagnostic": "carrier_to_actuator_conversion_sweep",
+                        "bundle_key": "entity_insert:a:source_body:near_reachable",
+                        "objective_bundle_key": "entity_insert:a:source_body:near_reachable",
+                        "operator_recipe_expansion_mode": "activation_patch_candidate_review",
+                        "next_evidence_needed": "activation_patch_candidate_review",
+                    },
+                    source="unit_test",
+                    packet={"strategy_hints": {"diagnostic_frontier_bundle_key": "entity_insert:a:source_body:near_reachable"}},
+                )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["diagnostic_role"], "activation_patch_candidate_review")
+        self.assertEqual(result["diagnostic_intent_source"], "operator_recipe_expansion_mode")
+        self.assertEqual(result["activation_patch_blueprint_materialization_count"], 3)
+        self.assertTrue(result["activation_patch_candidate_pool"])
+        self.assertFalse(result["production_apply_allowed"])
+
+    def test_activation_patch_local_step_size_sweep_replays_saturated_carriers(self):
+        worker_runtime = self._make_worker_runtime()
+        worker_runtime.reset("Keep a.\nSOURCE: a b\nANSWER:")
+        observed_step_sizes: list[float] = []
+
+        def fake_replay(candidate_edits, **kwargs):
+            edit = candidate_edits[0]
+            observed_step_sizes.append(float(edit["budget"]["step_size"]))
+            self.assertEqual(edit["op"]["kind"], "activation_patch")
+            self.assertEqual(kwargs["intended_bundle_key"], "entity_insert:a:source_body:0:1")
+            return {
+                "status": "ok",
+                "actual_delta_class": "readout_gap_movement",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 1,
+                "target_top20_threshold_gap_delta": -0.002,
+                "target_piece_logit_delta": 0.001,
+                "term_readout_deltas": {"a": {"lift_score": 0.02}},
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_selected_token_count": 1,
+                "activation_patch_source_norm": 10.0,
+                "activation_patch_target_norm_before": 9.0,
+                "activation_patch_target_norm_after": 9.1,
+                "activation_patch_source_target_cosine": 0.9,
+                "activation_patch_source_target_delta_norm": 1.0,
+                "activation_patch_raw_blend_delta_norm": 0.09,
+                "activation_patch_blend_delta_norm": float(edit["budget"]["step_size"]),
+                "activation_patch_step_size_clip_saturated": False,
+                "candidate_fingerprint": {"step_size": edit["budget"]["step_size"]},
+                "eval_context_fingerprint": {"max_new_tokens": kwargs["max_new_tokens"]},
+            }
+
+        seed_rows = [
+            {
+                "evidence_kind": "activation_patch_certification",
+                "diagnostic_family": "activation_patch",
+                "activation_patch_op_kind": "activation_patch",
+                "objective_bundle_key": "entity_insert:a:source_body:0:1",
+                "actuator_bundle_key": "entity_insert:a:source_body:0:1",
+                "intended_term": "a",
+                "activation_patch_site": "resid_pre",
+                "activation_patch_layer": 3,
+                "activation_patch_alpha": 0.05,
+                "activation_patch_step_size": 0.04,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_patch_mode": "blend",
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_step_size_clip_saturated": True,
+                "status": "supportive",
+                "actual_delta_class": "readout_gap_movement",
+                "actuator_class": "self_actuator",
+                "target_top20_threshold_gap_delta": -0.001,
+                "self_delta": 0.01,
+                "recipe_name": "activation_patch_resid_pre_l3_source_term_token_a050",
+                "operator_recipe_id": "seed_recipe",
+            }
+        ]
+
+        with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
+            rows = worker_runtime._activation_patch_local_step_size_sweep_rows(seed_rows)
+
+        self.assertEqual(observed_step_sizes, [0.05, 0.08])
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["activation_patch_local_step_size_sweep"] for row in rows))
+        self.assertTrue(all(row["operator_axis"] == "activation_patch_local_step_size_sweep" for row in rows))
+        self.assertTrue(all(row["production_apply_allowed"] is False for row in rows))
+        self.assertEqual([row["activation_patch_step_size"] for row in rows], [0.05, 0.08])
+        self.assertEqual(rows[0]["actual_delta_class"], "readout_gap_movement")
+
+    def test_activation_patch_cap_release_response_curve_targets_local_carriers(self):
+        worker_runtime = self._make_worker_runtime()
+        observed: list[tuple[str, float]] = []
+
+        def fake_trial_edit(candidate, *, trial_contract):
+            step_size = float(candidate["step_size"])
+            return {
+                "id": f"diag_activation_patch_{candidate['site']}_{step_size}",
+                "target": {"surface_id": f"s_{candidate['site']}_l{candidate['layer']}_last"},
+                "source": {"dtype": "vector", "expr": {"ref": {"scope": "runtime"}}},
+                "op": {"kind": "activation_patch", "alpha": candidate["alpha"], "mode": "blend"},
+                "budget": {
+                    "ttl_steps": 1,
+                    "norm_clip": 1.0,
+                    "revertible": True,
+                    "step_size": step_size,
+                },
+                "meta": {"operator_recipe_id": candidate["operator_recipe_id"]},
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            edit = candidate_edits[0]
+            site = str(edit["target"]["surface_id"]).split("_l", 1)[0].removeprefix("s_")
+            step_size = float(edit["budget"]["step_size"])
+            observed.append((site, step_size))
+            return {
+                "status": "ok",
+                "actual_delta_class": "rank_carrier",
+                "target_mass_delta": 0.000001 if step_size >= 0.16 else 0.0,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 0,
+                "target_top20_threshold_gap_delta": -0.01 * step_size,
+                "target_piece_logit_delta": 0.002 * step_size,
+                "term_readout_deltas": {"a": {"lift_score": 0.02}},
+                "repeat_delta": 0.0,
+                "entropy_delta": -0.001,
+                "top1_margin_delta": 0.0005,
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_selected_token_count": 1,
+                "activation_patch_source_norm": 10.0,
+                "activation_patch_target_norm_before": 9.0,
+                "activation_patch_target_norm_after": 9.1,
+                "activation_patch_source_target_cosine": 0.95,
+                "activation_patch_source_target_delta_norm": 1.0,
+                "activation_patch_raw_blend_delta_norm": 0.4,
+                "activation_patch_blend_delta_norm": step_size,
+                "activation_patch_step_size_clip_saturated": True,
+            }
+
+        seed_rows = [
+            {
+                "evidence_kind": "activation_patch_certification",
+                "diagnostic_family": "activation_patch",
+                "activation_patch_op_kind": "activation_patch",
+                "objective_bundle_key": "entity_insert:a:source_body:0:1",
+                "actuator_bundle_key": "entity_insert:a:source_body:0:1",
+                "intended_term": "a",
+                "activation_patch_site": "mlp_out",
+                "activation_patch_layer": 11,
+                "activation_patch_alpha": 0.03,
+                "activation_patch_step_size": 0.12,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_patch_mode": "blend",
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_step_size_clip_saturated": True,
+                "status": "supportive",
+                "actual_delta_class": "rank_carrier",
+                "actuator_class": "self_actuator",
+                "target_top20_threshold_gap_delta": -0.0013,
+                "self_delta": 0.01,
+                "recipe_name": "activation_patch_mlp_out_l11_source_term_token_a030_step120",
+                "operator_recipe_id": "seed_mlp",
+            },
+            {
+                "evidence_kind": "activation_patch_certification",
+                "diagnostic_family": "activation_patch",
+                "activation_patch_op_kind": "activation_patch",
+                "objective_bundle_key": "entity_insert:a:source_body:0:1",
+                "actuator_bundle_key": "entity_insert:a:source_body:0:1",
+                "intended_term": "a",
+                "activation_patch_site": "resid_pre",
+                "activation_patch_layer": 11,
+                "activation_patch_alpha": 0.04,
+                "activation_patch_step_size": 0.12,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_patch_mode": "blend",
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_step_size_clip_saturated": True,
+                "status": "supportive",
+                "actual_delta_class": "rank_carrier",
+                "actuator_class": "self_actuator",
+                "target_top20_threshold_gap_delta": -0.0006,
+                "self_delta": 0.03,
+                "recipe_name": "activation_patch_resid_pre_l11_source_term_token_a040_step120",
+                "operator_recipe_id": "seed_resid",
+            },
+        ]
+
+        with patch.object(worker_runtime, "_activation_patch_trial_edit_from_candidate", side_effect=fake_trial_edit):
+            with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
+                rows = worker_runtime._activation_patch_cap_release_response_curve_rows(seed_rows)
+
+        self.assertEqual(observed, [("mlp_out", 0.16), ("mlp_out", 0.2), ("resid_pre", 0.16)])
+        self.assertEqual([row["activation_patch_step_size"] for row in rows], [0.16, 0.2, 0.16])
+        self.assertTrue(all(row["activation_patch_cap_release_response_curve"] for row in rows))
+        self.assertTrue(
+            all(row["operator_axis"] == "activation_patch_cap_release_response_curve" for row in rows)
+        )
+        self.assertTrue(all(row["production_apply_allowed"] is False for row in rows))
+        self.assertEqual(rows[0]["entropy_delta"], -0.001)
+
+    def test_activation_patch_cap_release_response_curve_forces_canonical_when_no_observed_seed(self):
+        worker_runtime = self._make_worker_runtime()
+        observed: list[tuple[str, float]] = []
+
+        def fake_trial_edit(candidate, *, trial_contract):
+            step_size = float(candidate["step_size"])
+            return {
+                "id": f"diag_activation_patch_{candidate['site']}_{step_size}",
+                "target": {"surface_id": f"s_{candidate['site']}_l{candidate['layer']}_last"},
+                "source": {"dtype": "vector", "expr": {"ref": {"scope": "runtime"}}},
+                "op": {"kind": "activation_patch", "alpha": candidate["alpha"], "mode": "blend"},
+                "budget": {
+                    "ttl_steps": 1,
+                    "norm_clip": 1.0,
+                    "revertible": True,
+                    "step_size": step_size,
+                },
+                "meta": {"operator_recipe_id": candidate["operator_recipe_id"]},
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            edit = candidate_edits[0]
+            site = str(edit["target"]["surface_id"]).split("_l", 1)[0].removeprefix("s_")
+            step_size = float(edit["budget"]["step_size"])
+            observed.append((site, step_size))
+            return {
+                "status": "ok",
+                "actual_delta_class": "neutral",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "focus_rank_delta": 0,
+                "target_top20_threshold_gap_delta": -0.001 * step_size,
+                "term_readout_deltas": {"a": {"lift_score": 0.0}},
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_selected_token_count": 1,
+                "activation_patch_source_norm": 10.0,
+                "activation_patch_target_norm_before": 9.0,
+                "activation_patch_target_norm_after": 9.1,
+                "activation_patch_source_target_cosine": 0.95,
+                "activation_patch_source_target_delta_norm": 1.0,
+                "activation_patch_raw_blend_delta_norm": 0.4,
+                "activation_patch_blend_delta_norm": step_size,
+                "activation_patch_step_size_clip_saturated": True,
+            }
+
+        seed_rows = [
+            {
+                "evidence_kind": "activation_patch_certification",
+                "diagnostic_family": "activation_patch",
+                "activation_patch_op_kind": "activation_patch",
+                "objective_bundle_key": "entity_insert:a:source_body:0:1",
+                "actuator_bundle_key": "entity_insert:a:source_body:0:1",
+                "intended_term": "a",
+                "activation_patch_site": "mlp_out",
+                "activation_patch_layer": 11,
+                "activation_patch_alpha": 0.03,
+                "activation_patch_step_size": 0.03,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_patch_mode": "blend",
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_step_size_clip_saturated": True,
+                "status": "blocked",
+                "actual_delta_class": "dead_actuator",
+                "actuator_class": "dead_actuator",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "recipe_name": "activation_patch_mlp_out_l11_source_term_token_a030",
+                "operator_recipe_id": "seed_mlp_dead",
+            },
+            {
+                "evidence_kind": "activation_patch_certification",
+                "diagnostic_family": "activation_patch",
+                "activation_patch_op_kind": "activation_patch",
+                "objective_bundle_key": "entity_insert:a:source_body:0:1",
+                "actuator_bundle_key": "entity_insert:a:source_body:0:1",
+                "intended_term": "a",
+                "activation_patch_site": "resid_pre",
+                "activation_patch_layer": 11,
+                "activation_patch_alpha": 0.04,
+                "activation_patch_step_size": 0.04,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_patch_mode": "blend",
+                "activation_patch_hook_call_count": 1,
+                "activation_patch_step_size_clip_saturated": True,
+                "status": "blocked",
+                "actual_delta_class": "dead_actuator",
+                "actuator_class": "dead_actuator",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "recipe_name": "activation_patch_resid_pre_l11_source_term_token_a040",
+                "operator_recipe_id": "seed_resid_dead",
+            },
+        ]
+
+        with patch.object(worker_runtime, "_activation_patch_trial_edit_from_candidate", side_effect=fake_trial_edit):
+            with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
+                rows = worker_runtime._activation_patch_cap_release_response_curve_rows(seed_rows)
+
+        self.assertEqual(observed, [("mlp_out", 0.16), ("mlp_out", 0.2), ("resid_pre", 0.16)])
+        self.assertEqual([row["activation_patch_seed_source"] for row in rows], ["forced_canonical"] * 3)
+        self.assertTrue(all(row["activation_patch_forced_seed"] for row in rows))
+        self.assertTrue(all(row["production_apply_allowed"] is False for row in rows))
 
     def test_worker_runtime_tokenize_terms_tool_returns_token_units(self):
         worker_runtime = self._make_worker_runtime()
@@ -5550,6 +6202,9 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(result["actual_delta_class"], "required_term_progress")
         policy_override = simulate_mock.call_args_list[1].kwargs["policy_override"]
         self.assertEqual(policy_override.global_budget.max_edits_per_step, 2)
+        self.assertFalse(simulate_mock.call_args_list[0].kwargs["score_observer_check"])
+        self.assertFalse(simulate_mock.call_args_list[1].kwargs["score_observer_check"])
+        self.assertTrue(result["observer_check_skipped"])
         self.assertEqual(result["operator_family_key"], "composition|resid_add|source_body|exact_prompt_span_mean")
         self.assertEqual(result["candidate_fingerprint"]["recipe_name"], "pair")
         self.assertEqual(result["eval_context_fingerprint"]["decode_step"], 0)

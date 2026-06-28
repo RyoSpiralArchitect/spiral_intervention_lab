@@ -14,6 +14,7 @@ OP_COST_FACTORS: dict[str, float] = {
     "resid_add": 1.0,
     "kv_mix": 1.15,
     "rank1_patch": 1.35,
+    "activation_patch": 1.25,
 }
 
 

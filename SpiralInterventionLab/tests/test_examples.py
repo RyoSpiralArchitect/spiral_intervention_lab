@@ -35,6 +35,7 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     _resolve_worker_device,
     write_post_run_debrief_artifacts,
 )
+from SpiralInterventionLab.examples.summarize_activation_patch_jsonl import summarize_activation_patch_jsonl
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
 from SpiralInterventionLab.runtime.diagnostic_orchestration import (
     confirmed_gap_only_objective_rows,
@@ -273,12 +274,18 @@ class TestPostRunDebrief(unittest.TestCase):
                 "full",
                 "--controller-prompt-asset",
                 "controller_v01.txt",
+                "--max-diagnostic-calls-per-run",
+                "12",
+                "--diagnostic-result-window",
+                "12",
             ]
         )
 
         self.assertEqual(args.controller_prompt_profile, "full")
         self.assertEqual(args.controller_packet_view, "full")
         self.assertEqual(args.controller_prompt_asset, "controller_v01.txt")
+        self.assertEqual(args.max_diagnostic_calls_per_run, 12)
+        self.assertEqual(args.diagnostic_result_window, 12)
 
 
 class TestObserverAndEntityProbeContracts(unittest.TestCase):
@@ -591,6 +598,38 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
                     "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
                     "eval_context_fingerprint": {"decode_step": 0},
                 }
+            if "anti_attractor_calibrate_l075_a030" in label:
+                return {
+                    "status": "ok",
+                    "label": label,
+                    "actual_delta_class": "collapse_suppressor",
+                    "target_mass_delta": 0.0,
+                    "target_top20_hit_delta": 0,
+                    "target_piece": " Mira",
+                    "target_piece_logit_delta": 0.0001,
+                    "target_piece_prob_delta": 0.0,
+                    "target_rank_after": 64,
+                    "target_top20_threshold_gap_baseline": 1.5,
+                    "target_top20_threshold_gap": 1.499,
+                    "target_top20_threshold_gap_after": 1.499,
+                    "target_top20_threshold_gap_delta": -0.001,
+                    "attractor_family_mass_delta": -0.00002,
+                    "attractor_top20_hit_delta": -1,
+                    "focus_rank_delta": 0,
+                    "repeat_flag_delta": 0,
+                    "entropy_delta": 0.0,
+                    "top1_margin_delta": 0.0,
+                    "term_readout_deltas": {
+                        "Mira": {
+                            "lift_score": 0.0,
+                            "target_mass_delta": 0.0,
+                            "target_top20_hit_delta": 0,
+                            "focus_rank_delta": 0,
+                        }
+                    },
+                    "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                    "eval_context_fingerprint": {"decode_step": 0},
+                }
             return fake_replay(candidate_edits, **kwargs)
 
         runtime.replay_candidate_edits_actual_delta = fake_replay_with_dead_non_kv
@@ -659,7 +698,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(deepening["operator_recipe_expansion_summary"]["status"], "rank_carrier_family_found")
         self.assertEqual(
             deepening["operator_recipe_expansion_summary"]["best_readout_steering_rank_carrier_recipe_family"],
-            "readout_steering|entity_target_readout",
+            "readout_steering|target_readout_deepening",
         )
         self.assertGreater(deepening["readout_steering_deepening_followup_count"], 0)
         self.assertEqual(deepening["readout_steering_deepening_followup_status"], "matrix_replayed")
@@ -709,7 +748,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(repeated["readout_steering_deepening_followup_count"], 0)
         self.assertEqual(repeated["readout_steering_deepening_followup_status"], "already_replayed")
         self.assertEqual(repeated["next_evidence_needed"], "readout_steering_deepening_review_complete")
-        self.assertEqual(repeated["operator_recipe_expansion_summary"]["matrix_row_count"], 4)
+        self.assertEqual(repeated["operator_recipe_expansion_summary"]["matrix_row_count"], 3)
         self.assertEqual(
             repeated["readout_deepening_review_summary"]["recommended_next_action"],
             "request_readout_gap_confirmation_or_variant_sweep",
@@ -760,7 +799,10 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(conversion["diagnostic"], "carrier_to_actuator_conversion_sweep")
         self.assertEqual(conversion["diagnostic_role"], "carrier_to_actuator_conversion_sweep")
         self.assertGreater(conversion["carrier_to_actuator_conversion_variant_count"], 0)
-        self.assertEqual(conversion["next_evidence_needed"], "non_kv_operator_search_review_complete")
+        self.assertEqual(
+            conversion["next_evidence_needed"],
+            "suppress_then_target_after_calibration_review_complete",
+        )
         self.assertEqual(
             conversion["readout_deepening_review_summary"]["best_candidate_role"],
             "carrier_only_no_target_actuator",
@@ -807,11 +849,71 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertTrue(
             conversion["readout_deepening_review_summary"]["mini_non_kv_first_pass_executed"]
         )
+        self.assertTrue(conversion["non_kv_variant_or_two_stage_requested"])
+        self.assertEqual(conversion["non_kv_variant_or_two_stage_review_status"], "matrix_replayed")
+        self.assertGreater(
+            conversion["non_kv_variant_or_two_stage_summary"]["non_kv_variant_or_two_stage_rows"],
+            0,
+        )
+        self.assertGreater(len(conversion["non_kv_variant_or_two_stage_rows"]), 0)
+        self.assertTrue(
+            any(
+                row.get("two_stage_patch")
+                for row in conversion["non_kv_variant_or_two_stage_rows"]
+            )
+        )
         self.assertTrue(
             any(
                 row.get("carrier_to_actuator_conversion_variant")
                 for row in conversion["operator_recipe_expansion_matrix"]
             )
+        )
+        self.assertTrue(conversion["inline_anti_attractor_suppression_calibration_executed"])
+        self.assertEqual(
+            conversion["anti_attractor_suppression_calibration_review_status"],
+            "inline_suppress_then_target_replayed",
+        )
+        self.assertGreater(conversion["anti_attractor_suppression_calibration_row_count"], 0)
+        self.assertGreater(
+            len(conversion["inline_anti_attractor_suppression_calibration_rows"]),
+            0,
+        )
+        self.assertEqual(
+            conversion["inline_anti_attractor_suppression_calibration_summary"][
+                "best_inline_anti_attractor_suppression_role"
+            ],
+            "collapse_suppressor_candidate",
+        )
+        self.assertTrue(
+            conversion["readout_deepening_review_summary"][
+                "inline_anti_attractor_suppression_calibration_executed"
+            ]
+        )
+        self.assertTrue(conversion["inline_suppress_then_target_after_calibration_executed"])
+        self.assertGreater(
+            len(conversion["inline_suppress_then_target_after_calibration_rows"]),
+            1,
+        )
+        self.assertGreater(
+            len(
+                {
+                    row.get("recipe_name")
+                    for row in conversion["inline_suppress_then_target_after_calibration_rows"]
+                    if row.get("recipe_name")
+                }
+            ),
+            1,
+        )
+        self.assertEqual(
+            conversion["inline_suppress_then_target_after_calibration_summary"][
+                "best_inline_suppress_then_target_role"
+            ],
+            "gap_closer_candidate",
+        )
+        self.assertTrue(
+            conversion["readout_deepening_review_summary"][
+                "inline_suppress_then_target_after_calibration_executed"
+            ]
         )
 
         non_kv_preview = runtime._execute_controller_diagnostic_request(
@@ -828,6 +930,77 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(non_kv_preview["operator_family_shift_status"], "preview_ready")
         self.assertGreater(len(non_kv_preview["operator_family_shift_preview_rows"]), 0)
         self.assertFalse(non_kv_preview["production_apply_allowed"])
+
+        runtime._diagnostic_results = [result, deepening, confirmation]
+        variant = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "non_kv_variant_or_two_stage_design",
+                "next_evidence_needed": "non_kv_variant_or_two_stage_design",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(variant)
+        assert variant is not None
+        self.assertEqual(variant["diagnostic"], "compare_extra_operator_diagnostics")
+        self.assertTrue(variant["non_kv_variant_or_two_stage_requested"])
+        self.assertEqual(variant["next_evidence_needed"], "non_kv_variant_or_two_stage_review_complete")
+        self.assertEqual(variant["non_kv_variant_or_two_stage_review_status"], "matrix_replayed")
+        self.assertGreater(variant["non_kv_variant_or_two_stage_summary"]["non_kv_variant_or_two_stage_rows"], 0)
+        self.assertFalse(variant["non_kv_variant_or_two_stage_summary"]["production_apply_allowed"])
+        self.assertGreater(len(variant["non_kv_variant_or_two_stage_rows"]), 0)
+        self.assertTrue(
+            any(
+                row.get("two_stage_patch")
+                for row in variant["non_kv_variant_or_two_stage_rows"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row.get("candidate_fingerprint")
+                for row in variant["non_kv_variant_or_two_stage_rows"]
+            )
+        )
+
+        runtime._diagnostic_results = [result, deepening, confirmation, variant]
+        calibration = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "anti_attractor_suppression_calibration_sweep",
+                "next_evidence_needed": "anti_attractor_suppression_calibration_sweep",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertIsNotNone(calibration)
+        assert calibration is not None
+        self.assertEqual(
+            calibration["next_evidence_needed"],
+            "anti_attractor_suppression_calibration_review_complete",
+        )
+        self.assertTrue(calibration["anti_attractor_suppression_calibration_requested"])
+        self.assertEqual(
+            calibration["anti_attractor_suppression_calibration_review_status"],
+            "matrix_replayed",
+        )
+        self.assertGreater(calibration["anti_attractor_suppression_calibration_row_count"], 0)
+        self.assertEqual(
+            calibration["readout_deepening_review_summary"]["best_candidate_role"],
+            "collapse_suppressor_candidate",
+        )
+        self.assertTrue(
+            any(
+                row.get("anti_attractor_suppression_calibration")
+                for row in calibration["operator_recipe_expansion_matrix"]
+            )
+        )
 
     def test_operator_replay_prefers_un_deepened_rotated_objective_for_readout_followup(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
@@ -1722,8 +1895,101 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertFalse(mini_hints["operator_family_shift_recommended"])
         self.assertTrue(mini_hints["non_kv_operator_search_review_complete"])
         self.assertEqual(mini_hints["next_evidence_needed"], "non_kv_variant_or_two_stage_design")
-        self.assertNotIn("diagnostic_frontier_request", mini_hints)
-        self.assertNotIn("diagnostic_frontier_next_evidence", mini_hints)
+        self.assertEqual(mini_hints["diagnostic_frontier_request"], "compare_extra_operator_diagnostics")
+        self.assertEqual(mini_hints["diagnostic_frontier_next_evidence"], "non_kv_variant_or_two_stage_design")
+        self.assertEqual(
+            mini_hints["diagnostic_frontier_operator_recipe_expansion_mode"],
+            "non_kv_variant_or_two_stage_design",
+        )
+        self.assertEqual(
+            mini_hints["diagnostic_frontier_canonical_request"]["operator_recipe_expansion_mode"],
+            "non_kv_variant_or_two_stage_design",
+        )
+
+        runtime._diagnostic_results[0].update(
+            {
+                "inline_suppress_then_target_after_calibration_executed": True,
+                "inline_suppress_then_target_after_calibration_summary": {
+                    "inline_suppress_then_target_after_calibration_executed": True,
+                    "inline_suppress_then_target_after_calibration_rows": 3,
+                    "best_inline_suppress_then_target_role": "collapse_suppressor",
+                    "best_inline_suppress_then_target_recipe_name": (
+                        "calibrated_non_kv_two_stage_suppress_l100_then_target_l025_a070"
+                    ),
+                    "best_inline_suppress_then_target_target_mass_delta": 0.0,
+                    "best_inline_suppress_then_target_target_top20_hit_delta": 0,
+                    "best_inline_suppress_then_target_gap_delta": -0.002897,
+                    "best_inline_suppress_then_target_attractor_mass_delta": -0.000012,
+                },
+                "inline_suppress_then_target_after_calibration_rows": [
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "recipe_name": "calibrated_non_kv_two_stage_suppress_l100_then_target_l025_a050",
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "recipe_name": "calibrated_non_kv_two_stage_suppress_l100_then_target_pure_a060",
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                    {
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "recipe_name": "calibrated_non_kv_two_stage_suppress_l100_then_target_l025_a070",
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                ],
+            }
+        )
+
+        saturated_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertTrue(saturated_hints["suppress_then_target_after_calibration_review_complete"])
+        self.assertTrue(saturated_hints["suppress_then_target_after_calibration_saturation_detected"])
+        self.assertEqual(
+            saturated_hints["suppress_then_target_after_calibration_outcome"],
+            "saturated_collapse_suppressor_no_target_lift",
+        )
+        self.assertEqual(
+            saturated_hints["next_evidence_needed"],
+            "activation_patch_candidate_review",
+        )
+        self.assertTrue(saturated_hints["new_runtime_operator_needed_after_suppressor_saturation"])
+        self.assertTrue(saturated_hints["activation_patch_candidate_review_recommended"])
+        self.assertEqual(
+            saturated_hints["diagnostic_frontier_request"],
+            "activation_patch_candidate_review",
+        )
+        self.assertEqual(
+            saturated_hints["diagnostic_frontier_next_evidence"],
+            "activation_patch_candidate_review",
+        )
+        self.assertEqual(
+            saturated_hints["operator_family_shift_status"],
+            "suppress_then_target_saturated_no_target_lift",
+        )
+        self.assertNotEqual(
+            saturated_hints.get("diagnostic_frontier_operator_recipe_expansion_mode"),
+            "two_stage_suppress_then_target_review",
+        )
+        blocked = saturated_hints.get("blocked_next_diagnostics", [])
+        self.assertTrue(
+            any(
+                row.get("status") == "diagnostic_saturated"
+                and row.get("reason") == "suppress_then_target_after_calibration_saturated_no_target_lift"
+                for row in blocked
+                if isinstance(row, dict)
+            )
+        )
 
     def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):
         env = SpiralEasyConstrainedRewriteEnv()
@@ -1784,6 +2050,80 @@ class TestExamples(unittest.TestCase):
         self.assertIn("step_size", catalog[0]["caps"])
         self.assertEqual(catalog[1]["surface_id"], "s_resid_pre_l1_prev")
         self.assertEqual(catalog[1]["target"]["token"], {"mode": "index", "value": -2})
+
+    def test_expanded_activation_surface_catalog_exposes_late_multisite_surfaces(self):
+        model, _codec = self._make_model_and_codec()
+
+        catalog = build_default_activation_surface_catalog(
+            model,
+            worker_id="os_0",
+            profile="activation_patch_expanded",
+        )
+
+        last_surfaces = [surface for surface in catalog if surface["target"]["token"] == {"mode": "last"}]
+        self.assertEqual({surface["target"]["site"] for surface in last_surfaces}, {"resid_pre", "resid_post", "mlp_out"})
+        self.assertTrue(
+            all("activation_patch" in surface["allow_ops"] for surface in last_surfaces)
+        )
+        self.assertEqual(catalog[-1]["target"]["token"], {"mode": "index", "value": -2})
+
+    def test_activation_patch_jsonl_summary_groups_candidate_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "c1.jsonl"
+            event = {
+                "event": "controller_diagnostic_result",
+                "activation_patch_candidate_pool": [
+                    {
+                        "diagnostic_family": "activation_patch",
+                        "activation_patch_op_kind": "activation_patch",
+                        "activation_patch_site": "resid_post",
+                        "activation_patch_layer": 11,
+                        "activation_patch_source_localization": "source_term_token",
+                        "activation_patch_alpha": 0.03,
+                        "activation_patch_step_size": 0.03,
+                        "activation_patch_hook_call_count": 1,
+                        "activation_patch_source_target_cosine": 0.42,
+                        "activation_patch_blend_delta_norm": 0.0015,
+                        "activation_patch_step_size_clip_saturated": False,
+                        "actual_delta_class": "dead_actuator",
+                        "actuator_class": "dead_actuator",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                        "target_top20_threshold_gap_delta": float("nan"),
+                        "recipe_name": "activation_patch_resid_post_l11_source_term_token_a030",
+                    },
+                    {
+                        "diagnostic_family": "activation_patch",
+                        "activation_patch_op_kind": "activation_patch",
+                        "activation_patch_site": "mlp_out",
+                        "activation_patch_layer": 11,
+                        "activation_patch_source_localization": "source_centered_pm1",
+                        "activation_patch_alpha": 0.04,
+                        "activation_patch_step_size": 0.08,
+                        "actual_delta_class": "readout_gap_movement",
+                        "actuator_class": "self_actuator",
+                        "target_mass_delta": 0.00001,
+                        "target_top20_hit_delta": 0,
+                        "target_top20_threshold_gap_delta": -0.002,
+                        "recipe_name": "activation_patch_mlp_out_l11_source_centered_pm1_a040",
+                    },
+                ],
+            }
+            log_path.write_text(json.dumps(event, allow_nan=True) + "\n", encoding="utf-8")
+
+            summary = summarize_activation_patch_jsonl([log_path])
+
+        self.assertEqual(summary["activation_patch_row_count"], 2)
+        self.assertEqual(summary["by_actual_delta_class"]["dead_actuator"], 1)
+        self.assertEqual(summary["by_actual_delta_class"]["readout_gap_movement"], 1)
+        self.assertEqual(summary["by_site"]["mlp_out"], 1)
+        self.assertIsNone(summary["best_rows"]["gap_delta"][-1]["gap_delta"])
+        self.assertEqual(summary["best_rows"]["gap_delta"][0]["gap_delta"], -0.002)
+        resid_post_row = next(row for row in summary["matrix"] if row["site"] == "resid_post")
+        self.assertEqual(resid_post_row["hooked_rows"], 1)
+        self.assertAlmostEqual(resid_post_row["max_blend_delta_norm"], 0.0015)
+        mlp_row = next(row for row in summary["matrix"] if row["site"] == "mlp_out")
+        self.assertEqual(mlp_row["max_step_size"], 0.08)
 
     def test_build_hooked_transformer_worker_runtime_smoke(self):
         model, codec = self._make_model_and_codec()

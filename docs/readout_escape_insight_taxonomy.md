@@ -1,6 +1,6 @@
 # Readout Escape Insight Taxonomy
 
-Status date: 2026-06-13
+Status date: 2026-06-28
 
 This note organizes the current readout-escape findings into three buckets:
 
@@ -415,6 +415,8 @@ The system has progressed through six stages:
 4. locally deepen the most promising gap closers
 5. rotate objectives when a term is confirmed gap-only
 6. route failed carrier conversion into non-KV family-shift previews
+7. execute activation-patch blend diagnostics as a first-class runtime operator
+   and measure forced/canonical cap-response curves
 
 The current state is:
 
@@ -425,16 +427,58 @@ The current state is:
 - production apply remains correctly closed
 - the controller now has a positive local search signal and a family-shift
   escape hatch instead of only vetoes
+- `activation_patch` can now be executed and summarized as its own diagnostic
+  op, but the first forced canonical response curve was `dead_actuator` rather
+  than a target actuator
 
 This is a healthy plateau, not a dead end.
+
+## Activation Patch v1 Reading
+
+Activation patching now sits in both buckets:
+
+- mechanistic value: it tests whether moving a late answer-boundary activation
+  toward a source activation can change ownership/readout behavior
+- engineering value: it does so as a typed, budgeted, auditable operator rather
+  than as disguised residual addition
+
+The first forced canonical response curve should be read carefully.
+
+It tested:
+
+- `mlp_out L11 source_term_token`, `step_size=0.16`
+- `mlp_out L11 source_term_token`, `step_size=0.20`
+- `resid_pre L11 source_term_token`, `step_size=0.16`
+
+All three were `dead_actuator` in the latest GPT-2 constrained-rewrite live
+run. They did not produce target mass/top-20 lift, and they did not produce
+collapse.
+
+This is not a proof that activation patching is useless. It is a narrower
+finding:
+
+> Canonical source-term activation blending, even with diagnostic cap release,
+> did not become an answer-boundary target actuator on this live state.
+
+The classification matters:
+
+| Result | Meaning |
+| --- | --- |
+| `collapse_sharpener` | too much or wrong direction; veto/lower dose |
+| `gap_closer_candidate` | local carrier exists; confirm or vary nearby |
+| `dead_actuator` at higher step size | source/target localization likely wrong |
+| `self_target_actuator` | send through shadow/trial ladder |
+
+The observed result is the third row. The next search should not merely turn
+the knob higher; it should change localization, staging, or source construction.
 
 ## Next Strategy
 
 ### Immediate: Execute The Non-KV Family Shift Preview
 
-The next run should let the controller request `non_kv_operator_search` after
-`carrier_only_no_target_actuator`. The expected output is not an edit; it is a
-small comparison over:
+The system has now executed the first activation-patch member of the non-KV
+family shift. The expected output is still not a production edit; it is a small
+comparison over:
 
 - residual readout-direction patching
 - activation patching from source term tokens
@@ -444,6 +488,15 @@ small comparison over:
 Goal:
 
 > Find a family that can move target mass/top-20, not just target rank or gap.
+
+The first activation-patch source-term-token family did not do that. The next
+immediate experiment should keep the activation-patch contract but vary the
+source:
+
+- source-centered minus stealer
+- blueprint-derived repair span
+- affordance/source-body relation span
+- anti-attractor-then-activation-patch diagnostic sequence
 
 ### Short Term: Compare Operator Families Under One Contract
 

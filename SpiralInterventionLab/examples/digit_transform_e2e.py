@@ -66,6 +66,7 @@ _POST_RUN_DEBRIEF_MODES = ("off", "controller")
 _SEMANTIC_CRITIC_MODES = ("off", "minilm")
 _READOUT_ANALYZER_MODES = ("off", "heuristic", "sae_scaffold")
 _READOUT_ANALYZER_RERANK_MODES = ("off", "shadow", "apply")
+_ACTIVATION_SURFACE_PROFILES = ("standard", "activation_patch_expanded")
 _WORKER_DECODER_CONTROL_MODES = (
     "off",
     "loop_aware",
@@ -86,13 +87,16 @@ ExperimentTaskEnv = (
 )
 
 
-def _default_surface_layers(model: Any) -> tuple[int, ...]:
+def _default_surface_layers(model: Any, *, profile: str = "standard") -> tuple[int, ...]:
     n_layers = int(getattr(getattr(model, "cfg", None), "n_layers", 1))
     if n_layers <= 1:
         return (0,)
     middle = max(0, min(n_layers - 1, n_layers // 2))
     if n_layers <= 3:
         return tuple(sorted({middle}))
+    if str(profile) == "activation_patch_expanded":
+        late_layers = {max(0, n_layers - 3), max(0, n_layers - 2), n_layers - 1}
+        return tuple(sorted({max(0, middle - 1), middle, *late_layers}))
     return tuple(sorted({max(0, middle - 1), middle}))
 
 
@@ -101,16 +105,34 @@ def build_default_activation_surface_catalog(
     *,
     worker_id: str = "os_0",
     layers: Sequence[int] | None = None,
-    sites: Sequence[str] = ("resid_pre",),
+    sites: Sequence[str] | None = None,
+    profile: str = "standard",
     max_alpha: float = 0.18,
     max_ttl_steps: int = 2,
     norm_clip: float = 1.5,
     step_size: float = 0.12,
 ) -> list[dict[str, Any]]:
-    selected_layers = tuple(int(layer) for layer in (layers or _default_surface_layers(model)))
+    normalized_profile = str(profile or "standard")
+    if normalized_profile not in _ACTIVATION_SURFACE_PROFILES:
+        raise ValueError(
+            f"Unsupported activation surface profile '{profile}'; expected one of {_ACTIVATION_SURFACE_PROFILES}"
+        )
+    selected_layers = tuple(int(layer) for layer in (layers or _default_surface_layers(model, profile=normalized_profile)))
+    selected_sites = tuple(
+        str(site)
+        for site in (
+            sites
+            if sites is not None
+            else (
+                ("resid_pre", "resid_post", "mlp_out")
+                if normalized_profile == "activation_patch_expanded"
+                else ("resid_pre",)
+            )
+        )
+    )
     catalog: list[dict[str, Any]] = []
     for layer in selected_layers:
-        for site in sites:
+        for site in selected_sites:
             catalog.append(
                 {
                     "surface_id": f"s_{site}_l{layer}_last",
@@ -121,7 +143,7 @@ def build_default_activation_surface_catalog(
                         "layer": layer,
                         "token": {"mode": "last"},
                     },
-                    "allow_ops": ["resid_add"],
+                    "allow_ops": ["resid_add", "activation_patch"],
                     "caps": {
                         "max_alpha": float(max_alpha),
                         "max_ttl_steps": int(max_ttl_steps),
@@ -133,7 +155,7 @@ def build_default_activation_surface_catalog(
             )
     if selected_layers:
         shot_layer = min(selected_layers)
-        for site in sites:
+        for site in selected_sites:
             if site != "resid_pre":
                 continue
             catalog.append(
@@ -219,6 +241,7 @@ def build_hooked_transformer_worker_runtime(
     episode_id: str = "episode_digit_transform",
     task_view_mode: str = "redacted",
     surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    activation_surface_profile: str = "standard",
     codec: Any | None = None,
     max_generated_tokens: int | None = None,
     max_edits_per_step: int = 1,
@@ -269,7 +292,12 @@ def build_hooked_transformer_worker_runtime(
         adapter=adapter,
         model=model,
         codec=resolved_codec,
-        surface_catalog=surface_catalog or build_default_activation_surface_catalog(model, worker_id=worker_id),
+        surface_catalog=surface_catalog
+        or build_default_activation_surface_catalog(
+            model,
+            worker_id=worker_id,
+            profile=activation_surface_profile,
+        ),
         run_id=run_id,
         episode_id=episode_id,
         worker_id=worker_id,
@@ -1530,6 +1558,7 @@ def _diagnostic_evidence_ledger(
                         "activation_patch_site": item.get("activation_patch_site"),
                         "activation_patch_layer": item.get("activation_patch_layer"),
                         "activation_patch_alpha": item.get("activation_patch_alpha"),
+                        "activation_patch_step_size": item.get("activation_patch_step_size"),
                         "activation_patch_source_localization": item.get("activation_patch_source_localization"),
                         "activation_patch_patch_mode": item.get("activation_patch_patch_mode"),
                         "activation_patch_base_localization": item.get("activation_patch_base_localization"),
@@ -1672,6 +1701,7 @@ def _diagnostic_evidence_ledger(
                 "activation_patch_site",
                 "activation_patch_layer",
                 "activation_patch_alpha",
+                "activation_patch_step_size",
                 "activation_patch_source_localization",
                 "activation_patch_patch_mode",
                 "activation_patch_base_localization",
@@ -2358,6 +2388,24 @@ class _FrontierReplayControllerClient:
                 "activation_patch_compile_preview_blocked_reason"
             ),
             "activation_patch_compile_preview": result.get("activation_patch_compile_preview"),
+            "activation_patch_local_step_size_sweep_executed": result.get(
+                "activation_patch_local_step_size_sweep_executed"
+            ),
+            "activation_patch_local_step_size_sweep_summary": result.get(
+                "activation_patch_local_step_size_sweep_summary"
+            ),
+            "activation_patch_local_step_size_sweep_rows": result.get(
+                "activation_patch_local_step_size_sweep_rows"
+            ),
+            "activation_patch_cap_release_response_curve_executed": result.get(
+                "activation_patch_cap_release_response_curve_executed"
+            ),
+            "activation_patch_cap_release_response_curve_summary": result.get(
+                "activation_patch_cap_release_response_curve_summary"
+            ),
+            "activation_patch_cap_release_response_curve_rows": result.get(
+                "activation_patch_cap_release_response_curve_rows"
+            ),
             "bridge_plan_shadow_actuator": result.get("bridge_plan_shadow_actuator"),
             "bridge_plan_reason": result.get("bridge_plan_reason"),
             "cross_bundle_bridge_summary": result.get("cross_bundle_bridge_summary"),
@@ -2963,6 +3011,7 @@ class _FrontierReplayControllerClient:
                     "activation_patch_site": row.get("activation_patch_site"),
                     "activation_patch_layer": row.get("activation_patch_layer"),
                     "activation_patch_alpha": alpha,
+                    "activation_patch_step_size": row.get("activation_patch_step_size"),
                     "activation_patch_source_localization": row.get("activation_patch_source_localization"),
                     "activation_patch_patch_mode": row.get("activation_patch_patch_mode"),
                     "activation_patch_base_localization": row.get("activation_patch_base_localization"),
@@ -3050,6 +3099,7 @@ class _FrontierReplayControllerClient:
                 "activation_patch_site": preview.get("site"),
                 "activation_patch_layer": preview.get("layer"),
                 "activation_patch_alpha": preview.get("alpha"),
+                "activation_patch_step_size": preview.get("step_size"),
                 "activation_patch_source_localization": preview.get("source_localization"),
                 "activation_patch_patch_mode": preview.get("patch_mode"),
                 "activation_patch_base_localization": preview.get("base_localization"),
@@ -3080,6 +3130,7 @@ class _FrontierReplayControllerClient:
             "activation_patch_site": preview.get("site"),
             "activation_patch_layer": preview.get("layer"),
             "activation_patch_alpha": preview.get("alpha"),
+            "activation_patch_step_size": preview.get("step_size"),
             "activation_patch_source_localization": preview.get("source_localization"),
             "activation_patch_patch_mode": preview.get("patch_mode"),
             "activation_patch_base_localization": preview.get("base_localization"),
@@ -5214,6 +5265,7 @@ def run_digit_transform_experiment(
     log_dir: str | Path | None = None,
     codec: Any | None = None,
     surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    activation_surface_profile: str = "standard",
     worker_model_path: str | Path | None = None,
     worker_tokenizer_path: str | Path | None = None,
     worker_device: str | None = None,
@@ -5232,6 +5284,8 @@ def run_digit_transform_experiment(
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
+    max_diagnostic_calls_per_run: int = 8,
+    diagnostic_result_window: int = 8,
 ) -> DigitTransformExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -5269,6 +5323,7 @@ def run_digit_transform_experiment(
             seed=seed,
             task_view_mode=task_view_mode,
             surface_catalog=surface_catalog,
+            activation_surface_profile=activation_surface_profile,
             codec=codec,
             controller_reflection_mode=controller_reflection_mode,
             controller_memory_window=controller_memory_window,
@@ -5278,6 +5333,8 @@ def run_digit_transform_experiment(
             worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
+            max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
+            diagnostic_result_window=diagnostic_result_window,
         )
 
     suite = run_minimal_baseline_suite(
@@ -5329,6 +5386,7 @@ def run_digit_transform_c1_only_experiment(
     log_dir: str | Path | None = None,
     codec: Any | None = None,
     surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    activation_surface_profile: str = "standard",
     worker_model_path: str | Path | None = None,
     worker_tokenizer_path: str | Path | None = None,
     worker_device: str | None = None,
@@ -5347,6 +5405,8 @@ def run_digit_transform_c1_only_experiment(
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
+    max_diagnostic_calls_per_run: int = 8,
+    diagnostic_result_window: int = 8,
 ) -> DigitTransformC1OnlyExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -5377,6 +5437,7 @@ def run_digit_transform_c1_only_experiment(
         seed=seed,
         task_view_mode=task_view_mode,
         surface_catalog=surface_catalog,
+        activation_surface_profile=activation_surface_profile,
         codec=codec,
         controller_reflection_mode=controller_reflection_mode,
         controller_memory_window=controller_memory_window,
@@ -5386,6 +5447,8 @@ def run_digit_transform_c1_only_experiment(
         worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
         worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
         worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
+        max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
+        diagnostic_result_window=diagnostic_result_window,
     )
     logger_factory = _logger_factory(log_dir)
     c1 = run_c1(
@@ -5429,6 +5492,7 @@ def run_shot_mode_probe_harness(
     log_dir: str | Path | None = None,
     codec: Any | None = None,
     surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    activation_surface_profile: str = "standard",
     worker_model_path: str | Path | None = None,
     worker_tokenizer_path: str | Path | None = None,
     worker_device: str | None = None,
@@ -5476,6 +5540,7 @@ def run_shot_mode_probe_harness(
         seed=seed,
         task_view_mode=task_view_mode,
         surface_catalog=surface_catalog,
+        activation_surface_profile=activation_surface_profile,
         codec=codec,
         controller_reflection_mode=controller_reflection_mode,
         controller_memory_window=controller_memory_window,
@@ -5729,6 +5794,7 @@ def run_readout_escape_replay_harness(
     log_dir: str | Path | None = None,
     codec: Any | None = None,
     surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    activation_surface_profile: str = "standard",
     worker_model_path: str | Path | None = None,
     worker_tokenizer_path: str | Path | None = None,
     worker_device: str | None = None,
@@ -5782,6 +5848,7 @@ def run_readout_escape_replay_harness(
         seed=seed,
         task_view_mode="redacted",
         surface_catalog=surface_catalog,
+        activation_surface_profile=activation_surface_profile,
         codec=codec,
         max_generated_tokens=max_generated_tokens,
         controller_reflection_mode=controller_reflection_mode,
@@ -7510,6 +7577,7 @@ def run_readout_escape_replay_harness(
                 "activation_patch_site": site,
                 "activation_patch_layer": int(layer),
                 "activation_patch_alpha": round(float(alpha_value), 6),
+                "activation_patch_step_size": result.get("step_size"),
                 "activation_patch_source_localization": source_localization,
                 "activation_patch_patch_mode": patch_mode,
                 "activation_patch_base_localization": source_meta.get("source_base_localization"),
@@ -9129,6 +9197,7 @@ def run_digit_transform_sweep(
     log_dir: str | Path | None = None,
     codec: Any | None = None,
     surface_catalog: Sequence[Mapping[str, Any]] | None = None,
+    activation_surface_profile: str = "standard",
     worker_model_path: str | Path | None = None,
     worker_tokenizer_path: str | Path | None = None,
     worker_device: str | None = None,
@@ -9147,6 +9216,8 @@ def run_digit_transform_sweep(
     worker_loop_rescue_edits_per_run: int = 0,
     worker_loop_rescue_total_alpha: float = 0.0,
     worker_loop_rescue_total_edit_cost: float | None = None,
+    max_diagnostic_calls_per_run: int = 8,
+    diagnostic_result_window: int = 8,
 ) -> DigitTransformSweepResult:
     resolved_seeds = tuple(int(seed) for seed in seeds)
     if not resolved_seeds:
@@ -9186,6 +9257,7 @@ def run_digit_transform_sweep(
                 log_dir=seed_log_dir,
                 codec=codec,
                 surface_catalog=surface_catalog,
+                activation_surface_profile=activation_surface_profile,
                 worker_model_path=worker_model_path,
                 worker_tokenizer_path=worker_tokenizer_path,
                 worker_device=worker_device,
@@ -9204,8 +9276,10 @@ def run_digit_transform_sweep(
                 worker_loop_rescue_edits_per_run=worker_loop_rescue_edits_per_run,
                 worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
                 worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
+                max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
+                diagnostic_result_window=diagnostic_result_window,
             )
-            )
+        )
     result = DigitTransformSweepResult(seeds=resolved_seeds, runs=tuple(runs))
     _write_summary_artifact(log_dir, "sweep_summary.json", result.to_dict())
     return result
@@ -9281,6 +9355,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--worker-first-n-layers", type=int, default=None, help="Optionally truncate the worker model depth")
     parser.add_argument("--worker-hf-offline", action="store_true", help="Force local_files_only when loading the worker model/tokenizer")
     parser.add_argument("--worker-trust-remote-code", action="store_true", help="Pass trust_remote_code through to HF / TransformerLens loading")
+    parser.add_argument(
+        "--activation-surface-profile",
+        default="standard",
+        choices=list(_ACTIVATION_SURFACE_PROFILES),
+        help=(
+            "Activation surface catalog profile. standard keeps prompts small; "
+            "activation_patch_expanded exposes late resid_pre/resid_post/mlp_out surfaces for diagnostic activation_patch runs."
+        ),
+    )
     parser.add_argument(
         "--worker-mps-mode",
         default="auto",
@@ -9364,6 +9447,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Separate total edit-cost budget for loop-rescue edits; defaults to --worker-loop-rescue-total-alpha",
     )
+    parser.add_argument(
+        "--max-diagnostic-calls-per-run",
+        type=int,
+        default=8,
+        help="Maximum controller diagnostic requests that may execute during one C1 run.",
+    )
+    parser.add_argument(
+        "--diagnostic-result-window",
+        type=int,
+        default=8,
+        help="Maximum recent diagnostic result summaries retained in the controller packet.",
+    )
     return parser
 
 
@@ -9380,6 +9475,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--worker-loop-rescue-total-alpha must be >= 0")
     if args.worker_loop_rescue_total_edit_cost is not None and args.worker_loop_rescue_total_edit_cost < 0.0:
         parser.error("--worker-loop-rescue-total-edit-cost must be >= 0")
+    if args.max_diagnostic_calls_per_run < 0:
+        parser.error("--max-diagnostic-calls-per-run must be >= 0")
+    if args.diagnostic_result_window <= 0:
+        parser.error("--diagnostic-result-window must be >= 1")
     if args.post_run_debrief_max_output_tokens <= 0:
         parser.error("--post-run-debrief-max-output-tokens must be >= 1")
     if args.post_run_debrief != "off" and args.log_dir is None:
@@ -9425,6 +9524,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_first_n_layers=args.worker_first_n_layers,
             worker_hf_offline=args.worker_hf_offline,
             worker_trust_remote_code=args.worker_trust_remote_code,
+            activation_surface_profile=args.activation_surface_profile,
             worker_mps_mode=args.worker_mps_mode,
             controller_reflection_mode=args.controller_reflection_mode,
             controller_memory_window=args.controller_memory_window,
@@ -9436,6 +9536,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
+            max_diagnostic_calls_per_run=args.max_diagnostic_calls_per_run,
+            diagnostic_result_window=args.diagnostic_result_window,
         )
         payload = result.to_dict()
     elif args.num_seeds == 1:
@@ -9458,6 +9560,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_first_n_layers=args.worker_first_n_layers,
             worker_hf_offline=args.worker_hf_offline,
             worker_trust_remote_code=args.worker_trust_remote_code,
+            activation_surface_profile=args.activation_surface_profile,
             worker_mps_mode=args.worker_mps_mode,
             controller_reflection_mode=args.controller_reflection_mode,
             controller_memory_window=args.controller_memory_window,
@@ -9469,6 +9572,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
+            max_diagnostic_calls_per_run=args.max_diagnostic_calls_per_run,
+            diagnostic_result_window=args.diagnostic_result_window,
         )
         payload = result.to_dict()
     else:
@@ -9491,6 +9596,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_first_n_layers=args.worker_first_n_layers,
             worker_hf_offline=args.worker_hf_offline,
             worker_trust_remote_code=args.worker_trust_remote_code,
+            activation_surface_profile=args.activation_surface_profile,
             worker_mps_mode=args.worker_mps_mode,
             controller_reflection_mode=args.controller_reflection_mode,
             controller_memory_window=args.controller_memory_window,
@@ -9502,6 +9608,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_edits_per_run=args.worker_loop_rescue_edits_per_run,
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
+            max_diagnostic_calls_per_run=args.max_diagnostic_calls_per_run,
+            diagnostic_result_window=args.diagnostic_result_window,
         )
         payload = sweep.to_dict()
     if args.post_run_debrief == "controller":

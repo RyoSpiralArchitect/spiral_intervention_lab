@@ -53,6 +53,9 @@ certification.
 This is a scaffold, not a full benchmark suite yet.
 
 - The controller DSL supports `resid_add`, `kv_mix`, and `rank1_patch`.
+- The controller DSL also supports diagnostic `activation_patch` blend edits on
+  activation surfaces. These are executable hooks, not disguised `resid_add`
+  probes, and production permission remains gated separately.
 - The runtime assumes edits are reversible and TTL-scoped to an episode.
 - The default policy follows the v0 constraints: one edit per step, small alpha budget, no free-form answer channel.
 - The HookedTransformer path now has a real runtime state for cache reads and hook lifecycle management.
@@ -71,6 +74,9 @@ This is a scaffold, not a full benchmark suite yet.
 - Diagnostic-only tools include readout-local first-piece probes, attention readout-carrier probes with shadow-actuator counterfactuals, and a scaffolded `sae_scaffold` readout analyzer backend.
 - The controller can now request bounded diagnostics through `meta.diagnostic_request`; the runtime returns `latest_diagnostic_results` / `recent_diagnostic_results` on later packets.
 - These diagnostics are evidence for the controller, not production apply permission. The controller remains the policy owner.
+- Activation-patch diagnostics now include local step-size sweeps and forced
+  canonical cap-response curves. A diagnostic-only cap release can measure
+  `step_size=0.16/0.20` without widening production apply authority.
 
 ## Current bottleneck
 
@@ -190,6 +196,17 @@ separate `production_trial_budget_class="alternate_followup"` trial on
 still closed. This is not a solved actuator, but it proves the controller can
 run a recipe-local post-harmful alternate trial without treating the alternate
 as production permission.
+
+The next activation-patch pass promotes the operator from review language to
+runtime evidence. Blend-mode `activation_patch` edits can now be materialized,
+compiled, replayed, and summarized as their own op kind. A forced canonical
+cap-response curve measured `mlp_out L11 source_term_token` at `step_size=0.16`
+and `0.20`, plus `resid_pre L11 source_term_token` at `0.16`. In the latest
+GPT-2 constrained-rewrite live run, all three points were `dead_actuator` with
+no target mass/top-20 lift and no collapse. That weakens the hypothesis that
+the earlier failure was only a surface-cap artifact; this canonical source-term
+blend appears executable but not sufficient as a target actuator on that live
+state.
 
 For local larger-worker checks, provide the local Hugging Face export on the CLI
 with `worker_model_path` / `--worker-model-path`. Keep clone-specific model

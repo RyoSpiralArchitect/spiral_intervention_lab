@@ -11,8 +11,9 @@ REF_TENSORS = {"hidden", "resid_pre", "resid_post", "mlp_out", "k_cache", "v_cac
 STATS = {"mean", "std", "ema"}
 SCOPES = {"runtime", "trace", "stats"}
 POOL_MODES = {"last", "mean"}
-OP_KINDS = {"resid_add", "kv_mix", "rank1_patch"}
+OP_KINDS = {"resid_add", "kv_mix", "rank1_patch", "activation_patch"}
 KV_WHICH = {"k", "v", "kv"}
+ACTIVATION_PATCH_MODES = {"blend"}
 EXPR_FNS = {
     "add",
     "sub",
@@ -461,7 +462,27 @@ class Rank1PatchOp:
         return cls(kind="rank1_patch", alpha=_require_float(_require_key(data, "alpha", "op"), "op.alpha"))
 
 
-Op = ResidAddOp | KvMixOp | Rank1PatchOp
+@dataclass(frozen=True)
+class ActivationPatchOp:
+    kind: str
+    alpha: float
+    mode: str
+
+    @classmethod
+    def from_dict(cls, value: Any) -> "ActivationPatchOp":
+        data = _as_mapping(value, "op")
+        mode = data.get("mode", "blend")
+        mode = _require_str(mode, "op.mode")
+        if mode not in ACTIVATION_PATCH_MODES:
+            raise SchemaError(f"op.mode must be one of {sorted(ACTIVATION_PATCH_MODES)}")
+        return cls(
+            kind="activation_patch",
+            alpha=_require_float(_require_key(data, "alpha", "op"), "op.alpha"),
+            mode=mode,
+        )
+
+
+Op = ResidAddOp | KvMixOp | Rank1PatchOp | ActivationPatchOp
 
 
 def parse_op(value: Any) -> Op:
@@ -473,6 +494,8 @@ def parse_op(value: Any) -> Op:
         return KvMixOp.from_dict(data)
     if kind == "rank1_patch":
         return Rank1PatchOp.from_dict(data)
+    if kind == "activation_patch":
+        return ActivationPatchOp.from_dict(data)
     raise SchemaError(f"op.kind must be one of {sorted(OP_KINDS)}")
 
 

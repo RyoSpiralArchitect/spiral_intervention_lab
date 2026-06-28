@@ -1,6 +1,6 @@
 # Readout Escape Research Observations
 
-Status date: 2026-06-13
+Status date: 2026-06-28
 
 This note summarizes the current research state of the readout-escape line. It is intentionally about observations and interpretation, not just implementation history.
 
@@ -843,3 +843,125 @@ The research reading is therefore sharper:
 This is a useful failure. The easy benchmark did not merely lower task
 difficulty; it revealed that the measurement stack has a backend-sanity axis
 that must be controlled before operator conclusions are trusted.
+
+## Activation Patch Runtime Operator v1
+
+The latest implementation turns `activation_patch` into a first-class
+diagnostic runtime operator rather than a review-language placeholder.
+
+The v1 scope is intentionally narrow:
+
+- `op.kind = "activation_patch"`
+- `op.mode = "blend"`
+- activation targets only: `resid_pre`, `resid_post`, `mlp_out`
+- answer-boundary `last` token only
+- `ttl_steps=1`
+- diagnostic/shadow evidence only unless later promotion/trial gates certify it
+
+The important design point is that activation patching is not normalized
+`resid_add`. The hook moves the target activation toward a source activation by
+a bounded interpolation, records activation-patch telemetry, and remains under
+the same controller-owned policy contract:
+
+```text
+activation_patch evidence != production apply permission
+```
+
+The runtime now records:
+
+- `activation_patch_op_kind`
+- `activation_patch_mode`
+- `activation_patch_source_localization`
+- `activation_patch_runtime_supported`
+- `activation_patch_effect_role`
+- hook telemetry such as source/target norms, cosine, blend delta norm, and
+  step-size saturation
+
+This matters because the project can now test a different operator family
+without letting the helper stack become a hidden controller.
+
+## Forced Cap Response Curve
+
+The first activation-patch response-curve result is a useful negative finding.
+
+The immediate question was whether prior activation-patch failures were caused
+by a surface `step_size` cap rather than by the operator recipe itself. To test
+that, the runtime now supports a diagnostic-only forced/canonical response
+curve:
+
+```text
+seed_source = observed_gap_carrier | forced_canonical | prior_run_replay
+```
+
+If no observed gap-carrier seed is available on the live trajectory, the runtime
+can force canonical seeds:
+
+- `mlp_out L11 source_term_token`
+- `resid_pre L11 source_term_token`
+
+These rows are explicitly marked as boundary measurements:
+
+- `forced_seed = true`
+- `seed_source = forced_canonical`
+- `production_apply_allowed = false`
+- `certified_for_apply = false`
+
+The latest GPT-2 constrained-rewrite live run executed:
+
+| site | layer | localization | step size | result |
+| --- | ---: | --- | ---: | --- |
+| `mlp_out` | 11 | `source_term_token` | 0.16 | `dead_actuator` |
+| `mlp_out` | 11 | `source_term_token` | 0.20 | `dead_actuator` |
+| `resid_pre` | 11 | `source_term_token` | 0.16 | `dead_actuator` |
+
+The run did not solve the task. The output remained:
+
+```text
+the the the the the the the the the.
+```
+
+But the diagnostic conclusion is sharper:
+
+- the response curve really executed
+- policy no longer blocked the cap-release measurement
+- the tested rows did not collapse
+- the tested rows also did not move target mass or target top-20
+
+Interpretation:
+
+> This specific canonical source-term activation blend is executable and safe
+> enough to measure, but it is not a target actuator on the observed live state.
+
+That weakens the "surface cap was the main reason" hypothesis. The bottleneck
+has shifted again: not `operator strength` alone, and not just `seed
+availability`, but likely source/target localization or the need for a more
+structured activation-patch source.
+
+## Next Strategy After Forced Cap Deadness
+
+The next operator workstream should avoid simply increasing dose again.
+
+The response curve did not show target lift at 0.16 or 0.20, and it did not
+show collapse. That means the curve is flat/dead for this canonical seed, not
+obviously under-dosed.
+
+The next candidate axes are:
+
+1. **Localization shift.** Keep activation-patch v1, but change source from
+   simple `source_term_token` to a more structured source such as
+   `source_centered_pm1_minus_stealer`, `source_affordance_span`, or a
+   blueprint-derived repair span.
+2. **Target-site shift.** Keep the source fixed but measure nearby late
+   residual/MLP sites under the same forced curve contract.
+3. **Two-stage diagnostic only.** If anti-attractor suppression produces a
+   non-harmful suppressor, test `anti-collapse -> activation_patch` as a
+   diagnostic sequence before considering any trial gate.
+4. **Backend sanity first.** Any operator conclusion on the `the the` basin
+   should be paired with CPU/conservative or first-token top-k parity checks,
+   because MPS/auto worker geometry can change the basin being measured.
+
+The next PR should therefore be framed as:
+
+> Activation patch v1 is executable and auditable; the first forced canonical
+> cap-response curve is dead, so the next search should vary localization and
+> staging rather than merely increasing step size.
