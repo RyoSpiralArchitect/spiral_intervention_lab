@@ -3544,6 +3544,37 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(rows[0]["piece"], " budget")
         self.assertGreater(rows[0]["anchor_quality"], rows[1]["anchor_quality"])
 
+    def test_worker_runtime_v_source_positions_reuse_position_invariant_projection(self):
+        worker_runtime = self._make_worker_runtime()
+        prototype = torch.tensor([1.0, 0.0], dtype=torch.float32)
+        cache_tensor = torch.tensor([[[[1.0, 0.0]], [[1.0, 0.0]], [[1.0, 0.0]]]], dtype=torch.float32)
+        position_records = [
+            {"position": 0, "relative_index": -3, "segment_kind": "prompt", "piece": " Mira"},
+            {"position": 1, "relative_index": -2, "segment_kind": "prompt", "piece": " send"},
+            {"position": 2, "relative_index": -1, "segment_kind": "prompt", "piece": " budget"},
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_project_feature_into_kv_head",
+            return_value=torch.tensor([1.0, 0.0], dtype=torch.float32, device="cpu"),
+        ) as projected:
+            rows = worker_runtime._kv_source_positions_for_feature(
+                prototype,
+                feature="budget",
+                cache_tensor=cache_tensor,
+                layer=3,
+                site="v_cache",
+                head=0,
+                width=2,
+                head_count=1,
+                position_records=position_records,
+                max_positions=3,
+            )
+
+        self.assertEqual(projected.call_count, 1)
+        self.assertGreaterEqual(len(rows), 1)
+
     def test_worker_runtime_shot_mode_only_prefers_canary_passing_kv_candidates(self):
         worker_runtime = self._make_worker_runtime()
         worker_runtime.reset("p")
