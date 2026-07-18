@@ -12562,6 +12562,14 @@ class HookedTransformerWorkerRuntime:
                         )
                         if sub_rows:
                             readout_steering_deepening_operator_rows.extend(sub_rows)
+                        composed_conversion_rows = self._carrier_composed_conversion_rows(
+                            sub_request,
+                            [*matching_rows, *readout_steering_deepening_operator_rows],
+                            packet_context=packet_context,
+                            max_rows=4,
+                        )
+                        if composed_conversion_rows:
+                            readout_steering_deepening_operator_rows.extend(composed_conversion_rows)
                 else:
                     readout_steering_deepening_operator_rows = self._readout_steering_deepening_operator_rows(
                         request,
@@ -21946,6 +21954,512 @@ class HookedTransformerWorkerRuntime:
                         "diagnostic_only": True,
                     }
                 )
+        return rows
+
+    def _carrier_composed_conversion_rows(
+        self,
+        request: Mapping[str, Any],
+        seed_rows: Sequence[Mapping[str, Any]],
+        *,
+        packet_context: Mapping[str, Any] | None = None,
+        max_rows: int = 4,
+    ) -> list[dict[str, Any]]:
+        """Answer `convert_rank_carrier_to_target:{activation_patch_family}`.
+
+        The activation-patch rank carrier is held at its observed strength while
+        a second bounded edit (target readout or attractor suppression) applies
+        in the same step. The composed replay asks whether the carrier's rank
+        movement becomes target-owned mass/top20 lift. Diagnostic-only.
+        """
+
+        objective_key = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+        if not objective_key:
+            return []
+        objective_term = str(request.get("objective_term") or self._term_from_bundle_key(objective_key) or "").strip()
+        if not objective_term:
+            return []
+        if any(
+            isinstance(row, Mapping)
+            and bool(row.get("carrier_composed_conversion", False))
+            and str(row.get("objective_bundle_key") or row.get("bundle_key") or "") == objective_key
+            for row in seed_rows
+        ):
+            return []
+
+        def _as_float(value: Any, default: float = 0.0) -> float:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return float(value)
+            except Exception:
+                return default
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        def _candidate_role(
+            *,
+            actual_delta_class: str,
+            target_mass_delta: float,
+            target_top20_hit_delta: int,
+            gap_delta: Any,
+            attractor_mass_delta: Any,
+            repeat_delta: float,
+        ) -> str:
+            gap_delta_value = _as_float(gap_delta, 0.0) if gap_delta is not None else 0.0
+            attractor_delta = _as_float(attractor_mass_delta, 0.0) if attractor_mass_delta is not None else 0.0
+            if actual_delta_class in {"collapse_sharpener", "harmful", "collapse_isomorphic"} or repeat_delta > 0.0:
+                return "collapse_sharpener"
+            if target_mass_delta > 0.00002 or target_top20_hit_delta > 0:
+                return "target_actuator_candidate"
+            if actual_delta_class == "collapse_suppressor" or attractor_delta < -0.00001:
+                return "collapse_suppressor"
+            if gap_delta is not None and gap_delta_value <= -0.001:
+                return "gap_closer_candidate"
+            return "dead"
+
+        def _row_traits(row: Mapping[str, Any]) -> set[str]:
+            raw_traits = row.get("positive_traits")
+            if not isinstance(raw_traits, SequenceABC) or isinstance(raw_traits, (str, bytes, bytearray)):
+                return set()
+            return {str(item) for item in raw_traits if str(item)}
+
+        requested_family = str(
+            request.get("carrier_recipe_family")
+            or request.get("seed_recipe_family")
+            or ""
+        )
+
+        def _is_activation_patch_rank_carrier(row: Mapping[str, Any]) -> bool:
+            if str(row.get("objective_bundle_key") or row.get("bundle_key") or "") != objective_key:
+                return False
+            is_activation_patch = bool(row.get("activation_patch_site")) or (
+                str(row.get("diagnostic_family") or "") == "activation_patch"
+            )
+            if not is_activation_patch:
+                return False
+            return (
+                str(row.get("actual_delta_class") or "") == "rank_carrier"
+                or str(row.get("effect_role") or "") == "rank_carrier"
+                or str(row.get("failure_mode") or "") == "self_rank_carrier"
+                or "rank_carrier" in _row_traits(row)
+            )
+
+        def _carrier_seed_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+            family = str(row.get("recipe_family") or "")
+            return (
+                2.0 if requested_family and family == requested_family else 0.0,
+                1.5 if str(row.get("ownership_role") or "") == "self" else 0.0,
+                1.0 if str(row.get("safety_role") or "") not in {"collapse_sharpener", "harmful"} else -2.0,
+                _as_float(row.get("focus_rank_delta"), 0.0),
+                _as_float(row.get("self_delta"), 0.0),
+            )
+
+        carrier_seeds = sorted(
+            (
+                dict(row)
+                for row in seed_rows
+                if isinstance(row, Mapping) and _is_activation_patch_rank_carrier(row)
+            ),
+            key=_carrier_seed_rank,
+            reverse=True,
+        )
+        carrier_seed = carrier_seeds[0] if carrier_seeds else None
+        if carrier_seed is None and not requested_family:
+            return []
+
+        model_layers = _as_int(
+            getattr(getattr(getattr(self, "model", None), "cfg", None), "n_layers", 1), 1
+        )
+        if carrier_seed is not None:
+            site = str(carrier_seed.get("activation_patch_site") or "resid_pre")
+            layer = _as_int(carrier_seed.get("activation_patch_layer"), max(0, model_layers - 1))
+            source_localization = str(
+                carrier_seed.get("activation_patch_source_localization") or "source_term_token"
+            )
+            alpha = _as_float(carrier_seed.get("activation_patch_alpha"), 0.05) or 0.05
+            step_size = _as_float(carrier_seed.get("activation_patch_step_size"), alpha) or alpha
+            carrier_recipe_name = str(carrier_seed.get("recipe_name") or "activation_patch_carrier")
+            carrier_recipe_id = str(carrier_seed.get("operator_recipe_id") or "")
+            carrier_family = str(carrier_seed.get("recipe_family") or "") or (
+                requested_family or f"{site}|{source_localization}|blend"
+            )
+        else:
+            parts = [part for part in requested_family.split("|") if part]
+            site = parts[0] if parts and parts[0] in {"resid_pre", "resid_post", "mlp_out"} else "resid_pre"
+            localization_part = parts[1] if len(parts) >= 2 else "source_term_token"
+            if localization_part.endswith("_to_last"):
+                localization_part = localization_part[: -len("_to_last")]
+            source_localization = localization_part or "source_term_token"
+            alpha = 0.05
+            for part in parts:
+                if len(part) > 1 and part.startswith("a") and part[1].isdigit():
+                    alpha = _as_float(part[1:], alpha) or alpha
+            step_size = alpha
+            layer = max(0, model_layers - 1)
+            carrier_recipe_name = f"carrier_seed|{site}|{source_localization}"
+            carrier_recipe_id = ""
+            carrier_family = requested_family
+        step_size = min(max(step_size, 0.0), 0.08) or 0.05
+
+        trial_contract = {
+            "max_alpha": 0.08,
+            "norm_clip": 1.0,
+            "trial_budget_class": "diagnostic_only",
+            "production_trial_followup_allowed": False,
+            "promotion_reason": "carrier_to_actuator_conversion_sweep",
+        }
+        carrier_candidate = {
+            "objective_bundle_key": objective_key,
+            "actuator_bundle_key": objective_key,
+            "bundle_key": objective_key,
+            "objective_term": objective_term,
+            "layer": layer,
+            "site": site,
+            "alpha": alpha,
+            "step_size": step_size,
+            "source_localization": source_localization,
+            "patch_mode": "blend",
+            "contrast_mode": (
+                carrier_seed.get("activation_patch_contrast_mode") if isinstance(carrier_seed, Mapping) else None
+            ),
+            "contrast_scale": (
+                carrier_seed.get("activation_patch_contrast_scale") if isinstance(carrier_seed, Mapping) else None
+            ),
+            "stealer_term": (
+                carrier_seed.get("activation_patch_stealer_term") if isinstance(carrier_seed, Mapping) else None
+            ),
+            "recipe_name": f"{carrier_recipe_name}:carrier_hold",
+            "operator_recipe_id": carrier_recipe_id
+            or (
+                f"readout_escape|activation_patch|{site}|L{layer}|source_body|"
+                f"{source_localization}|blend|a{alpha:.4f}"
+            ),
+            "promotion_reason": "carrier_to_actuator_conversion_sweep",
+        }
+        carrier_edit = self._activation_patch_trial_edit_from_candidate(
+            carrier_candidate, trial_contract=trial_contract
+        )
+
+        def _blocked_row(recipe_name: str, stage: str, blocked_reason: str) -> dict[str, Any]:
+            return {
+                "bundle_key": objective_key,
+                "objective_bundle_key": objective_key,
+                "actuator_bundle_key": objective_key,
+                "intended_bundle_key": objective_key,
+                "intended_term": objective_term,
+                "evidence_kind": "operator_replay",
+                "diagnostic_family": "carrier_composed_conversion",
+                "operator_axis": "carrier_to_actuator_conversion_sweep",
+                "operator_family": "carrier_composed_conversion",
+                "candidate_kind": stage,
+                "status": "blocked",
+                "actuator_class": "dead_actuator",
+                "ownership_role": "unknown",
+                "effect_role": "dead",
+                "safety_role": "neutral",
+                "recipe_name": recipe_name,
+                "recipe_family": f"carrier_composed|{stage}",
+                "carrier_seed_recipe_family": carrier_family,
+                "carrier_seed_recipe_name": carrier_recipe_name,
+                "carrier_seed_operator_recipe_id": carrier_recipe_id or None,
+                "actual_delta_class": "materialization_failed",
+                "conversion_role": "materialization_failed",
+                "carrier_composed_conversion": True,
+                "carrier_to_actuator_conversion_variant": True,
+                "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                "blocked_by": [blocked_reason],
+                "production_apply_allowed": False,
+                "certified_for_apply": False,
+                "policy_candidate_ready": False,
+                "diagnostic_only": True,
+            }
+
+        if carrier_edit is None:
+            return [
+                _blocked_row(
+                    f"{carrier_recipe_name}:carrier_hold",
+                    "carrier_hold",
+                    "carrier_materialization_failed",
+                )
+            ]
+        carrier_edit["bundle_key"] = objective_key
+        carrier_edit["focus_feature"] = objective_term
+        carrier_edit["phase_objective"] = "readout_escape"
+        carrier_edit["bundle_family"] = "activation_patch"
+        carrier_edit["provenance_class"] = "source_body"
+        carrier_edit["recipe_localization"] = source_localization
+        carrier_edit["recipe_pooling"] = "blend"
+        carrier_edit["recipe_alpha"] = alpha
+        carrier_edit["bad_attractor_terms"] = list(_DEFAULT_BAD_ATTRACTOR_TERMS)
+
+        packet_for_surfaces = packet_context if isinstance(packet_context, Mapping) else getattr(self, "_last_packet", {})
+        raw_surface_ids = packet_for_surfaces.get("surface_ids") if isinstance(packet_for_surfaces, Mapping) else None
+        preferred_surface_ids = [
+            str(surface_id)
+            for surface_id in raw_surface_ids
+            if str(surface_id)
+        ] if isinstance(raw_surface_ids, SequenceABC) and not isinstance(raw_surface_ids, (str, bytes, bytearray)) else []
+        if isinstance(carrier_seed, Mapping):
+            fingerprint = carrier_seed.get("candidate_fingerprint")
+            if isinstance(fingerprint, Mapping):
+                surface_id = fingerprint.get("target_surface_id") or fingerprint.get("surface_id")
+                if surface_id not in (None, "") and str(surface_id) not in preferred_surface_ids:
+                    preferred_surface_ids.insert(0, str(surface_id))
+
+        carrier_solo_target_mass_delta = (
+            _as_float(carrier_seed.get("target_mass_delta"), 0.0) if isinstance(carrier_seed, Mapping) else None
+        )
+        carrier_solo_focus_rank_delta = (
+            _as_int(carrier_seed.get("focus_rank_delta"), 0) if isinstance(carrier_seed, Mapping) else None
+        )
+
+        composed_specs = [
+            {
+                "recipe_name": "carrier_hold_plus_target_pure_a050",
+                "stage": "carrier_plus_target",
+                "target_alpha": 0.05,
+                "target_negative_scale": 0.0,
+                "target_contrast_mode": "target_readout_pure",
+            },
+            {
+                "recipe_name": "carrier_hold_plus_target_l025_a050",
+                "stage": "carrier_plus_target",
+                "target_alpha": 0.05,
+                "target_negative_scale": 0.025,
+                "target_contrast_mode": "target_readout_minus_attractor",
+            },
+            {
+                "recipe_name": "suppress_l100_a030_then_carrier_hold",
+                "stage": "suppress_then_carrier",
+                "suppress_alpha": 0.03,
+                "suppress_negative_scale": 0.1,
+            },
+            {
+                "recipe_name": "carrier_hold_plus_target_pure_a080",
+                "stage": "carrier_plus_target",
+                "target_alpha": 0.08,
+                "target_negative_scale": 0.0,
+                "target_contrast_mode": "target_readout_pure",
+            },
+        ]
+
+        rows: list[dict[str, Any]] = []
+        for spec in composed_specs[: max(1, int(max_rows))]:
+            recipe_name = str(spec["recipe_name"])
+            stage = str(spec["stage"])
+            candidates: list[dict[str, Any]] = []
+            if stage == "suppress_then_carrier":
+                suppress_candidate = self._readout_steering_candidate(
+                    bundle_key=objective_key,
+                    members=(),
+                    intended_term=objective_term,
+                    recipe_name=f"{recipe_name}:suppress",
+                    steering_kind="attractor_suppression",
+                    target_terms=(),
+                    negative_terms=_DEFAULT_BAD_ATTRACTOR_TERMS,
+                    negative_scale=float(spec.get("suppress_negative_scale", 0.0) or 0.0),
+                    target_scale=1.0,
+                    alpha=float(spec.get("suppress_alpha", 0.0) or 0.0),
+                    contrast_mode="suppress_attractor",
+                    preferred_surface_ids=preferred_surface_ids,
+                )
+                if suppress_candidate is None:
+                    rows.append(_blocked_row(recipe_name, stage, "no_concrete_suppress_candidate"))
+                    continue
+                candidates.append(suppress_candidate)
+                candidates.append(dict(carrier_edit))
+            else:
+                target_candidate = self._readout_steering_candidate(
+                    bundle_key=objective_key,
+                    members=(),
+                    intended_term=objective_term,
+                    recipe_name=f"{recipe_name}:target",
+                    steering_kind="target_readout",
+                    target_terms=(objective_term,),
+                    negative_terms=_DEFAULT_BAD_ATTRACTOR_TERMS
+                    if float(spec.get("target_negative_scale", 0.0) or 0.0) > 0.0
+                    else (),
+                    negative_scale=float(spec.get("target_negative_scale", 0.0) or 0.0),
+                    target_scale=1.0,
+                    alpha=float(spec.get("target_alpha", 0.0) or 0.0),
+                    contrast_mode=str(spec.get("target_contrast_mode") or "target_readout_pure"),
+                    preferred_surface_ids=preferred_surface_ids,
+                )
+                if target_candidate is None:
+                    rows.append(_blocked_row(recipe_name, stage, "no_concrete_target_readout_candidate"))
+                    continue
+                candidates.append(dict(carrier_edit))
+                candidates.append(target_candidate)
+
+            try:
+                replay = self.replay_candidate_edits_actual_delta(
+                    candidates,
+                    max_new_tokens=1,
+                    top_k=6,
+                    max_edits_per_step_override=max(1, len(candidates)),
+                    score_candidate_text=False,
+                    label=f"{recipe_name}:{objective_key}",
+                    ownership_terms=(objective_term,),
+                    intended_bundle_key=objective_key,
+                    intended_term=objective_term,
+                )
+            except Exception as exc:
+                replay = {
+                    "status": "error",
+                    "error": f"{type(exc).__name__}:{exc}",
+                    "actual_delta_class": "replay_error",
+                }
+
+            actual_delta_class = str(replay.get("actual_delta_class") or replay.get("status") or "unknown")
+            target_mass_delta = _as_float(replay.get("target_mass_delta"), 0.0)
+            target_top20_hit_delta = _as_int(replay.get("target_top20_hit_delta"), 0)
+            focus_rank_delta = _as_int(replay.get("focus_rank_delta"), 0)
+            repeat_delta = max(
+                _as_float(replay.get("repeat_flag_delta"), 0.0),
+                _as_float(replay.get("repeat_delta"), 0.0),
+                _as_float(replay.get("repetition_score_delta"), 0.0),
+            )
+            gap_delta = replay.get("target_top20_threshold_gap_delta")
+            role = _candidate_role(
+                actual_delta_class=actual_delta_class,
+                target_mass_delta=target_mass_delta,
+                target_top20_hit_delta=target_top20_hit_delta,
+                gap_delta=gap_delta,
+                attractor_mass_delta=replay.get("attractor_family_mass_delta"),
+                repeat_delta=repeat_delta,
+            )
+            direct_target_effect = target_mass_delta > 0.00002 or target_top20_hit_delta > 0
+            if role == "target_actuator_candidate":
+                conversion_role = "converted_target_actuator"
+            elif role == "collapse_sharpener":
+                conversion_role = "collapse_sharpener"
+            elif focus_rank_delta > 0 or actual_delta_class in {"rank_carrier", "readout_gap_movement"}:
+                conversion_role = "still_rank_carrier"
+            elif role == "collapse_suppressor":
+                conversion_role = "collapse_suppressor_only"
+            else:
+                conversion_role = "dead"
+            status = "supportive" if role in {"target_actuator_candidate", "collapse_suppressor", "gap_closer_candidate"} else "blocked"
+            self_delta = self._term_readout_lift_score(replay)
+            actuator_class = (
+                "self_actuator"
+                if role == "target_actuator_candidate"
+                else "collapse_suppressor"
+                if role == "collapse_suppressor"
+                else "dead_actuator"
+                if role == "dead"
+                else "collapse_sharpener"
+                if role == "collapse_sharpener"
+                else "noisy_or_harmful"
+            )
+            role_axes = _derive_operator_role_axes(
+                actuator_class=actuator_class,
+                actual_delta_class=actual_delta_class,
+                objective_bundle_key=objective_key,
+                realized_lift_bundle_key=objective_key,
+                target_mass_delta=target_mass_delta,
+                target_top20_hit_delta=target_top20_hit_delta,
+                focus_rank_delta=focus_rank_delta,
+                self_delta=self_delta,
+                cross_delta=0.0,
+                repeat_delta=repeat_delta,
+                entropy_delta=replay.get("entropy_delta"),
+                top1_margin_delta=replay.get("top1_margin_delta"),
+                status=status,
+            )
+            positive_traits: list[str] = []
+            if direct_target_effect:
+                positive_traits.extend(
+                    ["target_reachable", "rank_to_mass_convertible", "carrier_to_actuator_converted"]
+                )
+            if actual_delta_class == "rank_carrier" or focus_rank_delta > 0:
+                positive_traits.append("rank_carrier")
+            blocked_by: list[str] = []
+            if str(replay.get("status") or "") != "ok":
+                blocked_by.append(f"replay_error:{replay.get('error') or replay.get('status') or 'unknown'}")
+            elif role in {"dead", "collapse_sharpener"}:
+                blocked_by.append(str(actual_delta_class or role))
+            rows.append(
+                {
+                    "bundle_key": objective_key,
+                    "objective_bundle_key": objective_key,
+                    "actuator_bundle_key": objective_key,
+                    "intended_bundle_key": objective_key,
+                    "intended_term": objective_term,
+                    "evidence_kind": "operator_replay",
+                    "diagnostic_family": "carrier_composed_conversion",
+                    "operator_axis": "carrier_to_actuator_conversion_sweep",
+                    "operator_family": "carrier_composed_conversion",
+                    "candidate_kind": stage,
+                    "status": status,
+                    "actuator_class": actuator_class,
+                    **role_axes,
+                    "recipe_name": recipe_name,
+                    "operator_recipe_id": " + ".join(
+                        str(candidate.get("operator_recipe_id") or "")
+                        for candidate in candidates
+                        if str(candidate.get("operator_recipe_id") or "")
+                    )
+                    or recipe_name,
+                    "operator_family_key": " + ".join(
+                        str(candidate.get("operator_family_key") or "")
+                        for candidate in candidates
+                        if str(candidate.get("operator_family_key") or "")
+                    )
+                    or "carrier_composed_conversion",
+                    "recipe_family": f"carrier_composed|{stage}",
+                    "carrier_seed_recipe_family": carrier_family,
+                    "carrier_seed_recipe_name": carrier_recipe_name,
+                    "carrier_seed_operator_recipe_id": carrier_recipe_id or None,
+                    "carrier_solo_target_mass_delta": carrier_solo_target_mass_delta,
+                    "carrier_solo_focus_rank_delta": carrier_solo_focus_rank_delta,
+                    "activation_patch_site": site,
+                    "activation_patch_layer": layer,
+                    "activation_patch_step_size": round(float(step_size), 6),
+                    "activation_patch_source_localization": source_localization,
+                    "conversion_role": conversion_role,
+                    "carrier_composed_conversion": True,
+                    "carrier_to_actuator_conversion_variant": True,
+                    "carrier_to_actuator_success_criteria": "target_mass_delta>tau_or_target_top20_hit_delta>0",
+                    "edit_count": len(candidates),
+                    "actual_delta_class": actual_delta_class,
+                    "target_mass_delta": round(float(target_mass_delta), 8),
+                    "target_top20_hit_delta": int(target_top20_hit_delta),
+                    "target_piece": replay.get("target_piece"),
+                    "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
+                    "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
+                    "target_rank_after": replay.get("target_rank_after"),
+                    "target_top20_threshold_gap_baseline": replay.get("target_top20_threshold_gap_baseline"),
+                    "target_top20_threshold_gap": replay.get("target_top20_threshold_gap"),
+                    "target_top20_threshold_gap_after": replay.get("target_top20_threshold_gap_after"),
+                    "target_top20_threshold_gap_delta": replay.get("target_top20_threshold_gap_delta"),
+                    "target_top20_margin": replay.get("target_top20_margin"),
+                    "attractor_family_mass_delta": replay.get("attractor_family_mass_delta"),
+                    "attractor_top20_hit_delta": replay.get("attractor_top20_hit_delta"),
+                    "focus_rank_delta": int(focus_rank_delta),
+                    "repeat_delta": round(float(repeat_delta), 6),
+                    "self_delta": round(float(self_delta), 6),
+                    "cross_delta": 0.0,
+                    "alignment_margin": round(float(self_delta), 6),
+                    "blocked_by": blocked_by,
+                    "replay_error": replay.get("error"),
+                    "simulate_error": replay.get("simulate_error"),
+                    "positive_traits": sorted(set(positive_traits)),
+                    "candidate_fingerprint": replay.get("candidate_fingerprint"),
+                    "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
+                    "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                    "policy_candidate_ready": False,
+                    "diagnostic_only": True,
+                }
+            )
         return rows
 
     def _invoke_observer_check(
