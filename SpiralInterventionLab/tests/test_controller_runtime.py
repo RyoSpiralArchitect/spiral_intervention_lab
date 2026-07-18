@@ -3053,7 +3053,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertTrue(all(row["production_apply_allowed"] is False for row in rows))
         self.assertEqual(rows[0]["entropy_delta"], -0.001)
 
-    def test_activation_patch_cap_release_response_curve_forces_canonical_when_no_observed_seed(self):
+    def test_activation_patch_cap_release_response_curve_runs_seed_discovery_when_no_observed_seed(self):
         worker_runtime = self._make_worker_runtime()
         observed: list[tuple[str, float]] = []
 
@@ -3151,8 +3151,14 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
             with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
                 rows = worker_runtime._activation_patch_cap_release_response_curve_rows(seed_rows)
 
-        self.assertEqual(observed, [("mlp_out", 0.16), ("mlp_out", 0.2), ("resid_pre", 0.16)])
-        self.assertEqual([row["activation_patch_seed_source"] for row in rows], ["forced_canonical"] * 3)
+        self.assertEqual(observed, [("mlp_out", 0.05), ("mlp_out", 0.08), ("resid_pre", 0.05)])
+        self.assertEqual(
+            [row["activation_patch_seed_source"] for row in rows],
+            ["forced_canonical_seed_discovery"] * 3,
+        )
+        self.assertTrue(all(row["operator_axis"] == "activation_patch_seed_discovery" for row in rows))
+        self.assertTrue(all(row["activation_patch_seed_discovery"] for row in rows))
+        self.assertTrue(all(not row["activation_patch_cap_release_response_curve"] for row in rows))
         self.assertTrue(all(row["activation_patch_forced_seed"] for row in rows))
         self.assertTrue(all(row["production_apply_allowed"] is False for row in rows))
 

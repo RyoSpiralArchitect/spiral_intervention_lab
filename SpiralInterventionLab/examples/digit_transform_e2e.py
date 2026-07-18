@@ -4960,6 +4960,7 @@ class ReadoutEscapeReplayHarnessResult:
     readout_analyzer_feature_backend: str | None
     readout_analyzer_sae_status: str | None
     readout_analyzer_sae_feature_hint_count: int
+    readout_analyzer_sae_subspace_group_count: int
     gate_report_frontier_bundle_key: str | None
     controller_selected_bundle_key: str | None
     controller_selection_source: str | None
@@ -8917,6 +8918,11 @@ def run_readout_escape_replay_harness(
             0
             if first_selection_event is None
             else first_selection_event.get("readout_analyzer_sae_feature_hint_count", 0)
+        ),
+        readout_analyzer_sae_subspace_group_count=int(
+            0
+            if first_selection_event is None
+            else first_selection_event.get("readout_analyzer_sae_subspace_group_count", 0)
         ),
         gate_report_frontier_bundle_key=None
         if first_selection_event is None

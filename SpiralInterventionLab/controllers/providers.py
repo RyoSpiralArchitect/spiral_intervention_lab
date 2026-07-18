@@ -122,6 +122,12 @@ def _anthropic_metadata(raw: Any) -> Mapping[str, Any]:
     )
 
 
+def _anthropic_model_accepts_temperature(model: str) -> bool:
+    # Opus 4.8 rejects temperature; keep the exclusion narrow so existing
+    # Anthropic controller behavior remains unchanged for older models.
+    return not str(model or "").startswith("claude-opus-4-8")
+
+
 def _mistral_metadata(raw: Any) -> Mapping[str, Any]:
     choice = (getattr(raw, "choices", None) or [None])[0]
     return _compact_metadata(
@@ -237,13 +243,15 @@ class AnthropicControllerProvider(ControllerProvider):
         return self._model_name
 
     def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
-        raw = self.client.messages.create(
-            model=self.model_name,
-            max_tokens=request.max_output_tokens,
-            temperature=request.temperature,
-            system=request.effective_system_prompt(),
-            messages=[{"role": "user", "content": request.payload_text()}],
-        )
+        request_kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "max_tokens": request.max_output_tokens,
+            "system": request.effective_system_prompt(),
+            "messages": [{"role": "user", "content": request.payload_text()}],
+        }
+        if _anthropic_model_accepts_temperature(self.model_name):
+            request_kwargs["temperature"] = request.temperature
+        raw = self.client.messages.create(**request_kwargs)
         return ControllerProviderResponse(
             text=_anthropic_text(raw),
             provider=self.provider_name,

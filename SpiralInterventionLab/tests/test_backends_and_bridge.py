@@ -20,7 +20,7 @@ from SpiralInterventionLab.bridge.controller_clients import (
     load_prompt_asset,
 )
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
-from SpiralInterventionLab.controllers.providers import OpenAIControllerProvider
+from SpiralInterventionLab.controllers.providers import AnthropicControllerProvider, OpenAIControllerProvider
 from SpiralInterventionLab.runtime.baselines import run_b1
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.schema import parse_observation_packet
@@ -139,6 +139,21 @@ class _FakeOpenAIResponsesAPI:
 class _FakeOpenAIClient:
     def __init__(self) -> None:
         self.responses = _FakeOpenAIResponsesAPI()
+
+
+class _FakeAnthropicMessagesAPI:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        block = type("FakeAnthropicBlock", (), {"text": "{\"version\":\"0.1\",\"decision\":\"noop\"}"})()
+        return type("FakeAnthropicResponse", (), {"content": [block], "usage": {}})()
+
+
+class _FakeAnthropicClient:
+    def __init__(self) -> None:
+        self.messages = _FakeAnthropicMessagesAPI()
 
 
 class TestBackendsAndBridge(unittest.TestCase):
@@ -1175,6 +1190,37 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "medium")
         self.assertIn("temperature", client.responses.calls[0])
+
+    def test_anthropic_controller_provider_omits_temperature_for_opus48(self):
+        client = _FakeAnthropicClient()
+        provider = AnthropicControllerProvider(model="claude-opus-4-8", client=client)
+
+        provider.complete(
+            ControllerProviderRequest(
+                system_prompt="sys",
+                payload={"step": 1},
+                expect_json=True,
+                temperature=0.2,
+            )
+        )
+
+        self.assertNotIn("temperature", client.messages.calls[0])
+        self.assertEqual(client.messages.calls[0]["model"], "claude-opus-4-8")
+
+    def test_anthropic_controller_provider_keeps_temperature_for_older_models(self):
+        client = _FakeAnthropicClient()
+        provider = AnthropicControllerProvider(model="claude-opus-4-7", client=client)
+
+        provider.complete(
+            ControllerProviderRequest(
+                system_prompt="sys",
+                payload={"step": 1},
+                expect_json=True,
+                temperature=0.2,
+            )
+        )
+
+        self.assertEqual(client.messages.calls[0]["temperature"], 0.2)
 
     def test_local_backend_worker_runtime_packet_is_schema_shaped(self):
         runtime = LocalBackendWorkerRuntime(

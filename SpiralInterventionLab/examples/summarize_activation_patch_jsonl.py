@@ -101,10 +101,39 @@ def _row_identity(path: Path, line_no: int, row: Mapping[str, Any]) -> tuple[Any
         row.get("activation_patch_alpha"),
         row.get("activation_patch_step_size"),
         row.get("actual_delta_class"),
+        row.get("target_piece"),
+        row.get("target_piece_token_id"),
         row.get("target_mass_delta"),
         row.get("target_top20_hit_delta"),
         row.get("target_top20_threshold_gap_delta"),
     )
+
+
+def _activation_patch_seed_source(row: Mapping[str, Any]) -> Any:
+    seed_source = row.get("activation_patch_seed_source") or row.get("seed_source")
+    if seed_source not in (None, ""):
+        return seed_source
+    if bool(row.get("activation_patch_forced_seed", False)) or bool(
+        row.get("activation_patch_seed_discovery", False)
+    ):
+        return "forced_canonical_seed_discovery"
+    operator_axis = str(row.get("operator_axis") or row.get("operator_recipe_expansion_mode") or "")
+    if operator_axis == "activation_patch_local_step_size_sweep":
+        return "observed_gap_carrier"
+    if operator_axis == "activation_patch_cap_release_response_curve":
+        return "observed_gap_carrier"
+    if _is_activation_patch_row(row):
+        return "direct_candidate"
+    return None
+
+
+def _target_piece_binding_status(row: Mapping[str, Any]) -> Any:
+    report = row.get("target_piece_binding_report")
+    if isinstance(report, Mapping):
+        status = report.get("binding_stability_status")
+        if status not in (None, ""):
+            return status
+    return row.get("target_piece_binding_status")
 
 
 def _compact_row(path: Path, line_no: int, row: Mapping[str, Any]) -> dict[str, Any]:
@@ -116,12 +145,22 @@ def _compact_row(path: Path, line_no: int, row: Mapping[str, Any]) -> dict[str, 
         "objective_bundle_key": row.get("objective_bundle_key") or row.get("bundle_key"),
         "actuator_bundle_key": row.get("actuator_bundle_key"),
         "intended_term": row.get("intended_term") or row.get("objective_term"),
+        "target_piece": row.get("target_piece"),
+        "target_piece_token_id": _as_int(row.get("target_piece_token_id")),
+        "target_piece_binding_status": _target_piece_binding_status(row),
+        "target_piece_binding_report": dict(row.get("target_piece_binding_report"))
+        if isinstance(row.get("target_piece_binding_report"), Mapping)
+        else None,
         "site": row.get("activation_patch_site"),
         "layer": _as_int(row.get("activation_patch_layer")),
         "source_localization": row.get("activation_patch_source_localization"),
         "operator_axis": row.get("operator_axis"),
         "operator_recipe_expansion_mode": row.get("operator_recipe_expansion_mode"),
-        "seed_source": row.get("activation_patch_seed_source"),
+        "seed_source": _activation_patch_seed_source(row),
+        "seed_recipe_name": row.get("activation_patch_seed_recipe_name")
+        or row.get("activation_patch_response_curve_seed_recipe_name")
+        or row.get("seed_recipe_name")
+        or row.get("source_seed_recipe_name"),
         "forced_seed": bool(row.get("activation_patch_forced_seed", False)),
         "base_localization": row.get("activation_patch_base_localization"),
         "contrast_mode": row.get("activation_patch_contrast_mode"),
@@ -150,6 +189,21 @@ def _compact_row(path: Path, line_no: int, row: Mapping[str, Any]) -> dict[str, 
             "activation_patch_step_size_clip_saturated",
             row.get("step_size_clip_saturated"),
         ),
+        "first_order_response_proxy": _as_float(row.get("activation_patch_first_order_response_proxy")),
+        "predicted_gap_delta_proxy": _as_float(row.get("activation_patch_predicted_gap_delta_proxy")),
+        "predicted_logit_delta_proxy": _as_float(row.get("activation_patch_predicted_logit_delta_proxy")),
+        "response_effect_role": row.get("activation_patch_response_effect_role"),
+        "attribution_reliability_score": _as_float(row.get("attribution_reliability_score")),
+        "attribution_reliability_status": row.get("attribution_reliability_status"),
+        "proxy_reliability_status": row.get("activation_patch_proxy_calibration_status")
+        or row.get("attribution_reliability_status"),
+        "attribution_curvature_proxy": _as_float(row.get("attribution_curvature_proxy")),
+        "proxy_reliability_key": row.get("activation_patch_proxy_reliability_key"),
+        "proxy_calibration_status": row.get("activation_patch_proxy_calibration_status"),
+        "proxy_selector_permission": row.get("activation_patch_proxy_selector_permission"),
+        "subspace_consistent_seed": bool(row.get("activation_patch_subspace_consistent_seed", False)),
+        "subspace_family": row.get("activation_patch_subspace_family"),
+        "subspace_support": _as_float(row.get("activation_patch_subspace_support")),
         "status": row.get("status"),
         "actual_delta_class": row.get("actual_delta_class"),
         "actuator_class": row.get("actuator_class"),
@@ -194,7 +248,7 @@ def _best_rows(rows: Sequence[Mapping[str, Any]], *, top_k: int) -> dict[str, li
     }
 
 
-def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int = 8) -> dict[str, Any]:
+def collect_activation_patch_rows(paths: Sequence[str | Path]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     jsonl_paths = _iter_jsonl_paths(paths)
     rows: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
@@ -214,11 +268,28 @@ def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int 
                     seen.add(identity)
                     rows.append(_compact_row(path, line_no, row))
 
+    return rows, {
+        "input_paths": [str(path) for path in jsonl_paths],
+        "jsonl_file_count": len(jsonl_paths),
+        "parse_errors": parse_errors,
+    }
+
+
+def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int = 8) -> dict[str, Any]:
+    rows, metadata = collect_activation_patch_rows(paths)
+
     by_actual_delta_class = Counter(str(row.get("actual_delta_class") or "unknown") for row in rows)
     by_actuator_class = Counter(str(row.get("actuator_class") or "unknown") for row in rows)
     by_site = Counter(str(row.get("site") or "unknown") for row in rows)
     by_source_localization = Counter(str(row.get("source_localization") or "unknown") for row in rows)
     by_operator_axis = Counter(str(row.get("operator_axis") or "unknown") for row in rows)
+    by_reliability_status = Counter(str(row.get("attribution_reliability_status") or "unknown") for row in rows)
+    by_response_effect_role = Counter(str(row.get("response_effect_role") or "unknown") for row in rows)
+    by_proxy_calibration_status = Counter(str(row.get("proxy_calibration_status") or "unknown") for row in rows)
+    by_subspace_family = Counter(str(row.get("subspace_family") or "unknown") for row in rows)
+    by_target_piece_binding_status = Counter(
+        str(row.get("target_piece_binding_status") or "unknown") for row in rows
+    )
 
     grouped: dict[tuple[str, int | None, str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -238,6 +309,16 @@ def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int 
         blend_values = [value for value in (_as_float(row.get("blend_delta_norm")) for row in group_rows) if value is not None]
         step_size_values = [value for value in (_as_float(row.get("step_size")) for row in group_rows) if value is not None]
         cosine_values = [value for value in (_as_float(row.get("source_target_cosine")) for row in group_rows) if value is not None]
+        response_proxy_values = [
+            value
+            for value in (_as_float(row.get("first_order_response_proxy")) for row in group_rows)
+            if value is not None
+        ]
+        reliability_values = [
+            value
+            for value in (_as_float(row.get("attribution_reliability_score")) for row in group_rows)
+            if value is not None
+        ]
         matrix.append(
             {
                 "site": site,
@@ -250,23 +331,56 @@ def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int 
                 "max_blend_delta_norm": max(blend_values) if blend_values else None,
                 "max_step_size": max(step_size_values) if step_size_values else None,
                 "mean_source_target_cosine": (sum(cosine_values) / len(cosine_values)) if cosine_values else None,
+                "max_first_order_response_proxy": max(response_proxy_values) if response_proxy_values else None,
+                "mean_attribution_reliability_score": (
+                    sum(reliability_values) / len(reliability_values)
+                )
+                if reliability_values
+                else None,
                 "hooked_rows": sum(1 for row in group_rows if (_as_int(row.get("hook_call_count")) or 0) > 0),
                 "clip_saturated_rows": sum(1 for row in group_rows if bool(row.get("step_size_clip_saturated"))),
+                "hint_only_unreliable_rows": sum(
+                    1
+                    for row in group_rows
+                    if str(row.get("proxy_calibration_status") or "") == "candidate_hint_only_unreliable"
+                ),
+                "subspace_consistent_rows": sum(
+                    1 for row in group_rows if bool(row.get("subspace_consistent_seed", False))
+                ),
                 "top20_hits": sum(1 for row in group_rows if (_as_int(row.get("target_top20_hit_delta")) or 0) > 0),
             }
         )
 
     return _json_safe(
         {
-            "input_paths": [str(path) for path in jsonl_paths],
-            "jsonl_file_count": len(jsonl_paths),
-            "parse_errors": parse_errors,
+            **metadata,
             "activation_patch_row_count": len(rows),
             "by_actual_delta_class": dict(sorted(by_actual_delta_class.items())),
             "by_actuator_class": dict(sorted(by_actuator_class.items())),
             "by_site": dict(sorted(by_site.items())),
             "by_source_localization": dict(sorted(by_source_localization.items())),
             "by_operator_axis": dict(sorted(by_operator_axis.items())),
+            "by_attribution_reliability_status": dict(sorted(by_reliability_status.items())),
+            "by_response_effect_role": dict(sorted(by_response_effect_role.items())),
+            "by_proxy_calibration_status": dict(sorted(by_proxy_calibration_status.items())),
+            "by_subspace_family": dict(sorted(by_subspace_family.items())),
+            "by_target_piece_binding_status": dict(sorted(by_target_piece_binding_status.items())),
+            "target_piece_binding_reports": [
+                {
+                    "objective_bundle_key": row.get("objective_bundle_key"),
+                    "intended_term": row.get("intended_term"),
+                    "target_piece": row.get("target_piece"),
+                    "target_piece_token_id": row.get("target_piece_token_id"),
+                    "seed_source": row.get("seed_source"),
+                    "site": row.get("site"),
+                    "layer": row.get("layer"),
+                    "source_localization": row.get("source_localization"),
+                    "operator_axis": row.get("operator_axis"),
+                    "binding_report": row.get("target_piece_binding_report"),
+                }
+                for row in rows
+                if isinstance(row.get("target_piece_binding_report"), Mapping)
+            ][: max(1, int(top_k))],
             "matrix": matrix,
             "response_curve_points": [
                 dict(row)
