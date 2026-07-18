@@ -22432,6 +22432,8 @@ class HookedTransformerWorkerRuntime:
                     "target_mass_delta": round(float(target_mass_delta), 8),
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
+                    "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_report": replay.get("target_piece_binding_report"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
