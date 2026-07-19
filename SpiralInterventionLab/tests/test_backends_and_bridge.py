@@ -210,6 +210,26 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(provider.requests[0].max_output_tokens, 1600)
         self.assertEqual(client.latest_trace()["effective_max_output_tokens"], 1600)
 
+    def test_provider_controller_client_uses_claude5_output_floor(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}", model_name="claude-sonnet-5")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, max_output_tokens=800)
+
+        client.invoke({"step": 1})
+
+        self.assertEqual(provider.requests[0].max_output_tokens, 4096)
+        self.assertEqual(client.latest_trace()["effective_max_output_tokens"], 4096)
+
+    def test_provider_controller_client_keeps_default_budget_for_version_first_claude(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\"}",
+            model_name="claude-3-5-sonnet-20241022",
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, max_output_tokens=800)
+
+        client.invoke({"step": 1})
+
+        self.assertEqual(provider.requests[0].max_output_tokens, 800)
+
     def test_provider_controller_client_compact_packet_view_summarizes_payload(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
         client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, packet_view="compact")
