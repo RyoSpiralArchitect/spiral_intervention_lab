@@ -123,9 +123,21 @@ def _anthropic_metadata(raw: Any) -> Mapping[str, Any]:
 
 
 def _anthropic_model_accepts_temperature(model: str) -> bool:
-    # Opus 4.8 rejects temperature; keep the exclusion narrow so existing
-    # Anthropic controller behavior remains unchanged for older models.
-    return not str(model or "").startswith("claude-opus-4-8")
+    # Opus 4.8 and the Claude 5 family reject temperature ("deprecated for
+    # this model"); keep the exclusion narrow so existing Anthropic controller
+    # behavior remains unchanged for older models.
+    name = str(model or "")
+    if name.startswith("claude-opus-4-8"):
+        return False
+    family_and_rest = name.split("-", 1)
+    if len(family_and_rest) == 2:
+        segments = family_and_rest[1].split("-")
+        # claude-<family>-5[-...] e.g. claude-sonnet-5, claude-fable-5-20260301.
+        # The alphabetic family guard keeps claude-3-5-sonnet (version-first
+        # naming) on the old temperature-accepting path.
+        if len(segments) >= 2 and segments[0].isalpha() and segments[1] == "5":
+            return False
+    return True
 
 
 def _mistral_metadata(raw: Any) -> Mapping[str, Any]:

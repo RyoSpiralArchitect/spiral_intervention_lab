@@ -1222,6 +1222,38 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(client.messages.calls[0]["temperature"], 0.2)
 
+    def test_anthropic_controller_provider_omits_temperature_for_claude5_family(self):
+        for model in ("claude-sonnet-5", "claude-fable-5", "claude-fable-5-20260301"):
+            client = _FakeAnthropicClient()
+            provider = AnthropicControllerProvider(model=model, client=client)
+
+            provider.complete(
+                ControllerProviderRequest(
+                    system_prompt="sys",
+                    payload={"step": 1},
+                    expect_json=True,
+                    temperature=0.2,
+                )
+            )
+
+            self.assertNotIn("temperature", client.messages.calls[0], model)
+
+    def test_anthropic_controller_provider_keeps_temperature_for_version_first_names(self):
+        for model in ("claude-3-5-sonnet-20241022", "claude-haiku-4-5-20251001"):
+            client = _FakeAnthropicClient()
+            provider = AnthropicControllerProvider(model=model, client=client)
+
+            provider.complete(
+                ControllerProviderRequest(
+                    system_prompt="sys",
+                    payload={"step": 1},
+                    expect_json=True,
+                    temperature=0.2,
+                )
+            )
+
+            self.assertEqual(client.messages.calls[0]["temperature"], 0.2, model)
+
     def test_local_backend_worker_runtime_packet_is_schema_shaped(self):
         runtime = LocalBackendWorkerRuntime(
             backend=_FakeLocalBackend(),
