@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from importlib.util import find_spec
@@ -2658,6 +2660,20 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(divergence["gpt55"]["seed_source_counts"], {"direct_candidate": 1})
         self.assertFalse(divergence["divergence"]["target_piece_sets_match"])
         self.assertFalse(divergence["divergence"]["target_piece_token_id_sets_match"])
+
+    def test_activation_patch_jsonl_compare_supports_direct_script_help(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        script = repo_root / "SpiralInterventionLab" / "examples" / "compare_activation_patch_jsonl.py"
+        completed = subprocess.run(
+            [sys.executable, str(script), "--help"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Compare activation_patch diagnostic rows", completed.stdout)
 
     def test_build_hooked_transformer_worker_runtime_smoke(self):
         model, codec = self._make_model_and_codec()

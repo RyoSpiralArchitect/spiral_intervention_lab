@@ -8,7 +8,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .summarize_activation_patch_jsonl import collect_activation_patch_rows
+if __package__:
+    from .summarize_activation_patch_jsonl import collect_activation_patch_rows
+else:  # Support direct execution alongside the module-style CLI.
+    from summarize_activation_patch_jsonl import collect_activation_patch_rows
 
 
 def _json_safe(value: Any) -> Any:
