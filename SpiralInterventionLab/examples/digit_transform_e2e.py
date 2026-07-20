@@ -2664,15 +2664,26 @@ class _FrontierReplayControllerClient:
         }
 
     @staticmethod
-    def _diagnostic_seen_in_results(results: Sequence[Any], diagnostic_name: str) -> bool:
+    def _diagnostic_seen_in_results(
+        results: Sequence[Any],
+        diagnostic_name: str,
+        *,
+        objective_bundle_key: str | None = None,
+    ) -> bool:
         expected = str(diagnostic_name or "")
+        expected_objective = str(objective_bundle_key or "")
         if not expected:
             return False
         for result in results:
             if not isinstance(result, Mapping):
                 continue
-            if str(result.get("diagnostic", "") or "") == expected:
-                return True
+            if str(result.get("diagnostic", "") or "") != expected:
+                continue
+            if expected_objective:
+                result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+                if result_objective != expected_objective:
+                    continue
+            return True
         return False
 
     @staticmethod
@@ -3599,6 +3610,7 @@ class _FrontierReplayControllerClient:
         carrier_conversion_sweep_seen = self._diagnostic_seen_in_results(
             diagnostic_history_items,
             "carrier_to_actuator_conversion_sweep",
+            objective_bundle_key=objective_bundle_key,
         )
         production_trial_alternate_candidate: dict[str, Any] | None = None
         production_trial_blocked_recipe_id = (

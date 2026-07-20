@@ -6039,6 +6039,29 @@ class TestCarrierConversionControllerWiring(unittest.TestCase):
             "request_carrier_to_actuator_conversion_sweep",
         )
 
+    def test_conversion_sweep_seen_is_scoped_to_objective(self):
+        results = [
+            {
+                "diagnostic": "carrier_to_actuator_conversion_sweep",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+            }
+        ]
+
+        self.assertTrue(
+            _FrontierReplayControllerClient._diagnostic_seen_in_results(
+                results,
+                "carrier_to_actuator_conversion_sweep",
+                objective_bundle_key="entity_insert:mira:source_body:near_reachable",
+            )
+        )
+        self.assertFalse(
+            _FrontierReplayControllerClient._diagnostic_seen_in_results(
+                results,
+                "carrier_to_actuator_conversion_sweep",
+                objective_bundle_key=self._OBJECTIVE_KEY,
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
