@@ -1639,6 +1639,14 @@ def _controller_model_output_token_floor(model_name: str) -> int:
     model = str(model_name or "").strip().lower()
     if model.startswith("gpt-5"):
         return 1600
+    if model.startswith("claude-"):
+        segments = model.split("-")[1:]
+        # Claude 5 family (claude-<family>-5[-...]) reasons adaptively before
+        # emitting text, so a small max_tokens can be consumed entirely by
+        # thinking and return an empty text body. Keep version-first names
+        # such as claude-3-5-sonnet on the default budget.
+        if len(segments) >= 2 and segments[0].isalpha() and segments[1] == "5":
+            return 4096
     return 0
 
 

@@ -335,40 +335,85 @@ def build_sae_feature_emitter_readout_analyzer(
     def analyze(capture: ReadoutSidecarCapture) -> Mapping[str, Any] | None:
         base = dict(heuristic(capture) or {})
         feature_hints: list[dict[str, Any]] = []
+        subspace_groups: list[dict[str, Any]] = []
         bundle_vectors = base.get("bundle_evidence_vectors")
         if isinstance(bundle_vectors, Mapping):
             for bundle_key, vector in list(bundle_vectors.items())[:6]:
                 if not isinstance(vector, Mapping):
                     continue
+                source_body_exact = bool(vector.get("source_body_exact", False))
+                support = _clip_score(vector.get("semantic_residual_support"), minimum=-2.0, maximum=2.0)
+                anchor_strength = _clip_score(vector.get("anchor_strength"), minimum=-2.0, maximum=2.0)
+                provenance_class = _clean_text(vector.get("provenance_class"), limit=32)
+                span_kind = _clean_text(vector.get("span_kind"), limit=64)
                 feature_hints.append(
                     {
                         "bundle_key": str(bundle_key),
                         "feature_family": "source_body_anchor"
-                        if bool(vector.get("source_body_exact", False))
+                        if source_body_exact
                         else "prompt_anchor",
                         "operator_family_prior": "resid_or_readout_boundary"
-                        if bool(vector.get("source_body_exact", False))
+                        if source_body_exact
                         else "attention_carrier_probe",
                         "operator_family_priors": [
                             "activation_patch_source_to_boundary",
                             "resid_or_readout_boundary",
                         ]
-                        if bool(vector.get("source_body_exact", False))
+                        if source_body_exact
                         else ["attention_carrier_probe"],
-                        "support": _clip_score(vector.get("semantic_residual_support"), minimum=-2.0, maximum=2.0),
-                        "anchor_strength": _clip_score(vector.get("anchor_strength"), minimum=-2.0, maximum=2.0),
-                        "provenance_class": _clean_text(vector.get("provenance_class"), limit=32),
-                        "span_kind": _clean_text(vector.get("span_kind"), limit=64),
+                        "support": support,
+                        "anchor_strength": anchor_strength,
+                        "provenance_class": provenance_class,
+                        "span_kind": span_kind,
+                    }
+                )
+                support_value = support if support is not None else 0.0
+                anchor_value = anchor_strength if anchor_strength is not None else 0.0
+                group_support = _clip_score(
+                    (0.65 * support_value) + (0.35 * anchor_value),
+                    minimum=-2.0,
+                    maximum=2.0,
+                )
+                subspace_groups.append(
+                    {
+                        "bundle_key": str(bundle_key),
+                        "subspace_family": "source_body_entity_subspace"
+                        if source_body_exact
+                        else "prompt_anchor_subspace",
+                        "subspace_rank": 2 if source_body_exact else 1,
+                        "support": group_support,
+                        "anchor_strength": anchor_strength,
+                        "member_feature_families": [
+                            "source_body_anchor",
+                            "activation_patch_source_to_boundary",
+                            "readout_boundary_residual",
+                        ]
+                        if source_body_exact
+                        else ["prompt_anchor", "attention_carrier_probe"],
+                        "operator_family_priors": [
+                            "activation_patch_source_to_boundary",
+                            "resid_or_readout_boundary",
+                        ]
+                        if source_body_exact
+                        else ["attention_carrier_probe"],
+                        "provenance_class": provenance_class,
+                        "span_kind": span_kind,
                     }
                 )
         base.update(
             {
                 "analyzer_name": analyzer_name,
                 "feature_backend": "sae_sidecar",
-                "sae_status": "scaffold_feature_emitter_no_saelens_runtime",
+                "sae_status": "scaffold_subspace_feature_emitter_no_saelens_runtime",
                 "sae_feature_hints": feature_hints,
+                "sae_feature_subspace_groups": subspace_groups[:6],
+                "subspace_feature_backend": "sasa_inspired_scaffold",
                 "notes": list(base.get("notes", []))[:5]
-                + ["sae_feature_emitter_scaffold", "policy_owner_remains_controller"],
+                + [
+                    "sae_feature_emitter_scaffold",
+                    "subspace_group_evidence_not_policy",
+                    "policy_owner_remains_controller",
+                ],
             }
         )
         return base
@@ -518,6 +563,53 @@ def normalize_readout_sidecar_hints(value: Mapping[str, Any] | None) -> dict[str
                 cleaned_feature_hints.append(row)
         if cleaned_feature_hints:
             summary["sae_feature_hints"] = cleaned_feature_hints
+
+    subspace_backend = _clean_text(value.get("subspace_feature_backend"), limit=64)
+    if subspace_backend is not None:
+        summary["subspace_feature_backend"] = subspace_backend
+    sae_feature_subspace_groups = value.get("sae_feature_subspace_groups")
+    if isinstance(sae_feature_subspace_groups, Sequence) and not isinstance(
+        sae_feature_subspace_groups,
+        (str, bytes, bytearray),
+    ):
+        cleaned_groups: list[dict[str, Any]] = []
+        for item in sae_feature_subspace_groups[:6]:
+            if not isinstance(item, Mapping):
+                continue
+            row: dict[str, Any] = {}
+            for key, limit in (
+                ("bundle_key", 160),
+                ("subspace_family", 64),
+                ("provenance_class", 32),
+                ("span_kind", 64),
+            ):
+                text = _clean_text(item.get(key), limit=limit)
+                if text is not None:
+                    row[key] = text
+            for key in ("support", "anchor_strength"):
+                score = _clip_score(item.get(key))
+                if score is not None:
+                    row[key] = score
+            try:
+                if item.get("subspace_rank") is not None:
+                    row["subspace_rank"] = int(item.get("subspace_rank"))
+            except Exception:
+                pass
+            for key in ("member_feature_families", "operator_family_priors"):
+                raw_items = item.get(key)
+                if not isinstance(raw_items, Sequence) or isinstance(raw_items, (str, bytes, bytearray)):
+                    continue
+                cleaned_items = [
+                    text
+                    for text in (_clean_text(raw_item, limit=64) for raw_item in raw_items[:5])
+                    if text is not None
+                ]
+                if cleaned_items:
+                    row[key] = cleaned_items
+            if row:
+                cleaned_groups.append(row)
+        if cleaned_groups:
+            summary["sae_feature_subspace_groups"] = cleaned_groups
 
     for source_key, target_key, limit in (
         ("candidate_family_vetoes", "candidate_family_vetoes", 8),

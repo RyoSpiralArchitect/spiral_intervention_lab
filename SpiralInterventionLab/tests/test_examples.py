@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from importlib.util import find_spec
@@ -36,13 +38,18 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
     write_post_run_debrief_artifacts,
 )
 from SpiralInterventionLab.examples.summarize_activation_patch_jsonl import summarize_activation_patch_jsonl
+from SpiralInterventionLab.examples.compare_activation_patch_jsonl import compare_activation_patch_runs
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
 from SpiralInterventionLab.runtime.diagnostic_orchestration import (
     confirmed_gap_only_objective_rows,
     operator_family_shift_canonical_request,
     readout_gap_confirmation_seen_for_objective,
 )
-from SpiralInterventionLab.runtime.loop import _extract_diagnostic_requests, _extract_observer_check_request
+from SpiralInterventionLab.runtime.loop import (
+    _build_controller_selection_report,
+    _extract_diagnostic_requests,
+    _extract_observer_check_request,
+)
 from SpiralInterventionLab.runtime.sidecar import (
     ReadoutSidecarCapture,
     ReadoutSidecarSiteCapture,
@@ -1991,6 +1998,377 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
             )
         )
 
+    def test_strategy_hints_routes_response_curve_dead_end_to_non_kv_search(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime.decoder_control_mode = ""
+        runtime._kv_canary_eval_active = False
+        runtime._steps = 10
+        runtime.max_diagnostic_calls_per_run = 12
+        runtime._operator_certification_table = {}
+        runtime._operator_bridge_plan_table = {}
+        objective_key = "entity_insert:mira:source_body:near_reachable"
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "operator_recipe_expansion_mode": "two_stage_suppress_then_target_review",
+                "objective_bundle_key": objective_key,
+                "recorded_step": 8,
+                "inline_suppress_then_target_after_calibration_executed": True,
+                "inline_suppress_then_target_after_calibration_summary": {
+                    "inline_suppress_then_target_after_calibration_executed": True,
+                    "inline_suppress_then_target_after_calibration_rows": 2,
+                    "best_inline_suppress_then_target_role": "collapse_suppressor",
+                    "best_inline_suppress_then_target_target_mass_delta": 0.0,
+                    "best_inline_suppress_then_target_target_top20_hit_delta": 0,
+                },
+                "inline_suppress_then_target_after_calibration_rows": [
+                    {
+                        "objective_bundle_key": objective_key,
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                    {
+                        "objective_bundle_key": objective_key,
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                ],
+            },
+            {
+                "diagnostic": "activation_patch_candidate_review",
+                "operator_recipe_expansion_mode": "activation_patch_cap_release_response_curve",
+                "next_evidence_needed": "activation_patch_cap_release_response_curve_review_complete",
+                "objective_bundle_key": objective_key,
+                "bundle_key": objective_key,
+                "recorded_step": 9,
+                "activation_patch_cap_release_response_curve_executed": True,
+                "activation_patch_cap_release_response_curve_summary": {
+                    "activation_patch_cap_release_response_curve_executed": True,
+                    "activation_patch_cap_release_response_curve_rows": 3,
+                    "response_curve_has_target_lift": False,
+                    "response_curve_has_collapse": False,
+                    "best_activation_patch_response_curve_role": "dead_actuator",
+                    "best_activation_patch_response_curve_recipe_name": (
+                        "activation_patch_mlp_out_l11_source_term_token_a030_step200"
+                    ),
+                    "best_activation_patch_response_curve_target_mass_delta": 0.0,
+                    "best_activation_patch_response_curve_target_top20_hit_delta": 0,
+                },
+                "activation_patch_cap_release_response_curve_rows": [
+                    {
+                        "objective_bundle_key": objective_key,
+                        "recipe_name": "activation_patch_mlp_out_l11_source_term_token_a030_step200",
+                        "actuator_class": "dead_actuator",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                        "activation_patch_step_size": 0.2,
+                    }
+                ],
+            },
+        ]
+        runtime._latest_tokenize_terms_result = lambda: {}
+        runtime._feedback_terms = lambda keys: ["Mira", "budget"]
+        runtime._preprobe_readout_escape_state = lambda canary: (False, {})
+        runtime._intersect_terms = lambda raw_terms, allowed_terms: []
+        runtime._shot_mode_ready = lambda: False
+        runtime._recent_loop_break_attempt_count = lambda: 0
+        runtime._recent_stabilizing_only_count = lambda: 0
+        runtime._l4_term_nudge_cooldown_active = lambda: False
+        runtime._shot_candidate_edits = lambda **kwargs: []
+        runtime._kv_candidate_edits = lambda **kwargs: (
+            [],
+            {
+                "called": True,
+                "source": "unit_test",
+                "stage": "empty",
+                "input_hit_count": 0,
+                "output_count": 0,
+                "prune_reasons": [],
+                "target_terms": [],
+            },
+        )
+        runtime._annotate_effect_families = lambda edits: (edits, [])
+        runtime._attach_operator_certifications = lambda edits: edits
+        runtime._kv_retry_candidate_edits = lambda **kwargs: []
+        runtime._shot_probe_needed = lambda **kwargs: False
+        runtime._semantic_focus_summary = lambda **kwargs: {}
+        runtime._readout_escape_needed = lambda **kwargs: (False, "", {})
+        runtime._loop_severity_hint = lambda: "none"
+        runtime._ordered_missing_terms_for_phase = lambda **kwargs: []
+
+        hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+
+        self.assertTrue(hints["activation_patch_cap_release_response_curve_review_complete"])
+        self.assertTrue(hints["activation_patch_candidate_review_stale_after_response_curve"])
+        self.assertEqual(hints["next_evidence_needed"], "non_kv_operator_search")
+        self.assertEqual(hints["diagnostic_frontier_request"], "compare_extra_operator_diagnostics")
+        self.assertEqual(hints["diagnostic_frontier_next_evidence"], "non_kv_operator_search")
+        self.assertEqual(
+            hints["diagnostic_frontier_operator_recipe_expansion_mode"],
+            "non_kv_operator_search",
+        )
+        self.assertEqual(
+            hints["operator_family_shift_status"],
+            "needed_after_activation_patch_response_curve_no_target_lift",
+        )
+        blocked = hints.get("blocked_next_diagnostics", [])
+        self.assertTrue(
+            any(
+                row.get("status") == "stale_after_response_curve"
+                and row.get("reason") == "activation_patch_response_curve_completed_no_target_lift"
+                for row in blocked
+                if isinstance(row, dict)
+            )
+        )
+        self.assertFalse(
+            any(
+                isinstance(item, dict)
+                and item.get("diagnostic") == "activation_patch_candidate_review"
+                for item in hints.get("available_next_diagnostics", [])
+            )
+        )
+
+    def test_strategy_hints_preempts_activation_patch_review_when_subspace_evidence_available(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime.decoder_control_mode = ""
+        runtime._kv_canary_eval_active = False
+        runtime._steps = 9
+        runtime.max_diagnostic_calls_per_run = 12
+        runtime._operator_certification_table = {}
+        runtime._operator_bridge_plan_table = {}
+        objective_key = "entity_insert:mira:source_body:near_reachable"
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "operator_recipe_expansion_mode": "two_stage_suppress_then_target_review",
+                "objective_bundle_key": objective_key,
+                "recorded_step": 8,
+                "inline_suppress_then_target_after_calibration_executed": True,
+                "inline_suppress_then_target_after_calibration_summary": {
+                    "inline_suppress_then_target_after_calibration_executed": True,
+                    "inline_suppress_then_target_after_calibration_rows": 2,
+                    "best_inline_suppress_then_target_role": "collapse_suppressor",
+                    "best_inline_suppress_then_target_target_mass_delta": 0.0,
+                    "best_inline_suppress_then_target_target_top20_hit_delta": 0,
+                },
+                "inline_suppress_then_target_after_calibration_rows": [
+                    {
+                        "objective_bundle_key": objective_key,
+                        "non_kv_variant_role": "collapse_suppressor",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                    {
+                        "objective_bundle_key": objective_key,
+                        "non_kv_variant_role": "gap_closer_candidate",
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                    },
+                ],
+            },
+        ]
+        runtime._latest_tokenize_terms_result = lambda: {}
+        runtime._feedback_terms = lambda keys: ["Mira", "budget"]
+        runtime._preprobe_readout_escape_state = lambda canary: (False, {})
+        runtime._intersect_terms = lambda raw_terms, allowed_terms: []
+        runtime._shot_mode_ready = lambda: False
+        runtime._recent_loop_break_attempt_count = lambda: 0
+        runtime._recent_stabilizing_only_count = lambda: 0
+        runtime._l4_term_nudge_cooldown_active = lambda: False
+        runtime._shot_candidate_edits = lambda **kwargs: []
+        runtime._kv_candidate_edits = lambda **kwargs: (
+            [],
+            {
+                "called": True,
+                "source": "unit_test",
+                "stage": "empty",
+                "input_hit_count": 0,
+                "output_count": 0,
+                "prune_reasons": [],
+                "target_terms": [],
+            },
+        )
+        runtime._annotate_effect_families = lambda edits: (edits, [])
+        runtime._attach_operator_certifications = lambda edits: edits
+        runtime._kv_retry_candidate_edits = lambda **kwargs: []
+        runtime._shot_probe_needed = lambda **kwargs: False
+        runtime._semantic_focus_summary = lambda **kwargs: {}
+        runtime._readout_escape_needed = lambda **kwargs: (False, "", {})
+        runtime._loop_severity_hint = lambda: "none"
+        runtime._ordered_missing_terms_for_phase = lambda **kwargs: []
+
+        hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={
+                "sae_feature_subspace_groups": [
+                    {
+                        "bundle_key": objective_key,
+                        "subspace_family": "source_body_entity_subspace",
+                        "support": 1.2,
+                        "operator_family_priors": [
+                            "activation_patch_source_to_boundary",
+                            "resid_or_readout_boundary",
+                        ],
+                    }
+                ],
+            },
+        )
+
+        self.assertTrue(hints["activation_patch_frontier_preemption"])
+        self.assertTrue(hints["diagnostic_budget_reserved_for_activation_patch_review"])
+        self.assertEqual(hints["diagnostic_frontier_request"], "activation_patch_candidate_review")
+        request = hints["diagnostic_frontier_canonical_request"]
+        self.assertTrue(request["frontier_preemption"])
+        self.assertFalse(request["production_apply_allowed"])
+        activation_requests = [
+            item
+            for item in hints.get("available_next_diagnostics", [])
+            if isinstance(item, dict)
+            and isinstance(item.get("request"), dict)
+            and item["request"].get("diagnostic") == "activation_patch_candidate_review"
+        ]
+        self.assertTrue(activation_requests)
+        self.assertEqual(activation_requests[0]["priority"], 1)
+
+    def test_activation_patch_materializer_uses_compact_subspace_seed_rows(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        objective_key = "entity_insert:mira:source_body:72:73"
+
+        class _Token:
+            mode = "last"
+
+        class _Target:
+            kind = "activation"
+            layer = 11
+            site = "resid_post"
+            token = _Token()
+
+        class _Surface:
+            surface_id = "s_resid_post_l11_last"
+            target = _Target()
+            allow_ops = ("activation_patch",)
+
+        runtime.surface_catalog = [_Surface()]
+        runtime._diagnostic_results = []
+        runtime._latest_entity_insertion_candidate_blueprints = lambda request: [
+            {
+                "candidate_key": objective_key,
+                "objective_term": "Mira",
+                "source_provenance": "source_body",
+                "source_span": {
+                    "start": 72,
+                    "end": 73,
+                    "provenance_class": "source_body",
+                    "text": "Mira",
+                },
+            }
+        ]
+        runtime._activation_patch_trial_edit_from_candidate = lambda candidate, *, trial_contract: None
+
+        rows = runtime._activation_patch_rows_from_entity_blueprints(
+            {"objective_bundle_key": objective_key},
+            packet_context={
+                "strategy_hints": {
+                    "activation_patch_subspace_evidence_objectives": [
+                        {
+                            "bundle_key": "kv_pair:Mira:source_body:72:73",
+                            "subspace_family": "source_body_entity_subspace",
+                            "support": 1.2,
+                            "operator_family_priors": ["activation_patch_source_to_boundary"],
+                        }
+                    ]
+                }
+            },
+            max_candidates=1,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["activation_patch_subspace_consistent_seed"])
+        self.assertEqual(rows[0]["activation_patch_subspace_family"], "source_body_entity_subspace")
+        self.assertEqual(rows[0]["activation_patch_subspace_support"], 1.2)
+
+    def test_activation_patch_proxy_reliability_ledger_downgrades_dead_proxy_family(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        objective_key = "entity_insert:mira:source_body:near_reachable"
+        base_row = {
+            "diagnostic_family": "activation_patch",
+            "objective_bundle_key": objective_key,
+            "intended_term": "Mira",
+            "activation_patch_site": "mlp_out",
+            "activation_patch_layer": 11,
+            "activation_patch_source_localization": "source_term_token",
+            "activation_patch_first_order_response_proxy": 0.2,
+            "activation_patch_response_effect_role": "no_response",
+            "attribution_reliability_status": "dead_response_after_positive_proxy",
+            "actual_delta_class": "dead_actuator",
+            "target_mass_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "production_apply_allowed": False,
+        }
+        runtime._diagnostic_results = [
+            {
+                "diagnostic": "activation_patch_candidate_review",
+                "activation_patch_cap_release_response_curve_rows": [
+                    dict(base_row, recipe_name="a"),
+                    dict(base_row, recipe_name="b", activation_patch_step_size=0.2),
+                ],
+            }
+        ]
+
+        ledger = runtime._activation_patch_proxy_reliability_ledger()
+
+        self.assertEqual(ledger[0]["calibration_status"], "candidate_hint_only_unreliable")
+        self.assertEqual(ledger[0]["dead_response_after_positive_proxy_count"], 2)
+        unreliable_keys = {
+            row["activation_patch_proxy_reliability_key"]
+            for row in ledger
+            if row["calibration_status"] == "candidate_hint_only_unreliable"
+        }
+        future_row = HookedTransformerWorkerRuntime._apply_activation_patch_proxy_calibration(
+            dict(base_row, recipe_name="future"),
+            unreliable_keys=unreliable_keys,
+        )
+        self.assertEqual(
+            future_row["activation_patch_proxy_calibration_status"],
+            "candidate_hint_only_unreliable",
+        )
+        self.assertEqual(future_row["activation_patch_proxy_selector_permission"], "candidate_hint_only")
+        self.assertFalse(future_row["production_apply_allowed"])
+
+    def test_controller_selection_report_surfaces_activation_patch_preemption_and_reliability(self):
+        objective_key = "entity_insert:mira:source_body:72:73"
+        packet = {
+            "strategy_hints": {
+                "diagnostic_frontier_bundle_key": objective_key,
+                "activation_patch_subspace_evidence_count": 2,
+                "activation_patch_frontier_preemption": True,
+                "activation_patch_frontier_preemption_reason": (
+                    "SAE/subspace evidence is available and activation_patch review has not yet been measured"
+                ),
+                "activation_patch_frontier_preemption_objective_bundle_key": objective_key,
+                "activation_patch_proxy_reliability_unreliable_count": 1,
+                "activation_patch_candidate_hint_only_unreliable_keys": ["mira|mlp_out|L11|source_term_token"],
+            }
+        }
+
+        report = _build_controller_selection_report(packet, {"decision": "noop", "meta": {}})
+
+        self.assertEqual(report["activation_patch_subspace_evidence_count"], 2)
+        self.assertTrue(report["activation_patch_frontier_preemption"])
+        self.assertEqual(report["activation_patch_frontier_preemption_objective_bundle_key"], objective_key)
+        self.assertEqual(report["activation_patch_proxy_reliability_unreliable_count"], 1)
+        self.assertEqual(
+            report["activation_patch_candidate_hint_only_unreliable_keys"],
+            ["mira|mlp_out|L11|source_term_token"],
+        )
+
     def test_constrained_rewrite_observer_check_has_lexical_fallback_without_critic(self):
         env = SpiralEasyConstrainedRewriteEnv()
         env.reset(7)
@@ -2089,6 +2467,18 @@ class TestExamples(unittest.TestCase):
                         "actuator_class": "dead_actuator",
                         "target_mass_delta": 0.0,
                         "target_top20_hit_delta": 0,
+                        "target_piece": " Mira",
+                        "target_piece_token_id": 43000,
+                        "target_piece_binding_report": {
+                            "objective_term": "Mira",
+                            "candidate_target_pieces": ["M", " Mira"],
+                            "candidate_target_token_ids": [44, 43000],
+                            "chosen_target_piece": " Mira",
+                            "chosen_target_token_id": 43000,
+                            "binding_reason": "rank_delta_then_edited_rank",
+                            "binding_source": "first_token_target_readout_metrics",
+                            "binding_stability_status": "divergent",
+                        },
                         "target_top20_threshold_gap_delta": float("nan"),
                         "recipe_name": "activation_patch_resid_post_l11_source_term_token_a030",
                     },
@@ -2117,6 +2507,12 @@ class TestExamples(unittest.TestCase):
         self.assertEqual(summary["by_actual_delta_class"]["dead_actuator"], 1)
         self.assertEqual(summary["by_actual_delta_class"]["readout_gap_movement"], 1)
         self.assertEqual(summary["by_site"]["mlp_out"], 1)
+        self.assertEqual(summary["by_target_piece_binding_status"]["divergent"], 1)
+        self.assertEqual(summary["target_piece_binding_reports"][0]["target_piece_token_id"], 43000)
+        self.assertEqual(
+            summary["target_piece_binding_reports"][0]["binding_report"]["chosen_target_piece"],
+            " Mira",
+        )
         self.assertIsNone(summary["best_rows"]["gap_delta"][-1]["gap_delta"])
         self.assertEqual(summary["best_rows"]["gap_delta"][0]["gap_delta"], -0.002)
         resid_post_row = next(row for row in summary["matrix"] if row["site"] == "resid_post")
@@ -2124,6 +2520,160 @@ class TestExamples(unittest.TestCase):
         self.assertAlmostEqual(resid_post_row["max_blend_delta_norm"], 0.0015)
         mlp_row = next(row for row in summary["matrix"] if row["site"] == "mlp_out")
         self.assertEqual(mlp_row["max_step_size"], 0.08)
+
+    def test_activation_patch_jsonl_compare_pairs_shared_recipe_keys(self):
+        def write_run(path: Path, *, model: str, actual_delta_class: str, target_mass: float, subspace: bool):
+            events = [
+                {
+                    "event": "controller_provider_attempt",
+                    "step": 0,
+                    "provider": "fake",
+                    "model": model,
+                    "parse_ok": True,
+                },
+                {
+                    "event": "controller_diagnostic_request",
+                    "step": 1,
+                    "diagnostic": "activation_patch_candidate_review",
+                    "next_evidence_needed": "activation_patch_candidate_review",
+                },
+                {
+                    "event": "controller_diagnostic_result",
+                    "activation_patch_candidate_pool": [
+                        {
+                            "diagnostic_family": "activation_patch",
+                            "activation_patch_op_kind": "activation_patch",
+                            "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "actuator_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "intended_term": "Mira",
+                            "target_piece": " Mira",
+                            "activation_patch_site": "mlp_out",
+                            "activation_patch_layer": 11,
+                            "activation_patch_source_localization": "source_term_token",
+                            "operator_axis": "activation_patch_cap_release_response_curve",
+                            "activation_patch_alpha": 0.03,
+                            "activation_patch_step_size": 0.03,
+                            "activation_patch_seed_source": "observed_gap_carrier",
+                            "activation_patch_seed_recipe_name": "seed_mlp",
+                            "attribution_reliability_status": "dead_response_after_positive_proxy",
+                            "activation_patch_subspace_consistent_seed": subspace,
+                            "activation_patch_subspace_family": "source_body_entity_subspace"
+                            if subspace
+                            else None,
+                            "activation_patch_response_effect_role": "gap_carrier"
+                            if actual_delta_class == "rank_carrier"
+                            else "no_response",
+                            "actual_delta_class": actual_delta_class,
+                            "target_mass_delta": target_mass,
+                            "target_top20_hit_delta": 0,
+                            "target_top20_threshold_gap_delta": -0.002
+                            if actual_delta_class == "rank_carrier"
+                            else None,
+                            "recipe_name": "activation_patch_mlp_out_l11_source_term_token_a030",
+                        }
+                    ],
+                },
+            ]
+            path.write_text("\n".join(json.dumps(event) for event in events) + "\n", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left = Path(tmpdir) / "left.jsonl"
+            right = Path(tmpdir) / "right.jsonl"
+            write_run(left, model="gpt-5.5", actual_delta_class="rank_carrier", target_mass=0.000001, subspace=False)
+            write_run(right, model="claude-opus-4-8", actual_delta_class="dead_actuator", target_mass=0.0, subspace=True)
+
+            comparison = compare_activation_patch_runs(
+                [left],
+                [right],
+                left_label="gpt55",
+                right_label="opus48",
+            )
+
+        self.assertEqual(comparison["left"]["provider_parse_ok_count"], 1)
+        self.assertEqual(comparison["right"]["provider_models"]["claude-opus-4-8"], 1)
+        self.assertEqual(comparison["shared_recipe_key_count"], 1)
+        paired = comparison["paired_recipe_comparison"][0]
+        self.assertEqual(paired["key"]["objective_bundle_key"], "entity_insert:mira:source_body:near_reachable")
+        self.assertEqual(paired["key"]["intended_term"], "Mira")
+        self.assertEqual(paired["key"]["target_piece"], " Mira")
+        self.assertEqual(paired["key"]["seed_source"], "observed_gap_carrier")
+        self.assertEqual(paired["key"]["seed_recipe_name"], "seed_mlp")
+        self.assertEqual(paired["key"]["proxy_reliability_status"], "dead_response_after_positive_proxy")
+        self.assertEqual(paired["gpt55"]["by_actual_delta_class"]["rank_carrier"], 1)
+        self.assertEqual(paired["opus48"]["by_actual_delta_class"]["dead_actuator"], 1)
+        self.assertEqual(paired["delta"]["subspace_consistent_rows"], 1)
+
+    def test_activation_patch_jsonl_compare_reports_target_piece_divergence(self):
+        def write_run(path: Path, *, target_piece: str, actual_delta_class: str):
+            event = {
+                "event": "controller_diagnostic_result",
+                "activation_patch_candidate_pool": [
+                    {
+                        "diagnostic_family": "activation_patch",
+                        "activation_patch_op_kind": "activation_patch",
+                        "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "actuator_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                        "intended_term": "Mira",
+                        "target_piece": target_piece,
+                        "target_piece_token_id": 43000 if target_piece == " budget" else 44,
+                        "activation_patch_site": "mlp_out",
+                        "activation_patch_layer": 11,
+                        "activation_patch_source_localization": "source_term_token",
+                        "operator_axis": "activation_patch_candidate_review",
+                        "activation_patch_alpha": 0.03,
+                        "activation_patch_step_size": 0.03,
+                        "activation_patch_response_effect_role": "gap_carrier",
+                        "actual_delta_class": actual_delta_class,
+                        "target_mass_delta": 0.0,
+                        "target_top20_hit_delta": 0,
+                        "target_top20_threshold_gap_delta": -0.001,
+                        "recipe_name": "activation_patch_mlp_out_l11_source_term_token_a030",
+                    }
+                ],
+            }
+            path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            left = Path(tmpdir) / "left.jsonl"
+            right = Path(tmpdir) / "right.jsonl"
+            write_run(left, target_piece=" budget", actual_delta_class="rank_carrier")
+            write_run(right, target_piece="M", actual_delta_class="dead_actuator")
+
+            comparison = compare_activation_patch_runs(
+                [left],
+                [right],
+                left_label="gpt55",
+                right_label="opus48",
+            )
+
+        self.assertEqual(comparison["strict_shared_recipe_key_count"], 0)
+        self.assertEqual(comparison["relaxed_shared_recipe_key_count"], 1)
+        relaxed = comparison["relaxed_paired_recipe_comparison"][0]
+        self.assertEqual(relaxed["key"]["site"], "mlp_out")
+        self.assertEqual(relaxed["gpt55"]["by_actual_delta_class"]["rank_carrier"], 1)
+        self.assertEqual(relaxed["opus48"]["by_actual_delta_class"]["dead_actuator"], 1)
+        divergence = comparison["target_piece_divergence_report"][0]
+        self.assertEqual(divergence["gpt55"]["target_piece_counts"], {" budget": 1})
+        self.assertEqual(divergence["opus48"]["target_piece_counts"], {"M": 1})
+        self.assertEqual(divergence["gpt55"]["target_piece_token_id_counts"], {"43000": 1})
+        self.assertEqual(divergence["opus48"]["target_piece_token_id_counts"], {"44": 1})
+        self.assertEqual(divergence["gpt55"]["seed_source_counts"], {"direct_candidate": 1})
+        self.assertFalse(divergence["divergence"]["target_piece_sets_match"])
+        self.assertFalse(divergence["divergence"]["target_piece_token_id_sets_match"])
+
+    def test_activation_patch_jsonl_compare_supports_direct_script_help(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        script = repo_root / "SpiralInterventionLab" / "examples" / "compare_activation_patch_jsonl.py"
+        completed = subprocess.run(
+            [sys.executable, str(script), "--help"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Compare activation_patch diagnostic rows", completed.stdout)
 
     def test_build_hooked_transformer_worker_runtime_smoke(self):
         model, codec = self._make_model_and_codec()
@@ -2349,13 +2899,64 @@ class TestExamples(unittest.TestCase):
         hints = normalize_readout_sidecar_hints(analyzer(capture))
 
         self.assertEqual(hints["feature_backend"], "sae_sidecar")
-        self.assertEqual(hints["sae_status"], "scaffold_feature_emitter_no_saelens_runtime")
+        self.assertEqual(hints["sae_status"], "scaffold_subspace_feature_emitter_no_saelens_runtime")
         self.assertGreaterEqual(len(hints["sae_feature_hints"]), 1)
         self.assertEqual(hints["sae_feature_hints"][0]["operator_family_prior"], "resid_or_readout_boundary")
         self.assertIn(
             "activation_patch_source_to_boundary",
             hints["sae_feature_hints"][0]["operator_family_priors"],
         )
+        self.assertEqual(hints["subspace_feature_backend"], "sasa_inspired_scaffold")
+        self.assertGreaterEqual(len(hints["sae_feature_subspace_groups"]), 1)
+        self.assertEqual(
+            hints["sae_feature_subspace_groups"][0]["subspace_family"],
+            "source_body_entity_subspace",
+        )
+        self.assertIn(
+            "activation_patch_source_to_boundary",
+            hints["sae_feature_subspace_groups"][0]["operator_family_priors"],
+        )
+
+    def test_activation_patch_response_guidance_adds_proxy_reliability_evidence(self):
+        row = {
+            "diagnostic_family": "activation_patch",
+            "activation_patch_site": "mlp_out",
+            "activation_patch_layer": 11,
+            "activation_patch_source_localization": "source_term_token",
+            "activation_patch_source_target_cosine": 0.1,
+            "activation_patch_source_target_delta_norm": 0.8,
+            "activation_patch_blend_delta_norm": 0.12,
+            "activation_patch_step_size": 0.2,
+            "target_top20_threshold_gap_delta": -0.001,
+            "target_piece_logit_delta": 0.0005,
+            "target_mass_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "focus_rank_delta": 3,
+            "production_apply_allowed": False,
+            "policy_candidate_ready": False,
+        }
+
+        annotated = HookedTransformerWorkerRuntime._annotate_activation_patch_response_guidance(row)
+
+        self.assertTrue(annotated["response_guided_activation_patch_candidate_review"])
+        self.assertEqual(annotated["activation_patch_response_guidance_version"], "proxy_v1")
+        self.assertEqual(annotated["activation_patch_response_effect_role"], "gap_carrier")
+        self.assertLess(annotated["activation_patch_predicted_gap_delta_proxy"], 0.0)
+        self.assertIn(
+            annotated["attribution_reliability_status"],
+            {
+                "dead_response_after_positive_proxy",
+                "low_proxy_reliability",
+                "medium_proxy_reliability",
+                "high_proxy_reliability",
+            },
+        )
+        self.assertEqual(
+            annotated["activation_patch_response_fingerprint"]["source_localization"],
+            "source_term_token",
+        )
+        self.assertFalse(annotated["production_apply_allowed"])
+        self.assertFalse(annotated["policy_candidate_ready"])
 
     def test_create_readout_sidecar_analyzer_supports_off_mode(self):
         self.assertIsNone(create_readout_sidecar_analyzer("off"))

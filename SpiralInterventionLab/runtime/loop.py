@@ -1361,6 +1361,25 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         if isinstance(analyzer_sae_feature_hints, Sequence) and not isinstance(analyzer_sae_feature_hints, (str, bytes, bytearray))
         else 0
     )
+    analyzer_sae_subspace_groups = analyzer_hints.get("sae_feature_subspace_groups")
+    analyzer_sae_subspace_group_count = (
+        len(analyzer_sae_subspace_groups)
+        if isinstance(analyzer_sae_subspace_groups, Sequence)
+        and not isinstance(analyzer_sae_subspace_groups, (str, bytes, bytearray))
+        else 0
+    )
+    activation_patch_subspace_evidence_count = strategy_hints.get("activation_patch_subspace_evidence_count")
+    activation_patch_proxy_unreliable_count = strategy_hints.get(
+        "activation_patch_proxy_reliability_unreliable_count"
+    )
+    activation_patch_unreliable_keys = strategy_hints.get("activation_patch_candidate_hint_only_unreliable_keys")
+    activation_patch_frontier_preemption = strategy_hints.get("activation_patch_frontier_preemption")
+    activation_patch_frontier_preemption_reason = strategy_hints.get(
+        "activation_patch_frontier_preemption_reason"
+    )
+    activation_patch_frontier_preemption_objective = strategy_hints.get(
+        "activation_patch_frontier_preemption_objective_bundle_key"
+    )
     bridge_plan_objective_bundle_key = (
         meta.get("bridge_plan_objective_bundle_key")
         or strategy_hints.get("bridge_plan_objective_bundle_key")
@@ -1486,6 +1505,36 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         if analyzer_sae_status in (None, "")
         else str(analyzer_sae_status),
         "readout_analyzer_sae_feature_hint_count": int(analyzer_sae_feature_hint_count),
+        "readout_analyzer_sae_subspace_group_count": int(analyzer_sae_subspace_group_count),
+        "activation_patch_subspace_evidence_count": (
+            None
+            if activation_patch_subspace_evidence_count is None
+            else int(activation_patch_subspace_evidence_count or 0)
+        ),
+        "activation_patch_frontier_preemption": (
+            None if activation_patch_frontier_preemption is None else bool(activation_patch_frontier_preemption)
+        ),
+        "activation_patch_frontier_preemption_reason": (
+            None
+            if activation_patch_frontier_preemption_reason in (None, "")
+            else str(activation_patch_frontier_preemption_reason)
+        ),
+        "activation_patch_frontier_preemption_objective_bundle_key": (
+            None
+            if activation_patch_frontier_preemption_objective in (None, "")
+            else str(activation_patch_frontier_preemption_objective)
+        ),
+        "activation_patch_proxy_reliability_unreliable_count": (
+            None
+            if activation_patch_proxy_unreliable_count is None
+            else int(activation_patch_proxy_unreliable_count or 0)
+        ),
+        "activation_patch_candidate_hint_only_unreliable_keys": (
+            [str(item) for item in activation_patch_unreliable_keys[:6] if str(item)]
+            if isinstance(activation_patch_unreliable_keys, Sequence)
+            and not isinstance(activation_patch_unreliable_keys, (str, bytes, bytearray))
+            else []
+        ),
         "gate_report_frontier_bundle_key": None if helper_frontier_bundle_key in (None, "") else str(helper_frontier_bundle_key),
         "bridge_plan_objective_bundle_key": (
             None if bridge_plan_objective_bundle_key in (None, "") else str(bridge_plan_objective_bundle_key)

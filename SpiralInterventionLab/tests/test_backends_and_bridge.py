@@ -20,7 +20,7 @@ from SpiralInterventionLab.bridge.controller_clients import (
     load_prompt_asset,
 )
 from SpiralInterventionLab.controllers.base import ControllerProvider, ControllerProviderRequest, ControllerProviderResponse
-from SpiralInterventionLab.controllers.providers import OpenAIControllerProvider
+from SpiralInterventionLab.controllers.providers import AnthropicControllerProvider, OpenAIControllerProvider
 from SpiralInterventionLab.runtime.baselines import run_b1
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
 from SpiralInterventionLab.runtime.schema import parse_observation_packet
@@ -141,6 +141,21 @@ class _FakeOpenAIClient:
         self.responses = _FakeOpenAIResponsesAPI()
 
 
+class _FakeAnthropicMessagesAPI:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        block = type("FakeAnthropicBlock", (), {"text": "{\"version\":\"0.1\",\"decision\":\"noop\"}"})()
+        return type("FakeAnthropicResponse", (), {"content": [block], "usage": {}})()
+
+
+class _FakeAnthropicClient:
+    def __init__(self) -> None:
+        self.messages = _FakeAnthropicMessagesAPI()
+
+
 class TestBackendsAndBridge(unittest.TestCase):
     def test_provider_controller_client_retries_until_valid_json(self):
         provider = _FakeProvider("not json", "```json\n{\"version\":\"0.1\",\"decision\":\"noop\"}\n```")
@@ -194,6 +209,26 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(provider.requests[0].max_output_tokens, 1600)
         self.assertEqual(client.latest_trace()["effective_max_output_tokens"], 1600)
+
+    def test_provider_controller_client_uses_claude5_output_floor(self):
+        provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}", model_name="claude-sonnet-5")
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, max_output_tokens=800)
+
+        client.invoke({"step": 1})
+
+        self.assertEqual(provider.requests[0].max_output_tokens, 4096)
+        self.assertEqual(client.latest_trace()["effective_max_output_tokens"], 4096)
+
+    def test_provider_controller_client_keeps_default_budget_for_version_first_claude(self):
+        provider = _FakeProvider(
+            "{\"version\":\"0.1\",\"decision\":\"noop\"}",
+            model_name="claude-3-5-sonnet-20241022",
+        )
+        client = ProviderControllerClient(provider, system_prompt="sys", max_attempts=1, max_output_tokens=800)
+
+        client.invoke({"step": 1})
+
+        self.assertEqual(provider.requests[0].max_output_tokens, 800)
 
     def test_provider_controller_client_compact_packet_view_summarizes_payload(self):
         provider = _FakeProvider("{\"version\":\"0.1\",\"decision\":\"noop\"}")
@@ -1175,6 +1210,69 @@ class TestBackendsAndBridge(unittest.TestCase):
 
         self.assertEqual(client.responses.calls[0]["text"]["verbosity"], "medium")
         self.assertIn("temperature", client.responses.calls[0])
+
+    def test_anthropic_controller_provider_omits_temperature_for_opus48(self):
+        client = _FakeAnthropicClient()
+        provider = AnthropicControllerProvider(model="claude-opus-4-8", client=client)
+
+        provider.complete(
+            ControllerProviderRequest(
+                system_prompt="sys",
+                payload={"step": 1},
+                expect_json=True,
+                temperature=0.2,
+            )
+        )
+
+        self.assertNotIn("temperature", client.messages.calls[0])
+        self.assertEqual(client.messages.calls[0]["model"], "claude-opus-4-8")
+
+    def test_anthropic_controller_provider_keeps_temperature_for_older_models(self):
+        client = _FakeAnthropicClient()
+        provider = AnthropicControllerProvider(model="claude-opus-4-7", client=client)
+
+        provider.complete(
+            ControllerProviderRequest(
+                system_prompt="sys",
+                payload={"step": 1},
+                expect_json=True,
+                temperature=0.2,
+            )
+        )
+
+        self.assertEqual(client.messages.calls[0]["temperature"], 0.2)
+
+    def test_anthropic_controller_provider_omits_temperature_for_claude5_family(self):
+        for model in ("claude-sonnet-5", "claude-fable-5", "claude-fable-5-20260301"):
+            client = _FakeAnthropicClient()
+            provider = AnthropicControllerProvider(model=model, client=client)
+
+            provider.complete(
+                ControllerProviderRequest(
+                    system_prompt="sys",
+                    payload={"step": 1},
+                    expect_json=True,
+                    temperature=0.2,
+                )
+            )
+
+            self.assertNotIn("temperature", client.messages.calls[0], model)
+
+    def test_anthropic_controller_provider_keeps_temperature_for_version_first_names(self):
+        for model in ("claude-3-5-sonnet-20241022", "claude-haiku-4-5-20251001"):
+            client = _FakeAnthropicClient()
+            provider = AnthropicControllerProvider(model=model, client=client)
+
+            provider.complete(
+                ControllerProviderRequest(
+                    system_prompt="sys",
+                    payload={"step": 1},
+                    expect_json=True,
+                    temperature=0.2,
+                )
+            )
+
+            self.assertEqual(client.messages.calls[0]["temperature"], 0.2, model)
 
     def test_local_backend_worker_runtime_packet_is_schema_shaped(self):
         runtime = LocalBackendWorkerRuntime(

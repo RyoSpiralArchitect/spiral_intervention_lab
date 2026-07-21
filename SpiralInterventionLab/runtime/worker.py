@@ -5,7 +5,7 @@ import math
 import re
 from collections.abc import Sequence as SequenceABC
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Collection, Mapping, Sequence
+from typing import Any, Callable, Collection, Iterable, Mapping, Sequence
 
 import torch
 
@@ -6453,6 +6453,67 @@ class HookedTransformerWorkerRuntime:
             if suggested_bundle_key not in (None, ""):
                 hints["readout_sidecar_suggested_bundle_key"] = str(suggested_bundle_key)
                 hints["readout_analyzer_suggested_bundle_key"] = str(suggested_bundle_key)
+            raw_subspace_groups = readout_sidecar_hints.get("sae_feature_subspace_groups")
+            if isinstance(raw_subspace_groups, SequenceABC) and not isinstance(
+                raw_subspace_groups,
+                (str, bytes, bytearray),
+            ):
+                activation_patch_subspace_group_count = 0
+                activation_patch_subspace_evidence_rows: list[dict[str, Any]] = []
+                for group in raw_subspace_groups:
+                    if not isinstance(group, Mapping):
+                        continue
+                    priors = group.get("operator_family_priors")
+                    if isinstance(priors, SequenceABC) and not isinstance(
+                        priors,
+                        (str, bytes, bytearray),
+                    ):
+                        if any("activation_patch" in str(prior) for prior in priors):
+                            activation_patch_subspace_group_count += 1
+                            bundle_key = str(group.get("bundle_key") or "")
+                            compact_row = {
+                                "bundle_key": bundle_key,
+                                "subspace_family": group.get("subspace_family"),
+                                "support": group.get("support"),
+                                "operator_family_priors": [str(prior) for prior in list(priors)[:4]],
+                            }
+                            compact_row = {
+                                key: value
+                                for key, value in compact_row.items()
+                                if value not in (None, "", [])
+                            }
+                            if compact_row:
+                                activation_patch_subspace_evidence_rows.append(compact_row)
+                hints["readout_analyzer_sae_subspace_group_count"] = len(raw_subspace_groups)
+                hints["activation_patch_subspace_evidence_count"] = activation_patch_subspace_group_count
+                hints["activation_patch_subspace_evidence_available"] = bool(
+                    activation_patch_subspace_group_count > 0
+                )
+                if activation_patch_subspace_evidence_rows:
+                    hints["activation_patch_subspace_evidence_objectives"] = [
+                        dict(row) for row in activation_patch_subspace_evidence_rows[:6]
+                    ]
+                    hints["activation_patch_subspace_evidence_bundle_keys"] = [
+                        str(row.get("bundle_key"))
+                        for row in activation_patch_subspace_evidence_rows[:6]
+                        if str(row.get("bundle_key") or "")
+                    ]
+        activation_patch_proxy_reliability_ledger = self._activation_patch_proxy_reliability_ledger()
+        activation_patch_unreliable_proxy_keys = {
+            str(row.get("activation_patch_proxy_reliability_key") or "")
+            for row in activation_patch_proxy_reliability_ledger
+            if str(row.get("calibration_status") or "") == "candidate_hint_only_unreliable"
+        }
+        if activation_patch_proxy_reliability_ledger:
+            hints["activation_patch_proxy_reliability_ledger"] = [
+                dict(row) for row in activation_patch_proxy_reliability_ledger[:6]
+            ]
+            hints["activation_patch_proxy_reliability_unreliable_count"] = len(
+                activation_patch_unreliable_proxy_keys
+            )
+            hints["activation_patch_candidate_hint_only_unreliable_keys"] = sorted(
+                key for key in activation_patch_unreliable_proxy_keys if key
+            )[:6]
         if semantic_focus:
             hints.update(semantic_focus)
         if controller_focus_term:
@@ -7516,6 +7577,21 @@ class HookedTransformerWorkerRuntime:
                         "without target mass/top20 lift"
                     )
                     if objective_key:
+                        activation_patch_review_already_seen = any(
+                            isinstance(result, Mapping)
+                            and str(result.get("diagnostic") or "") == "activation_patch_candidate_review"
+                            and str(
+                                result.get("objective_bundle_key")
+                                or result.get("bundle_key")
+                                or ""
+                            )
+                            == objective_key
+                            for result in self._diagnostic_results
+                        )
+                        activation_patch_preempt = bool(
+                            int(hints.get("activation_patch_subspace_evidence_count", 0) or 0) > 0
+                            and not activation_patch_review_already_seen
+                        )
                         activation_patch_request = {
                             "diagnostic": "activation_patch_candidate_review",
                             "bundle_key": objective_key,
@@ -7530,10 +7606,31 @@ class HookedTransformerWorkerRuntime:
                             "production_apply_allowed": False,
                             "policy_candidate_ready": False,
                         }
+                        if activation_patch_preempt:
+                            activation_patch_request.update(
+                                {
+                                    "frontier_preemption": True,
+                                    "frontier_preemption_reason": (
+                                        "sae_subspace_evidence_available_and_suppressor_saturated"
+                                    ),
+                                    "diagnostic_budget_reserved": True,
+                                }
+                            )
                         hints["activation_patch_candidate_review_recommended"] = True
                         hints["activation_patch_candidate_review_canonical_request"] = dict(
                             activation_patch_request
                         )
+                        if activation_patch_preempt:
+                            hints["activation_patch_frontier_preemption"] = True
+                            hints["activation_patch_frontier_preemption_reason"] = (
+                                "SAE/subspace evidence is available and activation_patch review has not "
+                                "yet been measured for this objective"
+                            )
+                            hints["activation_patch_frontier_preemption_objective_bundle_key"] = (
+                                objective_key
+                            )
+                            hints["activation_patch_frontier_preemption_requires_controller_choice"] = True
+                            hints["diagnostic_budget_reserved_for_activation_patch_review"] = True
                         hints["diagnostic_frontier_bundle_key"] = objective_key
                         hints["diagnostic_frontier_request"] = "activation_patch_candidate_review"
                         hints["diagnostic_frontier_next_evidence"] = "activation_patch_candidate_review"
@@ -7548,7 +7645,7 @@ class HookedTransformerWorkerRuntime:
                                 "suppress-then-target saturated; activation_patch blend is the next "
                                 "diagnostic runtime operator family"
                             ),
-                            priority=2,
+                            priority=1 if activation_patch_preempt else 2,
                         )
                         saturated_request = {
                             "diagnostic": "compare_extra_operator_diagnostics",
@@ -7606,6 +7703,195 @@ class HookedTransformerWorkerRuntime:
                             hints["diagnostic_frontier_blocked_reason"] = (
                                 "suppress_then_target_after_calibration_saturated_no_target_lift"
                             )
+        latest_activation_patch_response_curve_review = next(
+            (
+                result
+                for result in reversed(self._diagnostic_results)
+                if isinstance(result, Mapping)
+                and (
+                    str(result.get("operator_recipe_expansion_mode") or "")
+                    == "activation_patch_cap_release_response_curve"
+                    or str(result.get("next_evidence_needed") or "")
+                    == "activation_patch_cap_release_response_curve_review_complete"
+                    or isinstance(
+                        result.get("activation_patch_cap_release_response_curve_summary"),
+                        Mapping,
+                    )
+                )
+            ),
+            None,
+        )
+        if isinstance(latest_activation_patch_response_curve_review, Mapping):
+            response_curve_summary = latest_activation_patch_response_curve_review.get(
+                "activation_patch_cap_release_response_curve_summary"
+            )
+            if not isinstance(response_curve_summary, Mapping):
+                response_curve_summary = {}
+            response_curve_step = _hint_int(
+                latest_activation_patch_response_curve_review.get("recorded_step"),
+                -1,
+            )
+            non_kv_after_response_curve = any(
+                isinstance(result, Mapping)
+                and _hint_int(result.get("recorded_step"), -1) >= response_curve_step
+                and (
+                    str(result.get("operator_recipe_expansion_mode") or "")
+                    in {
+                        "non_kv_operator_search",
+                        "non_kv_variant_or_two_stage_design",
+                        "two_stage_suppress_then_target_review",
+                        "anti_attractor_suppression_calibration_sweep",
+                    }
+                    or bool(result.get("mini_non_kv_first_pass_executed", False))
+                )
+                for result in self._diagnostic_results
+                if response_curve_step >= 0
+            )
+            response_curve_executed = bool(
+                response_curve_summary.get("activation_patch_cap_release_response_curve_executed", False)
+                or latest_activation_patch_response_curve_review.get(
+                    "activation_patch_cap_release_response_curve_executed",
+                    False,
+                )
+            )
+            response_curve_has_target_lift = bool(
+                response_curve_summary.get("response_curve_has_target_lift", False)
+            )
+            response_curve_has_collapse = bool(
+                response_curve_summary.get("response_curve_has_collapse", False)
+            )
+            response_curve_has_observed_gap_seed = bool(
+                response_curve_summary.get(
+                    "response_curve_has_observed_gap_seed",
+                    not bool(response_curve_summary.get("activation_patch_seed_discovery_executed", False)),
+                )
+            )
+            if (
+                response_curve_executed
+                and response_curve_has_observed_gap_seed
+                and not response_curve_has_target_lift
+                and not response_curve_has_collapse
+                and not non_kv_after_response_curve
+            ):
+                objective_key = str(
+                    latest_activation_patch_response_curve_review.get("objective_bundle_key")
+                    or latest_activation_patch_response_curve_review.get("bundle_key")
+                    or ""
+                )
+                objective_term = self._term_from_bundle_key(objective_key)
+                seed_recipe_name = str(
+                    response_curve_summary.get("best_activation_patch_response_curve_recipe_name")
+                    or ""
+                )
+                preview_rows = self._operator_family_shift_preview_rows(
+                    objective_bundle_key=objective_key,
+                    objective_term=objective_term,
+                    seed_recipe_id=seed_recipe_name,
+                    seed_recipe_family="activation_patch|cap_release_response_curve",
+                )
+                non_kv_request = self._operator_family_shift_canonical_request(
+                    objective_bundle_key=objective_key,
+                    objective_term=objective_term,
+                    seed_recipe_id=seed_recipe_name,
+                    seed_recipe_family="activation_patch|cap_release_response_curve",
+                )
+                non_kv_request["reason"] = (
+                    "activation_patch cap-release response curve completed without target "
+                    "mass/top20 lift or collapse; inspect non-KV operator families instead "
+                    "of repeating activation_patch candidate review"
+                )
+                stale_activation_patch_request = {
+                    "diagnostic": "activation_patch_candidate_review",
+                    "bundle_key": objective_key or None,
+                    "objective_bundle_key": objective_key or None,
+                    "step_actuator_bundle_key": objective_key or None,
+                    "next_evidence_needed": "activation_patch_candidate_review",
+                    "operator_recipe_expansion_mode": "activation_patch_candidate_review",
+                    "reason": (
+                        "activation_patch response curve already completed without target lift; "
+                        "do not repeat activation_patch candidate review for this frontier"
+                    ),
+                    "permission": "diagnostic_only",
+                    "production_apply_allowed": False,
+                    "policy_candidate_ready": False,
+                }
+                stale_activation_patch_request = {
+                    key: value
+                    for key, value in stale_activation_patch_request.items()
+                    if value not in (None, "", [])
+                }
+                hints["activation_patch_cap_release_response_curve_review_complete"] = True
+                hints["activation_patch_response_curve_outcome"] = "safe_no_target_lift"
+                hints["activation_patch_candidate_review_stale_after_response_curve"] = True
+                hints["activation_patch_response_curve_has_target_lift"] = False
+                hints["activation_patch_response_curve_has_collapse"] = False
+                hints["operator_family_shift_status"] = (
+                    "needed_after_activation_patch_response_curve_no_target_lift"
+                )
+                hints["operator_family_shift_reason"] = (
+                    "activation_patch cap-release response curve was safe but produced no target "
+                    "mass/top20 lift"
+                )
+                hints["operator_family_shift_preview_rows"] = [
+                    dict(row) for row in preview_rows[:6] if isinstance(row, Mapping)
+                ]
+                hints["operator_family_shift_canonical_request"] = dict(non_kv_request)
+                hints["operator_family_shift_recommended"] = True
+                hints["next_evidence_needed"] = "non_kv_operator_search"
+                _block_next_diagnostic(
+                    stale_activation_patch_request,
+                    reason="activation_patch_response_curve_completed_no_target_lift",
+                    priority=2,
+                    status="stale_after_response_curve",
+                )
+                available = hints.get("available_next_diagnostics")
+                if isinstance(available, list):
+                    hints["available_next_diagnostics"] = [
+                        item
+                        for item in available
+                        if not (
+                            isinstance(item, Mapping)
+                            and isinstance(item.get("request"), Mapping)
+                            and (
+                                str(item.get("diagnostic") or "")
+                                == "activation_patch_candidate_review"
+                                or str(
+                                    item.get("request", {}).get("operator_recipe_expansion_mode")
+                                    or item.get("request", {}).get("next_evidence_needed")
+                                    or ""
+                                )
+                                == "activation_patch_candidate_review"
+                            )
+                        )
+                    ]
+                for key in (
+                    "diagnostic_frontier_request",
+                    "diagnostic_frontier_next_evidence",
+                    "diagnostic_frontier_operator_recipe_expansion_mode",
+                    "diagnostic_frontier_canonical_request",
+                ):
+                    hints.pop(key, None)
+                if not diagnostic_budget_exhausted:
+                    hints["diagnostic_frontier_bundle_key"] = objective_key or None
+                    hints["diagnostic_frontier_request"] = "compare_extra_operator_diagnostics"
+                    hints["diagnostic_frontier_next_evidence"] = "non_kv_operator_search"
+                    hints["diagnostic_frontier_operator_recipe_expansion_mode"] = (
+                        "non_kv_operator_search"
+                    )
+                    hints["diagnostic_frontier_canonical_request"] = dict(non_kv_request)
+                    hints["diagnostic_frontier_reason_text"] = str(non_kv_request["reason"])
+                else:
+                    hints["diagnostic_frontier_blocked_reason"] = (
+                        "diagnostic_call_budget_exhausted"
+                    )
+                _add_available_next_diagnostic(
+                    non_kv_request,
+                    reason=(
+                        "activation_patch response curve was safe but target-lift dead; "
+                        "shift to non-KV operator search"
+                    ),
+                    priority=2,
+                )
         if self._operator_certification_table:
             hints["operator_certification_count"] = len(self._operator_certification_table)
             hints["operator_certification_families"] = [
@@ -9464,6 +9750,7 @@ class HookedTransformerWorkerRuntime:
         best_focus: dict[str, Any] | None = None
         best_rank_focus: dict[str, Any] | None = None
         seen_token_ids: set[int] = set()
+        target_rows: list[dict[str, Any]] = []
         for sequence in target_sequences:
             token_id = int(sequence.token_ids[0])
             if token_id in seen_token_ids:
@@ -9486,6 +9773,7 @@ class HookedTransformerWorkerRuntime:
                 "edited_rank": int(edited_rank),
                 "rank_delta": int(baseline_rank - edited_rank),
             }
+            target_rows.append(row)
             if best_focus is None or (
                 float(row["prob_delta"]),
                 float(row["logit_delta"]),
@@ -9566,6 +9854,37 @@ class HookedTransformerWorkerRuntime:
             metrics["target_piece_logit_baseline"] = round(target_logit_before, 6)
             metrics["target_piece_logit_after"] = round(target_logit_after, 6)
             metrics["target_top20_margin"] = round(float(target_logit_after - edited_top20_threshold), 6)
+            same_term_rows = [
+                row for row in target_rows if str(row.get("term") or "") == str(best_rank_focus["term"])
+            ]
+            candidate_pieces = [
+                {
+                    "piece": str(row.get("piece") or ""),
+                    "token_id": int(row["token_id"]),
+                    "variant": str(row.get("variant") or ""),
+                    "baseline_rank": int(row["baseline_rank"]),
+                    "edited_rank": int(row["edited_rank"]),
+                    "rank_delta": int(row["rank_delta"]),
+                    "logit_delta": round(float(row["logit_delta"]), 6),
+                    "prob_delta": round(float(row["prob_delta"]), 8),
+                }
+                for row in same_term_rows[:8]
+            ]
+            unique_piece_ids = {
+                (str(row.get("piece") or ""), int(row["token_id"])) for row in same_term_rows
+            }
+            metrics["target_piece_binding_report"] = {
+                "objective_term": str(best_rank_focus["term"]),
+                "candidate_target_pieces": [item["piece"] for item in candidate_pieces],
+                "candidate_target_token_ids": [int(item["token_id"]) for item in candidate_pieces],
+                "chosen_target_piece": str(best_rank_focus["piece"]),
+                "chosen_target_token_id": int(best_rank_focus["token_id"]),
+                "binding_reason": "rank_delta_then_edited_rank",
+                "binding_source": "first_token_target_readout_metrics",
+                "binding_stability_status": "stable" if len(unique_piece_ids) <= 1 else "divergent",
+                "candidate_count": len(candidate_pieces),
+                "candidate_target_piece_rows": candidate_pieces,
+            }
         return metrics
 
     def _current_answer_readout_canary(
@@ -12514,6 +12833,19 @@ class HookedTransformerWorkerRuntime:
                 "entropy_delta": row.get("entropy_delta"),
                 "top1_margin_delta": row.get("top1_margin_delta"),
                 "step_size_clip_saturated": row.get("activation_patch_step_size_clip_saturated"),
+                "first_order_response_proxy": row.get("activation_patch_first_order_response_proxy"),
+                "predicted_gap_delta_proxy": row.get("activation_patch_predicted_gap_delta_proxy"),
+                "attribution_reliability_score": row.get("attribution_reliability_score"),
+                "attribution_reliability_status": row.get("attribution_reliability_status"),
+                "activation_patch_proxy_calibration_status": row.get(
+                    "activation_patch_proxy_calibration_status"
+                ),
+                "activation_patch_proxy_selector_permission": row.get(
+                    "activation_patch_proxy_selector_permission"
+                ),
+                "activation_patch_subspace_consistent_seed": row.get(
+                    "activation_patch_subspace_consistent_seed"
+                ),
                 "recipe_name": row.get("recipe_name"),
             }
             for row in activation_patch_cap_release_response_curve_rows[:8]
@@ -12538,6 +12870,12 @@ class HookedTransformerWorkerRuntime:
                 if isinstance(row, Mapping)
             }
         )
+        response_curve_has_observed_gap_seed = "observed_gap_carrier" in response_curve_seed_sources
+        seed_discovery_rows = [
+            row
+            for row in activation_patch_cap_release_response_curve_rows
+            if isinstance(row, Mapping) and bool(row.get("activation_patch_seed_discovery", False))
+        ]
         activation_patch_cap_release_response_curve_summary = {
             "activation_patch_cap_release_response_curve_executed": bool(
                 activation_patch_cap_release_response_curve_rows
@@ -12564,6 +12902,12 @@ class HookedTransformerWorkerRuntime:
                 if activation_patch_review_requested
                 else "not_requested"
             ),
+            "activation_patch_seed_discovery_executed": bool(seed_discovery_rows),
+            "activation_patch_seed_discovery_rows": len(seed_discovery_rows),
+            "activation_patch_seed_discovery_reason": (
+                "observed_gap_carrier_unavailable" if seed_discovery_rows else None
+            ),
+            "response_curve_has_observed_gap_seed": bool(response_curve_has_observed_gap_seed),
             "response_curve_points": response_curve_points,
             "response_curve_has_collapse": bool(response_curve_has_collapse),
             "response_curve_has_target_lift": bool(response_curve_has_target_lift),
@@ -12599,7 +12943,11 @@ class HookedTransformerWorkerRuntime:
             ),
             "production_apply_allowed": False,
             "policy_candidate_ready": False,
-            "next_evidence_needed": "activation_patch_cap_release_response_curve_review_complete"
+            "next_evidence_needed": (
+                "activation_patch_cap_release_response_curve_review_complete"
+                if response_curve_has_observed_gap_seed
+                else "activation_patch_seed_discovery_review_complete"
+            )
             if activation_patch_cap_release_response_curve_rows
             else None,
         }
@@ -15246,6 +15594,8 @@ class HookedTransformerWorkerRuntime:
                         "target_mass_delta",
                         "target_top20_hit_delta",
                         "target_piece",
+                        "target_piece_token_id",
+                        "target_piece_binding_report",
                         "target_piece_logit_delta",
                         "target_rank_after",
                         "target_top20_threshold_gap_baseline",
@@ -15379,6 +15729,8 @@ class HookedTransformerWorkerRuntime:
                         "target_mass_delta",
                         "target_top20_hit_delta",
                         "target_piece",
+                        "target_piece_token_id",
+                        "target_piece_binding_report",
                         "target_piece_logit_delta",
                         "target_top20_threshold_gap",
                         "target_top20_threshold_gap_delta",
@@ -15547,6 +15899,25 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_source_localization",
                         "activation_patch_blend_delta_norm",
                         "activation_patch_step_size_clip_saturated",
+                        "response_guided_activation_patch_candidate_review",
+                        "activation_patch_response_fingerprint",
+                        "activation_patch_first_order_response_proxy",
+                        "activation_patch_predicted_gap_delta_proxy",
+                        "activation_patch_predicted_logit_delta_proxy",
+                        "activation_patch_response_effect_role",
+                        "activation_patch_response_direction_agreement",
+                        "attribution_reliability_score",
+                        "attribution_reliability_status",
+                        "attribution_reliability_basis",
+                        "attribution_curvature_proxy",
+                        "activation_patch_proxy_reliability_key",
+                        "activation_patch_proxy_calibration_status",
+                        "activation_patch_proxy_selector_permission",
+                        "activation_patch_proxy_downgraded_reason",
+                        "activation_patch_subspace_consistent_seed",
+                        "activation_patch_subspace_family",
+                        "activation_patch_subspace_support",
+                        "activation_patch_subspace_operator_family_priors",
                         "activation_patch_local_step_size_sweep",
                         "activation_patch_seed_recipe_name",
                         "activation_patch_seed_operator_recipe_id",
@@ -15602,8 +15973,30 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_source_localization",
                         "activation_patch_blend_delta_norm",
                         "activation_patch_step_size_clip_saturated",
+                        "response_guided_activation_patch_candidate_review",
+                        "activation_patch_response_fingerprint",
+                        "activation_patch_first_order_response_proxy",
+                        "activation_patch_predicted_gap_delta_proxy",
+                        "activation_patch_predicted_logit_delta_proxy",
+                        "activation_patch_response_effect_role",
+                        "activation_patch_response_direction_agreement",
+                        "attribution_reliability_score",
+                        "attribution_reliability_status",
+                        "attribution_reliability_basis",
+                        "attribution_curvature_proxy",
+                        "activation_patch_proxy_reliability_key",
+                        "activation_patch_proxy_calibration_status",
+                        "activation_patch_proxy_selector_permission",
+                        "activation_patch_proxy_downgraded_reason",
+                        "activation_patch_subspace_consistent_seed",
+                        "activation_patch_subspace_family",
+                        "activation_patch_subspace_support",
+                        "activation_patch_subspace_operator_family_priors",
                         "activation_patch_cap_release_response_curve",
+                        "activation_patch_seed_discovery",
+                        "activation_patch_seed_discovery_reason",
                         "activation_patch_seed_source",
+                        "activation_patch_seed_recipe_name",
                         "activation_patch_forced_seed",
                         "activation_patch_response_curve_point_index",
                         "activation_patch_response_curve_seed_step_size",
@@ -16096,6 +16489,8 @@ class HookedTransformerWorkerRuntime:
                         "target_mass_delta",
                         "target_top20_hit_delta",
                         "target_piece",
+                        "target_piece_token_id",
+                        "target_piece_binding_report",
                         "target_piece_logit_delta",
                         "target_piece_prob_delta",
                         "target_rank_after",
@@ -16132,6 +16527,25 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_raw_blend_delta_norm",
                         "activation_patch_blend_delta_norm",
                         "activation_patch_step_size_clip_saturated",
+                        "response_guided_activation_patch_candidate_review",
+                        "activation_patch_response_fingerprint",
+                        "activation_patch_first_order_response_proxy",
+                        "activation_patch_predicted_gap_delta_proxy",
+                        "activation_patch_predicted_logit_delta_proxy",
+                        "activation_patch_response_effect_role",
+                        "activation_patch_response_direction_agreement",
+                        "attribution_reliability_score",
+                        "attribution_reliability_status",
+                        "attribution_reliability_basis",
+                        "attribution_curvature_proxy",
+                        "activation_patch_proxy_reliability_key",
+                        "activation_patch_proxy_calibration_status",
+                        "activation_patch_proxy_selector_permission",
+                        "activation_patch_proxy_downgraded_reason",
+                        "activation_patch_subspace_consistent_seed",
+                        "activation_patch_subspace_family",
+                        "activation_patch_subspace_support",
+                        "activation_patch_subspace_operator_family_priors",
                         "activation_source_norm",
                         "operator_recipe_expansion_mode",
                         "post_bridge_exhaustion_recipe",
@@ -16175,6 +16589,8 @@ class HookedTransformerWorkerRuntime:
                         "target_mass_delta",
                         "target_top20_hit_delta",
                         "target_piece",
+                        "target_piece_token_id",
+                        "target_piece_binding_report",
                         "target_piece_logit_delta",
                         "target_piece_prob_delta",
                         "target_rank_after",
@@ -16240,6 +16656,25 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_raw_blend_delta_norm",
                         "activation_patch_blend_delta_norm",
                         "activation_patch_step_size_clip_saturated",
+                        "response_guided_activation_patch_candidate_review",
+                        "activation_patch_response_fingerprint",
+                        "activation_patch_first_order_response_proxy",
+                        "activation_patch_predicted_gap_delta_proxy",
+                        "activation_patch_predicted_logit_delta_proxy",
+                        "activation_patch_response_effect_role",
+                        "activation_patch_response_direction_agreement",
+                        "attribution_reliability_score",
+                        "attribution_reliability_status",
+                        "attribution_reliability_basis",
+                        "attribution_curvature_proxy",
+                        "activation_patch_proxy_reliability_key",
+                        "activation_patch_proxy_calibration_status",
+                        "activation_patch_proxy_selector_permission",
+                        "activation_patch_proxy_downgraded_reason",
+                        "activation_patch_subspace_consistent_seed",
+                        "activation_patch_subspace_family",
+                        "activation_patch_subspace_support",
+                        "activation_patch_subspace_operator_family_priors",
                         "activation_source_norm",
                         "activation_target_norm_before",
                         "activation_target_norm_after",
@@ -18352,6 +18787,214 @@ class HookedTransformerWorkerRuntime:
             and str(item.get("kind") or "") == "entity_insertion_candidate_blueprint"
         ]
 
+    @staticmethod
+    def _activation_patch_proxy_reliability_key_for_row(row: Mapping[str, Any]) -> str:
+        """Compact scope key for proxy-vs-actual activation_patch calibration."""
+
+        def _text(value: Any, default: str = "unknown") -> str:
+            raw = str(value or "").strip().lower()
+            return raw if raw else default
+
+        objective_key = str(
+            row.get("objective_bundle_key")
+            or row.get("bundle_key")
+            or row.get("intended_bundle_key")
+            or ""
+        )
+        objective_parts = objective_key.split(":")
+        objective_term = _text(
+            row.get("intended_term")
+            or row.get("objective_term")
+            or (objective_parts[1] if len(objective_parts) >= 2 else "")
+        )
+        site = _text(row.get("activation_patch_site"))
+        layer = _text(row.get("activation_patch_layer"))
+        localization = _text(row.get("activation_patch_source_localization"))
+        return f"{objective_term}|{site}|L{layer}|{localization}"
+
+    @classmethod
+    def _iter_activation_patch_evidence_rows_from_value(
+        cls,
+        value: Any,
+        *,
+        _depth: int = 0,
+    ) -> Iterable[Mapping[str, Any]]:
+        """Yield activation_patch diagnostic rows from nested runtime reports."""
+
+        if _depth > 7:
+            return
+        if isinstance(value, Mapping):
+            looks_like_activation_row = bool(
+                str(value.get("diagnostic_family") or "") == "activation_patch"
+                or str(value.get("operator_axis") or "").startswith("activation_patch")
+                or value.get("activation_patch_site") not in (None, "")
+                or bool(value.get("response_guided_activation_patch_candidate_review", False))
+            )
+            if looks_like_activation_row:
+                yield value
+            for nested in value.values():
+                yield from cls._iter_activation_patch_evidence_rows_from_value(
+                    nested,
+                    _depth=_depth + 1,
+                )
+        elif isinstance(value, SequenceABC) and not isinstance(value, (str, bytes, bytearray)):
+            for item in value:
+                yield from cls._iter_activation_patch_evidence_rows_from_value(
+                    item,
+                    _depth=_depth + 1,
+                )
+
+    def _activation_patch_proxy_reliability_ledger(self, *, max_rows: int = 8) -> list[dict[str, Any]]:
+        """Aggregate diagnostic-only evidence that a proxy family is unreliable."""
+
+        buckets: dict[str, dict[str, Any]] = {}
+        seen_signatures: set[tuple[str, str, str, str, str, str]] = set()
+        for result in getattr(self, "_diagnostic_results", []):
+            if not isinstance(result, Mapping):
+                continue
+            for row in self._iter_activation_patch_evidence_rows_from_value(result):
+                if not isinstance(row, Mapping):
+                    continue
+                key = self._activation_patch_proxy_reliability_key_for_row(row)
+                if not key or key.startswith("unknown|"):
+                    continue
+                signature = (
+                    key,
+                    str(row.get("operator_recipe_id") or row.get("recipe_name") or ""),
+                    str(row.get("operator_axis") or ""),
+                    str(row.get("activation_patch_step_size") or ""),
+                    str(row.get("attribution_reliability_status") or ""),
+                    str(row.get("actual_delta_class") or ""),
+                )
+                if signature in seen_signatures:
+                    continue
+                seen_signatures.add(signature)
+                entry = buckets.setdefault(
+                    key,
+                    {
+                        "activation_patch_proxy_reliability_key": key,
+                        "objective_term_family": key.split("|", 1)[0],
+                        "activation_patch_site": row.get("activation_patch_site"),
+                        "activation_patch_layer": row.get("activation_patch_layer"),
+                        "activation_patch_source_localization": row.get(
+                            "activation_patch_source_localization"
+                        ),
+                        "evidence_count": 0,
+                        "dead_response_after_positive_proxy_count": 0,
+                        "target_actuator_candidate_count": 0,
+                        "gap_carrier_count": 0,
+                        "rank_carrier_count": 0,
+                        "collapse_risk_count": 0,
+                        "max_first_order_response_proxy": None,
+                        "best_actual_delta_class": None,
+                        "calibration_status": "insufficient_evidence",
+                        "permission": "diagnostic_only",
+                        "production_apply_allowed": False,
+                    },
+                )
+                entry["evidence_count"] = int(entry.get("evidence_count", 0) or 0) + 1
+                reliability_status = str(row.get("attribution_reliability_status") or "")
+                response_role = str(row.get("activation_patch_response_effect_role") or "")
+                actual_delta_class = str(row.get("actual_delta_class") or "")
+                if reliability_status == "dead_response_after_positive_proxy":
+                    entry["dead_response_after_positive_proxy_count"] = (
+                        int(entry.get("dead_response_after_positive_proxy_count", 0) or 0) + 1
+                    )
+                if response_role == "target_actuator_candidate" or actual_delta_class in {
+                    "target_lift",
+                    "target_mass_lift",
+                    "self_target_actuator",
+                }:
+                    entry["target_actuator_candidate_count"] = (
+                        int(entry.get("target_actuator_candidate_count", 0) or 0) + 1
+                    )
+                    entry["best_actual_delta_class"] = actual_delta_class or response_role
+                elif response_role == "gap_carrier":
+                    entry["gap_carrier_count"] = int(entry.get("gap_carrier_count", 0) or 0) + 1
+                elif response_role == "rank_carrier":
+                    entry["rank_carrier_count"] = int(entry.get("rank_carrier_count", 0) or 0) + 1
+                elif response_role == "collapse_risk" or actual_delta_class == "collapse_sharpener":
+                    entry["collapse_risk_count"] = int(entry.get("collapse_risk_count", 0) or 0) + 1
+                try:
+                    proxy = float(row.get("activation_patch_first_order_response_proxy"))
+                    if math.isfinite(proxy):
+                        current = entry.get("max_first_order_response_proxy")
+                        entry["max_first_order_response_proxy"] = (
+                            proxy if current is None else max(float(current), proxy)
+                        )
+                except Exception:
+                    pass
+        for entry in buckets.values():
+            dead_after_proxy = int(entry.get("dead_response_after_positive_proxy_count", 0) or 0)
+            target_hits = int(entry.get("target_actuator_candidate_count", 0) or 0)
+            gap_hits = int(entry.get("gap_carrier_count", 0) or 0)
+            if target_hits > 0:
+                status = "proxy_confirmed_by_target_response"
+            elif dead_after_proxy >= 2:
+                status = "candidate_hint_only_unreliable"
+            elif dead_after_proxy >= 1:
+                status = "candidate_hint_only_watchlist"
+            elif gap_hits > 0:
+                status = "proxy_gap_carrier_only"
+            else:
+                status = "insufficient_evidence"
+            entry["calibration_status"] = status
+            entry["selector_permission"] = "evidence_only"
+        ordered = sorted(
+            buckets.values(),
+            key=lambda item: (
+                0
+                if item.get("calibration_status") == "candidate_hint_only_unreliable"
+                else 1
+                if item.get("calibration_status") == "candidate_hint_only_watchlist"
+                else 2,
+                -int(item.get("dead_response_after_positive_proxy_count", 0) or 0),
+                str(item.get("activation_patch_proxy_reliability_key") or ""),
+            ),
+        )
+        return [dict(item) for item in ordered[: max(0, int(max_rows))]]
+
+    def _activation_patch_unreliable_proxy_keys(self) -> set[str]:
+        return {
+            str(row.get("activation_patch_proxy_reliability_key") or "")
+            for row in self._activation_patch_proxy_reliability_ledger(max_rows=64)
+            if str(row.get("calibration_status") or "") == "candidate_hint_only_unreliable"
+        }
+
+    @classmethod
+    def _apply_activation_patch_proxy_calibration(
+        cls,
+        row: Mapping[str, Any],
+        *,
+        unreliable_keys: set[str] | None = None,
+    ) -> dict[str, Any]:
+        calibrated = dict(row)
+        key = str(
+            calibrated.get("activation_patch_proxy_reliability_key")
+            or cls._activation_patch_proxy_reliability_key_for_row(calibrated)
+            or ""
+        )
+        if key:
+            calibrated["activation_patch_proxy_reliability_key"] = key
+        if unreliable_keys and key in unreliable_keys:
+            calibrated["activation_patch_proxy_calibration_status"] = "candidate_hint_only_unreliable"
+            calibrated["activation_patch_proxy_selector_permission"] = "candidate_hint_only"
+            calibrated["activation_patch_proxy_downgraded_reason"] = (
+                "prior positive proxy produced dead actual response for this objective/site/localization"
+            )
+            calibrated["production_apply_allowed"] = False
+            calibrated["policy_candidate_ready"] = False
+            blocked_by = calibrated.get("blocked_by")
+            if not isinstance(blocked_by, list):
+                blocked_by = [] if blocked_by in (None, "") else [str(blocked_by)]
+            if "activation_patch_proxy_candidate_hint_only_unreliable" not in blocked_by:
+                blocked_by.append("activation_patch_proxy_candidate_hint_only_unreliable")
+            calibrated["blocked_by"] = blocked_by
+        else:
+            calibrated.setdefault("activation_patch_proxy_calibration_status", "candidate_hint_only_observe")
+            calibrated.setdefault("activation_patch_proxy_selector_permission", "evidence_only")
+        return calibrated
+
     def _entity_insertion_materialized_operator_rows(
         self,
         request: Mapping[str, Any],
@@ -18599,6 +19242,8 @@ class HookedTransformerWorkerRuntime:
                     "target_mass_delta": round(float(target_mass_delta), 8),
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
+                    "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_report": replay.get("target_piece_binding_report"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -18644,6 +19289,81 @@ class HookedTransformerWorkerRuntime:
         if not blueprints:
             return []
         requested_objective = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+        packet_strategy_hints = (
+            packet_context.get("strategy_hints")
+            if isinstance(packet_context, Mapping) and isinstance(packet_context.get("strategy_hints"), Mapping)
+            else {}
+        )
+        analyzer_hints = (
+            packet_strategy_hints.get("readout_analyzer_hints")
+            if isinstance(packet_strategy_hints, Mapping)
+            and isinstance(packet_strategy_hints.get("readout_analyzer_hints"), Mapping)
+            else packet_strategy_hints.get("readout_sidecar_hints")
+            if isinstance(packet_strategy_hints, Mapping)
+            and isinstance(packet_strategy_hints.get("readout_sidecar_hints"), Mapping)
+            else {}
+        )
+        raw_subspace_groups = analyzer_hints.get("sae_feature_subspace_groups") if isinstance(analyzer_hints, Mapping) else None
+        subspace_groups_by_bundle: dict[str, Mapping[str, Any]] = {}
+        subspace_groups_by_term: dict[str, Mapping[str, Any]] = {}
+
+        def _bundle_term_key(bundle_key: Any) -> str:
+            parts = str(bundle_key or "").split(":")
+            if len(parts) >= 2 and parts[1]:
+                return parts[1].strip().lower()
+            return ""
+
+        def _register_subspace_group(group: Mapping[str, Any]) -> None:
+            bundle_key = str(group.get("bundle_key") or "")
+            if not bundle_key:
+                return
+            priors = group.get("operator_family_priors")
+            has_activation_patch_prior = isinstance(priors, SequenceABC) and not isinstance(
+                priors,
+                (str, bytes, bytearray),
+            ) and any("activation_patch" in str(prior) for prior in priors)
+            if not has_activation_patch_prior:
+                return
+            subspace_groups_by_bundle.setdefault(bundle_key, group)
+            term_key = _bundle_term_key(bundle_key)
+            if term_key:
+                subspace_groups_by_term.setdefault(term_key, group)
+
+        if isinstance(raw_subspace_groups, SequenceABC) and not isinstance(
+            raw_subspace_groups,
+            (str, bytes, bytearray),
+        ):
+            for group in raw_subspace_groups:
+                if not isinstance(group, Mapping):
+                    continue
+                _register_subspace_group(group)
+        compact_subspace_rows = (
+            packet_strategy_hints.get("activation_patch_subspace_evidence_objectives")
+            if isinstance(packet_strategy_hints, Mapping)
+            else None
+        )
+        if isinstance(compact_subspace_rows, SequenceABC) and not isinstance(
+            compact_subspace_rows,
+            (str, bytes, bytearray),
+        ):
+            for row in compact_subspace_rows:
+                if not isinstance(row, Mapping):
+                    continue
+                _register_subspace_group(row)
+        latest_sidecar_hints = (
+            self._latest_readout_sidecar_hints
+            if isinstance(getattr(self, "_latest_readout_sidecar_hints", None), Mapping)
+            else {}
+        )
+        latest_subspace_groups = latest_sidecar_hints.get("sae_feature_subspace_groups")
+        if isinstance(latest_subspace_groups, SequenceABC) and not isinstance(
+            latest_subspace_groups,
+            (str, bytes, bytearray),
+        ):
+            for group in latest_subspace_groups:
+                if isinstance(group, Mapping):
+                    _register_subspace_group(group)
+        unreliable_proxy_keys = self._activation_patch_unreliable_proxy_keys()
 
         def _as_float(value: Any, default: float = 0.0) -> float:
             try:
@@ -18812,6 +19532,20 @@ class HookedTransformerWorkerRuntime:
                     base_localization = source_localization[: -len("_orthogonal_stealer")]
                     contrast_mode = "orthogonal_stealer"
                     contrast_scale = 1.0
+                subspace_group = subspace_groups_by_bundle.get(bundle_key) or subspace_groups_by_term.get(
+                    term.lower()
+                )
+                subspace_operator_priors = (
+                    list(subspace_group.get("operator_family_priors", [])[:4])
+                    if isinstance(subspace_group, Mapping)
+                    and isinstance(subspace_group.get("operator_family_priors"), SequenceABC)
+                    and not isinstance(subspace_group.get("operator_family_priors"), (str, bytes, bytearray))
+                    else []
+                )
+                subspace_consistent_seed = bool(
+                    isinstance(subspace_group, Mapping)
+                    and base_localization == "source_term_token"
+                )
                 recipe_name = f"activation_patch_{site}_l{layer}_{source_localization}_a{int(round(alpha * 1000)):03d}"
                 candidate = {
                     "objective_bundle_key": bundle_key,
@@ -18835,44 +19569,57 @@ class HookedTransformerWorkerRuntime:
                 }
                 edit = self._activation_patch_trial_edit_from_candidate(candidate, trial_contract=trial_contract)
                 if edit is None:
+                    row = {
+                        "bundle_key": bundle_key,
+                        "objective_bundle_key": bundle_key,
+                        "actuator_bundle_key": bundle_key,
+                        "intended_bundle_key": bundle_key,
+                        "intended_term": term,
+                        "evidence_kind": "activation_patch_certification",
+                        "diagnostic_family": "activation_patch",
+                        "operator_axis": "activation_patch_blueprint_materialization",
+                        "operator_recipe_expansion_mode": "activation_patch_candidate_review",
+                        "status": "blocked",
+                        "actuator_class": "dead_actuator",
+                        "ownership_role": "unknown",
+                        "effect_role": "dead",
+                        "safety_role": "neutral",
+                        "recipe_name": recipe_name,
+                        "operator_recipe_id": candidate["operator_recipe_id"],
+                        "activation_patch_surface_id": surface_id,
+                        "activation_patch_site": site,
+                        "activation_patch_layer": layer,
+                        "activation_patch_alpha": round(float(alpha), 6),
+                        "activation_patch_step_size": None,
+                        "activation_patch_source_localization": source_localization,
+                        "activation_patch_patch_mode": "blend",
+                        "activation_patch_seed_source": "direct_candidate",
+                        "activation_patch_base_localization": base_localization,
+                        "activation_patch_contrast_mode": contrast_mode,
+                        "activation_patch_contrast_scale": round(float(contrast_scale), 6),
+                        "activation_patch_stealer_bundle_key": stealer_bundle_key or None,
+                        "activation_patch_stealer_term": stealer_term or None,
+                        "activation_patch_subspace_consistent_seed": subspace_consistent_seed,
+                        "activation_patch_subspace_family": subspace_group.get("subspace_family")
+                        if isinstance(subspace_group, Mapping)
+                        else None,
+                        "activation_patch_subspace_support": subspace_group.get("support")
+                        if isinstance(subspace_group, Mapping)
+                        else None,
+                        "activation_patch_subspace_operator_family_priors": subspace_operator_priors,
+                        "actual_delta_class": "materialization_failed",
+                        "blocked_by": ["activation_patch_edit_materialization_failed"],
+                        "source_blueprint": dict(blueprint),
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                        "policy_candidate_ready": False,
+                        "diagnostic_only": True,
+                    }
                     rows.append(
-                        {
-                            "bundle_key": bundle_key,
-                            "objective_bundle_key": bundle_key,
-                            "actuator_bundle_key": bundle_key,
-                            "intended_bundle_key": bundle_key,
-                            "intended_term": term,
-                            "evidence_kind": "activation_patch_certification",
-                            "diagnostic_family": "activation_patch",
-                            "operator_axis": "activation_patch_blueprint_materialization",
-                            "operator_recipe_expansion_mode": "activation_patch_candidate_review",
-                            "status": "blocked",
-                            "actuator_class": "dead_actuator",
-                            "ownership_role": "unknown",
-                            "effect_role": "dead",
-                            "safety_role": "neutral",
-                            "recipe_name": recipe_name,
-                            "operator_recipe_id": candidate["operator_recipe_id"],
-                            "activation_patch_surface_id": surface_id,
-                            "activation_patch_site": site,
-                            "activation_patch_layer": layer,
-                            "activation_patch_alpha": round(float(alpha), 6),
-                            "activation_patch_step_size": None,
-                            "activation_patch_source_localization": source_localization,
-                            "activation_patch_patch_mode": "blend",
-                            "activation_patch_base_localization": base_localization,
-                            "activation_patch_contrast_mode": contrast_mode,
-                            "activation_patch_contrast_scale": round(float(contrast_scale), 6),
-                            "activation_patch_stealer_bundle_key": stealer_bundle_key or None,
-                            "activation_patch_stealer_term": stealer_term or None,
-                            "actual_delta_class": "materialization_failed",
-                            "blocked_by": ["activation_patch_edit_materialization_failed"],
-                            "source_blueprint": dict(blueprint),
-                            "production_apply_allowed": False,
-                            "certified_for_apply": False,
-                            "policy_candidate_ready": False,
-                            "diagnostic_only": True,
-                        }
+                        self._apply_activation_patch_proxy_calibration(
+                            self._annotate_activation_patch_response_guidance(row),
+                            unreliable_keys=unreliable_proxy_keys,
+                        )
                     )
                     emitted += 1
                     continue
@@ -18994,116 +19741,311 @@ class HookedTransformerWorkerRuntime:
                     top1_margin_delta=replay.get("top1_margin_delta"),
                     status=status,
                 )
-                rows.append(
-                    {
-                        "bundle_key": bundle_key,
-                        "objective_bundle_key": bundle_key,
-                        "actuator_bundle_key": bundle_key,
-                        "intended_bundle_key": bundle_key,
-                        "intended_term": term,
-                        "evidence_kind": "activation_patch_certification",
-                        "diagnostic_family": "activation_patch",
-                        "operator_axis": "activation_patch_blueprint_materialization",
-                        "operator_recipe_expansion_mode": "activation_patch_candidate_review",
-                        "status": status,
-                        "actuator_class": actuator_class,
-                        **role_axes,
-                        "recipe_name": recipe_name,
-                        "operator_recipe_id": candidate["operator_recipe_id"],
-                        "recipe_family": f"activation_patch|{site}|{source_localization}",
-                        "activation_patch_surface_id": surface_id,
-                        "activation_patch_site": site,
-                        "activation_patch_layer": layer,
-                        "activation_patch_alpha": round(float(alpha), 6),
-                        "activation_patch_step_size": _finite_or_none(
-                            edit.get("budget", {}).get("step_size")
-                            if isinstance(edit.get("budget"), Mapping)
-                            else None
-                        ),
-                        "activation_patch_source_localization": source_localization,
-                        "activation_patch_patch_mode": "blend",
-                        "activation_patch_base_localization": base_localization,
-                        "activation_patch_contrast_mode": contrast_mode,
-                        "activation_patch_contrast_scale": round(float(contrast_scale), 6),
-                        "activation_patch_stealer_bundle_key": stealer_bundle_key or None,
-                        "activation_patch_stealer_term": stealer_term or None,
-                        "activation_patch_op_kind": "activation_patch",
-                        "activation_patch_mode": "blend",
-                        "activation_patch_runtime_supported": bool(edit.get("op", {}).get("kind") == "activation_patch"),
-                        "activation_hook_call_count": _as_int(replay.get("activation_patch_hook_call_count"), 0),
-                        "activation_patch_hook_call_count": _as_int(replay.get("activation_patch_hook_call_count"), 0),
-                        "activation_patch_selected_token_count": _as_int(
-                            replay.get("activation_patch_selected_token_count"),
-                            0,
-                        ),
-                        "activation_patch_source_norm": _finite_or_none(replay.get("activation_patch_source_norm")),
-                        "activation_patch_target_norm_before": _finite_or_none(
-                            replay.get("activation_patch_target_norm_before")
-                        ),
-                        "activation_patch_target_norm_after": _finite_or_none(
-                            replay.get("activation_patch_target_norm_after")
-                        ),
-                        "activation_patch_source_target_cosine": _finite_or_none(
-                            replay.get("activation_patch_source_target_cosine")
-                        ),
-                        "activation_patch_source_target_delta_norm": _finite_or_none(
-                            replay.get("activation_patch_source_target_delta_norm")
-                        ),
-                        "activation_patch_raw_blend_delta_norm": _finite_or_none(
-                            replay.get("activation_patch_raw_blend_delta_norm")
-                        ),
-                        "activation_patch_blend_delta_norm": _finite_or_none(
-                            replay.get("activation_patch_blend_delta_norm")
-                        ),
-                        "activation_patch_step_size_clip_saturated": bool(
-                            replay.get("activation_patch_step_size_clip_saturated", False)
-                        ),
-                        "actual_delta_class": actual_delta_class,
+                row = {
+                    "bundle_key": bundle_key,
+                    "objective_bundle_key": bundle_key,
+                    "actuator_bundle_key": bundle_key,
+                    "intended_bundle_key": bundle_key,
+                    "intended_term": term,
+                    "evidence_kind": "activation_patch_certification",
+                    "diagnostic_family": "activation_patch",
+                    "operator_axis": "activation_patch_blueprint_materialization",
+                    "operator_recipe_expansion_mode": "activation_patch_candidate_review",
+                    "status": status,
+                    "actuator_class": actuator_class,
+                    **role_axes,
+                    "recipe_name": recipe_name,
+                    "operator_recipe_id": candidate["operator_recipe_id"],
+                    "recipe_family": f"activation_patch|{site}|{source_localization}",
+                    "activation_patch_surface_id": surface_id,
+                    "activation_patch_site": site,
+                    "activation_patch_layer": layer,
+                    "activation_patch_alpha": round(float(alpha), 6),
+                    "activation_patch_step_size": _finite_or_none(
+                        edit.get("budget", {}).get("step_size")
+                        if isinstance(edit.get("budget"), Mapping)
+                        else None
+                    ),
+                    "activation_patch_source_localization": source_localization,
+                    "activation_patch_patch_mode": "blend",
+                    "activation_patch_seed_source": "direct_candidate",
+                    "activation_patch_base_localization": base_localization,
+                    "activation_patch_contrast_mode": contrast_mode,
+                    "activation_patch_contrast_scale": round(float(contrast_scale), 6),
+                    "activation_patch_stealer_bundle_key": stealer_bundle_key or None,
+                    "activation_patch_stealer_term": stealer_term or None,
+                    "activation_patch_subspace_consistent_seed": subspace_consistent_seed,
+                    "activation_patch_subspace_family": subspace_group.get("subspace_family")
+                    if isinstance(subspace_group, Mapping)
+                    else None,
+                    "activation_patch_subspace_support": subspace_group.get("support")
+                    if isinstance(subspace_group, Mapping)
+                    else None,
+                    "activation_patch_subspace_operator_family_priors": subspace_operator_priors,
+                    "activation_patch_op_kind": "activation_patch",
+                    "activation_patch_mode": "blend",
+                    "activation_patch_runtime_supported": bool(edit.get("op", {}).get("kind") == "activation_patch"),
+                    "activation_hook_call_count": _as_int(replay.get("activation_patch_hook_call_count"), 0),
+                    "activation_patch_hook_call_count": _as_int(replay.get("activation_patch_hook_call_count"), 0),
+                    "activation_patch_selected_token_count": _as_int(
+                        replay.get("activation_patch_selected_token_count"),
+                        0,
+                    ),
+                    "activation_patch_source_norm": _finite_or_none(replay.get("activation_patch_source_norm")),
+                    "activation_patch_target_norm_before": _finite_or_none(
+                        replay.get("activation_patch_target_norm_before")
+                    ),
+                    "activation_patch_target_norm_after": _finite_or_none(
+                        replay.get("activation_patch_target_norm_after")
+                    ),
+                    "activation_patch_source_target_cosine": _finite_or_none(
+                        replay.get("activation_patch_source_target_cosine")
+                    ),
+                    "activation_patch_source_target_delta_norm": _finite_or_none(
+                        replay.get("activation_patch_source_target_delta_norm")
+                    ),
+                    "activation_patch_raw_blend_delta_norm": _finite_or_none(
+                        replay.get("activation_patch_raw_blend_delta_norm")
+                    ),
+                    "activation_patch_blend_delta_norm": _finite_or_none(
+                        replay.get("activation_patch_blend_delta_norm")
+                    ),
+                    "activation_patch_step_size_clip_saturated": bool(
+                        replay.get("activation_patch_step_size_clip_saturated", False)
+                    ),
+                    "actual_delta_class": actual_delta_class,
+                    "target_mass_delta": round(float(target_mass_delta), 8),
+                    "target_top20_hit_delta": int(target_top20_hit_delta),
+                    "target_piece": replay.get("target_piece"),
+                    "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                    "target_piece_logit_delta": _finite_or_none(replay.get("target_piece_logit_delta")),
+                    "target_piece_prob_delta": _finite_or_none(replay.get("target_piece_prob_delta")),
+                    "target_rank_after": replay.get("target_rank_after"),
+                    "target_top20_threshold_gap_baseline": _finite_or_none(
+                        replay.get("target_top20_threshold_gap_baseline")
+                    ),
+                    "target_top20_threshold_gap": _finite_or_none(replay.get("target_top20_threshold_gap")),
+                    "target_top20_threshold_gap_after": _finite_or_none(
+                        replay.get("target_top20_threshold_gap_after")
+                    ),
+                    "target_top20_threshold_gap_delta": _finite_or_none(
+                        replay.get("target_top20_threshold_gap_delta")
+                    ),
+                    "focus_rank_delta": int(focus_rank_delta),
+                    "realized_lift_bundle_key": realized_lift_bundle_key,
+                    "self_delta": round(float(self_delta), 6),
+                    "cross_delta": round(float(cross_delta), 6),
+                    "alignment_margin": round(float(alignment_margin), 6),
+                    "bundle_lift_scores": {
+                        str(key): round(float(value), 6) for key, value in bundle_lift_scores.items()
+                    },
+                    "counterfactual_delta": {
                         "target_mass_delta": round(float(target_mass_delta), 8),
                         "target_top20_hit_delta": int(target_top20_hit_delta),
-                        "target_piece": replay.get("target_piece"),
-                        "target_piece_logit_delta": _finite_or_none(replay.get("target_piece_logit_delta")),
-                        "target_piece_prob_delta": _finite_or_none(replay.get("target_piece_prob_delta")),
-                        "target_rank_after": replay.get("target_rank_after"),
-                        "target_top20_threshold_gap_baseline": _finite_or_none(
-                            replay.get("target_top20_threshold_gap_baseline")
-                        ),
-                        "target_top20_threshold_gap": _finite_or_none(replay.get("target_top20_threshold_gap")),
-                        "target_top20_threshold_gap_after": _finite_or_none(
-                            replay.get("target_top20_threshold_gap_after")
-                        ),
-                        "target_top20_threshold_gap_delta": _finite_or_none(
-                            replay.get("target_top20_threshold_gap_delta")
-                        ),
                         "focus_rank_delta": int(focus_rank_delta),
-                        "realized_lift_bundle_key": realized_lift_bundle_key,
                         "self_delta": round(float(self_delta), 6),
                         "cross_delta": round(float(cross_delta), 6),
                         "alignment_margin": round(float(alignment_margin), 6),
-                        "bundle_lift_scores": {str(key): round(float(value), 6) for key, value in bundle_lift_scores.items()},
-                        "counterfactual_delta": {
-                            "target_mass_delta": round(float(target_mass_delta), 8),
-                            "target_top20_hit_delta": int(target_top20_hit_delta),
-                            "focus_rank_delta": int(focus_rank_delta),
-                            "self_delta": round(float(self_delta), 6),
-                            "cross_delta": round(float(cross_delta), 6),
-                            "alignment_margin": round(float(alignment_margin), 6),
-                        },
-                        "blocked_by": blocked_by,
-                        "positive_traits": sorted(set(positive_traits)),
-                        "candidate_fingerprint": replay.get("candidate_fingerprint"),
-                        "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
-                        "source_blueprint": dict(blueprint),
-                        "diagnostic_only": True,
-                        "production_apply_allowed": False,
-                        "certified_for_apply": False,
-                        "policy_candidate_ready": False,
-                    }
+                    },
+                    "blocked_by": blocked_by,
+                    "positive_traits": sorted(set(positive_traits)),
+                    "candidate_fingerprint": replay.get("candidate_fingerprint"),
+                    "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
+                    "source_blueprint": dict(blueprint),
+                    "diagnostic_only": True,
+                    "production_apply_allowed": False,
+                    "certified_for_apply": False,
+                    "policy_candidate_ready": False,
+                }
+                rows.append(
+                    self._apply_activation_patch_proxy_calibration(
+                        self._annotate_activation_patch_response_guidance(row),
+                        unreliable_keys=unreliable_proxy_keys,
+                    )
                 )
                 emitted += 1
             if emitted >= max(1, int(max_candidates)):
                 break
         return rows
+
+    @staticmethod
+    def _annotate_activation_patch_response_guidance(row: Mapping[str, Any]) -> dict[str, Any]:
+        """Attach proxy response/reliability evidence without granting apply authority."""
+
+        annotated = dict(row)
+
+        def _as_float(value: Any) -> float | None:
+            try:
+                if isinstance(value, bool):
+                    return None
+                numeric = float(value)
+            except Exception:
+                return None
+            return numeric if math.isfinite(numeric) else None
+
+        def _as_int(value: Any, default: int = 0) -> int:
+            try:
+                if isinstance(value, bool):
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        if str(annotated.get("diagnostic_family") or "") != "activation_patch":
+            return annotated
+
+        delta_norm = _as_float(annotated.get("activation_patch_source_target_delta_norm"))
+        blend_delta_norm = _as_float(annotated.get("activation_patch_blend_delta_norm"))
+        raw_blend_delta_norm = _as_float(annotated.get("activation_patch_raw_blend_delta_norm"))
+        step_size = _as_float(annotated.get("activation_patch_step_size"))
+        cosine = _as_float(annotated.get("activation_patch_source_target_cosine"))
+        gap_delta = _as_float(annotated.get("target_top20_threshold_gap_delta"))
+        logit_delta = _as_float(annotated.get("target_piece_logit_delta"))
+        target_mass_delta = _as_float(annotated.get("target_mass_delta")) or 0.0
+        top20_delta = _as_int(annotated.get("target_top20_hit_delta"), 0)
+        focus_rank_delta = _as_int(annotated.get("focus_rank_delta"), 0)
+        repeat_delta = _as_float(annotated.get("repeat_delta")) or 0.0
+
+        effective_move = next(
+            (
+                value
+                for value in (blend_delta_norm, raw_blend_delta_norm, step_size, delta_norm)
+                if value is not None and value > 0.0
+            ),
+            None,
+        )
+        if cosine is None:
+            cosine_bucket = "unknown"
+            directional_factor = 0.5
+        elif cosine >= 0.65:
+            cosine_bucket = "aligned"
+            directional_factor = max(0.05, 1.0 - cosine)
+        elif cosine >= 0.15:
+            cosine_bucket = "partly_aligned"
+            directional_factor = 0.55
+        elif cosine >= -0.15:
+            cosine_bucket = "orthogonal"
+            directional_factor = 0.85
+        else:
+            cosine_bucket = "opposed"
+            directional_factor = 1.15
+
+        first_order_response_proxy = (
+            round(float(effective_move * directional_factor), 6)
+            if effective_move is not None
+            else None
+        )
+        predicted_gap_delta_proxy = (
+            round(-float(first_order_response_proxy) * 0.01, 6)
+            if first_order_response_proxy is not None
+            else None
+        )
+        predicted_logit_delta_proxy = (
+            round(float(first_order_response_proxy) * 0.01, 6)
+            if first_order_response_proxy is not None
+            else None
+        )
+
+        reliability_score = None
+        curvature_proxy = None
+        direction_agreement = None
+        if predicted_gap_delta_proxy is not None and gap_delta is not None:
+            curvature_proxy = round(float(abs(gap_delta - predicted_gap_delta_proxy)), 6)
+            denom = max(abs(float(predicted_gap_delta_proxy)), abs(float(gap_delta)), 1e-6)
+            reliability_score = round(float(max(0.0, 1.0 - (curvature_proxy / denom))), 6)
+            direction_agreement = bool(
+                (predicted_gap_delta_proxy <= 0.0 and gap_delta <= 0.0)
+                or (predicted_gap_delta_proxy >= 0.0 and gap_delta >= 0.0)
+            )
+            if not direction_agreement:
+                reliability_score = round(float(reliability_score * 0.5), 6)
+        elif predicted_logit_delta_proxy is not None and logit_delta is not None:
+            curvature_proxy = round(float(abs(logit_delta - predicted_logit_delta_proxy)), 6)
+            denom = max(abs(float(predicted_logit_delta_proxy)), abs(float(logit_delta)), 1e-6)
+            reliability_score = round(float(max(0.0, 1.0 - (curvature_proxy / denom))), 6)
+            direction_agreement = bool(
+                (predicted_logit_delta_proxy >= 0.0 and logit_delta >= 0.0)
+                or (predicted_logit_delta_proxy <= 0.0 and logit_delta <= 0.0)
+            )
+            if not direction_agreement:
+                reliability_score = round(float(reliability_score * 0.5), 6)
+
+        if reliability_score is None:
+            reliability_status = "proxy_unavailable"
+        elif reliability_score >= 0.7:
+            reliability_status = "high_proxy_reliability"
+        elif reliability_score >= 0.35:
+            reliability_status = "medium_proxy_reliability"
+        else:
+            reliability_status = "low_proxy_reliability"
+
+        if target_mass_delta > 0.00002 or top20_delta > 0:
+            response_effect_role = "target_actuator_candidate"
+        elif gap_delta is not None and gap_delta < 0.0:
+            response_effect_role = "gap_carrier"
+        elif focus_rank_delta > 0:
+            response_effect_role = "rank_carrier"
+        elif repeat_delta > 0.0:
+            response_effect_role = "collapse_risk"
+        else:
+            response_effect_role = "no_response"
+
+        if (
+            reliability_score is None
+            and first_order_response_proxy is not None
+            and response_effect_role == "no_response"
+            and str(annotated.get("actual_delta_class") or "") in {"dead_actuator", "neutral", "unknown"}
+        ):
+            reliability_score = 0.0
+            reliability_status = "dead_response_after_positive_proxy"
+            curvature_proxy = None
+
+        fingerprint = {
+            "site": annotated.get("activation_patch_site"),
+            "layer": annotated.get("activation_patch_layer"),
+            "source_localization": annotated.get("activation_patch_source_localization"),
+            "cosine_bucket": cosine_bucket,
+            "move_norm_bucket": (
+                "unknown"
+                if effective_move is None
+                else "large"
+                if effective_move >= 0.12
+                else "medium"
+                if effective_move >= 0.04
+                else "small"
+            ),
+            "predicted_gap_direction": (
+                "close_gap"
+                if predicted_gap_delta_proxy is not None and predicted_gap_delta_proxy < 0.0
+                else "unknown"
+            ),
+            "observed_effect_role": response_effect_role,
+        }
+
+        annotated.update(
+            {
+                "response_guided_activation_patch_candidate_review": True,
+                "activation_patch_response_guidance_version": "proxy_v1",
+                "activation_patch_proxy_reliability_key": (
+                    HookedTransformerWorkerRuntime._activation_patch_proxy_reliability_key_for_row(
+                        annotated
+                    )
+                ),
+                "activation_patch_response_fingerprint": fingerprint,
+                "activation_patch_first_order_response_proxy": first_order_response_proxy,
+                "activation_patch_predicted_gap_delta_proxy": predicted_gap_delta_proxy,
+                "activation_patch_predicted_logit_delta_proxy": predicted_logit_delta_proxy,
+                "activation_patch_response_effect_role": response_effect_role,
+                "activation_patch_response_direction_agreement": direction_agreement,
+                "attribution_reliability_score": reliability_score,
+                "attribution_reliability_status": reliability_status,
+                "attribution_reliability_basis": "proxy_gap_or_logit_residual",
+                "attribution_curvature_proxy": curvature_proxy,
+                "attribution_reliability_diagnostic_only": True,
+            }
+        )
+        return annotated
 
     def _activation_patch_local_step_size_sweep_rows(
         self,
@@ -19118,6 +20060,7 @@ class HookedTransformerWorkerRuntime:
         """Re-evaluate saturated activation-patch carriers with a slightly larger movement cap."""
 
         del packet_context
+        unreliable_proxy_keys = self._activation_patch_unreliable_proxy_keys()
 
         def _as_float(value: Any, default: float = 0.0) -> float:
             try:
@@ -19290,7 +20233,9 @@ class HookedTransformerWorkerRuntime:
                 seen.add(key)
                 if edit is None:
                     rows.append(
-                        {
+                        self._apply_activation_patch_proxy_calibration(
+                            self._annotate_activation_patch_response_guidance(
+                                {
                             "bundle_key": objective_key,
                             "objective_bundle_key": objective_key,
                             "actuator_bundle_key": candidate["actuator_bundle_key"],
@@ -19313,6 +20258,9 @@ class HookedTransformerWorkerRuntime:
                             "activation_patch_op_kind": "activation_patch",
                             "activation_patch_mode": "blend",
                             "activation_patch_local_step_size_sweep": True,
+                            "activation_patch_seed_source": (
+                                "forced_canonical_seed_discovery" if force_seed_rows else "observed_gap_carrier"
+                            ),
                             "activation_patch_seed_recipe_name": base_recipe_name,
                             "activation_patch_seed_operator_recipe_id": base_recipe_id or None,
                             "actual_delta_class": "materialization_failed",
@@ -19321,7 +20269,10 @@ class HookedTransformerWorkerRuntime:
                             "production_apply_allowed": False,
                             "certified_for_apply": False,
                             "policy_candidate_ready": False,
-                        }
+                                }
+                            ),
+                            unreliable_keys=unreliable_proxy_keys,
+                        )
                     )
                     continue
                 edit["bundle_key"] = objective_key
@@ -19443,7 +20394,9 @@ class HookedTransformerWorkerRuntime:
                     status=status,
                 )
                 rows.append(
-                    {
+                    self._apply_activation_patch_proxy_calibration(
+                        self._annotate_activation_patch_response_guidance(
+                            {
                         "bundle_key": objective_key,
                         "objective_bundle_key": objective_key,
                         "actuator_bundle_key": candidate["actuator_bundle_key"],
@@ -19491,6 +20444,9 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_mode": "blend",
                         "activation_patch_runtime_supported": bool(edit.get("op", {}).get("kind") == "activation_patch"),
                         "activation_patch_local_step_size_sweep": True,
+                        "activation_patch_seed_source": (
+                            "forced_canonical_seed_discovery" if force_seed_rows else "observed_gap_carrier"
+                        ),
                         "activation_patch_seed_recipe_name": base_recipe_name,
                         "activation_patch_seed_operator_recipe_id": base_recipe_id or None,
                         "activation_patch_seed_step_size": _finite_or_none(seed.get("activation_patch_step_size")),
@@ -19525,6 +20481,8 @@ class HookedTransformerWorkerRuntime:
                         "target_mass_delta": round(float(target_mass_delta), 8),
                         "target_top20_hit_delta": int(target_top20_hit_delta),
                         "target_piece": replay.get("target_piece"),
+                        "target_piece_token_id": replay.get("target_piece_token_id"),
+                        "target_piece_binding_report": replay.get("target_piece_binding_report"),
                         "target_piece_logit_delta": _finite_or_none(replay.get("target_piece_logit_delta")),
                         "target_piece_prob_delta": _finite_or_none(replay.get("target_piece_prob_delta")),
                         "target_rank_after": replay.get("target_rank_after"),
@@ -19566,7 +20524,10 @@ class HookedTransformerWorkerRuntime:
                         "production_apply_allowed": False,
                         "certified_for_apply": False,
                         "policy_candidate_ready": False,
-                    }
+                            }
+                        ),
+                        unreliable_keys=unreliable_proxy_keys,
+                    )
                 )
         return rows
 
@@ -19646,6 +20607,13 @@ class HookedTransformerWorkerRuntime:
                 return False
             return bool(row.get("objective_bundle_key") or row.get("bundle_key"))
 
+        seed_discovery_already_replayed = any(
+            bool(row.get("activation_patch_seed_discovery", False))
+            or str(row.get("operator_axis") or row.get("operator_recipe_expansion_mode") or "")
+            == "activation_patch_seed_discovery"
+            for row in seed_rows
+            if isinstance(row, Mapping)
+        )
         selected: list[tuple[str, Sequence[float], Mapping[str, Any], str, bool]] = []
         for site, step_sizes in (
             ("mlp_out", (0.16, 0.20)),
@@ -19658,13 +20626,14 @@ class HookedTransformerWorkerRuntime:
             canonical_candidates = [
                 row for row in seed_rows if isinstance(row, Mapping) and _canonical(row, site=site)
             ]
-            if canonical_candidates:
+            if canonical_candidates and not seed_discovery_already_replayed:
+                discovery_step_sizes = (0.05, 0.08) if site == "mlp_out" else (0.05,)
                 selected.append(
                     (
                         site,
-                        step_sizes,
+                        discovery_step_sizes,
                         max(canonical_candidates, key=_seed_rank),
-                        "forced_canonical",
+                        "forced_canonical_seed_discovery",
                         True,
                     )
                 )
@@ -19681,11 +20650,21 @@ class HookedTransformerWorkerRuntime:
             )
             for index, row in enumerate(sweep_rows):
                 shaped = dict(row)
-                shaped["operator_axis"] = "activation_patch_cap_release_response_curve"
-                shaped["operator_recipe_expansion_mode"] = "activation_patch_cap_release_response_curve"
+                axis = (
+                    "activation_patch_seed_discovery"
+                    if forced_seed
+                    else "activation_patch_cap_release_response_curve"
+                )
+                shaped["operator_axis"] = axis
+                shaped["operator_recipe_expansion_mode"] = axis
                 shaped["activation_patch_local_step_size_sweep"] = False
-                shaped["activation_patch_cap_release_response_curve"] = True
+                shaped["activation_patch_seed_discovery"] = bool(forced_seed)
+                shaped["activation_patch_seed_discovery_reason"] = (
+                    "observed_gap_carrier_unavailable" if forced_seed else None
+                )
+                shaped["activation_patch_cap_release_response_curve"] = not bool(forced_seed)
                 shaped["activation_patch_seed_source"] = seed_source
+                shaped["activation_patch_seed_recipe_name"] = seed.get("recipe_name")
                 shaped["activation_patch_forced_seed"] = bool(forced_seed)
                 shaped["activation_patch_response_curve_site"] = site
                 shaped["activation_patch_response_curve_point_index"] = index
@@ -19697,7 +20676,8 @@ class HookedTransformerWorkerRuntime:
                 )
                 shaped["activation_patch_response_curve_seed_recipe_name"] = seed.get("recipe_name")
                 shaped["recipe_family"] = (
-                    f"activation_patch|{site}|source_term_token|cap_release_response_curve"
+                    f"activation_patch|{site}|source_term_token|"
+                    f"{'seed_discovery' if forced_seed else 'cap_release_response_curve'}"
                 )
                 rows.append(shaped)
         return rows
@@ -19952,6 +20932,8 @@ class HookedTransformerWorkerRuntime:
                     "target_mass_delta": round(float(target_mass_delta), 8),
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
+                    "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_report": replay.get("target_piece_binding_report"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -20363,6 +21345,8 @@ class HookedTransformerWorkerRuntime:
                     "target_mass_delta": round(float(target_mass_delta), 8),
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
+                    "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_report": replay.get("target_piece_binding_report"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -20928,6 +21912,8 @@ class HookedTransformerWorkerRuntime:
                         "target_mass_delta": round(float(target_mass_delta), 8),
                         "target_top20_hit_delta": int(target_top20_hit_delta),
                         "target_piece": replay.get("target_piece"),
+                        "target_piece_token_id": replay.get("target_piece_token_id"),
+                        "target_piece_binding_report": replay.get("target_piece_binding_report"),
                         "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                         "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                         "target_rank_after": replay.get("target_rank_after"),

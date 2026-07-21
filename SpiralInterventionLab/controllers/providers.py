@@ -122,6 +122,24 @@ def _anthropic_metadata(raw: Any) -> Mapping[str, Any]:
     )
 
 
+def _anthropic_model_accepts_temperature(model: str) -> bool:
+    # Opus 4.8 and the Claude 5 family reject temperature ("deprecated for
+    # this model"); keep the exclusion narrow so existing Anthropic controller
+    # behavior remains unchanged for older models.
+    name = str(model or "")
+    if name.startswith("claude-opus-4-8"):
+        return False
+    family_and_rest = name.split("-", 1)
+    if len(family_and_rest) == 2:
+        segments = family_and_rest[1].split("-")
+        # claude-<family>-5[-...] e.g. claude-sonnet-5, claude-fable-5-20260301.
+        # The alphabetic family guard keeps claude-3-5-sonnet (version-first
+        # naming) on the old temperature-accepting path.
+        if len(segments) >= 2 and segments[0].isalpha() and segments[1] == "5":
+            return False
+    return True
+
+
 def _mistral_metadata(raw: Any) -> Mapping[str, Any]:
     choice = (getattr(raw, "choices", None) or [None])[0]
     return _compact_metadata(
@@ -237,13 +255,15 @@ class AnthropicControllerProvider(ControllerProvider):
         return self._model_name
 
     def complete(self, request: ControllerProviderRequest) -> ControllerProviderResponse:
-        raw = self.client.messages.create(
-            model=self.model_name,
-            max_tokens=request.max_output_tokens,
-            temperature=request.temperature,
-            system=request.effective_system_prompt(),
-            messages=[{"role": "user", "content": request.payload_text()}],
-        )
+        request_kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "max_tokens": request.max_output_tokens,
+            "system": request.effective_system_prompt(),
+            "messages": [{"role": "user", "content": request.payload_text()}],
+        }
+        if _anthropic_model_accepts_temperature(self.model_name):
+            request_kwargs["temperature"] = request.temperature
+        raw = self.client.messages.create(**request_kwargs)
         return ControllerProviderResponse(
             text=_anthropic_text(raw),
             provider=self.provider_name,
