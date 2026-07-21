@@ -2347,6 +2347,8 @@ class _FrontierReplayControllerClient:
             return "request_compare_extra_operator_diagnostics"
         if normalized == "cross_bundle_bridge_search":
             return "request_cross_bundle_bridge_search"
+        if normalized == "carrier_to_actuator_conversion_sweep":
+            return "request_carrier_to_actuator_conversion_sweep"
         return "request_operator_diagnostic"
 
     @staticmethod
@@ -2662,15 +2664,26 @@ class _FrontierReplayControllerClient:
         }
 
     @staticmethod
-    def _diagnostic_seen_in_results(results: Sequence[Any], diagnostic_name: str) -> bool:
+    def _diagnostic_seen_in_results(
+        results: Sequence[Any],
+        diagnostic_name: str,
+        *,
+        objective_bundle_key: str | None = None,
+    ) -> bool:
         expected = str(diagnostic_name or "")
+        expected_objective = str(objective_bundle_key or "")
         if not expected:
             return False
         for result in results:
             if not isinstance(result, Mapping):
                 continue
-            if str(result.get("diagnostic", "") or "") == expected:
-                return True
+            if str(result.get("diagnostic", "") or "") != expected:
+                continue
+            if expected_objective:
+                result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+                if result_objective != expected_objective:
+                    continue
+            return True
         return False
 
     @staticmethod
@@ -2776,6 +2789,55 @@ class _FrontierReplayControllerClient:
                 "best_readout_gap_closer_target_piece_logit_delta": summary.get(
                     "best_readout_gap_closer_target_piece_logit_delta"
                 ),
+            }
+        return None
+
+    @staticmethod
+    def _carrier_conversion_plan_from_results(
+        results: Sequence[Any],
+        *,
+        objective_bundle_key: str,
+    ) -> dict[str, Any] | None:
+        """Extract a `convert_rank_carrier_to_target:{family}` recommendation.
+
+        Reads the post-bridge recipe-expansion summary. Returns the carrier
+        identity when the best rank carrier is a non-readout-steering
+        (activation-patch) family, so the controller can spend the next
+        diagnostic on a carrier-composed conversion sweep instead of dead-ending
+        on operator_recipe_expansion_exhausted.
+        """
+
+        for result in reversed(list(results)):
+            if not isinstance(result, Mapping):
+                continue
+            if str(result.get("diagnostic", "") or "") != "compare_extra_operator_diagnostics":
+                continue
+            result_objective = str(result.get("objective_bundle_key") or result.get("bundle_key") or "")
+            if objective_bundle_key and result_objective and result_objective != objective_bundle_key:
+                continue
+            if str(result.get("operator_recipe_expansion_mode") or "") != "post_bridge_exhaustion" and not bool(
+                result.get("post_bridge_exhaustion_recipe_expansion_requested", False)
+            ):
+                continue
+            summary = result.get("operator_recipe_expansion_summary")
+            if not isinstance(summary, Mapping):
+                summary = result.get("diagnostic_summary")
+            summary = dict(summary) if isinstance(summary, Mapping) else {}
+            recommended = str(
+                summary.get("recommended_next_family")
+                or result.get("recommended_next_family")
+                or ""
+            )
+            if not recommended.startswith("convert_rank_carrier_to_target:"):
+                continue
+            carrier_family = recommended.split(":", 1)[1].strip()
+            if not carrier_family or carrier_family.startswith("readout_steering"):
+                continue
+            return {
+                "carrier_recipe_family": carrier_family,
+                "carrier_recipe_name": summary.get("best_rank_carrier_recipe_name"),
+                "recommended_next_family": recommended,
+                "status": summary.get("status") or result.get("status"),
             }
         return None
 
@@ -3541,6 +3603,15 @@ class _FrontierReplayControllerClient:
             diagnostic_history_items,
             objective_bundle_key=objective_bundle_key,
         )
+        carrier_conversion_plan = self._carrier_conversion_plan_from_results(
+            diagnostic_history_items,
+            objective_bundle_key=objective_bundle_key,
+        )
+        carrier_conversion_sweep_seen = self._diagnostic_seen_in_results(
+            diagnostic_history_items,
+            "carrier_to_actuator_conversion_sweep",
+            objective_bundle_key=objective_bundle_key,
+        )
         production_trial_alternate_candidate: dict[str, Any] | None = None
         production_trial_blocked_recipe_id = (
             production_trial_outcome.get("operator_recipe_id")
@@ -4114,6 +4185,34 @@ class _FrontierReplayControllerClient:
                             if isinstance(readout_steering_deepening.get("positive_operator_deepening_plan"), Mapping)
                             else None
                         ),
+                    }
+                elif (
+                    rank_carrier_block
+                    and cross_bundle_bridge_exhausted
+                    and post_bridge_recipe_expansion_seen
+                    and carrier_conversion_plan is not None
+                    and not carrier_conversion_sweep_seen
+                ):
+                    request_extra_operator_compare_round = True
+                    diagnostic_name = "carrier_to_actuator_conversion_sweep"
+                    next_evidence = "rank_carrier_to_target_conversion"
+                    why_not_apply = (
+                        "post-bridge operator expansion found a self-owned activation-patch rank carrier; "
+                        "compose that carrier with bounded readout arms and ask whether rank movement "
+                        "converts into target-owned mass/top20 lift"
+                    )
+                    diagnostic_request = {
+                        "diagnostic": diagnostic_name,
+                        "bundle_key": objective_bundle_key,
+                        "objective_bundle_key": objective_bundle_key,
+                        "step_actuator_bundle_key": step_actuator_bundle_key,
+                        "next_evidence_needed": next_evidence,
+                        "reason": why_not_apply,
+                        "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                        "carrier_to_actuator_conversion_sweep": True,
+                        "carrier_recipe_family": carrier_conversion_plan.get("carrier_recipe_family"),
+                        "carrier_recipe_name": carrier_conversion_plan.get("carrier_recipe_name"),
+                        "recommended_next_family": carrier_conversion_plan.get("recommended_next_family"),
                     }
                 elif rank_carrier_block and cross_bundle_bridge_exhausted and post_bridge_recipe_expansion_seen:
                     next_evidence = "operator_recipe_expansion_exhausted"

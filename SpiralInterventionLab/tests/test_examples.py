@@ -5818,5 +5818,266 @@ class TestExamples(unittest.TestCase):
         set_default_device.assert_called_once_with("cpu")
 
 
+class TestCarrierComposedConversion(unittest.TestCase):
+    _OBJECTIVE_KEY = "kv_pair:budget:source_body:72:73"
+    _CARRIER_FAMILY = "resid_pre|source_term_token|blend"
+
+    def _make_runtime(self, *, convert_on_label: str | None = None):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+
+        def fake_trial_edit(candidate, *, trial_contract):
+            return {
+                "surface_id": "s_resid_pre_l11_last",
+                "kind": "activation_patch",
+                "bundle_key": candidate["bundle_key"],
+                "target": {"surface_id": "s_resid_pre_l11_last"},
+                "source": {"dtype": "vector", "expr": {"fn": "activation_patch_blend"}},
+                "op": {"kind": "activation_patch", "alpha": candidate["alpha"]},
+                "budget": {
+                    "ttl_steps": 1,
+                    "norm_clip": trial_contract["norm_clip"],
+                    "step_size": candidate["step_size"],
+                    "revertible": True,
+                },
+                "operator_recipe_id": candidate["operator_recipe_id"],
+                "operator_family_key": f"readout_escape|activation_patch|{candidate['site']}",
+            }
+
+        def fake_readout_candidate(**kwargs):
+            return {
+                "surface_id": "s_resid_pre_l11_last",
+                "kind": "resid_add",
+                "bundle_key": kwargs["bundle_key"],
+                "focus_feature": kwargs["intended_term"],
+                "target": {"surface_id": "s_resid_pre_l11_last"},
+                "source": {"dtype": "vector", "expr": {"fn": "readout_direction"}},
+                "op": {"kind": "resid_add", "alpha": kwargs["alpha"]},
+                "budget": {"ttl_steps": 1, "norm_clip": 1.0, "revertible": True},
+                "operator_recipe_id": (
+                    f"readout_escape|readout_steering|{kwargs['steering_kind']}|a{kwargs['alpha']:.4f}"
+                ),
+                "operator_family_key": "readout_escape|readout_steering|readout_direction",
+            }
+
+        def fake_replay(candidate_edits, **kwargs):
+            label = str(kwargs.get("label") or "")
+            if convert_on_label is not None and convert_on_label in label:
+                return {
+                    "status": "ok",
+                    "label": label,
+                    "actual_delta_class": "target_actuator",
+                    "target_mass_delta": 0.0005,
+                    "target_top20_hit_delta": 1,
+                    "target_piece": " budget",
+                    "target_piece_logit_delta": 0.4,
+                    "target_rank_after": 14,
+                    "target_top20_threshold_gap_delta": -0.8,
+                    "focus_rank_delta": 22,
+                    "repeat_flag_delta": 0,
+                    "entropy_delta": 0.0,
+                    "top1_margin_delta": 0.0,
+                    "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                    "eval_context_fingerprint": {"decode_step": 0},
+                }
+            return {
+                "status": "ok",
+                "label": label,
+                "actual_delta_class": "rank_carrier",
+                "target_mass_delta": 0.0,
+                "target_top20_hit_delta": 0,
+                "target_piece": " budget",
+                "target_piece_logit_delta": 0.02,
+                "target_rank_after": 55,
+                "target_top20_threshold_gap_delta": -0.05,
+                "focus_rank_delta": 6,
+                "repeat_flag_delta": 0,
+                "entropy_delta": 0.0,
+                "top1_margin_delta": 0.0,
+                "candidate_fingerprint": {"bundle_key": candidate_edits[0]["bundle_key"]},
+                "eval_context_fingerprint": {"decode_step": 0},
+            }
+
+        runtime._activation_patch_trial_edit_from_candidate = fake_trial_edit
+        runtime._readout_steering_candidate = fake_readout_candidate
+        runtime.replay_candidate_edits_actual_delta = fake_replay
+        runtime._term_readout_lift_score = lambda replay: 0.05
+        return runtime
+
+    def _carrier_seed_row(self):
+        return {
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "bundle_key": self._OBJECTIVE_KEY,
+            "intended_term": "budget",
+            "diagnostic_family": "activation_patch",
+            "recipe_family": self._CARRIER_FAMILY,
+            "recipe_name": "activation_patch_resid_pre_source_term_token",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L11|source_body|source_term_token|blend|a0.0500",
+            "activation_patch_site": "resid_pre",
+            "activation_patch_layer": 11,
+            "activation_patch_alpha": 0.05,
+            "activation_patch_step_size": 0.05,
+            "activation_patch_source_localization": "source_term_token",
+            "actual_delta_class": "rank_carrier",
+            "effect_role": "rank_carrier",
+            "ownership_role": "self",
+            "safety_role": "neutral",
+            "positive_traits": ["rank_carrier"],
+            "focus_rank_delta": 9,
+            "target_mass_delta": 0.0,
+            "self_delta": 0.06,
+        }
+
+    def test_composed_rows_hold_carrier_and_stay_diagnostic_only(self):
+        runtime = self._make_runtime(convert_on_label="carrier_hold_plus_target_l025_a050")
+        request = {
+            "diagnostic": "carrier_to_actuator_conversion_sweep",
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "objective_term": "budget",
+            "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+            "carrier_recipe_family": self._CARRIER_FAMILY,
+        }
+        rows = runtime._carrier_composed_conversion_rows(request, [self._carrier_seed_row()])
+
+        self.assertEqual(len(rows), 4)
+        for row in rows:
+            self.assertTrue(row["carrier_composed_conversion"])
+            self.assertTrue(row["carrier_to_actuator_conversion_variant"])
+            self.assertTrue(row["diagnostic_only"])
+            self.assertFalse(row["production_apply_allowed"])
+            self.assertFalse(row["policy_candidate_ready"])
+            self.assertEqual(row["edit_count"], 2)
+            self.assertEqual(row["operator_axis"], "carrier_to_actuator_conversion_sweep")
+            self.assertEqual(row["carrier_seed_recipe_family"], self._CARRIER_FAMILY)
+            self.assertEqual(row["activation_patch_site"], "resid_pre")
+            self.assertEqual(row["activation_patch_layer"], 11)
+            self.assertTrue(str(row["recipe_family"]).startswith("carrier_composed|"))
+
+        converted = [row for row in rows if row["conversion_role"] == "converted_target_actuator"]
+        self.assertEqual(len(converted), 1)
+        self.assertEqual(converted[0]["recipe_name"], "carrier_hold_plus_target_l025_a050")
+        self.assertIn("carrier_to_actuator_converted", converted[0]["positive_traits"])
+        self.assertEqual(converted[0]["status"], "supportive")
+
+        still_carriers = [row for row in rows if row["conversion_role"] == "still_rank_carrier"]
+        self.assertEqual(len(still_carriers), 3)
+        suppress_rows = [row for row in rows if row["candidate_kind"] == "suppress_then_carrier"]
+        self.assertEqual(len(suppress_rows), 1)
+
+    def test_composed_rows_fall_back_to_requested_family_without_seed(self):
+        runtime = self._make_runtime()
+        request = {
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "objective_term": "budget",
+            "carrier_recipe_family": "resid_pre|source_term_token_to_last|blend|a0.050",
+        }
+        rows = runtime._carrier_composed_conversion_rows(request, [])
+
+        self.assertEqual(len(rows), 4)
+        for row in rows:
+            self.assertEqual(row["activation_patch_site"], "resid_pre")
+            self.assertEqual(row["activation_patch_source_localization"], "source_term_token")
+            self.assertEqual(row["conversion_role"], "still_rank_carrier")
+
+    def test_composed_rows_deduplicate_and_require_carrier_identity(self):
+        runtime = self._make_runtime()
+        request = {
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "objective_term": "budget",
+            "carrier_recipe_family": self._CARRIER_FAMILY,
+        }
+        already_row = {
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "carrier_composed_conversion": True,
+        }
+        self.assertEqual(runtime._carrier_composed_conversion_rows(request, [already_row]), [])
+
+        bare_request = {"objective_bundle_key": self._OBJECTIVE_KEY, "objective_term": "budget"}
+        self.assertEqual(runtime._carrier_composed_conversion_rows(bare_request, []), [])
+
+
+class TestCarrierConversionControllerWiring(unittest.TestCase):
+    _OBJECTIVE_KEY = "kv_pair:budget:source_body:72:73"
+
+    def test_conversion_plan_extracted_from_post_bridge_summary(self):
+        results = [
+            {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "objective_bundle_key": self._OBJECTIVE_KEY,
+                "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+                "operator_recipe_expansion_summary": {
+                    "status": "rank_carrier_family_found",
+                    "recommended_next_family": "convert_rank_carrier_to_target:resid_pre|source_term_token|blend",
+                    "best_rank_carrier_recipe_name": "activation_patch_resid_pre_source_term_token",
+                },
+            }
+        ]
+        plan = _FrontierReplayControllerClient._carrier_conversion_plan_from_results(
+            results, objective_bundle_key=self._OBJECTIVE_KEY
+        )
+        self.assertIsNotNone(plan)
+        assert plan is not None
+        self.assertEqual(plan["carrier_recipe_family"], "resid_pre|source_term_token|blend")
+        self.assertEqual(plan["carrier_recipe_name"], "activation_patch_resid_pre_source_term_token")
+        self.assertEqual(plan["status"], "rank_carrier_family_found")
+
+    def test_conversion_plan_ignores_readout_steering_and_non_post_bridge(self):
+        readout_steering_result = {
+            "diagnostic": "compare_extra_operator_diagnostics",
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "operator_recipe_expansion_mode": "post_bridge_exhaustion",
+            "operator_recipe_expansion_summary": {
+                "recommended_next_family": "convert_rank_carrier_to_target:readout_steering|target_readout",
+            },
+        }
+        self.assertIsNone(
+            _FrontierReplayControllerClient._carrier_conversion_plan_from_results(
+                [readout_steering_result], objective_bundle_key=self._OBJECTIVE_KEY
+            )
+        )
+        non_post_bridge_result = {
+            "diagnostic": "compare_extra_operator_diagnostics",
+            "objective_bundle_key": self._OBJECTIVE_KEY,
+            "operator_recipe_expansion_mode": "readout_steering_deepening",
+            "operator_recipe_expansion_summary": {
+                "recommended_next_family": "convert_rank_carrier_to_target:resid_pre|source_term_token|blend",
+            },
+        }
+        self.assertIsNone(
+            _FrontierReplayControllerClient._carrier_conversion_plan_from_results(
+                [non_post_bridge_result], objective_bundle_key=self._OBJECTIVE_KEY
+            )
+        )
+
+    def test_diagnostic_next_action_maps_conversion_sweep(self):
+        self.assertEqual(
+            _FrontierReplayControllerClient._diagnostic_next_action("carrier_to_actuator_conversion_sweep"),
+            "request_carrier_to_actuator_conversion_sweep",
+        )
+
+    def test_conversion_sweep_seen_is_scoped_to_objective(self):
+        results = [
+            {
+                "diagnostic": "carrier_to_actuator_conversion_sweep",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+            }
+        ]
+
+        self.assertTrue(
+            _FrontierReplayControllerClient._diagnostic_seen_in_results(
+                results,
+                "carrier_to_actuator_conversion_sweep",
+                objective_bundle_key="entity_insert:mira:source_body:near_reachable",
+            )
+        )
+        self.assertFalse(
+            _FrontierReplayControllerClient._diagnostic_seen_in_results(
+                results,
+                "carrier_to_actuator_conversion_sweep",
+                objective_bundle_key=self._OBJECTIVE_KEY,
+            )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
