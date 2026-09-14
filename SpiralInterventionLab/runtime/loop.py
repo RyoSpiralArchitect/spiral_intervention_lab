@@ -709,6 +709,14 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         if not name_text:
             continue
         row.setdefault("diagnostic", name_text)
+        if name_text == "inspect_evidence":
+            # An ID addresses historical evidence, not the current frontier.
+            # Do not silently constrain it to today's objective or replay mode.
+            signature = _diagnostic_request_signature(row)
+            if signature not in seen:
+                seen.add(signature)
+                normalized.append(row)
+            continue
         _canonicalize_diagnostic_request_row(
             row,
             meta=meta,
@@ -815,6 +823,7 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
             "objective_bundle_key",
             "next_evidence_needed",
             "operator_recipe_expansion_mode",
+            "execution_id", "evidence_id", "dose_grid", "candidate_ids", "limit", "comparison_axis",
         )
     ) + "|" + str(candidate_recipe_id or "")
 

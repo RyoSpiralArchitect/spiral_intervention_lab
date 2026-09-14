@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections import Counter, deque
+from collections import Counter
 from collections.abc import Iterable, Sequence as SequenceABC
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -2095,65 +2095,8 @@ def _result_payload_digest(result_payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _jsonl_log_digest(log_dir: str | Path | None, *, max_files: int = 16, tail_per_file: int = 32) -> dict[str, Any]:
-    if log_dir is None:
-        return {"log_dir": None, "log_files": [], "event_counts": {}, "controller_step_views_tail": []}
-    base = Path(log_dir)
-    if not base.exists():
-        return {"log_dir": str(base), "log_files": [], "event_counts": {}, "controller_step_views_tail": []}
-
-    total_event_counts: Counter[str] = Counter()
-    file_summaries: list[dict[str, Any]] = []
-    combined_tail_events: list[dict[str, Any]] = []
-    jsonl_paths = sorted(path for path in base.rglob("*.jsonl") if path.is_file())
-    for path_index, path in enumerate(jsonl_paths):
-        file_event_counts: Counter[str] = Counter()
-        tail: deque[dict[str, Any]] = deque(maxlen=tail_per_file)
-        line_count = 0
-        with path.open("r", encoding="utf-8") as handle:
-            for raw_line in handle:
-                line_count += 1
-                try:
-                    event = json.loads(raw_line)
-                except json.JSONDecodeError:
-                    file_event_counts["<json_decode_error>"] += 1
-                    total_event_counts["<json_decode_error>"] += 1
-                    continue
-                if not isinstance(event, Mapping):
-                    continue
-                event_name = str(event.get("event", "<missing_event>") or "<missing_event>")
-                file_event_counts[event_name] += 1
-                total_event_counts[event_name] += 1
-                tail.append(dict(event))
-        if path_index < max_files:
-            relative = str(path.relative_to(base))
-            tail_events = list(tail)
-            combined_tail_events.extend(tail_events)
-            file_summaries.append(
-                {
-                    "path": relative,
-                    "line_count": line_count,
-                    "event_counts": dict(sorted(file_event_counts.items())),
-                    "tail_events": [
-                        _compact_for_post_run_debrief(event, max_depth=3, max_items=14, max_string=420)
-                        for event in tail_events[-8:]
-                    ],
-                }
-            )
-
-    step_views = _controller_step_views(combined_tail_events) if combined_tail_events else ()
-    return {
-        "log_dir": str(base),
-        "jsonl_file_count": len(jsonl_paths),
-        "jsonl_files_included": min(len(jsonl_paths), max_files),
-        "event_counts": dict(sorted(total_event_counts.items())),
-        "log_files": file_summaries,
-        "controller_step_views_tail": _compact_for_post_run_debrief(
-            list(step_views)[-8:],
-            max_depth=5,
-            max_items=12,
-            max_string=700,
-        ),
-    }
+    from SpiralInterventionLab.runtime.debrief import event_anchored_log_digest
+    return event_anchored_log_digest(log_dir, max_files=max_files)
 
 
 def _post_run_debrief_system_prompt() -> str:
@@ -2161,6 +2104,9 @@ def _post_run_debrief_system_prompt() -> str:
         "You are writing a post-run qualitative audit memo for Spiral Intervention Lab.\n"
         "This is not a controller command, not hidden chain-of-thought, not a score, and not paper-ready evidence.\n"
         "Use compact evidence-grounded bullets. Cite only the supplied run summary and logs; do not infer unseen model internals.\n"
+        "Cite supplied event_id values for claims and tool wishes. Check coverage_manifest before saying a signal is missing. "
+        "Classify wishes as missing_at_runtime, present_but_not_shown, shown_but_ambiguous, or unknown_from_supplied_evidence. "
+        "If no grounded wish exists, say so. This fresh call reconstructs public trajectory context, not private memory.\n"
         "Do not propose applying unsafe interventions directly. Treat diagnostic support as evidence, not permission.\n\n"
         "Write markdown with exactly these headings:\n"
         "## What happened?\n"
@@ -2173,7 +2119,7 @@ def _post_run_debrief_system_prompt() -> str:
         "## Controller-perspective note\n"
         "Use at most 3 bullets per section, except 'What would have made this easier?' may use 2-5 bullets.\n"
         "Each bullet should be one short sentence or a label plus one short explanation.\n"
-        "In 'What would have made this easier?', use the schema '- missing_signal: why_it_would_help -> suggested_field'. "
+        "In 'What would have made this easier?', use the schema '- availability_category | event_id | missing_signal: why_it_would_help -> suggested_field'. "
         "This section is a qualitative lab-note wish list only: it must not authorize interventions, select candidates, "
         "or become future-run context automatically.\n"
         "In the final section, write 2-4 short first-person bullets from the perspective of a controller "
@@ -2227,6 +2173,7 @@ def write_post_run_debrief_artifacts(
     max_output_tokens: int = 1200,
 ) -> dict[str, Any]:
     packet = build_post_run_debrief_packet(result_payload=result_payload, log_dir=log_dir)
+    _write_summary_artifact(log_dir, "post_run_debrief_input.json", packet)
     response = provider.complete(
         ControllerProviderRequest(
             system_prompt=_post_run_debrief_system_prompt(),
@@ -2245,6 +2192,7 @@ def write_post_run_debrief_artifacts(
     memo = str(response.text or "").strip()
     if not memo:
         memo = "_Post-run debrief provider returned an empty memo._"
+    from SpiralInterventionLab.runtime.debrief import audit_debrief_references
     artifact = {
         "artifact_kind": "post_run_controller_debrief",
         "qualitative_only": True,
@@ -2256,7 +2204,9 @@ def write_post_run_debrief_artifacts(
         "usage": _compact_for_post_run_debrief(dict(response.usage), max_depth=4, max_items=20),
         "metadata": _compact_for_post_run_debrief(dict(response.metadata), max_depth=3, max_items=20),
         "debrief_text": memo,
+        "reference_audit": audit_debrief_references(memo, packet["log_digest"]),
         "packet_summary": {
+            "coverage_manifest": packet["log_digest"].get("coverage_manifest", {}),
             "suite_mode": packet["run_result_digest"].get("suite_mode"),
             "task_id": packet["run_result_digest"].get("task_id"),
             "event_counts": packet["log_digest"].get("event_counts", {}),

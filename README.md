@@ -41,6 +41,14 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/source_direction_comparison.md`](docs/source_direction_comparison.md)
+  Frozen-prefix, equal-dose source-construction comparison and an evidence-ID
+  path into existing bounded trial reviews. Source changes affect token-form
+  response; the measured candidates still have no certified target actuator.
+- [`docs/luna_diagnostic_tooling_plan.md`](docs/luna_diagnostic_tooling_plan.md)
+  Luna-centered matched-dose response probes, bounded evidence inspection, and
+  event-anchored qualitative debriefs. Measurement remains separate from apply
+  permission; equal materialized edits are aliases, not independent evidence.
 - [`docs/readout_escape_research_observations.md`](docs/readout_escape_research_observations.md)
   Chronological research observations for the readout-escape line.
 - [`docs/readout_escape_insight_taxonomy.md`](docs/readout_escape_insight_taxonomy.md)
@@ -52,7 +60,7 @@ Key current notes:
 
 The current implementation includes:
 
-- a typed controller DSL with `resid_add`, `kv_mix`, and `rank1_patch`
+- a typed controller DSL with `resid_add`, `kv_mix`, `rank1_patch`, and blend-only `activation_patch`
 - reversible, TTL-scoped runtime edits with strict budget validation
 - structured controller reflection via `controller_memory`
 - task-grounded effect labeling driven by `partial_score`, coverage, repetition, and violations

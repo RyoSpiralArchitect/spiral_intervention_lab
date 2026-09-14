@@ -114,6 +114,8 @@ _KEY_FIELDS = (
     "intended_term",
     "target_piece",
     "target_piece_token_id",
+    "target_piece_binding_id",
+    "target_piece_binding_variant",
     "site",
     "layer",
     "source_localization",
@@ -141,6 +143,8 @@ def _row_key(row: Mapping[str, Any]) -> tuple[str, ...]:
         str(row.get("intended_term") or "unknown"),
         str(row.get("target_piece") or "unknown"),
         str(row.get("target_piece_token_id") if row.get("target_piece_token_id") is not None else "unknown"),
+        str(row.get("target_piece_binding_id") or "unknown"),
+        str(row.get("target_piece_binding_variant") or "unknown"),
         str(row.get("site") or "unknown"),
         str(row.get("layer") if row.get("layer") is not None else "unknown"),
         str(row.get("source_localization") or "unknown"),
@@ -177,6 +181,22 @@ def _summarize_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "by_response_effect_role": dict(sorted(Counter(str(row.get("response_effect_role") or "unknown") for row in rows).items())),
         "by_proxy_calibration_status": dict(sorted(Counter(str(row.get("proxy_calibration_status") or "unknown") for row in rows).items())),
         "by_subspace_family": dict(sorted(Counter(str(row.get("subspace_family") or "unknown") for row in rows).items())),
+        "by_target_piece_binding_variant": dict(
+            sorted(
+                Counter(
+                    str(row.get("target_piece_binding_variant") or "unknown")
+                    for row in rows
+                ).items()
+            )
+        ),
+        "target_piece_binding_seed_matrix_rows": sum(
+            1
+            for row in rows
+            if str(row.get("operator_axis") or "") == "target_piece_binding_seed_matrix"
+        ),
+        "post_edit_binding_divergence_rows": sum(
+            1 for row in rows if row.get("post_edit_matches_binding") is False
+        ),
         "subspace_consistent_row_count": sum(1 for row in rows if bool(row.get("subspace_consistent_seed", False))),
         "hint_only_unreliable_row_count": sum(
             1 for row in rows if str(row.get("proxy_calibration_status") or "") == "candidate_hint_only_unreliable"
@@ -275,6 +295,12 @@ def _target_piece_divergence_report(
         right_piece_ids = _piece_counts(right_rows, "target_piece_token_id")
         left_binding_status = _piece_counts(left_rows, "target_piece_binding_status")
         right_binding_status = _piece_counts(right_rows, "target_piece_binding_status")
+        left_ambiguity_status = _piece_counts(left_rows, "target_piece_binding_ambiguity_status")
+        right_ambiguity_status = _piece_counts(right_rows, "target_piece_binding_ambiguity_status")
+        left_binding_ids = _piece_counts(left_rows, "target_piece_binding_id")
+        right_binding_ids = _piece_counts(right_rows, "target_piece_binding_id")
+        left_binding_variants = _piece_counts(left_rows, "target_piece_binding_variant")
+        right_binding_variants = _piece_counts(right_rows, "target_piece_binding_variant")
         if (
             left_pieces == right_pieces
             and left_piece_ids == right_piece_ids
@@ -291,6 +317,9 @@ def _target_piece_divergence_report(
                     "target_piece_counts": left_pieces,
                     "target_piece_token_id_counts": left_piece_ids,
                     "target_piece_binding_status_counts": left_binding_status,
+                    "target_piece_binding_ambiguity_status_counts": left_ambiguity_status,
+                    "target_piece_binding_id_counts": left_binding_ids,
+                    "target_piece_binding_variant_counts": left_binding_variants,
                     "seed_source_counts": _piece_counts(left_rows, "seed_source"),
                     **left_summary,
                 },
@@ -298,6 +327,9 @@ def _target_piece_divergence_report(
                     "target_piece_counts": right_pieces,
                     "target_piece_token_id_counts": right_piece_ids,
                     "target_piece_binding_status_counts": right_binding_status,
+                    "target_piece_binding_ambiguity_status_counts": right_ambiguity_status,
+                    "target_piece_binding_id_counts": right_binding_ids,
+                    "target_piece_binding_variant_counts": right_binding_variants,
                     "seed_source_counts": _piece_counts(right_rows, "seed_source"),
                     **right_summary,
                 },
@@ -307,6 +339,9 @@ def _target_piece_divergence_report(
                     "target_piece_sets_match": left_pieces == right_pieces,
                     "target_piece_token_id_sets_match": left_piece_ids == right_piece_ids,
                     "binding_status_sets_match": left_binding_status == right_binding_status,
+                    "binding_ambiguity_status_sets_match": left_ambiguity_status == right_ambiguity_status,
+                    "binding_id_sets_match": left_binding_ids == right_binding_ids,
+                    "binding_variant_sets_match": left_binding_variants == right_binding_variants,
                     "seed_source_sets_match": _piece_counts(left_rows, "seed_source")
                     == _piece_counts(right_rows, "seed_source"),
                 },

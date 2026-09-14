@@ -103,6 +103,10 @@ def _row_identity(path: Path, line_no: int, row: Mapping[str, Any]) -> tuple[Any
         row.get("actual_delta_class"),
         row.get("target_piece"),
         row.get("target_piece_token_id"),
+        row.get("target_piece_binding_id"),
+        row.get("target_piece_binding_seed_matrix_id"),
+        row.get("target_piece_binding_variant"),
+        row.get("activation_patch_seed_source") or row.get("seed_source"),
         row.get("target_mass_delta"),
         row.get("target_top20_hit_delta"),
         row.get("target_top20_threshold_gap_delta"),
@@ -136,24 +140,65 @@ def _target_piece_binding_status(row: Mapping[str, Any]) -> Any:
     return row.get("target_piece_binding_status")
 
 
+def _target_piece_binding_ambiguity_status(row: Mapping[str, Any]) -> Any:
+    report = row.get("target_piece_binding_report")
+    if isinstance(report, Mapping):
+        status = report.get("binding_ambiguity_status")
+        if status not in (None, ""):
+            return status
+    manifest = row.get("target_piece_binding_manifest")
+    if isinstance(manifest, Mapping):
+        status = manifest.get("binding_ambiguity_status")
+        if status not in (None, ""):
+            return status
+    return row.get("target_piece_binding_ambiguity_status")
+
+
 def _compact_row(path: Path, line_no: int, row: Mapping[str, Any]) -> dict[str, Any]:
     target_mass = _as_float(row.get("target_mass_delta"))
     gap_delta = _as_float(row.get("target_top20_threshold_gap_delta"))
     return {
         "path": str(path),
         "line": int(line_no),
+        "execution_id": row.get("execution_id"),
+        "observable_id": row.get("observable_id"),
+        "measurement_context_id": row.get("measurement_context_id"),
+        "execution_alias": row.get("execution_alias"),
+        "bound_token_response": row.get("bound_token_response"),
+        "actual_delta_class_scope": row.get("actual_delta_class_scope"),
+        "comparison_axis": row.get("comparison_axis"),
+        "source_variant": row.get("source_variant"),
+        "source_variant_origin": row.get("source_variant_origin"),
+        "threshold20_logit_delta": row.get("threshold20_logit_delta"),
+        "repeat_max_abs_logit_delta": _as_float(row.get("repeat_max_abs_logit_delta")),
         "objective_bundle_key": row.get("objective_bundle_key") or row.get("bundle_key"),
         "actuator_bundle_key": row.get("actuator_bundle_key"),
         "intended_term": row.get("intended_term") or row.get("objective_term"),
         "target_piece": row.get("target_piece"),
         "target_piece_token_id": _as_int(row.get("target_piece_token_id")),
+        "target_piece_binding_id": row.get("target_piece_binding_id"),
         "target_piece_binding_status": _target_piece_binding_status(row),
+        "target_piece_binding_ambiguity_status": _target_piece_binding_ambiguity_status(row),
+        "target_piece_binding_variant": row.get("target_piece_binding_variant"),
+        "target_piece_binding_seed_matrix_id": row.get(
+            "target_piece_binding_seed_matrix_id"
+        ),
+        "target_piece_binding_requested_honored": row.get(
+            "target_piece_binding_requested_honored"
+        ),
+        "target_piece_binding_manifest": dict(row.get("target_piece_binding_manifest"))
+        if isinstance(row.get("target_piece_binding_manifest"), Mapping)
+        else None,
         "target_piece_binding_report": dict(row.get("target_piece_binding_report"))
         if isinstance(row.get("target_piece_binding_report"), Mapping)
         else None,
+        "post_edit_best_piece": row.get("post_edit_best_piece"),
+        "post_edit_best_token_id": _as_int(row.get("post_edit_best_token_id")),
+        "post_edit_matches_binding": row.get("post_edit_matches_binding"),
         "site": row.get("activation_patch_site"),
         "layer": _as_int(row.get("activation_patch_layer")),
         "source_localization": row.get("activation_patch_source_localization"),
+        "evidence_kind": row.get("evidence_kind"),
         "operator_axis": row.get("operator_axis"),
         "operator_recipe_expansion_mode": row.get("operator_recipe_expansion_mode"),
         "seed_source": _activation_patch_seed_source(row),
@@ -211,6 +256,9 @@ def _compact_row(path: Path, line_no: int, row: Mapping[str, Any]) -> dict[str, 
         "safety_role": row.get("safety_role"),
         "target_mass_delta": target_mass,
         "target_top20_hit_delta": _as_int(row.get("target_top20_hit_delta")),
+        "target_piece_logit_delta": _as_float(row.get("target_piece_logit_delta")),
+        "target_piece_prob_delta": _as_float(row.get("target_piece_prob_delta")),
+        "target_rank_delta": _as_int(row.get("target_rank_delta")),
         "gap_delta": gap_delta,
         "focus_rank_delta": _as_int(row.get("focus_rank_delta")),
         "repeat_delta": _as_float(row.get("repeat_delta")),
@@ -290,6 +338,119 @@ def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int 
     by_target_piece_binding_status = Counter(
         str(row.get("target_piece_binding_status") or "unknown") for row in rows
     )
+    by_target_piece_binding_ambiguity_status = Counter(
+        str(row.get("target_piece_binding_ambiguity_status") or "unknown") for row in rows
+    )
+    raw_binding_seed_rows = [
+        row
+        for row in rows
+        if str(row.get("operator_axis") or "") == "target_piece_binding_seed_matrix"
+        and (str(row.get("evidence_kind") or "") == "target_piece_binding_replay" or row.get("execution_id"))
+        and str(row.get("target_piece_binding_variant") or "")
+        in {"canonical", "alternate"}
+        and row.get("seed_source") not in (None, "")
+    ]
+
+    def _binding_seed_cell_identity(row: Mapping[str, Any]) -> tuple[str, ...]:
+        return (
+            str(row.get("objective_bundle_key") or "unknown"),
+            str(row.get("target_piece_binding_id") or ""),
+            str(row.get("target_piece_binding_variant") or ""),
+            str(row.get("seed_source") or ""),
+            str(row.get("operator_recipe_id") or row.get("seed_recipe_name") or ""),
+            str(row.get("site") or ""),
+            str(row.get("layer") or ""),
+            str(row.get("target_piece_token_id") or ""),
+            str(row.get("step_size") or ""),
+            str(row.get("alpha") or ""),
+            str(row.get("execution_id") or ""),
+        )
+
+    identified_cell_keys = {
+        _binding_seed_cell_identity(row)
+        for row in raw_binding_seed_rows
+        if row.get("target_piece_binding_seed_matrix_id") not in (None, "")
+    }
+    binding_seed_rows_by_key: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in raw_binding_seed_rows:
+        cell_key = _binding_seed_cell_identity(row)
+        matrix_id = str(row.get("target_piece_binding_seed_matrix_id") or "")
+        if not matrix_id and cell_key in identified_cell_keys:
+            continue
+        unique_key = (matrix_id or "legacy", *cell_key)
+        binding_seed_rows_by_key.setdefault(unique_key, row)
+    binding_seed_rows = list(binding_seed_rows_by_key.values())
+    by_target_piece_binding_variant = Counter(
+        str(row.get("target_piece_binding_variant") or "unknown")
+        for row in binding_seed_rows
+    )
+
+    binding_seed_groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in binding_seed_rows:
+        objective_key = str(row.get("objective_bundle_key") or "unknown")
+        matrix_id = str(
+            row.get("target_piece_binding_seed_matrix_id")
+            or f"legacy:{objective_key}"
+        )
+        binding_seed_groups[(objective_key, matrix_id)].append(row)
+    target_piece_binding_seed_matrices = []
+    for (objective_key, matrix_id), group_rows in sorted(binding_seed_groups.items()):
+        variants = sorted(
+            {str(row.get("target_piece_binding_variant") or "unknown") for row in group_rows}
+        )
+        seed_sources = sorted({str(row.get("seed_source") or "unknown") for row in group_rows})
+        target_piece_binding_seed_matrices.append(
+            {
+                "objective_bundle_key": objective_key,
+                "target_piece_binding_seed_matrix_id": matrix_id,
+                "row_count": len(group_rows),
+                "unique_execution_count": len({r["execution_id"] for r in group_rows if r.get("execution_id")}),
+                "unique_observable_count": len({r["observable_id"] for r in group_rows if r.get("observable_id")}),
+                "binding_variants": variants,
+                "seed_sources": seed_sources,
+                "comparison_axes": sorted({str(r["comparison_axis"]) for r in group_rows if r.get("comparison_axis")}),
+                "source_variants": sorted({str(r["source_variant"]) for r in group_rows if r.get("source_variant")}),
+                "factorial_complete": bool(
+                    {"canonical", "alternate"}.issubset(set(variants))
+                    and len(seed_sources) >= 2
+                    and len(group_rows) >= 4
+                ),
+                "requested_binding_honored_count": sum(
+                    1
+                    for row in group_rows
+                    if bool(row.get("target_piece_binding_requested_honored", False))
+                ),
+                "post_edit_binding_divergence_count": sum(
+                    1 for row in group_rows if row.get("post_edit_matches_binding") is False
+                ),
+                "cells": [
+                    {
+                        "binding_variant": row.get("target_piece_binding_variant"),
+                        "binding_id": row.get("target_piece_binding_id"),
+                        "target_piece": row.get("target_piece"),
+                        "target_piece_token_id": row.get("target_piece_token_id"),
+                        "seed_source": row.get("seed_source"),
+                        "source_variant": row.get("source_variant"),
+                        "seed_recipe_name": row.get("seed_recipe_name"),
+                        "step_size": row.get("step_size"),
+                        "execution_id": row.get("execution_id"),
+                        "observable_id": row.get("observable_id"),
+                        "execution_alias": row.get("execution_alias"),
+                        "threshold20_logit_delta": row.get("threshold20_logit_delta"),
+                        "bound_token_response": row.get("bound_token_response"),
+                        "target_piece_logit_delta": row.get("target_piece_logit_delta"),
+                        "target_piece_prob_delta": row.get("target_piece_prob_delta"),
+                        "target_rank_delta": row.get("target_rank_delta"),
+                        "target_mass_delta": row.get("target_mass_delta"),
+                        "target_top20_hit_delta": row.get("target_top20_hit_delta"),
+                        "gap_delta": row.get("gap_delta"),
+                        "post_edit_best_piece": row.get("post_edit_best_piece"),
+                        "post_edit_matches_binding": row.get("post_edit_matches_binding"),
+                    }
+                    for row in group_rows
+                ],
+            }
+        )
 
     grouped: dict[tuple[str, int | None, str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -365,12 +526,26 @@ def summarize_activation_patch_jsonl(paths: Sequence[str | Path], *, top_k: int 
             "by_proxy_calibration_status": dict(sorted(by_proxy_calibration_status.items())),
             "by_subspace_family": dict(sorted(by_subspace_family.items())),
             "by_target_piece_binding_status": dict(sorted(by_target_piece_binding_status.items())),
+            "by_target_piece_binding_ambiguity_status": dict(
+                sorted(by_target_piece_binding_ambiguity_status.items())
+            ),
+            "by_target_piece_binding_variant": dict(
+                sorted(by_target_piece_binding_variant.items())
+            ),
+            "target_piece_binding_seed_matrix_row_count": len(binding_seed_rows),
+            "target_piece_binding_seed_matrices": target_piece_binding_seed_matrices,
             "target_piece_binding_reports": [
                 {
                     "objective_bundle_key": row.get("objective_bundle_key"),
                     "intended_term": row.get("intended_term"),
                     "target_piece": row.get("target_piece"),
                     "target_piece_token_id": row.get("target_piece_token_id"),
+                    "target_piece_binding_id": row.get("target_piece_binding_id"),
+                    "target_piece_binding_ambiguity_status": row.get(
+                        "target_piece_binding_ambiguity_status"
+                    ),
+                    "post_edit_best_piece": row.get("post_edit_best_piece"),
+                    "post_edit_best_token_id": row.get("post_edit_best_token_id"),
                     "seed_source": row.get("seed_source"),
                     "site": row.get("site"),
                     "layer": row.get("layer"),
