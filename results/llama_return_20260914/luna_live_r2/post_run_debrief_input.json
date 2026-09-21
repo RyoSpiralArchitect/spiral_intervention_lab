@@ -1,0 +1,500 @@
+{
+  "artifact_kind": "post_run_controller_debrief_packet",
+  "do_not_autofeed_into_next_run": true,
+  "interpretation_boundary": "The debrief may summarize controller trajectory evidence, but it is not a metric, not a success label, and not an authorization signal for future apply decisions.",
+  "log_digest": {
+    "controller_step_views_tail": [],
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L101",
+        "c1.jsonl:L28",
+        "c1.jsonl:L29",
+        "c1.jsonl:L30",
+        "c1.jsonl:L31",
+        "c1.jsonl:L50",
+        "c1.jsonl:L51",
+        "c1.jsonl:L52",
+        "c1.jsonl:L53"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 93,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 103
+    },
+    "event_anchors": [
+      {
+        "anchor_kind": "first_event",
+        "anchor_kinds": [
+          "first_event"
+        ],
+        "event": "episode_start",
+        "event_id": "b0.jsonl:L1",
+        "related_events": [],
+        "visible_fields": [
+          "event_id",
+          "event"
+        ]
+      },
+      {
+        "anchor_kind": "termination",
+        "anchor_kinds": [
+          "termination"
+        ],
+        "event": "episode_end",
+        "event_id": "c1.jsonl:L101",
+        "output": " Mira will send Omar the budget draft before lunch.",
+        "related_events": [],
+        "score": 1.0,
+        "steps": 11,
+        "task_done": true,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "steps",
+          "output",
+          "score",
+          "task_done"
+        ]
+      },
+      {
+        "anchor_kind": "first_materialization",
+        "anchor_kinds": [
+          "first_materialization"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 9,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "actual_delta_class": "target_lift",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:95a3672c9b2c127a3fb2d4e3",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+            "target_mass_delta": 0.0004,
+            "target_piece": " send",
+            "target_piece_logit_delta": 0.0625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0625
+          },
+          {
+            "actual_delta_class": "target_lift",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:57b97ba08cbc9e57a8519354",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+            "target_mass_delta": 0.0004,
+            "target_piece": " send",
+            "target_piece_logit_delta": 0.0625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0625
+          }
+        ],
+        "candidate_rows_omitted": 0,
+        "diagnostic": "operator_diagnostic_replay",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L31",
+        "matrix": {
+          "measurement_context_id": null,
+          "measurement_mode": null,
+          "new_measurement_count": null,
+          "no_edit_max_abs_logit_delta": null,
+          "physical_replay_count": null,
+          "row_count": 0,
+          "state_restored": null,
+          "status": "not_requested",
+          "unavailable_reason": null
+        },
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "blocked_by": "certified_for_apply_false_and_production_apply_disallowed",
+                "diagnostic_request": "operator_diagnostic_replay",
+                "micro_rationale": "Candidate blueprint exists, but no operator is certified for apply.",
+                "next_action": "request_operator_diagnostic",
+                "why_not_apply": "diagnostic-only entity candidate lacks production permission"
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L28",
+            "step": 2,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L29",
+            "step": 2,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "diagnostic": "operator_diagnostic_replay",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L30",
+            "step": 2,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic"
+            ]
+          }
+        ],
+        "status": "ok",
+        "step": 2,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      },
+      {
+        "anchor_kind": "first_actual_matrix",
+        "anchor_kinds": [
+          "first_actual_matrix"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 7,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 8,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "rank_carrier",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:e953275e3ea394be13d9c755",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:475f0d566cd812ed76f98bcd",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": -0.0,
+            "target_piece": " send",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0078125,
+            "threshold20_logit_delta": -0.0078125
+          },
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "rank_carrier",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "negative_beyond_repeat_variation",
+            "evidence_id": "obs:400a36333665754b28e7c639",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:475f0d566cd812ed76f98bcd",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": -0.0,
+            "target_piece": " Send",
+            "target_piece_logit_delta": -0.00390625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.00390625,
+            "threshold20_logit_delta": -0.0078125
+          },
+          {
+            "activation_patch_step_size": 0.16,
+            "actual_delta_class": "rank_carrier",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "negative_beyond_repeat_variation",
+            "evidence_id": "obs:bdf1bdb591e02588e1e658a0",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:0e02f516f4262a4ad785f096",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": -0.0,
+            "target_piece": " send",
+            "target_piece_logit_delta": -0.00390625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.00390625,
+            "threshold20_logit_delta": -0.0078125
+          },
+          {
+            "activation_patch_step_size": 0.16,
+            "actual_delta_class": "rank_carrier",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "negative_beyond_repeat_variation",
+            "evidence_id": "obs:632021f45a9f0f6b3eab3fc3",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:0e02f516f4262a4ad785f096",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": -0.0,
+            "target_piece": " Send",
+            "target_piece_logit_delta": -0.00390625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.00390625,
+            "threshold20_logit_delta": -0.0078125
+          },
+          {
+            "activation_patch_step_size": 0.03,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:08c9a9f37e0895d986dd4e5d",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300",
+            "target_mass_delta": 0.0,
+            "target_piece": " send",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.05,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:17353698d731438b7e41e373",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0500",
+            "target_mass_delta": 0.0,
+            "target_piece": " send",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.05,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:6554b4075f74162eedb4f676",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0500",
+            "target_mass_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.08,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:98d2e5cac5bb31266ee0d997",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "target_mass_delta": 0.0,
+            "target_piece": " send",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.007812
+          }
+        ],
+        "candidate_rows_omitted": 16,
+        "diagnostic": "activation_patch_candidate_review",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L53",
+        "matrix": {
+          "measurement_context_id": "context:740c07176345f4b0ab492fc1",
+          "measurement_mode": "matched_response_probe",
+          "new_measurement_count": 2,
+          "no_edit_max_abs_logit_delta": 0.0,
+          "physical_replay_count": 6,
+          "row_count": 4,
+          "state_restored": true,
+          "status": "dose_matched_response_complete",
+          "unavailable_reason": null
+        },
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "blocked_by": "uncertified_operator_and_no_production_permission",
+                "diagnostic_request": "activation_patch_candidate_review",
+                "micro_rationale": "A small target lift is promising, but apply certification and production permission are absent.",
+                "next_action": "request_activation_patch_candidate_review",
+                "why_not_apply": "candidate evidence is diagnostic-only and target budget remains missing"
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L50",
+            "step": 4,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L51",
+            "step": 4,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "diagnostic": "activation_patch_candidate_review",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L52",
+            "step": 4,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic"
+            ]
+          }
+        ],
+        "status": "ok",
+        "step": 4,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      }
+    ],
+    "event_counts": {
+      "controller_command": 11,
+      "controller_decision": 11,
+      "controller_diagnostic_request": 6,
+      "controller_diagnostic_result": 6,
+      "controller_effect_summary": 11,
+      "controller_loop_patience": 6,
+      "controller_observation": 11,
+      "controller_prompt_telemetry": 11,
+      "controller_provider_attempt": 11,
+      "controller_selection": 11,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "log_dir": "results/llama_return_20260914/luna_live_r2",
+    "log_files": [
+      {
+        "event_counts": {
+          "episode_end": 1,
+          "episode_start": 1
+        },
+        "path": "b0.jsonl",
+        "sha256": "7657b1d541b661862e4048b611fa4b494d5be163a9a92d80c813a8e42699a6a5"
+      },
+      {
+        "event_counts": {
+          "controller_command": 11,
+          "controller_decision": 11,
+          "controller_diagnostic_request": 6,
+          "controller_diagnostic_result": 6,
+          "controller_effect_summary": 11,
+          "controller_loop_patience": 6,
+          "controller_observation": 11,
+          "controller_prompt_telemetry": 11,
+          "controller_provider_attempt": 11,
+          "controller_selection": 11,
+          "episode_end": 1,
+          "episode_start": 1,
+          "observer_check": 4
+        },
+        "path": "c1.jsonl",
+        "sha256": "a475cf19e7ddc0105272d090776a0d4786972677f9539ae76cf39e648c2a1d0e"
+      }
+    ]
+  },
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "output_diet_contract": {
+    "max_bullets_per_section": 3,
+    "qualitative_affordances_only": true,
+    "what_would_have_helped_schema": "missing_signal: why_it_would_help -> suggested_field"
+  },
+  "qualitative_only": true,
+  "required_output_sections": [
+    "What happened?",
+    "What made the run difficult?",
+    "Most likely failure factors",
+    "Evidence supporting this reading",
+    "What I would try next",
+    "What would have made this easier?",
+    "What should not be concluded",
+    "Controller-perspective note"
+  ],
+  "run_result_digest": {
+    "b0": {
+      "output": " Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "steps": 11
+    },
+    "b1": null,
+    "c1": {
+      "output": " Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "steps": 11
+    },
+    "controller_model_name": "gpt-5.6-luna",
+    "controller_provider": "openai",
+    "controller_reflection_mode": "off",
+    "seed": 7,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_v0",
+    "worker_decoder_control_mode": "off",
+    "worker_loop_rescue_edits_per_run": 0,
+    "worker_model_name": "meta-llama/Llama-3.2-3B-Instruct"
+  }
+}

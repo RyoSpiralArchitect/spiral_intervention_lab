@@ -1,0 +1,30 @@
+{
+  "status": "verified",
+  "rows_sha256": "2cc4fc297099c9761bee92effaefe1ef30b2673eb27268b91ffe5f56358a131a",
+  "source_log_hash_verified": true,
+  "source_manifest_hash_verified": true,
+  "same_candidate_and_source": true,
+  "source_files_changed_after_measurement": {
+    "SpiralInterventionLab/runtime/worker.py": {
+      "recorded": "53d869382bc0143bc2ac1f3a89469b23c7ff9b66eb158eb8eb46572bbe095372",
+      "current": "2938ae3b65bf9c7c1fcd6f5f74246e8d48d30dcb00cd1780134223c9014763b6"
+    }
+  },
+  "post_measurement_change_note": "worker.py adds only a Mapping guard for absent/non-mapping diagnostic hints; forward/replay functions unchanged",
+  "tests": {
+    "passed": 346,
+    "warnings": 16,
+    "subtests_passed": 2
+  },
+  "production_apply_allowed": false,
+  "artifact_sha256": {
+    "summary.json": "4bf49a8e5226c9538924424e835acab1fdf2d8a26e56bd5ba94445cfdaee7e1b",
+    "rows.jsonl": "2cc4fc297099c9761bee92effaefe1ef30b2673eb27268b91ffe5f56358a131a",
+    "review_reuse_audit.json": "b3da186809fd3278a016a15854cc8d5d905d986e126166ea2a7ad322aa7bc16b",
+    "audit_review_reuse.py": "49a7c48e7855feb4aad5cf69587ecb72cca171ade0cc82e9d3648edcab772bd6",
+    "frozen_source.pt": "bd657b16d52788ca6eaa3ca246565100ae87c33f558ab5980904d4b38081bdcd",
+    "frozen_candidate.json": "52c5101a40bf9bef6ea86a734aeca85e7d30d1460e83e5393db9b4285e2bc55f",
+    "manifest.json": "6ddc4610d97315b35c621cc632a9359c5a7b100a233c586fa4a0e158d0b1ae84",
+    "status.json": "8f3879a97f17108876a400d4e86b0e62faffd00bcc743e29767023896c49e46e"
+  }
+}

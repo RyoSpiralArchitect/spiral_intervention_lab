@@ -12,6 +12,7 @@ from .language_tasks import (
     StructuredSummaryEpisode,
 )
 from .semantic_critic import MiniLMSemanticCritic, SemanticCritic
+from .rewrite_ladder import REWRITE_LADDER_TASKS, SpiralRewriteLadderEnv
 
 __all__ = [
     "ConstrainedRewriteEpisode",
@@ -24,6 +25,8 @@ __all__ = [
     "SpiralDigitTransformEnv",
     "SpiralConstrainedRewriteEnv",
     "SpiralEasyConstrainedRewriteEnv",
+    "SpiralRewriteLadderEnv",
+    "REWRITE_LADDER_TASKS",
     "SpiralEntailmentReasoningEnv",
     "SpiralSentenceOrderingEnv",
     "SpiralStructuredSummaryEnv",

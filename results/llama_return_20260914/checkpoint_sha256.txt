@@ -1,0 +1,2 @@
+13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55  /Users/ryospiralarchitect/🌀SpiralReality🌀/model/llama-3.2-3b/model-00001-of-00002.safetensors
+7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c  /Users/ryospiralarchitect/🌀SpiralReality🌀/model/llama-3.2-3b/model-00002-of-00002.safetensors

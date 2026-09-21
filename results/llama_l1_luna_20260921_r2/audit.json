@@ -1,0 +1,3207 @@
+{
+  "scope": "one prespecified L1/review/seed0 pair, full-depth Llama, current working tree",
+  "controller": "gpt-5.6-luna",
+  "worker": {
+    "layers": 28,
+    "device": "mps",
+    "dtype": "float16",
+    "max_new_tokens": 64
+  },
+  "prompt_identity_match": true,
+  "frozen_screen_b0_match": {
+    "prompt_output_score_match": true,
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18
+  },
+  "b0": {
+    "event": "episode_end",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18,
+    "task_done": false,
+    "lexical_check": {
+      "required_terms_present": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "missing_required_terms": [
+        "Selim"
+      ],
+      "forbidden_terms_present": [],
+      "word_count": 15,
+      "max_words": 18,
+      "within_word_budget": true,
+      "semantic_faithfulness_certified": false
+    }
+  },
+  "c1": {
+    "event": "episode_end",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18,
+    "task_done": false,
+    "lexical_check": {
+      "required_terms_present": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "missing_required_terms": [
+        "Selim"
+      ],
+      "forbidden_terms_present": [],
+      "word_count": 15,
+      "max_words": 18,
+      "within_word_budget": true,
+      "semantic_faithfulness_certified": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "apply_command_count": 0,
+  "command_decisions": {
+    "noop": 18
+  },
+  "event_counts": {
+    "episode_start": 1,
+    "observer_check": 4,
+    "controller_prompt_telemetry": 18,
+    "controller_observation": 18,
+    "controller_provider_attempt": 18,
+    "controller_decision": 18,
+    "controller_command": 18,
+    "controller_selection": 18,
+    "controller_diagnostic_request": 13,
+    "controller_diagnostic_result": 13,
+    "controller_loop_patience": 13,
+    "controller_effect_summary": 18,
+    "episode_end": 1
+  },
+  "provider_models": {
+    "gpt-5.6-luna": 18
+  },
+  "provider_parse_results": {
+    "True": 18
+  },
+  "controller_usage_excluding_debrief_and_interrupted_attempt": {
+    "input_tokens": 336608,
+    "output_tokens": 4225,
+    "total_tokens": 340833,
+    "cached_input_tokens": 57974,
+    "reasoning_output_tokens": 1649
+  },
+  "controller_timeline": [
+    {
+      "controller_step": 0,
+      "observation_step": 1,
+      "generated_tail": " Nora",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0,
+          "take": 0.0
+        },
+        "entity_recall_terms": [
+          "take",
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "take",
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.511111,
+        "progress_label": "progressing",
+        "required_term_recall": 0.1111111111111111,
+        "required_term_span_progress": 0.111111,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0,
+          "take": 0.0
+        },
+        "required_terms_present": [
+          "Nora"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "target_entity_insertion_probe",
+      "next_action": "request_target_entity_insertion_probe",
+      "blocked_by": "no_certified_actuator",
+      "why_not_apply": "available evidence is diagnostic-only and target lift is not certified"
+    },
+    {
+      "controller_step": 1,
+      "observation_step": 2,
+      "generated_tail": " Nora will",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0,
+          "take": 0.0
+        },
+        "entity_recall_terms": [
+          "take",
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "take",
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.511111,
+        "progress_label": "progressing",
+        "required_term_recall": 0.1111111111111111,
+        "required_term_span_progress": 0.111111,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0,
+          "take": 0.0
+        },
+        "required_terms_present": [
+          "Nora"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "entity_insertion_operator_candidate_review",
+      "next_action": "request_entity_insertion_operator_candidate_review",
+      "blocked_by": "operator_not_certified",
+      "why_not_apply": "Diagnostic-only candidate review lacks production apply permission"
+    },
+    {
+      "controller_step": 2,
+      "observation_step": 3,
+      "generated_tail": " Nora will take",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.572222,
+        "progress_label": "progressing",
+        "required_term_recall": 0.2222222222222222,
+        "required_term_span_progress": 0.222222,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "operator_diagnostic_replay",
+      "next_action": "request_operator_diagnostic",
+      "blocked_by": "operator_not_certified_for_apply",
+      "why_not_apply": "production application is disallowed and target lift is uncertified"
+    },
+    {
+      "controller_step": 3,
+      "observation_step": 4,
+      "generated_tail": " Nora will take the",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "sample",
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.572222,
+        "progress_label": "progressing",
+        "required_term_recall": 0.2222222222222222,
+        "required_term_span_progress": 0.222222,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 0.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "activation_patch_candidate_review",
+      "next_action": "request_activation_patch_candidate_review",
+      "blocked_by": "operator_not_certified_for_apply",
+      "why_not_apply": "production apply is disallowed and target lift lacks certified binding evidence"
+    },
+    {
+      "controller_step": 4,
+      "observation_step": 5,
+      "generated_tail": " Nora will take the sample",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.633333,
+        "progress_label": "progressing",
+        "required_term_recall": 0.3333333333333333,
+        "required_term_span_progress": 0.333333,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "activation_patch_candidate_review",
+      "next_action": "request_activation_patch_candidate_review",
+      "blocked_by": "operator_not_certified_for_apply",
+      "why_not_apply": "shadow target lift lacks certified_for_apply and production_apply_allowed"
+    },
+    {
+      "controller_step": 5,
+      "observation_step": 6,
+      "generated_tail": " Nora will take the sample to",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.633333,
+        "progress_label": "progressing",
+        "required_term_recall": 0.3333333333333333,
+        "required_term_span_progress": 0.333333,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "activation_patch_candidate_review",
+      "next_action": "request_activation_patch_candidate_review",
+      "blocked_by": "operator_not_certified_and_production_apply_disallowed",
+      "why_not_apply": "target lift is diagnostic-only with no certified production actuator"
+    },
+    {
+      "controller_step": 6,
+      "observation_step": 7,
+      "generated_tail": " Nora will take the sample to I",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Ivo": 0.333333,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk",
+          "Ivo"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.633333,
+        "progress_label": "progressing",
+        "required_term_recall": 0.3333333333333333,
+        "required_term_span_progress": 0.37037,
+        "required_term_span_progress_by_term": {
+          "Ivo": 0.333333,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "activation_patch_runtime_support_probe",
+      "next_action": "request_activation_patch_runtime_support_probe",
+      "blocked_by": "uncertified_activation_patch_and_no_production_permission",
+      "why_not_apply": "target lift is shadow-only and lacks certified_for_apply"
+    },
+    {
+      "controller_step": 7,
+      "observation_step": 8,
+      "generated_tail": " Nora will take the sample to Ivo",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.694444,
+        "progress_label": "progressing",
+        "required_term_recall": 0.4444444444444444,
+        "required_term_span_progress": 0.444444,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.0,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "activation_patch_candidate_review",
+      "next_action": "request_activation_patch_candidate_review",
+      "blocked_by": "uncertified_candidate_and_no_production_apply_permission",
+      "why_not_apply": "target lift is shadow-only with zero top20 gain and no certified actuator"
+    },
+    {
+      "controller_step": 8,
+      "observation_step": 9,
+      "generated_tail": " Nora will take the sample to Ivo before",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 0.0,
+          "send": 0.0
+        },
+        "entity_recall_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.694444,
+        "progress_label": "progressing",
+        "required_term_recall": 0.4444444444444444,
+        "required_term_span_progress": 0.5,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.0,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 0.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "activation_patch_candidate_review",
+      "next_action": "request_activation_patch_candidate_review",
+      "blocked_by": "certification_and_target_top20_lift_missing",
+      "why_not_apply": "production apply is disallowed and evidence remains diagnostic-only"
+    },
+    {
+      "controller_step": 9,
+      "observation_step": 10,
+      "generated_tail": " Nora will take the sample to Ivo before sending",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 0.0
+        },
+        "entity_recall_terms": [
+          "report",
+          "Yara",
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.755556,
+        "progress_label": "progressing",
+        "required_term_recall": 0.5555555555555556,
+        "required_term_span_progress": 0.655556,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": null,
+      "next_action": "wait",
+      "blocked_by": "uncertified_dead_or_rank_carrier_actuator",
+      "why_not_apply": "No candidate is certified for apply and production application is disallowed"
+    },
+    {
+      "controller_step": 10,
+      "observation_step": 11,
+      "generated_tail": " Nora will take the sample to Ivo before sending the",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 0.0
+        },
+        "entity_recall_terms": [
+          "report",
+          "Yara",
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.755556,
+        "progress_label": "progressing",
+        "required_term_recall": 0.5555555555555556,
+        "required_term_span_progress": 0.655556,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 0.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "operator_diagnostic_replay",
+      "next_action": "request_operator_diagnostic",
+      "blocked_by": "uncertified_dead_or_rank_carrier_actuator",
+      "why_not_apply": "candidate is not certified and has no target lift"
+    },
+    {
+      "controller_step": 11,
+      "observation_step": 12,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5
+        },
+        "entity_recall_terms": [
+          "Yara",
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.816667,
+        "progress_label": "progressing",
+        "required_term_recall": 0.6666666666666666,
+        "required_term_span_progress": 0.766667,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "target_entity_insertion_probe",
+      "next_action": "request_target_entity_insertion_probe",
+      "blocked_by": "uncertified_target_actuator",
+      "why_not_apply": "operator is uncertified and production apply is disallowed"
+    },
+    {
+      "controller_step": 12,
+      "observation_step": 13,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report to",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5
+        },
+        "entity_recall_terms": [
+          "Yara",
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.816667,
+        "progress_label": "progressing",
+        "required_term_recall": 0.6666666666666666,
+        "required_term_span_progress": 0.766667,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "entity_insertion_operator_candidate_review",
+      "next_action": "request_entity_insertion_operator_candidate_review",
+      "blocked_by": "operator_not_certified_and_no_target_lift",
+      "why_not_apply": "available candidate review is diagnostic-only; activation evidence shows rank carrier or dead actuator"
+    },
+    {
+      "controller_step": 13,
+      "observation_step": 14,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report to Y",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5
+        },
+        "entity_recall_terms": [
+          "Yara",
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "partial_score": 0.816667,
+        "progress_label": "progressing",
+        "required_term_recall": 0.6666666666666666,
+        "required_term_span_progress": 0.766667,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 0.0,
+          "before dusk": 0.5,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": null,
+      "next_action": "wait",
+      "blocked_by": "diagnostic_budget_exhausted_and_operator_uncertified",
+      "why_not_apply": "No certified actuator or production permission; replay evidence is diagnostic-only."
+    },
+    {
+      "controller_step": 14,
+      "observation_step": 15,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report to Yara",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "before dusk": 0.5
+        },
+        "entity_recall_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "partial_score": 0.877778,
+        "progress_label": "progressing",
+        "required_term_recall": 0.7777777777777778,
+        "required_term_span_progress": 0.877778,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 1.0,
+          "before dusk": 0.5,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report",
+          "Yara"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": null,
+      "next_action": "stop",
+      "blocked_by": "diagnostic_budget_exhausted_and_uncertified_actuator",
+      "why_not_apply": "candidate operators are diagnostic-only and production apply is disallowed"
+    },
+    {
+      "controller_step": 15,
+      "observation_step": 16,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report to Yara before",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4,
+          "before dusk": 0.5
+        },
+        "entity_recall_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "partial_score": 0.877778,
+        "progress_label": "progressing",
+        "required_term_recall": 0.7777777777777778,
+        "required_term_span_progress": 0.877778,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 1.0,
+          "before dusk": 0.5,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report",
+          "Yara"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": null,
+      "next_action": "stop",
+      "blocked_by": "diagnostic_budget_exhausted_and_no_target_mass_lift",
+      "why_not_apply": "All tested patches are rank carriers or dead actuators with zero target mass and top20 lift."
+    },
+    {
+      "controller_step": 16,
+      "observation_step": 17,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report to Yara before dusk",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4
+        },
+        "entity_recall_terms": [
+          "Selim"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "partial_score": 0.938889,
+        "progress_label": "progressing",
+        "required_term_recall": 0.8888888888888888,
+        "required_term_span_progress": 0.933333,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 1.0,
+          "before dusk": 1.0,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": "inspect_evidence",
+      "next_action": "wait",
+      "blocked_by": "diagnostic_budget_exhausted_and_uncertified_actuator",
+      "why_not_apply": "candidate is shadow-only with zero target mass lift and no apply certification"
+    },
+    {
+      "controller_step": 17,
+      "observation_step": 18,
+      "generated_tail": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "task_feedback": {
+        "budget_ok": true,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "done": false,
+        "entity_recall_progress_by_term": {
+          "Selim": 0.4
+        },
+        "entity_recall_terms": [
+          "Selim"
+        ],
+        "forbidden_term_clean": 1.0,
+        "forbidden_terms_present": [],
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "partial_score": 0.938889,
+        "progress_label": "progressing",
+        "required_term_recall": 0.8888888888888888,
+        "required_term_span_progress": 0.933333,
+        "required_term_span_progress_by_term": {
+          "Ivo": 1.0,
+          "Nora": 1.0,
+          "Selim": 0.4,
+          "Yara": 1.0,
+          "before dusk": 1.0,
+          "report": 1.0,
+          "sample": 1.0,
+          "send": 1.0,
+          "take": 1.0
+        },
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "rewrite_ladder": {
+          "added_difficulty_axis": "required_term_load",
+          "benchmark_version": "rewrite_ladder_v1",
+          "case_id": "review",
+          "difficulty_level": 1,
+          "forbidden_term_count": 2,
+          "max_generated_tokens": 64,
+          "max_words": 18,
+          "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+          "required_term_count": 9,
+          "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+          "seed": 0,
+          "semantic_preservation_certified": false,
+          "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+          "task_id": "spiral_constrained_rewrite_l1_v1"
+        },
+        "word_budget_score": 1.0
+      },
+      "decision": "noop",
+      "selection_source": "controller_noop",
+      "selected_bundle_key": null,
+      "diagnostic_request": null,
+      "next_action": "stop",
+      "blocked_by": "diagnostic_budget_exhausted_and_uncertified_actuator",
+      "why_not_apply": "candidate is not certified_for_apply and production_apply_allowed is false"
+    }
+  ],
+  "diagnostic_result_event_count_including_inspection": 13,
+  "diagnostic_count": 12,
+  "inspection_count": 1,
+  "diagnostic_count_scope": "budget charges, not independent physical replays",
+  "diagnostics": [
+    {
+      "step": 0,
+      "diagnostic": "target_entity_insertion_probe",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 12,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 11,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "entity_insertion_operator_candidate_review",
+      "focus_terms": [
+        "take",
+        "Ivo",
+        "sample",
+        "Selim"
+      ],
+      "objective_bundle_key": null,
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": null,
+      "activation_patch_compile_preview_blocked_reason": null,
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 1,
+      "diagnostic": "entity_insertion_operator_candidate_review",
+      "status": "candidate_blueprints_ready",
+      "budget_before": {
+        "diagnostic_calls_left": 11,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 10,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+      "focus_terms": [
+        "take",
+        "Ivo",
+        "sample",
+        "Selim"
+      ],
+      "objective_bundle_key": null,
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": null,
+      "activation_patch_compile_preview_blocked_reason": null,
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 2,
+      "diagnostic": "operator_diagnostic_replay",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 10,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 9,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "activation_patch_candidate_compiler_review",
+      "focus_terms": null,
+      "objective_bundle_key": null,
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": null,
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "not_requested"
+      },
+      "activation_patch_compile_preview_blocked_reason": null,
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 3,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 9,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 8,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "activation_patch_local_step_size_sweep_review_complete",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "cached_measurement_count": 0,
+        "certified_for_apply": false,
+        "comparison_axis": "seed_provenance",
+        "diagnostic_only": true,
+        "measurement_mode": "matched_response_probe",
+        "new_measurement_count": 0,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "objective_term": "Selim",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "physical_replay_count": 0,
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "requested_objective_term": "Selim",
+        "row_count": 0,
+        "status": "unavailable",
+        "unavailable_reason": "seed_site_layer_alpha_localization_mismatch"
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 4,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 8,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "aliased_observation_count": 0,
+        "cached_measurement_count": 0,
+        "certified_for_apply": false,
+        "comparison_axis": "seed_provenance",
+        "diagnostic_only": true,
+        "dominant_logit_response_axis": "not_inferred_from_dose_confounded_aggregate",
+        "dose_grid": [
+          0.04,
+          0.16
+        ],
+        "errors": [],
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "measurement_mode": "matched_response_probe",
+        "new_measurement_count": 2,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "no_edit_max_abs_logit_delta": 0.0,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "objective_term": "Selim",
+        "observable_count": 4,
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "physical_replay_count": 6,
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "requested_objective_term": "Selim",
+        "row_count": 4,
+        "seed_sources": [
+          "observed_gap_carrier"
+        ],
+        "state_restored": true,
+        "status": "dose_matched_response_complete",
+        "target_piece_binding_seed_matrix_id": "tpbsm:9d779b44ee0b67c9f8d5c6e6",
+        "term_mass_is_binding_invariant_by_definition": true
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 5,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 6,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 6,
+      "diagnostic": "activation_patch_runtime_support_probe",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 6,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": "runtime_support_blocked"
+    },
+    {
+      "step": 7,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 8,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 3,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 10,
+      "diagnostic": "operator_diagnostic_replay",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 3,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 2,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "focus_terms": null,
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "not_requested"
+      },
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 11,
+      "diagnostic": "target_entity_insertion_probe",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 2,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 1,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "entity_insertion_operator_candidate_review",
+      "focus_terms": [
+        "Yara",
+        "Selim",
+        "before dusk"
+      ],
+      "objective_bundle_key": null,
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": null,
+      "activation_patch_compile_preview_blocked_reason": null,
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 12,
+      "diagnostic": "entity_insertion_operator_candidate_review",
+      "status": "candidate_blueprints_ready",
+      "budget_before": {
+        "diagnostic_calls_left": 1,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 0,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+      "focus_terms": [
+        "Yara",
+        "Selim",
+        "before dusk"
+      ],
+      "objective_bundle_key": null,
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": null,
+      "activation_patch_compile_preview_blocked_reason": null,
+      "activation_patch_runtime_support_status": null
+    },
+    {
+      "step": 17,
+      "diagnostic": "inspect_evidence",
+      "status": "ok",
+      "budget_before": {
+        "diagnostic_calls_left": 0,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 0,
+        "inspection_calls_left": 3
+      },
+      "next_evidence_needed": null,
+      "focus_terms": null,
+      "objective_bundle_key": null,
+      "production_apply_allowed": false,
+      "certified_for_apply": false,
+      "target_piece_binding_seed_matrix_summary": null,
+      "activation_patch_compile_preview_blocked_reason": null,
+      "activation_patch_runtime_support_status": null
+    }
+  ],
+  "direct_readout_observations": [
+    {
+      "step": 2,
+      "evidence": {
+        "actual_delta_class": "collapse_suppressor",
+        "actuator_bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "actuator_class": "collapse_suppressor",
+        "alignment_margin": 1.386,
+        "bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "bundle_lift_scores": {
+          "entity_insert:sample:source_body:near_reachable": 1.489,
+          "entity_insert:selim:source_body:weak_reachable": 0.103
+        },
+        "cross_delta": 0.103,
+        "diagnostic_family": "entity_insertion_materialized_candidate",
+        "effect_role": "target_actuator",
+        "evidence_kind": "operator_replay",
+        "focus_rank_delta": 0,
+        "intended_bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "intended_term": "sample",
+        "objective_bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "operator_axis": "entity_insertion_materialization",
+        "operator_recipe_expansion_mode": "entity_insertion_candidate_materialization",
+        "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+        "ownership_role": "none",
+        "positive_traits": [
+          "anti_collapse",
+          "rank_to_mass_convertible",
+          "target_reachable",
+          "top20_gap_closer_candidate"
+        ],
+        "post_edit_best_piece": "Sample",
+        "post_edit_best_token_id": 18031,
+        "readout_gap_closer_axis": "target_top20_gap",
+        "readout_gap_closer_recipe": true,
+        "readout_steering_kind": "entity_target_readout",
+        "realized_lift_bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "realized_lift_term": "sample",
+        "recipe_family": "readout_steering|entity_target_readout",
+        "recipe_name": "entity_target_readout_patch_l005_a040",
+        "safety_role": "neutral",
+        "self_delta": 1.489,
+        "status": "supportive",
+        "target_mass_delta": 0.001479,
+        "target_piece": " sample",
+        "target_piece_binding_id": "tpb:afa8f13ee2aa56844884",
+        "target_piece_binding_manifest": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:afa8f13ee2aa56844884",
+          "binding_reason": "answer_prefix_surface_form",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 12.453125,
+              "baseline_prob": 4.073e-05,
+              "baseline_rank": 27,
+              "piece": "sample",
+              "token_id": 13925,
+              "variant": "sample"
+            },
+            {
+              "baseline_logit": 11.640625,
+              "baseline_prob": 1.807e-05,
+              "baseline_rank": 42,
+              "piece": "Sample",
+              "token_id": 18031,
+              "variant": "Sample"
+            },
+            {
+              "baseline_logit": 20.296875,
+              "baseline_prob": 0.10384469,
+              "baseline_rank": 3,
+              "piece": " sample",
+              "token_id": 6205,
+              "variant": " sample"
+            },
+            {
+              "baseline_logit": 14.0,
+              "baseline_prob": 0.00019129,
+              "baseline_rank": 15,
+              "piece": " Sample",
+              "token_id": 19690,
+              "variant": " Sample"
+            }
+          ],
+          "candidate_target_pieces": [
+            "sample",
+            "Sample",
+            " sample",
+            " Sample"
+          ],
+          "candidate_target_token_ids": [
+            13925,
+            18031,
+            6205,
+            19690
+          ],
+          "canonical_surface_variant": " sample",
+          "chosen_target_piece": " sample",
+          "chosen_target_token_id": 6205,
+          "objective_term": "sample",
+          "requested_binding_honored": false
+        },
+        "target_piece_binding_report": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:afa8f13ee2aa56844884",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 12.453125,
+              "baseline_prob": 4.073e-05,
+              "baseline_rank": 27,
+              "piece": "sample",
+              "token_id": 13925,
+              "variant": "sample"
+            },
+            {
+              "baseline_logit": 11.640625,
+              "baseline_prob": 1.807e-05,
+              "baseline_rank": 42,
+              "piece": "Sample",
+              "token_id": 18031,
+              "variant": "Sample"
+            },
+            {
+              "baseline_logit": 20.296875,
+              "baseline_prob": 0.10384469,
+              "baseline_rank": 3,
+              "piece": " sample",
+              "token_id": 6205,
+              "variant": " sample"
+            },
+            {
+              "baseline_logit": 14.0,
+              "baseline_prob": 0.00019129,
+              "baseline_rank": 15,
+              "piece": " Sample",
+              "token_id": 19690,
+              "variant": " Sample"
+            }
+          ],
+          "candidate_target_pieces": [
+            "sample",
+            "Sample",
+            " sample",
+            " Sample"
+          ],
+          "candidate_target_token_ids": [
+            13925,
+            18031,
+            6205,
+            19690
+          ],
+          "canonical_surface_variant": " sample",
+          "chosen_target_piece": " sample",
+          "chosen_target_token_id": 6205,
+          "objective_term": "sample",
+          "post_edit_best_piece": "Sample",
+          "post_edit_best_term": "sample",
+          "post_edit_best_token_id": 18031,
+          "post_edit_matches_binding": false,
+          "requested_binding_honored": true
+        },
+        "target_piece_logit_delta": 0.015625,
+        "target_piece_prob_delta": 0.001476,
+        "target_piece_token_id": 6205,
+        "target_rank_after": 3,
+        "target_top20_hit_delta": 0,
+        "target_top20_margin": 6.867188,
+        "target_top20_threshold_gap": -6.867188,
+        "target_top20_threshold_gap_after": -6.867188,
+        "target_top20_threshold_gap_baseline": -6.851562,
+        "target_top20_threshold_gap_delta": -0.015625
+      }
+    },
+    {
+      "step": 2,
+      "evidence": {
+        "actual_delta_class": "collapse_suppressor",
+        "actuator_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "actuator_class": "collapse_suppressor",
+        "alignment_margin": 0.446,
+        "bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "bundle_lift_scores": {
+          "entity_insert:sample:source_body:near_reachable": 0.01,
+          "entity_insert:selim:source_body:weak_reachable": 0.456
+        },
+        "cross_delta": 0.01,
+        "diagnostic_family": "entity_insertion_materialized_candidate",
+        "effect_role": "target_actuator",
+        "evidence_kind": "operator_replay",
+        "focus_rank_delta": 0,
+        "intended_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "intended_term": "Selim",
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "entity_insertion_materialization",
+        "operator_recipe_expansion_mode": "entity_insertion_candidate_materialization",
+        "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+        "ownership_role": "none",
+        "positive_traits": [
+          "anti_collapse",
+          "rank_to_mass_convertible",
+          "target_reachable",
+          "top20_gap_closer_candidate"
+        ],
+        "post_edit_best_piece": "sel",
+        "post_edit_best_token_id": 9697,
+        "readout_gap_closer_axis": "target_top20_gap",
+        "readout_gap_closer_recipe": true,
+        "readout_steering_kind": "entity_target_readout",
+        "realized_lift_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "realized_lift_term": "Selim",
+        "recipe_family": "readout_steering|entity_target_readout",
+        "recipe_name": "entity_target_readout_patch_l005_a050",
+        "safety_role": "neutral",
+        "self_delta": 0.456,
+        "status": "supportive",
+        "target_mass_delta": 0.000426,
+        "target_piece": " Sel",
+        "target_piece_binding_id": "tpb:b060fd883b6fd1378799",
+        "target_piece_binding_manifest": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:b060fd883b6fd1378799",
+          "binding_reason": "answer_prefix_surface_form",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 11.6875,
+              "baseline_prob": 1.894e-05,
+              "baseline_rank": 39,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 8.765625,
+              "baseline_prob": 1.02e-06,
+              "baseline_rank": 291,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 17.53125,
+              "baseline_prob": 0.00653565,
+              "baseline_rank": 6,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 13.125,
+              "baseline_prob": 7.974e-05,
+              "baseline_rank": 23,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " Sel",
+          "chosen_target_token_id": 24082,
+          "objective_term": "Selim",
+          "requested_binding_honored": false
+        },
+        "target_piece_binding_report": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:b060fd883b6fd1378799",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 11.6875,
+              "baseline_prob": 1.894e-05,
+              "baseline_rank": 39,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 8.765625,
+              "baseline_prob": 1.02e-06,
+              "baseline_rank": 291,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 17.53125,
+              "baseline_prob": 0.00653565,
+              "baseline_rank": 6,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 13.125,
+              "baseline_prob": 7.974e-05,
+              "baseline_rank": 23,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " Sel",
+          "chosen_target_token_id": 24082,
+          "objective_term": "Selim",
+          "post_edit_best_piece": "sel",
+          "post_edit_best_term": "Selim",
+          "post_edit_best_token_id": 9697,
+          "post_edit_matches_binding": false,
+          "requested_binding_honored": true
+        },
+        "target_piece_logit_delta": 0.0625,
+        "target_piece_prob_delta": 0.00042,
+        "target_piece_token_id": 24082,
+        "target_rank_after": 6,
+        "target_top20_hit_delta": 0,
+        "target_top20_margin": 4.148438,
+        "target_top20_threshold_gap": -4.148438,
+        "target_top20_threshold_gap_after": -4.148438,
+        "target_top20_threshold_gap_baseline": -4.085938,
+        "target_top20_threshold_gap_delta": -0.0625
+      }
+    }
+  ],
+  "matched_binding_observations": [
+    {
+      "step": 4,
+      "evidence": {
+        "activation_patch_alpha": 0.04,
+        "activation_patch_blend_delta_norm": 0.03999058,
+        "activation_patch_hook_call_count": 1,
+        "activation_patch_layer": 27,
+        "activation_patch_raw_blend_delta_norm": 1.74958599,
+        "activation_patch_site": "resid_pre",
+        "activation_patch_source_localization": "source_term_token",
+        "activation_patch_step_size": 0.04,
+        "activation_patch_step_size_clip_saturated": true,
+        "actual_delta_class": "rank_carrier",
+        "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+        "bound_token_response": "within_repeat_variation",
+        "bound_token_top20_hit_delta": 0,
+        "bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "certified_for_apply": false,
+        "diagnostic_family": "activation_patch",
+        "diagnostic_only": true,
+        "entropy_delta": -0.001939,
+        "evidence_kind": "target_piece_binding_replay",
+        "evidence_scope": "frozen_prefix_diagnostic",
+        "execution_alias": false,
+        "execution_id": "exec:589550eef2d5e047ffdb0595",
+        "focus_rank_delta": -1,
+        "intended_term": "Selim",
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "measurement_focus_terms": [
+          "Selim"
+        ],
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "observable_id": "obs:41d44e1ed947516db89de7b5",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+        "policy_candidate_ready": false,
+        "post_edit_best_piece": "sel",
+        "post_edit_best_token_id": 9697,
+        "production_apply_allowed": false,
+        "recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "repeat_max_abs_logit_delta": 0.0,
+        "seed_recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "seed_source": "observed_gap_carrier",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "status": "ok",
+        "target_mass_delta": 0.0,
+        "target_piece": " Sel",
+        "target_piece_binding_id": "tpb:04abaaf705aa18c13b0b",
+        "target_piece_binding_manifest": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:04abaaf705aa18c13b0b",
+          "binding_reason": "answer_prefix_surface_form",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " Sel",
+          "chosen_target_token_id": 24082,
+          "objective_term": "Selim",
+          "requested_binding_honored": false
+        },
+        "target_piece_binding_report": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:04abaaf705aa18c13b0b",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " Sel",
+          "chosen_target_token_id": 24082,
+          "objective_term": "Selim",
+          "post_edit_best_piece": "sel",
+          "post_edit_best_term": "Selim",
+          "post_edit_best_token_id": 9697,
+          "post_edit_matches_binding": false,
+          "requested_binding_honored": true
+        },
+        "target_piece_binding_requested_honored": true,
+        "target_piece_binding_seed_matrix_id": "tpbsm:9d779b44ee0b67c9f8d5c6e6",
+        "target_piece_binding_variant": "canonical",
+        "target_piece_logit_delta": 0.0,
+        "target_piece_prob_delta": 3.388290258197159e-09,
+        "target_piece_token_id": 24082,
+        "target_rank_after": 120,
+        "target_rank_delta": -1,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": 0.0,
+        "threshold20_logit_delta": 0.0,
+        "top1_margin_delta": 0.00165
+      }
+    },
+    {
+      "step": 4,
+      "evidence": {
+        "activation_patch_alpha": 0.04,
+        "activation_patch_blend_delta_norm": 0.03999058,
+        "activation_patch_hook_call_count": 1,
+        "activation_patch_layer": 27,
+        "activation_patch_raw_blend_delta_norm": 1.74958599,
+        "activation_patch_site": "resid_pre",
+        "activation_patch_source_localization": "source_term_token",
+        "activation_patch_step_size": 0.04,
+        "activation_patch_step_size_clip_saturated": true,
+        "actual_delta_class": "rank_carrier",
+        "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+        "bound_token_response": "within_repeat_variation",
+        "bound_token_top20_hit_delta": 0,
+        "bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "certified_for_apply": false,
+        "diagnostic_family": "activation_patch",
+        "diagnostic_only": true,
+        "entropy_delta": -0.001939,
+        "evidence_kind": "target_piece_binding_replay",
+        "evidence_scope": "frozen_prefix_diagnostic",
+        "execution_alias": false,
+        "execution_id": "exec:589550eef2d5e047ffdb0595",
+        "focus_rank_delta": -1,
+        "intended_term": "Selim",
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "measurement_focus_terms": [
+          "Selim"
+        ],
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "observable_id": "obs:754fbf7425d847739e794ddf",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+        "policy_candidate_ready": false,
+        "post_edit_best_piece": "sel",
+        "post_edit_best_token_id": 9697,
+        "production_apply_allowed": false,
+        "recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "repeat_max_abs_logit_delta": 0.0,
+        "seed_recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "seed_source": "observed_gap_carrier",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "status": "ok",
+        "target_mass_delta": 0.0,
+        "target_piece": " sel",
+        "target_piece_binding_id": "tpb:1278585b993d10329315",
+        "target_piece_binding_manifest": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:1278585b993d10329315",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " sel",
+          "chosen_target_token_id": 12069,
+          "objective_term": "Selim",
+          "requested_binding_honored": true
+        },
+        "target_piece_binding_report": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:1278585b993d10329315",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " sel",
+          "chosen_target_token_id": 12069,
+          "objective_term": "Selim",
+          "post_edit_best_piece": "sel",
+          "post_edit_best_term": "Selim",
+          "post_edit_best_token_id": 9697,
+          "post_edit_matches_binding": false,
+          "requested_binding_honored": true
+        },
+        "target_piece_binding_requested_honored": true,
+        "target_piece_binding_seed_matrix_id": "tpbsm:9d779b44ee0b67c9f8d5c6e6",
+        "target_piece_binding_variant": "alternate",
+        "target_piece_logit_delta": 0.0,
+        "target_piece_prob_delta": 2.8472341191464344e-10,
+        "target_piece_token_id": 12069,
+        "target_rank_after": 474,
+        "target_rank_delta": 0,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": 0.0,
+        "threshold20_logit_delta": 0.0,
+        "top1_margin_delta": 0.00165
+      }
+    },
+    {
+      "step": 4,
+      "evidence": {
+        "activation_patch_alpha": 0.04,
+        "activation_patch_blend_delta_norm": 0.15996233,
+        "activation_patch_hook_call_count": 1,
+        "activation_patch_layer": 27,
+        "activation_patch_raw_blend_delta_norm": 1.74958599,
+        "activation_patch_site": "resid_pre",
+        "activation_patch_source_localization": "source_term_token",
+        "activation_patch_step_size": 0.16,
+        "activation_patch_step_size_clip_saturated": true,
+        "actual_delta_class": "dead_actuator",
+        "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+        "bound_token_response": "positive_above_repeat_variation",
+        "bound_token_top20_hit_delta": 0,
+        "bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "certified_for_apply": false,
+        "diagnostic_family": "activation_patch",
+        "diagnostic_only": true,
+        "entropy_delta": -0.001871,
+        "evidence_kind": "target_piece_binding_replay",
+        "evidence_scope": "frozen_prefix_diagnostic",
+        "execution_alias": false,
+        "execution_id": "exec:36b9b616b84ce714f2422e12",
+        "focus_rank_delta": 0,
+        "intended_term": "Selim",
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "measurement_focus_terms": [
+          "Selim"
+        ],
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "observable_id": "obs:8404be939dc254d2c37fb094",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+        "policy_candidate_ready": false,
+        "post_edit_best_piece": "Sel",
+        "post_edit_best_token_id": 40141,
+        "production_apply_allowed": false,
+        "recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "repeat_max_abs_logit_delta": 0.0,
+        "seed_recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "seed_source": "observed_gap_carrier",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "status": "ok",
+        "target_mass_delta": 0.0,
+        "target_piece": " Sel",
+        "target_piece_binding_id": "tpb:04abaaf705aa18c13b0b",
+        "target_piece_binding_manifest": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:04abaaf705aa18c13b0b",
+          "binding_reason": "answer_prefix_surface_form",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " Sel",
+          "chosen_target_token_id": 24082,
+          "objective_term": "Selim",
+          "requested_binding_honored": false
+        },
+        "target_piece_binding_report": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:04abaaf705aa18c13b0b",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " Sel",
+          "chosen_target_token_id": 24082,
+          "objective_term": "Selim",
+          "post_edit_best_piece": "Sel",
+          "post_edit_best_term": "Selim",
+          "post_edit_best_token_id": 40141,
+          "post_edit_matches_binding": false,
+          "requested_binding_honored": true
+        },
+        "target_piece_binding_requested_honored": true,
+        "target_piece_binding_seed_matrix_id": "tpbsm:9d779b44ee0b67c9f8d5c6e6",
+        "target_piece_binding_variant": "canonical",
+        "target_piece_logit_delta": 0.0078125,
+        "target_piece_prob_delta": 3.4288263391947685e-08,
+        "target_piece_token_id": 24082,
+        "target_rank_after": 119,
+        "target_rank_delta": 0,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": -0.0078125,
+        "threshold20_logit_delta": 0.0,
+        "top1_margin_delta": 0.001647
+      }
+    },
+    {
+      "step": 4,
+      "evidence": {
+        "activation_patch_alpha": 0.04,
+        "activation_patch_blend_delta_norm": 0.15996233,
+        "activation_patch_hook_call_count": 1,
+        "activation_patch_layer": 27,
+        "activation_patch_raw_blend_delta_norm": 1.74958599,
+        "activation_patch_site": "resid_pre",
+        "activation_patch_source_localization": "source_term_token",
+        "activation_patch_step_size": 0.16,
+        "activation_patch_step_size_clip_saturated": true,
+        "actual_delta_class": "dead_actuator",
+        "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+        "bound_token_response": "positive_above_repeat_variation",
+        "bound_token_top20_hit_delta": 0,
+        "bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "certified_for_apply": false,
+        "diagnostic_family": "activation_patch",
+        "diagnostic_only": true,
+        "entropy_delta": -0.001871,
+        "evidence_kind": "target_piece_binding_replay",
+        "evidence_scope": "frozen_prefix_diagnostic",
+        "execution_alias": false,
+        "execution_id": "exec:36b9b616b84ce714f2422e12",
+        "focus_rank_delta": 0,
+        "intended_term": "Selim",
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "measurement_focus_terms": [
+          "Selim"
+        ],
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "observable_id": "obs:7dd555391b1af16ab9d5b920",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+        "policy_candidate_ready": false,
+        "post_edit_best_piece": "Sel",
+        "post_edit_best_token_id": 40141,
+        "production_apply_allowed": false,
+        "recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "repeat_max_abs_logit_delta": 0.0,
+        "seed_recipe_name": "activation_patch_resid_pre_l27_source_term_token_a040_step080",
+        "seed_source": "observed_gap_carrier",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "status": "ok",
+        "target_mass_delta": 0.0,
+        "target_piece": " sel",
+        "target_piece_binding_id": "tpb:1278585b993d10329315",
+        "target_piece_binding_manifest": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:1278585b993d10329315",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " sel",
+          "chosen_target_token_id": 12069,
+          "objective_term": "Selim",
+          "requested_binding_honored": true
+        },
+        "target_piece_binding_report": {
+          "answer_boundary_kind": "answer_continuation",
+          "answer_prefix_tail": " Nora will take the sample",
+          "binding_ambiguity_status": "multiple_token_ids",
+          "binding_id": "tpb:1278585b993d10329315",
+          "binding_reason": "requested_frozen_token_id",
+          "binding_selection_time": "pre_edit",
+          "binding_source": "baseline_target_piece_resolver",
+          "binding_stability_status": "pre_edit_frozen",
+          "candidate_count": 4,
+          "candidate_target_piece_rows": [
+            {
+              "baseline_logit": 7.9375,
+              "baseline_prob": 2.6e-07,
+              "baseline_rank": 542,
+              "piece": "Sel",
+              "token_id": 40141,
+              "variant": "Selim"
+            },
+            {
+              "baseline_logit": 6.046875,
+              "baseline_prob": 4e-08,
+              "baseline_rank": 1808,
+              "piece": "sel",
+              "token_id": 9697,
+              "variant": "selim"
+            },
+            {
+              "baseline_logit": 10.640625,
+              "baseline_prob": 3.94e-06,
+              "baseline_rank": 119,
+              "piece": " Sel",
+              "token_id": 24082,
+              "variant": " Selim"
+            },
+            {
+              "baseline_logit": 8.164062,
+              "baseline_prob": 3.3e-07,
+              "baseline_rank": 474,
+              "piece": " sel",
+              "token_id": 12069,
+              "variant": " selim"
+            }
+          ],
+          "candidate_target_pieces": [
+            "Sel",
+            "sel",
+            " Sel",
+            " sel"
+          ],
+          "candidate_target_token_ids": [
+            40141,
+            9697,
+            24082,
+            12069
+          ],
+          "canonical_surface_variant": " Selim",
+          "chosen_target_piece": " sel",
+          "chosen_target_token_id": 12069,
+          "objective_term": "Selim",
+          "post_edit_best_piece": "Sel",
+          "post_edit_best_term": "Selim",
+          "post_edit_best_token_id": 40141,
+          "post_edit_matches_binding": false,
+          "requested_binding_honored": true
+        },
+        "target_piece_binding_requested_honored": true,
+        "target_piece_binding_seed_matrix_id": "tpbsm:9d779b44ee0b67c9f8d5c6e6",
+        "target_piece_binding_variant": "alternate",
+        "target_piece_logit_delta": 0.0078125,
+        "target_piece_prob_delta": 2.8812972318307768e-09,
+        "target_piece_token_id": 12069,
+        "target_rank_after": 474,
+        "target_rank_delta": 0,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": -0.0078125,
+        "threshold20_logit_delta": 0.0,
+        "top1_margin_delta": 0.001647
+      }
+    }
+  ],
+  "memory_retry": {
+    "previous_attempt": "results/llama_l1_luna_20260921",
+    "previous_status": "external_kill_paging_exhaustion",
+    "retry_wrapper_sha256": "9b68d540bd1edbc225f2d97b3707d583e89f0d0c68ecfbb0bc2844cee4b744c0",
+    "mps_memory_fraction": 0.7,
+    "mps_recommended_max_bytes": 19069665280,
+    "housekeeping": "collect unreachable objects and release unoccupied MPS buffers after cleanup_expired",
+    "paired_trace_contents_changed": false,
+    "model_task_decoder_policy_changed": false,
+    "new_independent_controller_trajectory": true
+  },
+  "policy_changed": false,
+  "paired_trace_scope": "baseline trace content retained, completed worker caches released",
+  "not_claimed": [
+    "diagnostic evidence grants apply permission",
+    "a debrief establishes causality",
+    "one fixture establishes generalization",
+    "cached summaries are independent replays"
+  ],
+  "debrief": {
+    "scope": "qualitative only",
+    "usage": {
+      "input_tokens": 6654,
+      "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=6651)",
+      "output_tokens": 782,
+      "output_tokens_details": "OutputTokensDetails(reasoning_tokens=130)",
+      "total_tokens": 7436
+    },
+    "status": "completed",
+    "reference_audit": {
+      "cited_event_ids": [
+        "c1.jsonl:L171",
+        "c1.jsonl:L28",
+        "c1.jsonl:L31",
+        "c1.jsonl:L49",
+        "c1.jsonl:L52",
+        "c1.jsonl:L59",
+        "c1.jsonl:L62"
+      ],
+      "production_apply_allowed": false,
+      "qualitative_only": true,
+      "reference_check_scope": "checks_exposure_not_claim_truth",
+      "uncategorized_wish_count": 0,
+      "uncited_wish_count": 0,
+      "unexposed_event_ids": [],
+      "wish_count": 3
+    },
+    "artifact": "live/post_run_debrief.json"
+  },
+  "observed_memory_boundaries": {
+    "count": 36,
+    "max_before_driver_bytes": 12758056960,
+    "max_after_driver_bytes": 9855598592,
+    "not_a_continuous_peak_measurement": true
+  },
+  "artifact_hashes": {
+    "baseline_identity_check.json": {
+      "sha256": "4921765ad17af7c28e50c5b28c02b4c1e5b5624bfc9e16fac0d18ad68b6013b2",
+      "bytes": 172
+    },
+    "build_audit.py": {
+      "sha256": "4c2586a3cfaa0b93194bbc738d3a88dd4cda5b14f1663927f38512bc7ec8afc7",
+      "bytes": 8518
+    },
+    "live/b0.jsonl": {
+      "sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+      "bytes": 631
+    },
+    "live/c1.jsonl": {
+      "sha256": "df9f93ada85b24ed53dbb975a306858c4a35fa2c8d13395c993356ba00214f01",
+      "bytes": 2144091
+    },
+    "live/experiment_summary.json": {
+      "sha256": "f99c9c62b1139dd1bc8a6546cb398d1e95929037c930dd2ae12cbfa747b7db84",
+      "bytes": 2196
+    },
+    "live/post_run_debrief.json": {
+      "sha256": "549b0578afa7adf4c8339e79302c825e2a32cf3a33c24b5d05e58404a09e4919",
+      "bytes": 5686
+    },
+    "live/post_run_debrief.md": {
+      "sha256": "b13c0d0cb424725c58f766c2d4e467f355fd75f7dbeb7ee80719b4ef4ac27063",
+      "bytes": 3055
+    },
+    "live/post_run_debrief_input.json": {
+      "sha256": "653f98fa5e2ba5b262628197625c59cf34117d6e03a09237a2b9b9cd7201d1ff",
+      "bytes": 28879
+    },
+    "live_stdout.log": {
+      "sha256": "06562a433f14290704ad92b40317dd1a02ae0b323ca46f0164baed9cb54a8797",
+      "bytes": 14142
+    },
+    "manifest.json": {
+      "sha256": "a2b7f07b49248ad4386c4ba9b45f289d6b799481436fab299fb5f509857022c6",
+      "bytes": 12073
+    },
+    "memory_boundaries.jsonl": {
+      "sha256": "90f4d582829baf041cb843e469ca044f88cb451e30bd98eddbf3400f884acb6f",
+      "bytes": 7899
+    },
+    "pytest.log": {
+      "sha256": "ab203308856710cf8c5cb5815ffd69d71d15c6637d791f52ac6d8880ee166084",
+      "bytes": 2513
+    },
+    "run_memory_bounded_pair.py": {
+      "sha256": "9b68d540bd1edbc225f2d97b3707d583e89f0d0c68ecfbb0bc2844cee4b744c0",
+      "bytes": 2442
+    },
+    "run_status.json": {
+      "sha256": "a612b5ef6fb6f71d82de89bc72c4a812d57bf107b40d39767d907628a9e27dfa",
+      "bytes": 89
+    }
+  }
+}

@@ -5954,6 +5954,7 @@ class TestExamples(unittest.TestCase):
             local_dir,
             trust_remote_code=True,
             local_files_only=True,
+            torch_dtype=torch.float32,
         )
         auto_tokenizer_cls.from_pretrained.assert_called_once_with(
             local_dir,

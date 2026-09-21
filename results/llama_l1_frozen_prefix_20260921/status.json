@@ -1,0 +1,33 @@
+{
+  "status": "incomplete",
+  "error": "ValueError:prefix_measurement_incomplete",
+  "seconds": 62.64890241600369,
+  "completed_prefixes": 1,
+  "reconstructed_prefixes": [
+    {
+      "worker_step": 1,
+      "prefix": " Nora",
+      "matched": true
+    },
+    {
+      "worker_step": 2,
+      "prefix": " Nora will",
+      "matched": true
+    },
+    {
+      "worker_step": 3,
+      "prefix": " Nora will take",
+      "matched": true
+    },
+    {
+      "worker_step": 4,
+      "prefix": " Nora will take the",
+      "matched": true
+    },
+    {
+      "worker_step": 5,
+      "prefix": " Nora will take the sample",
+      "matched": true
+    }
+  ]
+}

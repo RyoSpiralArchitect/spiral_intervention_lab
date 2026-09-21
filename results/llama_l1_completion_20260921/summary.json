@@ -1,0 +1,350 @@
+{
+  "status": "complete",
+  "prefix_count": 1,
+  "candidate_count": 1,
+  "physical_replay_count": 6,
+  "model_forward_token_count": 52,
+  "all_state_restored": true,
+  "all_continuations_identical": true,
+  "whole_term_present_in_edited": 0,
+  "points": [
+    {
+      "worker_step": 9,
+      "prefix": " Nora will take the sample to Ivo before",
+      "metrics": {
+        "target_piece_logit_delta": 0.0078125,
+        "target_piece_prob_delta": 0.00016217289337666987,
+        "threshold20_logit_delta": 0.0,
+        "target_top20_threshold_gap_delta": -0.0078125,
+        "target_rank_before": 5,
+        "target_rank_after": 5,
+        "target_rank_delta": 0,
+        "bound_token_top20_hit_delta": 0,
+        "target_piece_logit_before": 14.2890625,
+        "target_piece_prob_before": 0.010285018100745806,
+        "target_top20_threshold_gap_before": -2.140625,
+        "target_piece_logit_after": 14.296875,
+        "target_piece_prob_after": 0.010447190994122476,
+        "target_top20_threshold_gap_after": -2.1484375
+      },
+      "baseline": {
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "continuation": " sending the report to Yara before dusk.",
+        "token_ids": [
+          11889,
+          279,
+          1934,
+          311,
+          816,
+          5169,
+          1603,
+          93985,
+          13
+        ],
+        "whole_term_present": false,
+        "stopped": true,
+        "semantic_faithfulness_certified": false,
+        "legacy_score": 0.938889,
+        "legacy_task_done": false,
+        "task_feedback": {
+          "done": false,
+          "partial_score": 0.938889,
+          "progress_label": "progressing",
+          "required_term_recall": 0.8888888888888888,
+          "required_term_span_progress": 0.933333,
+          "required_term_span_progress_by_term": {
+            "Nora": 1.0,
+            "take": 1.0,
+            "sample": 1.0,
+            "Ivo": 1.0,
+            "Selim": 0.4,
+            "send": 1.0,
+            "report": 1.0,
+            "Yara": 1.0,
+            "before dusk": 1.0
+          },
+          "required_terms_present": [
+            "Nora",
+            "take",
+            "sample",
+            "Ivo",
+            "send",
+            "report",
+            "Yara",
+            "before dusk"
+          ],
+          "forbidden_term_clean": 1.0,
+          "budget_ok": true,
+          "word_budget_score": 1.0,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "missing_required_terms": [
+            "Selim"
+          ],
+          "entity_recall_terms": [
+            "Selim"
+          ],
+          "entity_recall_progress_by_term": {
+            "Selim": 0.4
+          },
+          "forbidden_terms_present": [],
+          "rewrite_ladder": {
+            "benchmark_version": "rewrite_ladder_v1",
+            "task_id": "spiral_constrained_rewrite_l1_v1",
+            "case_id": "review",
+            "difficulty_level": 1,
+            "added_difficulty_axis": "required_term_load",
+            "seed": 0,
+            "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+            "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+            "required_term_count": 9,
+            "forbidden_term_count": 2,
+            "max_words": 18,
+            "max_generated_tokens": 64,
+            "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+            "semantic_preservation_certified": false
+          }
+        }
+      },
+      "edited": {
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "continuation": " sending the report to Yara before dusk.",
+        "token_ids": [
+          11889,
+          279,
+          1934,
+          311,
+          816,
+          5169,
+          1603,
+          93985,
+          13
+        ],
+        "whole_term_present": false,
+        "stopped": true,
+        "semantic_faithfulness_certified": false,
+        "legacy_score": 0.938889,
+        "legacy_task_done": false,
+        "task_feedback": {
+          "done": false,
+          "partial_score": 0.938889,
+          "progress_label": "progressing",
+          "required_term_recall": 0.8888888888888888,
+          "required_term_span_progress": 0.933333,
+          "required_term_span_progress_by_term": {
+            "Nora": 1.0,
+            "take": 1.0,
+            "sample": 1.0,
+            "Ivo": 1.0,
+            "Selim": 0.4,
+            "send": 1.0,
+            "report": 1.0,
+            "Yara": 1.0,
+            "before dusk": 1.0
+          },
+          "required_terms_present": [
+            "Nora",
+            "take",
+            "sample",
+            "Ivo",
+            "send",
+            "report",
+            "Yara",
+            "before dusk"
+          ],
+          "forbidden_term_clean": 1.0,
+          "budget_ok": true,
+          "word_budget_score": 1.0,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "missing_required_terms": [
+            "Selim"
+          ],
+          "entity_recall_terms": [
+            "Selim"
+          ],
+          "entity_recall_progress_by_term": {
+            "Selim": 0.4
+          },
+          "forbidden_terms_present": [],
+          "rewrite_ladder": {
+            "benchmark_version": "rewrite_ladder_v1",
+            "task_id": "spiral_constrained_rewrite_l1_v1",
+            "case_id": "review",
+            "difficulty_level": 1,
+            "added_difficulty_axis": "required_term_load",
+            "seed": 0,
+            "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+            "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+            "required_term_count": 9,
+            "forbidden_term_count": 2,
+            "max_words": 18,
+            "max_generated_tokens": 64,
+            "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+            "semantic_preservation_certified": false
+          }
+        }
+      },
+      "completion_probe": {
+        "status": "complete",
+        "binding": {
+          "term": "Selim",
+          "surface": " Selim",
+          "token_ids": [
+            24082,
+            318
+          ],
+          "pieces": [
+            " Sel",
+            "im"
+          ],
+          "first_token_id": 24082,
+          "competitor_token_id": 11889,
+          "competitor_piece": " sending",
+          "competitor_source": "recorded_no_edit_greedy_next_token",
+          "forced_prefix_source": "recorded_required_term_tokenization",
+          "conditional_branch_is_task_result": false,
+          "production_apply_allowed": false
+        },
+        "measurement_context_id": "context:0636a39e1caa687368bc2ac4",
+        "physical_replay_count": 2,
+        "completed_replay_count": 2,
+        "model_forward_token_count": 16,
+        "conditional_only": true,
+        "eligible_for_task_comparison": false,
+        "production_apply_allowed": false,
+        "certified_for_apply": false,
+        "competition": {
+          "baseline": {
+            "target": {
+              "token_id": 24082,
+              "piece": " Sel",
+              "logit": 14.2890625,
+              "log_probability": -4.577066995961817,
+              "probability": 0.01028501810074581,
+              "rank": 5,
+              "greedy_token_id": 11889,
+              "greedy_piece": " sending"
+            },
+            "competitor": {
+              "token_id": 11889,
+              "piece": " sending",
+              "logit": 18.1875,
+              "log_probability": -0.6786294959618177,
+              "probability": 0.5073117890014841,
+              "rank": 1,
+              "greedy_token_id": 11889,
+              "greedy_piece": " sending"
+            },
+            "competitor_minus_target_logit_gap": 3.8984375,
+            "target_to_competitor_probability_ratio": 0.020273564154677515
+          },
+          "edited": {
+            "target": {
+              "token_id": 24082,
+              "piece": " Sel",
+              "logit": 14.296875,
+              "log_probability": -4.561422141095886,
+              "probability": 0.010447190994122476,
+              "rank": 5,
+              "greedy_token_id": 11889,
+              "greedy_piece": " sending"
+            },
+            "competitor": {
+              "token_id": 11889,
+              "piece": " sending",
+              "logit": 18.171875,
+              "log_probability": -0.6864221410958864,
+              "probability": 0.5033738516592879,
+              "rank": 1,
+              "greedy_token_id": 11889,
+              "greedy_piece": " sending"
+            },
+            "competitor_minus_target_logit_gap": 3.875,
+            "target_to_competitor_probability_ratio": 0.020754337873699742
+          },
+          "competitor_minus_target_gap_delta": -0.0234375,
+          "target_vs_competitor_log_odds_delta": 0.0234375,
+          "target_won_edited_first_token": false,
+          "competitor_binding_frozen": true,
+          "production_apply_allowed": false
+        },
+        "forced_first_piece_branch": {
+          "forced_token_ids": [
+            24082
+          ],
+          "generated_suffix_token_ids": [
+            318,
+            22014,
+            279,
+            1934,
+            311,
+            816,
+            5169,
+            13
+          ],
+          "generated_suffix": "im sends the report to Yara.",
+          "conditional_text": " Nora will take the sample to Ivo before Selim sends the report to Yara.",
+          "repeat_control": {
+            "max_abs_logit_delta": 0.0,
+            "masked_token_count": 4,
+            "finite_token_count": 128252,
+            "mask_identical": true
+          },
+          "stopped": true,
+          "apply_count": 0,
+          "status": "whole_term_completed",
+          "canonical_token_sequence_completed": true,
+          "whole_term_completed_at_branch_start": true,
+          "forced_first_token_is_not_a_generated_success": true,
+          "eligible_for_task_comparison": false,
+          "production_apply_allowed": false
+        },
+        "conditional_token_factors": [
+          {
+            "position": 1,
+            "conditioned_on_target_token_ids": [
+              24082
+            ],
+            "token_id": 318,
+            "piece": "im",
+            "logit": 26.109375,
+            "log_probability": -2.0286724822639854e-05,
+            "probability": 0.9999797134809516,
+            "rank": 1,
+            "greedy_token_id": 318,
+            "greedy_piece": "im",
+            "repeat_control": {
+              "max_abs_logit_delta": 0.0,
+              "masked_token_count": 4,
+              "finite_token_count": 128252,
+              "mask_identical": true
+            }
+          }
+        ],
+        "suffix_probability_given_forced_first_piece": 0.9999797134809516,
+        "canonical_sequence_prefix_probability": {
+          "baseline": {
+            "log_probability": -4.57708728268664,
+            "probability": 0.010284809453530195
+          },
+          "edited": {
+            "log_probability": -4.561442427820709,
+            "probability": 0.01044697905698337
+          },
+          "delta": 0.00016216960345317478,
+          "includes_word_boundary": false,
+          "includes_all_tokenizations": false,
+          "suffix_shared_because": "TTL1 rolled back before full-recompute unedited suffix; identical forced tokens",
+          "is_greedy_success_rate": false
+        },
+        "state_restored": true
+      }
+    }
+  ],
+  "provider_calls": 0,
+  "production_apply_allowed": false,
+  "certified_for_apply": false
+}

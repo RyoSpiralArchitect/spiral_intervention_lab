@@ -1,0 +1,79 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run completed successfully in 11 steps with the requested output and score 1.0 (c1.jsonl:L101).\n- The controller chose no edits and requested diagnostics instead of applying candidates (c1.jsonl:L28, c1.jsonl:L50).\n- Activation diagnostics found mostly rank-carrier responses with negligible target movement (c1.jsonl:L53).\n\n## What made the run difficult?\n- Candidate evidence was historical and not revalidated in context (c1.jsonl:L31).\n- Runtime probes showed zero or negative target-logit changes beyond repeat variation (c1.jsonl:L53).\n- Apply decisions were blocked by absent certification and production permission (c1.jsonl:L28, c1.jsonl:L50).\n\n## Most likely failure factors\n- The proposed intervention had insufficient measured leverage on the target token (c1.jsonl:L53).\n- Evidence mixed historical candidate rows with frozen-prefix diagnostics (c1.jsonl:L31, c1.jsonl:L53).\n- The controller lacked permission to test candidates through production application (c1.jsonl:L50).\n\n## Evidence supporting this reading\n- Historical rows showed only a 0.0004 target-mass lift and no top-20 hit improvement (c1.jsonl:L31).\n- Matched-response probes reported zero target-mass change and negative threshold movement (c1.jsonl:L53).\n- The final task succeeded without intervention (c1.jsonl:L101).\n\n## What I would try next\n- Revalidate promising candidates under the exact execution context before treating them as actionable evidence.\n- Compare candidate responses against a clearly defined no-edit baseline.\n- Preserve the no-op posture unless certification and permission are independently established.\n\n## What would have made this easier?\n- present_but_not_shown | c1.jsonl:L53 | full per-probe response traces: would clarify whether rank-carrier changes affected downstream tokens -> suggested_field: matched_response_trace\n- present_but_not_shown | c1.jsonl:L53 | complete candidate table: would support consistent comparison across omitted rows -> suggested_field: candidate_rows_full\n- unknown_from_supplied_evidence | c1.jsonl:L50 | explicit target-budget state: would clarify whether budget absence was operational or diagnostic -> suggested_field: target_budget_status\n\n## What should not be concluded\n- The successful output does not show that any intervention would have improved the run.\n- Diagnostic candidate evidence does not authorize applying an edit.\n- Omitted fields do not establish that corresponding runtime signals were absent.\n\n## Controller-perspective note\n- I would describe the run as successful without intervention.\n- I kept seeing weak or negative target movement in the exposed diagnostics.\n- I lacked evidence that applying a candidate was permitted or beneficial.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_09b8e2223b0d2dc0006aa75a94eaec87d283a070bc1820792c",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L101",
+        "c1.jsonl:L28",
+        "c1.jsonl:L29",
+        "c1.jsonl:L30",
+        "c1.jsonl:L31",
+        "c1.jsonl:L50",
+        "c1.jsonl:L51",
+        "c1.jsonl:L52",
+        "c1.jsonl:L53"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 93,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 103
+    },
+    "event_counts": {
+      "controller_command": 11,
+      "controller_decision": 11,
+      "controller_diagnostic_request": 6,
+      "controller_diagnostic_result": 6,
+      "controller_effect_summary": 11,
+      "controller_loop_patience": 6,
+      "controller_observation": 11,
+      "controller_prompt_telemetry": 11,
+      "controller_provider_attempt": 11,
+      "controller_selection": 11,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_v0"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L101",
+      "c1.jsonl:L28",
+      "c1.jsonl:L31",
+      "c1.jsonl:L50",
+      "c1.jsonl:L53"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 4508,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4505)",
+    "output_tokens": 660,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=95)",
+    "total_tokens": 5168
+  }
+}

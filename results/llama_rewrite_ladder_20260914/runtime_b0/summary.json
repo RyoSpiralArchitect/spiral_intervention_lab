@@ -1,0 +1,83 @@
+{
+  "condition_id": "constrained_rewrite_l1:review:seed0",
+  "result": {
+    "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18
+  },
+  "task_done": false,
+  "task_feedback": {
+    "done": false,
+    "partial_score": 0.938889,
+    "progress_label": "progressing",
+    "required_term_recall": 0.8888888888888888,
+    "required_term_span_progress": 0.933333,
+    "required_term_span_progress_by_term": {
+      "Nora": 1.0,
+      "take": 1.0,
+      "sample": 1.0,
+      "Ivo": 1.0,
+      "Selim": 0.4,
+      "send": 1.0,
+      "report": 1.0,
+      "Yara": 1.0,
+      "before dusk": 1.0
+    },
+    "required_terms_present": [
+      "Nora",
+      "take",
+      "sample",
+      "Ivo",
+      "send",
+      "report",
+      "Yara",
+      "before dusk"
+    ],
+    "forbidden_term_clean": 1.0,
+    "budget_ok": true,
+    "word_budget_score": 1.0,
+    "constraint_violations": [
+      "missing_required_terms"
+    ],
+    "missing_required_terms": [
+      "Selim"
+    ],
+    "entity_recall_terms": [
+      "Selim"
+    ],
+    "entity_recall_progress_by_term": {
+      "Selim": 0.4
+    },
+    "forbidden_terms_present": [],
+    "rewrite_ladder": {
+      "benchmark_version": "rewrite_ladder_v1",
+      "task_id": "spiral_constrained_rewrite_l1_v1",
+      "case_id": "review",
+      "difficulty_level": 1,
+      "added_difficulty_axis": "required_term_load",
+      "seed": 0,
+      "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+      "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+      "required_term_count": 9,
+      "forbidden_term_count": 2,
+      "max_words": 18,
+      "max_generated_tokens": 64,
+      "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+      "semantic_preservation_certified": false
+    }
+  },
+  "screen_output_match": true,
+  "screen_score_match": true,
+  "measurement_scope": "full_runtime_b0_including_observer_and_packet_construction",
+  "controller_calls": 0,
+  "rollout_edits": 0,
+  "production_apply_permission_changed": false,
+  "model_layers": 28,
+  "dtype": "float16",
+  "device": "mps",
+  "screen_manifest_sha256": "67c2c36c663287a80a5ac01ce888edd0a557a6c3c7763c4ecdd526c033bff48c",
+  "b0_jsonl_sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+  "confirmation_script_sha256": "f2fcc0a398caa5d32768e49515f8de8933d7accfa15d324b6e70e86d4f6bcf98",
+  "seconds": 46.832008792000124
+}

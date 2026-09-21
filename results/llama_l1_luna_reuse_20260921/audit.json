@@ -1,0 +1,799 @@
+{
+  "status": "complete",
+  "scope": "one fresh Luna trajectory; same worker/task/budgets, changed review-reuse interface",
+  "b0": {
+    "event": "episode_end",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18,
+    "task_done": false,
+    "lexical_check": {
+      "required_terms_present": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "missing_required_terms": [
+        "Selim"
+      ],
+      "forbidden_terms_present": [],
+      "word_count": 15,
+      "max_words": 18,
+      "within_word_budget": true,
+      "semantic_faithfulness_certified": false
+    }
+  },
+  "c1": {
+    "event": "episode_end",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18,
+    "task_done": false,
+    "lexical_check": {
+      "required_terms_present": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "missing_required_terms": [
+        "Selim"
+      ],
+      "forbidden_terms_present": [],
+      "word_count": 15,
+      "max_words": 18,
+      "within_word_budget": true,
+      "semantic_faithfulness_certified": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "command_decisions": {
+    "noop": 18
+  },
+  "event_counts": {
+    "episode_start": 1,
+    "observer_check": 4,
+    "controller_prompt_telemetry": 18,
+    "controller_observation": 18,
+    "controller_provider_attempt": 18,
+    "controller_decision": 18,
+    "controller_command": 18,
+    "controller_selection": 18,
+    "controller_diagnostic_request": 19,
+    "controller_diagnostic_result": 19,
+    "controller_loop_patience": 17,
+    "controller_effect_summary": 18,
+    "controller_observer_check_request": 1,
+    "episode_end": 1
+  },
+  "provider_models": {
+    "gpt-5.6-luna": 18
+  },
+  "provider_parse_results": {
+    "True": 18
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 351988,
+    "output_tokens": 4945,
+    "total_tokens": 356933,
+    "cached_input_tokens": 39882
+  },
+  "charged_diagnostic_count": 12,
+  "charged_inspection_count": 3,
+  "review_reuse_count": 4,
+  "review_reuse_prefix_changed_count": 4,
+  "diagnostic_timeline": [
+    {
+      "step": 0,
+      "source": "controller",
+      "diagnostic": "target_entity_insertion_probe",
+      "status": "ok",
+      "recorded_step": 1,
+      "budget_before": {
+        "diagnostic_calls_left": 12,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 11,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "entity_insertion_operator_candidate_review",
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 1,
+      "source": "controller",
+      "diagnostic": "entity_insertion_operator_candidate_review",
+      "status": "candidate_blueprints_ready",
+      "recorded_step": 2,
+      "budget_before": {
+        "diagnostic_calls_left": 11,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 10,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 2,
+      "diagnostic": "operator_diagnostic_replay",
+      "status": "ok",
+      "objective_bundle_key": null,
+      "recorded_step": 3,
+      "budget_before": {
+        "diagnostic_calls_left": 10,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 9,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "activation_patch_candidate_compiler_review",
+      "activation_patch_compile_preview_blocked_reason": null,
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": null,
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "not_requested"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 3,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 4,
+      "budget_before": {
+        "diagnostic_calls_left": 9,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 8,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "activation_patch_local_step_size_sweep_review_complete",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "cached_measurement_count": 0,
+        "certified_for_apply": false,
+        "comparison_axis": "seed_provenance",
+        "diagnostic_only": true,
+        "measurement_mode": "matched_response_probe",
+        "new_measurement_count": 0,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "objective_term": "Selim",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "physical_replay_count": 0,
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "requested_objective_term": "Selim",
+        "row_count": 0,
+        "status": "unavailable",
+        "unavailable_reason": "seed_site_layer_alpha_localization_mismatch"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 4,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 5,
+      "budget_before": {
+        "diagnostic_calls_left": 8,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "aliased_observation_count": 0,
+        "cached_measurement_count": 0,
+        "certified_for_apply": false,
+        "comparison_axis": "seed_provenance",
+        "diagnostic_only": true,
+        "dominant_logit_response_axis": "not_inferred_from_dose_confounded_aggregate",
+        "dose_grid": [
+          0.04,
+          0.16
+        ],
+        "errors": [],
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "measurement_mode": "matched_response_probe",
+        "new_measurement_count": 2,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "no_edit_max_abs_logit_delta": 0.0,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "objective_term": "Selim",
+        "observable_count": 4,
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "physical_replay_count": 6,
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "requested_objective_term": "Selim",
+        "row_count": 4,
+        "seed_sources": [
+          "observed_gap_carrier"
+        ],
+        "state_restored": true,
+        "status": "dose_matched_response_complete",
+        "target_piece_binding_seed_matrix_id": "tpbsm:9d779b44ee0b67c9f8d5c6e6",
+        "term_mass_is_binding_invariant_by_definition": true
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 5,
+      "source": "controller",
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "review_reused",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "review_reused": true,
+      "recorded_step": 6,
+      "reviewed_at_step": 5,
+      "prefix_changed_since_review": true,
+      "evidence_scope": "historical_review_not_current_measurement",
+      "budget_before": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "next_evidence_needed": "explicit_current_prefix_measurement_or_evidence_inspection",
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 7,
+      "source": "controller",
+      "diagnostic": "inspect_evidence",
+      "status": "ok",
+      "evidence_scope": "historical_view_not_current_permission",
+      "budget_before": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 3
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 7,
+      "source": "controller",
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "review_reused",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "review_reused": true,
+      "recorded_step": 8,
+      "reviewed_at_step": 5,
+      "prefix_changed_since_review": true,
+      "evidence_scope": "historical_review_not_current_measurement",
+      "budget_before": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 3
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "next_evidence_needed": "explicit_current_prefix_measurement_or_evidence_inspection",
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 8,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 9,
+      "budget_before": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 6,
+        "inspection_calls_left": 3
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 9,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 10,
+      "budget_before": {
+        "diagnostic_calls_left": 6,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 3
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 10,
+      "source": "controller",
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "review_reused",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "review_reused": true,
+      "recorded_step": 11,
+      "reviewed_at_step": 10,
+      "prefix_changed_since_review": true,
+      "evidence_scope": "historical_review_not_current_measurement",
+      "budget_before": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 3
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "next_evidence_needed": "explicit_current_prefix_measurement_or_evidence_inspection",
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 11,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 12,
+      "budget_before": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 3
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 12,
+      "source": "controller",
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "review_reused",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "review_reused": true,
+      "recorded_step": 13,
+      "reviewed_at_step": 10,
+      "prefix_changed_since_review": true,
+      "evidence_scope": "historical_review_not_current_measurement",
+      "budget_before": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 3
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "next_evidence_needed": "explicit_current_prefix_measurement_or_evidence_inspection",
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 14,
+      "source": "controller",
+      "diagnostic": "inspect_evidence",
+      "status": "ok",
+      "evidence_scope": "historical_view_not_current_permission",
+      "budget_before": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 3
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 2
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 13,
+      "diagnostic": "operator_diagnostic_replay",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 14,
+      "budget_before": {
+        "diagnostic_calls_left": 4,
+        "inspection_calls_left": 2
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 3,
+        "inspection_calls_left": 2
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "not_requested"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 14,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 15,
+      "budget_before": {
+        "diagnostic_calls_left": 3,
+        "inspection_calls_left": 2
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 2,
+        "inspection_calls_left": 2
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 16,
+      "source": "controller",
+      "diagnostic": "inspect_evidence",
+      "status": "ok",
+      "evidence_scope": "historical_view_not_current_permission",
+      "budget_before": {
+        "diagnostic_calls_left": 2,
+        "inspection_calls_left": 2
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 2,
+        "inspection_calls_left": 1
+      },
+      "physical_replay_count": 0,
+      "new_measurement_count": 0,
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 15,
+      "diagnostic": "operator_diagnostic_replay",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 16,
+      "budget_before": {
+        "diagnostic_calls_left": 2,
+        "inspection_calls_left": 1
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 1,
+        "inspection_calls_left": 1
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "not_requested"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    },
+    {
+      "step": 16,
+      "diagnostic": "activation_patch_runtime_support_probe",
+      "status": "ok",
+      "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+      "recorded_step": 17,
+      "budget_before": {
+        "diagnostic_calls_left": 1,
+        "inspection_calls_left": 1
+      },
+      "budget_after": {
+        "diagnostic_calls_left": 0,
+        "inspection_calls_left": 1
+      },
+      "next_evidence_needed": "alternate_activation_patch_or_bridge_evidence",
+      "activation_patch_compile_preview_blocked_reason": "rank_carrier_not_target_actuator",
+      "target_piece_binding_seed_matrix_summary": {
+        "certified_for_apply": false,
+        "diagnostic_only": true,
+        "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "row_count": 0,
+        "status": "already_replayed"
+      },
+      "production_apply_allowed": false,
+      "certified_for_apply": false
+    }
+  ],
+  "explicit_measurement_request_count": 0,
+  "matched_binding_repeat": {
+    "previous_observable_count": 4,
+    "current_observable_count": 4,
+    "identity_and_listed_metrics_exactly_match": true,
+    "current_measurements": [
+      {
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "execution_id": "exec:589550eef2d5e047ffdb0595",
+        "observable_id": "obs:41d44e1ed947516db89de7b5",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "activation_patch_step_size": 0.04,
+        "target_piece_token_id": 24082,
+        "target_piece": " Sel",
+        "target_piece_logit_delta": 0.0,
+        "target_piece_prob_delta": 3.388290258197159e-09,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": 0.0,
+        "repeat_max_abs_logit_delta": 0.0
+      },
+      {
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "execution_id": "exec:589550eef2d5e047ffdb0595",
+        "observable_id": "obs:754fbf7425d847739e794ddf",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "activation_patch_step_size": 0.04,
+        "target_piece_token_id": 12069,
+        "target_piece": " sel",
+        "target_piece_logit_delta": 0.0,
+        "target_piece_prob_delta": 2.8472341191464344e-10,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": 0.0,
+        "repeat_max_abs_logit_delta": 0.0
+      },
+      {
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "execution_id": "exec:36b9b616b84ce714f2422e12",
+        "observable_id": "obs:8404be939dc254d2c37fb094",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "activation_patch_step_size": 0.16,
+        "target_piece_token_id": 24082,
+        "target_piece": " Sel",
+        "target_piece_logit_delta": 0.0078125,
+        "target_piece_prob_delta": 3.4288263391947685e-08,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": -0.0078125,
+        "repeat_max_abs_logit_delta": 0.0
+      },
+      {
+        "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+        "execution_id": "exec:36b9b616b84ce714f2422e12",
+        "observable_id": "obs:7dd555391b1af16ab9d5b920",
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "activation_patch_step_size": 0.16,
+        "target_piece_token_id": 12069,
+        "target_piece": " sel",
+        "target_piece_logit_delta": 0.0078125,
+        "target_piece_prob_delta": 2.8812972318307768e-09,
+        "target_top20_hit_delta": 0,
+        "target_top20_threshold_gap_delta": -0.0078125,
+        "repeat_max_abs_logit_delta": 0.0
+      }
+    ],
+    "not_whole_term_or_task_success": true
+  },
+  "previous_pair_comparison": {
+    "manifest_sha256": "a2b7f07b49248ad4386c4ba9b45f289d6b799481436fab299fb5f509857022c6",
+    "previous_charged_diagnostics": 12,
+    "previous_output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "same_c1_output": true,
+    "causal_savings_established": false,
+    "reason": "Independent provider trajectory; no matched request-sequence ablation"
+  },
+  "conditional_completion_probe_invoked": false,
+  "production_policy_changed": false,
+  "debrief_scope": "qualitative only, not causal evidence or next-run context",
+  "debrief": {
+    "metadata": {
+      "response_id": "resp_0d01e3305cd923b8006ab0cc8274b487d2b33f8e48211b3e50",
+      "status": "completed"
+    },
+    "reference_audit": {
+      "cited_event_ids": [
+        "c1.jsonl:L188",
+        "c1.jsonl:L28",
+        "c1.jsonl:L31",
+        "c1.jsonl:L49",
+        "c1.jsonl:L52",
+        "c1.jsonl:L91",
+        "c1.jsonl:L94"
+      ],
+      "production_apply_allowed": false,
+      "qualitative_only": true,
+      "reference_check_scope": "checks_exposure_not_claim_truth",
+      "uncategorized_wish_count": 0,
+      "uncited_wish_count": 0,
+      "unexposed_event_ids": [],
+      "wish_count": 3
+    },
+    "usage": {
+      "input_tokens": 6698,
+      "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=6695)",
+      "output_tokens": 679,
+      "output_tokens_details": "OutputTokensDetails(reasoning_tokens=90)",
+      "total_tokens": 7377
+    }
+  },
+  "artifact_hashes": {
+    "baseline_identity_check.json": {
+      "sha256": "4921765ad17af7c28e50c5b28c02b4c1e5b5624bfc9e16fac0d18ad68b6013b2",
+      "bytes": 172
+    },
+    "build_audit.py": {
+      "sha256": "f664912fb048b1574331dee2788e1dd8e31dbe978010db97c328a7b05e0720de",
+      "bytes": 7839
+    },
+    "live/b0.jsonl": {
+      "sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+      "bytes": 631
+    },
+    "live/c1.jsonl": {
+      "sha256": "fe7df8d5e18c7d6555ece8f0977296f29bf3e2f46c2323a62fbd2adf75c093c9",
+      "bytes": 2501297
+    },
+    "live/experiment_summary.json": {
+      "sha256": "f99c9c62b1139dd1bc8a6546cb398d1e95929037c930dd2ae12cbfa747b7db84",
+      "bytes": 2196
+    },
+    "live/post_run_debrief.json": {
+      "sha256": "7db6c6059fa011b85e809f9ba99ee254fa6deb13c52584a428df3907a7f04ecf",
+      "bytes": 5403
+    },
+    "live/post_run_debrief.md": {
+      "sha256": "1230b710c9047fd9c725e893b778df37864593cd9118b4453f8f0f6060acbe20",
+      "bytes": 2727
+    },
+    "live/post_run_debrief_input.json": {
+      "sha256": "201bf5facb97c7adc71710732af9d586eccc201edc2b07dd034fca564a533ece",
+      "bytes": 29044
+    },
+    "manifest.json": {
+      "sha256": "0b4bb130def8c8675caccbd70c654bbd56e7714f62c188617cad50bce49db2b1",
+      "bytes": 13727
+    },
+    "memory_boundaries.jsonl": {
+      "sha256": "3521ed4c9340aa7b56b4191b18d2420c3aaa4a0ddbf421897ac05ac7b7758df3",
+      "bytes": 7882
+    },
+    "run_pair.py": {
+      "sha256": "f9a253df00d1ee2e7a2e9d0f3b1612f6ea798fdc30a9b1aaed5014a3271733cf",
+      "bytes": 3819
+    },
+    "run_status.json": {
+      "sha256": "e74e2df73a05aa466f0e2fe35ff2a3578ec5754c66df6f94d5e1df59d28ea0bb",
+      "bytes": 89
+    }
+  }
+}

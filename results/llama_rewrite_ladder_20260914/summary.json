@@ -1,0 +1,50 @@
+{
+  "manifest_sha256": "67c2c36c663287a80a5ac01ce888edd0a557a6c3c7763c4ecdd526c033bff48c",
+  "conditions_sha256": "50e91da9cfe431d217136ee4eb06566211b48926dbb14b7da7961182bad5e57c",
+  "levels": [
+    {
+      "level": 0,
+      "count": 1,
+      "passed": 1,
+      "truncated": 0,
+      "violation_counts": {}
+    },
+    {
+      "level": 1,
+      "count": 3,
+      "passed": 2,
+      "truncated": 0,
+      "violation_counts": {
+        "missing_required_terms": 1
+      }
+    },
+    {
+      "level": 2,
+      "count": 3,
+      "passed": 0,
+      "truncated": 0,
+      "violation_counts": {
+        "missing_required_terms": 2,
+        "over_word_budget": 2
+      }
+    },
+    {
+      "level": 3,
+      "count": 3,
+      "passed": 1,
+      "truncated": 0,
+      "violation_counts": {
+        "over_word_budget": 1,
+        "missing_required_terms": 1
+      }
+    }
+  ],
+  "selection_rule": "Keep the legacy control successful; take the first nonempty, non-truncated lexical failure in ascending level and manifest case order for human coherence review and full-runtime B0 confirmation, not automatic promotion.",
+  "selected_condition_id": "constrained_rewrite_l1:review:seed0",
+  "selected_next_step": "human_coherence_review_then_full_runtime_b0",
+  "controller_calls": 0,
+  "interventions": 0,
+  "production_apply_allowed": false,
+  "measurement_scope": "full_depth_tlens_no_edit_raw_greedy_without_observer_or_controller",
+  "semantic_preservation_certified": false
+}

@@ -1,0 +1,71 @@
+{
+  "scope": "command-meta-only scripted accounting with recorded results substituted",
+  "source_jsonl_sha256": "df9f93ada85b24ed53dbb975a306858c4a35fa2c8d13395c993356ba00214f01",
+  "rows": [
+    {
+      "controller_step": 4,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "review_executor_calls": 1,
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "prefix_changed_since_review": null,
+      "production_apply_allowed": false
+    },
+    {
+      "controller_step": 5,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "review_reused",
+      "review_executor_calls": 0,
+      "budget_after": {
+        "diagnostic_calls_left": 7,
+        "inspection_calls_left": 4
+      },
+      "prefix_changed_since_review": true,
+      "production_apply_allowed": false
+    },
+    {
+      "controller_step": 6,
+      "diagnostic": "activation_patch_runtime_support_probe",
+      "status": "ok",
+      "review_executor_calls": 1,
+      "budget_after": {
+        "diagnostic_calls_left": 6,
+        "inspection_calls_left": 4
+      },
+      "prefix_changed_since_review": null,
+      "production_apply_allowed": false
+    },
+    {
+      "controller_step": 7,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "ok",
+      "review_executor_calls": 1,
+      "budget_after": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 4
+      },
+      "prefix_changed_since_review": null,
+      "production_apply_allowed": false
+    },
+    {
+      "controller_step": 8,
+      "diagnostic": "activation_patch_candidate_review",
+      "status": "review_reused",
+      "review_executor_calls": 0,
+      "budget_after": {
+        "diagnostic_calls_left": 5,
+        "inspection_calls_left": 4
+      },
+      "prefix_changed_since_review": true,
+      "production_apply_allowed": false
+    }
+  ],
+  "avoided_reviews": 2,
+  "controller_calls": 0,
+  "model_calls": 0,
+  "controller_behavior_improvement_demonstrated": false,
+  "production_apply_allowed": false
+}

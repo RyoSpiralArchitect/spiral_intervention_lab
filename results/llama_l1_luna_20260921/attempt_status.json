@@ -1,0 +1,11 @@
+{
+  "status": "incomplete_external_kill",
+  "exit_code": 137,
+  "completed_baseline": "b0",
+  "last_c1_generated_tokens": 2,
+  "controller_response_count": 1,
+  "diagnostic_result_count": 1,
+  "compiled_edit_count": 0,
+  "cause_evidence": "os_memory_exit.txt: no paging space; largest compressed Python process killed at 17889 MB",
+  "usable_for_task_outcome_comparison": false
+}

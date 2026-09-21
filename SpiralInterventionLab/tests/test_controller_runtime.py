@@ -1,4 +1,6 @@
+import gc
 import unittest
+import weakref
 from collections.abc import Mapping
 from importlib.util import find_spec
 from unittest.mock import patch
@@ -7625,6 +7627,34 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertIn("paired_baseline", created_workers[1].runtime_state.trace_sequences)
         self.assertIn("paired_baseline", created_workers[2].runtime_state.trace_sequences)
         self.assertEqual(created_workers[1].runtime_state.trace_sequences["paired_baseline"].step_count, 3)
+
+    def test_minimal_baseline_suite_releases_completed_workers_but_keeps_trace(self):
+        for with_b1 in (False, True):
+            with self.subTest(with_b1=with_b1):
+                worker_refs = []
+                seeded_traces = []
+
+                def make_worker():
+                    gc.collect()
+                    self.assertTrue(all(ref() is None for ref in worker_refs))
+                    worker = self._make_worker_runtime()
+                    seeded_traces.append(worker.runtime_state.trace_sequences)
+                    worker_refs.append(weakref.ref(worker))
+                    return worker
+
+                suite = run_minimal_baseline_suite(
+                    _ThreeStepTaskEnv("c"),
+                    make_worker_runtime=make_worker,
+                    c1_controller=_ResidEditController(),
+                    b1_controller=_PromptHintController("b") if with_b1 else None,
+                )
+
+                self.assertEqual(suite.b0.output, "aaa")
+                self.assertEqual(suite.c1.output, "aca")
+                self.assertEqual(suite.c1.score, 1.0)
+                self.assertEqual(len(worker_refs), 3 if with_b1 else 2)
+                for traces in seeded_traces[1:]:
+                    self.assertEqual(traces["paired_baseline"].step_count, 3)
 
 
 @unittest.skipUnless(HAS_TRANSFORMER_LENS, "transformer_lens is not installed")
