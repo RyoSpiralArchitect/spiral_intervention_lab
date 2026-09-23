@@ -40,8 +40,11 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
 from SpiralInterventionLab.examples.summarize_activation_patch_jsonl import summarize_activation_patch_jsonl
 from SpiralInterventionLab.examples.compare_activation_patch_jsonl import compare_activation_patch_runs
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
+from SpiralInterventionLab.runtime import candidate_handoff
 from SpiralInterventionLab.runtime.diagnostic_orchestration import (
+    completed_expansion_keys,
     confirmed_gap_only_objective_rows,
+    expansion_already_replayed,
     operator_family_shift_canonical_request,
     readout_gap_confirmation_seen_for_objective,
 )
@@ -752,9 +755,12 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
 
         self.assertIsNotNone(repeated)
         assert repeated is not None
+        self.assertEqual(repeated["status"], "already_replayed")
+        self.assertEqual(repeated["diagnostic_call_cost"], 0)
+        self.assertEqual(repeated["new_measurement_count"], 0)
         self.assertEqual(repeated["readout_steering_deepening_followup_count"], 0)
         self.assertEqual(repeated["readout_steering_deepening_followup_status"], "already_replayed")
-        self.assertEqual(repeated["next_evidence_needed"], "readout_steering_deepening_review_complete")
+        self.assertEqual(repeated["next_evidence_needed"], "choose_unreplayed_diagnostic")
         self.assertEqual(repeated["operator_recipe_expansion_summary"]["matrix_row_count"], 3)
         self.assertEqual(
             repeated["readout_deepening_review_summary"]["recommended_next_action"],
@@ -922,6 +928,24 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
                 "inline_suppress_then_target_after_calibration_executed"
             ]
         )
+
+        runtime._diagnostic_results = [result, deepening, confirmation, conversion]
+        repeated_conversion = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "carrier_to_actuator_conversion_sweep",
+                "bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+            },
+            source="unit_test",
+            packet={"strategy_hints": {}},
+        )
+        self.assertIsNotNone(repeated_conversion)
+        assert repeated_conversion is not None
+        self.assertEqual(repeated_conversion["status"], "already_replayed")
+        self.assertEqual(repeated_conversion["diagnostic_call_cost"], 0)
+        self.assertEqual(repeated_conversion["carrier_to_actuator_conversion_variant_count"], 0)
+        runtime._diagnostic_results = [result, deepening, confirmation]
 
         non_kv_preview = runtime._execute_controller_diagnostic_request(
             conversion["readout_deepening_review_summary"]["operator_family_shift_canonical_request"],
@@ -1301,6 +1325,236 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "carrier_to_actuator_conversion_sweep")
         self.assertTrue(requests[0]["carrier_to_actuator_conversion_sweep"])
         self.assertTrue(requests[0]["canonical_followup_request_applied"])
+
+    def test_diagnostic_identity_does_not_inherit_another_frontiers_mode(self):
+        objective = "entity_insert:send:source_body:near_reachable"
+        command = {
+            "version": "0.1",
+            "decision": "noop",
+            "meta": {
+                "diagnostic_request": {
+                    "diagnostic": "carrier_to_actuator_conversion_sweep",
+                    "objective_bundle_key": objective,
+                    "next_evidence_needed": "carrier_to_actuator_conversion_sweep",
+                },
+            },
+        }
+        packet = {"strategy_hints": {
+            "diagnostic_frontier_canonical_request": {
+                "diagnostic": "compare_extra_operator_diagnostics",
+                "objective_bundle_key": objective,
+                "operator_recipe_expansion_mode": "two_stage_suppress_then_target_review",
+                "next_evidence_needed": "two_stage_suppress_then_target_review",
+            },
+            "diagnostic_frontier_operator_recipe_expansion_mode": "two_stage_suppress_then_target_review",
+        }}
+
+        requests = _extract_diagnostic_requests(command, packet)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["diagnostic"], "carrier_to_actuator_conversion_sweep")
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "carrier_to_actuator_conversion_sweep")
+        self.assertNotEqual(requests[0]["operator_recipe_expansion_mode"], "two_stage_suppress_then_target_review")
+
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        invalid = runtime._execute_controller_diagnostic_request(
+            {**requests[0], "operator_recipe_expansion_mode": "two_stage_suppress_then_target_review"},
+            source="unit_test",
+            packet=packet,
+        )
+        self.assertIsNotNone(invalid)
+        assert invalid is not None
+        self.assertEqual(invalid["status"], "invalid_request")
+        self.assertEqual(invalid["blocked_reason"], "diagnostic_mode_mismatch")
+        self.assertEqual(invalid["diagnostic_call_cost"], 0)
+        self.assertFalse(invalid["production_apply_allowed"])
+        invalid_next = runtime._execute_controller_diagnostic_request(
+            {
+                "diagnostic": "carrier_to_actuator_conversion_sweep",
+                "objective_bundle_key": objective,
+                "next_evidence_needed": "two_stage_suppress_then_target_review",
+            },
+            source="unit_test",
+            packet=packet,
+        )
+        self.assertEqual(invalid_next["blocked_reason"], "diagnostic_mode_mismatch")
+        self.assertEqual(invalid_next["diagnostic_call_cost"], 0)
+
+    def test_dedicated_diagnostic_request_and_next_action_are_one_measurement(self):
+        objective = "entity_insert:send:source_body:near_reachable"
+        requests = _extract_diagnostic_requests(
+            {
+                "version": "0.1",
+                "decision": "noop",
+                "meta": {
+                    "diagnostic_request": {
+                        "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+                        "objective_bundle_key": objective,
+                        "bundle_key": objective,
+                        "operator_recipe_expansion_mode": "readout_gap_confirmation_or_variant_sweep",
+                    },
+                    "next_action": "request_readout_gap_confirmation_or_variant_sweep",
+                    "next_evidence_needed": "readout_gap_confirmation_or_variant_sweep",
+                    "objective_bundle_key": objective,
+                },
+            },
+            {"strategy_hints": {}},
+        )
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["operator_recipe_expansion_mode"], "readout_gap_confirmation_or_variant_sweep")
+
+    def test_rotation_does_not_inherit_unrelated_frontier_mode(self):
+        objective = "entity_insert:rotation:take_sample_ivo"
+        packet = {"strategy_hints": {
+            "diagnostic_frontier_canonical_request": {
+                "diagnostic": "objective_rotation_pipeline",
+                "objective_bundle_key": objective,
+            },
+            "diagnostic_frontier_operator_recipe_expansion_mode": "readout_steering_deepening",
+        }}
+        command = {"version": "0.1", "decision": "noop", "meta": {
+            "diagnostic_request": {"diagnostic": "objective_rotation_pipeline", "objective_bundle_key": objective},
+            "next_action": "request_objective_rotation_pipeline",
+        }}
+        requests = _extract_diagnostic_requests(command, packet)
+        self.assertEqual(len(requests), 1)
+        self.assertNotIn("operator_recipe_expansion_mode", requests[0])
+
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        invalid = runtime._execute_controller_diagnostic_request(
+            {**requests[0], "operator_recipe_expansion_mode": "readout_steering_deepening"},
+            source="unit_test",
+            packet=packet,
+        )
+        self.assertEqual(invalid["blocked_reason"], "diagnostic_mode_mismatch")
+        self.assertEqual(invalid["diagnostic_call_cost"], 0)
+
+    def test_empty_matched_response_probe_is_not_a_successful_charged_diagnostic(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        runtime.max_diagnostic_calls_per_run = 12
+        runtime.diagnostic_result_window = 12
+        runtime._diagnostic_calls_used = 0
+        runtime._diagnostic_results = []
+        runtime._pending_diagnostic_events = []
+        runtime._evidence_inspection_count = 0
+        runtime._last_packet = {"strategy_hints": {}}
+        with patch("SpiralInterventionLab.runtime.worker.matched_response_probe", return_value={
+            "status": "no_candidate_seed",
+            "unavailable_reason": "no_candidate_seed",
+            "new_measurement_count": 0,
+            "physical_replay_count": 0,
+            "rows": [],
+        }):
+            rows = runtime.request_controller_diagnostics(
+                {"diagnostic": "matched_response_probe", "objective_bundle_key": "entity_insert:send:source_body:near_reachable"},
+                packet={"strategy_hints": {}},
+            )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["status"], "no_candidate_seed")
+        self.assertEqual(rows[0]["blocked_reason"], "no_candidate_seed")
+        self.assertFalse(rows[0]["diagnostic_budget_charged"])
+        self.assertEqual(rows[0]["budget_after"]["diagnostic_calls_left"], 12)
+
+    def test_matched_probe_executor_uses_retained_seed_after_result_eviction(self):
+        objective = "entity_insert:mira:source_body:weak_reachable"
+        row = {"operator_recipe_id": "readout_escape|activation_patch|resid_pre|L11|mira",
+               "operator_axis": "activation_patch_blueprint_materialization",
+               "objective_bundle_key": objective, "intended_term": "Mira",
+               "actual_delta_class": "rank_carrier", "activation_patch_site": "resid_pre",
+               "activation_patch_layer": 11, "activation_patch_alpha": 0.04,
+               "activation_patch_source_localization": "source_term_token"}
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        runtime._diagnostic_results = []
+        candidate_handoff.reset(runtime)
+        candidate_handoff.capture_seed_rows(runtime, {"evidence_rows": [row]})
+        with patch("SpiralInterventionLab.runtime.worker.matched_response_probe", return_value={
+            "status": "unavailable", "rows": [], "new_measurement_count": 0,
+            "physical_replay_count": 0,
+        }) as probe:
+            runtime._execute_controller_diagnostic_request(
+                {"diagnostic": "matched_response_probe", "objective_bundle_key": objective,
+                 "focus_term": "Mira", "comparison_axis": "source_localization",
+                 "candidate_ids": [row["operator_recipe_id"]], "dose_grid": [0.04]},
+                source="unit_test", packet={"strategy_hints": {}})
+        self.assertEqual(probe.call_args.args[1][0]["operator_recipe_id"], row["operator_recipe_id"])
+
+    def test_already_replayed_diagnostic_does_not_consume_budget(self):
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        runtime.max_diagnostic_calls_per_run = 12
+        runtime.diagnostic_result_window = 12
+        runtime._diagnostic_calls_used = 9
+        runtime._diagnostic_results = []
+        runtime._pending_diagnostic_events = []
+        runtime._evidence_inspection_count = 0
+        runtime._last_packet = {"strategy_hints": {}}
+        runtime._execute_controller_diagnostic_request = lambda *args, **kwargs: {
+            "diagnostic": "carrier_to_actuator_conversion_sweep",
+            "status": "already_replayed",
+            "new_measurement_count": 0,
+            "physical_replay_count": 0,
+            "diagnostic_call_cost": 0,
+            "production_apply_allowed": False,
+        }
+
+        rows = runtime.request_controller_diagnostics(
+            {"diagnostic": "carrier_to_actuator_conversion_sweep",
+             "objective_bundle_key": "entity_insert:send:source_body:near_reachable",
+             "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep"},
+            packet={"strategy_hints": {}},
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["budget_before"]["diagnostic_calls_left"], 3)
+        self.assertEqual(rows[0]["budget_after"]["diagnostic_calls_left"], 3)
+        self.assertFalse(rows[0]["diagnostic_budget_charged"])
+        self.assertEqual(runtime._diagnostic_calls_used, 9)
+
+    def test_completed_expansion_survives_bounded_result_window(self):
+        objective = "entity_insert:send:source_body:near_reachable"
+        request = {"diagnostic": "carrier_to_actuator_conversion_sweep",
+                   "objective_bundle_key": objective,
+                   "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep"}
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        runtime.max_diagnostic_calls_per_run = 12
+        runtime.diagnostic_result_window = 1
+        runtime._diagnostic_calls_used = 0
+        runtime._diagnostic_results = []
+        runtime._pending_diagnostic_events = []
+        runtime._evidence_inspection_count = 0
+        runtime._last_packet = {"strategy_hints": {}}
+        def execute_diagnostic(selected, **kwargs):
+            if selected["diagnostic"] != "carrier_to_actuator_conversion_sweep":
+                return {"diagnostic": selected["diagnostic"], "status": "ok"}
+            return {**request, "carrier_to_actuator_conversion_variant_count": 4,
+                    "operator_recipe_expansion_matrix": [{
+                        "objective_bundle_key": objective,
+                        "operator_axis": "carrier_to_actuator_conversion_sweep",
+                    }]}
+        runtime._execute_controller_diagnostic_request = execute_diagnostic
+        runtime.request_controller_diagnostics(request, packet={"strategy_hints": {}})
+        assert expansion_already_replayed(request, runtime._completed_expansion_keys, ())
+        assert not expansion_already_replayed(
+            {**request, "objective_bundle_key": "entity_insert:mira:source_body:near_reachable"},
+            runtime._completed_expansion_keys, ())
+        runtime.request_controller_diagnostics(
+            {"diagnostic": "target_entity_insertion_probe"}, packet={"strategy_hints": {}})
+        self.assertEqual(len(runtime._diagnostic_results), 1)
+        self.assertEqual(runtime._diagnostic_results[0]["diagnostic"], "target_entity_insertion_probe")
+        runtime._execute_controller_diagnostic_request = (
+            HookedTransformerWorkerRuntime._execute_controller_diagnostic_request.__get__(runtime))
+        repeated = runtime._execute_controller_diagnostic_request(
+            request, source="unit_test", packet={"strategy_hints": {}})
+        self.assertEqual(repeated["status"], "already_replayed")
+        self.assertEqual(repeated["diagnostic_call_cost"], 0)
+        self.assertEqual(repeated["physical_replay_count"], 0)
+        self.assertFalse(repeated["production_apply_allowed"])
+        self.assertEqual(completed_expansion_keys(repeated), set())
 
     def test_extract_diagnostic_requests_substitutes_blocked_attention_probe(self):
         objective = "entity_insert:send:source_body:weak_reachable"
@@ -1758,6 +2012,38 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         )
         self.assertEqual(request["target_terms"], ["mira", "budget"])
 
+        runtime._diagnostic_results.append({
+            "diagnostic": "carrier_to_actuator_conversion_sweep",
+            "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+            "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+            "carrier_to_actuator_conversion_variant_count": 4,
+            "recorded_step": 6,
+        })
+        consumed_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+        self.assertNotEqual(
+            consumed_hints.get("diagnostic_frontier_request"),
+            "carrier_to_actuator_conversion_sweep",
+        )
+        self.assertNotIn(
+            "carrier_to_actuator_conversion_sweep",
+            [row["diagnostic"] for row in consumed_hints.get("available_next_diagnostics", [])],
+        )
+        runtime._completed_expansion_keys = completed_expansion_keys(runtime._diagnostic_results[-1])
+        runtime._diagnostic_results.pop()
+        evicted_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+        self.assertNotIn(
+            "carrier_to_actuator_conversion_sweep",
+            [row["diagnostic"] for row in evicted_hints.get("available_next_diagnostics", [])],
+        )
+
     def test_strategy_hints_request_non_kv_shift_after_carrier_conversion_fails(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
         runtime.decoder_control_mode = ""
@@ -1870,6 +2156,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         }
         runtime._diagnostic_results[0].update(
             {
+                "carrier_to_actuator_conversion_variant_count": 4,
                 "mini_non_kv_first_pass_executed": True,
                 "mini_non_kv_first_pass_rows": 2,
                 "mini_non_kv_first_pass_summary": dict(mini_summary),
@@ -1913,6 +2200,30 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
             mini_hints["diagnostic_frontier_canonical_request"]["operator_recipe_expansion_mode"],
             "non_kv_variant_or_two_stage_design",
         )
+        self.assertNotIn(
+            "carrier_to_actuator_conversion_sweep",
+            [row["diagnostic"] for row in mini_hints.get("available_next_diagnostics", [])],
+        )
+
+        runtime._diagnostic_results[0]["non_kv_variant_or_two_stage_rows"] = [{
+            "objective_bundle_key": objective_key,
+            "operator_axis": "two_stage_suppress_then_target_review",
+        }]
+        already_measured_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+        self.assertNotIn(
+            "two_stage_suppress_then_target_review",
+            [row.get("request", {}).get("operator_recipe_expansion_mode")
+             for row in already_measured_hints.get("available_next_diagnostics", [])],
+        )
+        self.assertTrue(any(
+            row.get("status") == "already_replayed"
+            for row in already_measured_hints.get("blocked_next_diagnostics", [])
+        ))
+        runtime._diagnostic_results[0].pop("non_kv_variant_or_two_stage_rows")
 
         runtime._diagnostic_results[0].update(
             {

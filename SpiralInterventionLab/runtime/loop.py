@@ -15,7 +15,7 @@ from .edit_budget import (
     PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
 )
 from .policy import PolicyViolation, budget_violation_reason, command_budget_usage
-from . import prefix_control
+from . import candidate_handoff, prefix_control
 
 
 class TaskEnv(Protocol):
@@ -713,6 +713,10 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         # A selected offer is exclusive; stale next_action/memory prose must not
         # append a second diagnostic or rewrite a read into a measurement.
         return [{"diagnostic": "candidate_action", "action_id": diagnostic_request.get("action_id")}]
+    if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("diagnostic") == "matched_response_probe":
+        # Preserve the offered objective/seed and keep this bounded physical
+        # measurement separate from stale frontier or next_action requests.
+        return [dict(diagnostic_request)]
     if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("evidence_id"):
         from .response_promotion import REVIEW_NAMES
         if diagnostic_request.get("diagnostic") in REVIEW_NAMES:
@@ -779,12 +783,18 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
             strategy_hints=strategy_hints,
             canonical_request=canonical_request,
         )
+        frontier_name = str(
+            (canonical_request or {}).get("diagnostic")
+            or strategy_hints.get("diagnostic_frontier_request")
+            or ""
+        )
+        matches_frontier = not frontier_name or name_text == frontier_name
         row.setdefault(
             "bundle_key",
             meta.get("objective_bundle_key")
             or diagnostic_request_defaults.get("bundle_key")
             or diagnostic_request_defaults.get("objective_bundle_key")
-            or strategy_hints.get("diagnostic_frontier_bundle_key")
+            or (strategy_hints.get("diagnostic_frontier_bundle_key") if matches_frontier else None)
             or strategy_hints.get("gate_report_frontier_bundle_key")
             or strategy_hints.get("selected_bundle_key"),
         )
@@ -803,16 +813,34 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         row.setdefault(
             "next_evidence_needed",
             meta.get("next_evidence_needed")
-            or strategy_hints.get("diagnostic_frontier_next_evidence"),
+            or (strategy_hints.get("diagnostic_frontier_next_evidence") if matches_frontier else None),
         )
         row.setdefault("reason", meta.get("why_not_apply") or strategy_hints.get("diagnostic_frontier_reason_text"))
         if meta.get("operator_recipe_expansion_mode") not in (None, ""):
             row.setdefault("operator_recipe_expansion_mode", meta.get("operator_recipe_expansion_mode"))
-        elif strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode") not in (None, ""):
+        elif (
+            matches_frontier
+            and name_text in {
+                "compare_extra_operator_diagnostics",
+                "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
+                "activation_patch_candidate_review",
+                "activation_patch_runtime_support_probe",
+                "activation_patch_promotion_gate_review",
+                "activation_patch_production_shadow_replay",
+                "activation_patch_production_trial_gate_review",
+            }
+            and strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode") not in (None, "")
+        ):
             row.setdefault(
                 "operator_recipe_expansion_mode",
                 strategy_hints.get("diagnostic_frontier_operator_recipe_expansion_mode"),
             )
+        if name_text in {
+            "readout_gap_confirmation_or_variant_sweep",
+            "carrier_to_actuator_conversion_sweep",
+        } and row.get("operator_recipe_expansion_mode") in (None, ""):
+            row["operator_recipe_expansion_mode"] = name_text
         blocked = _blocked_diagnostic_row(row, strategy_hints=strategy_hints)
         if blocked is not None:
             alternate = str(blocked.get("suggested_alternate_diagnostic") or "")
@@ -1560,7 +1588,38 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         if controller_bridge_dual_layer_missing
         else None
     )
+    handoff = strategy_hints.get("candidate_handoff")
+    handoff = handoff if isinstance(handoff, Mapping) else {}
+    handoff_state = str(handoff.get("state") or "")
+    handoff_choice = None
+    handoff_defer_reason = None
+    handoff_defer_reason_source = None
+    if handoff_state == "measurable":
+        offered = [item for item in handoff.get("measurement_offers", ()) if isinstance(item, Mapping)]
+        requests = _extract_diagnostic_requests(command, packet)
+        measured = any(str(item.get("diagnostic") or "") == "matched_response_probe"
+                       and candidate_handoff.matches_offered_request(item, offer)
+                       for item in requests for offer in offered)
+        different_measurement = any(str(item.get("diagnostic") or "") == "matched_response_probe"
+                                    and str(item.get("objective_bundle_key") or "") ==
+                                    str(offer.get("objective_bundle_key") or "")
+                                    for item in requests for offer in offered)
+        handoff_choice = ("measurement_requested" if measured else
+                          "different_measurement_requested" if different_measurement else
+                          "deferred_for_other_diagnostic" if requests else "no_measurement_requested")
+        if not measured:
+            explicit_reason = _optional_meta_text(meta, "handoff_defer_reason")
+            general_reason = _optional_meta_text(meta, "micro_rationale")
+            handoff_defer_reason = explicit_reason or general_reason or "not_stated_by_controller"
+            handoff_defer_reason_source = ("explicit_handoff_reason" if explicit_reason else
+                                          "general_micro_rationale" if general_reason else "missing")
     return {
+        "candidate_handoff_state": handoff_state or None,
+        "candidate_handoff_choice": handoff_choice,
+        "candidate_handoff_defer_reason": handoff_defer_reason,
+        "candidate_handoff_defer_reason_source": handoff_defer_reason_source,
+        "candidate_handoff_soft_opportunity_cost": handoff.get("soft_opportunity_cost"),
+        "candidate_handoff_measured_card_count": handoff.get("measured_card_count"),
         "sidecar_suggested_bundle_key": None if sidecar_suggested_bundle_key in (None, "") else str(sidecar_suggested_bundle_key),
         "readout_analyzer_name": None if analyzer_name in (None, "") else str(analyzer_name),
         "readout_analyzer_feature_backend": None

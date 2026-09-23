@@ -245,6 +245,7 @@ _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
     "diagnostic_evidence_ledger",
     "diagnostic_review_reuse",
     "candidate_diagnostic_choices",
+    "candidate_handoff",
     "generation_control",
     "candidate_trial_handoffs",
     "candidate_trial_offer",
@@ -309,7 +310,7 @@ def _compact_strategy_hints(value: Any) -> dict[str, Any]:
     compact: dict[str, Any] = {}
     for key in _STRATEGY_HINT_PRIORITY_KEYS:
         if key in value and value.get(key) not in (None, "", []):
-            if key in {"candidate_diagnostic_choices", "candidate_trial_handoffs", "candidate_trial_offer", "generation_control"}:
+            if key in {"candidate_diagnostic_choices", "candidate_handoff", "candidate_trial_handoffs", "candidate_trial_offer", "generation_control"}:
                 # Runtime bounds the catalog; preserve nested executable IDs.
                 compact[key] = _bounded_json(value[key], max_depth=8, max_items=12, max_string=260)
                 continue

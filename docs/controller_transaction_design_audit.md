@@ -242,3 +242,113 @@ guard); no expected failures. `git diff --check` passes.
 
 These tests use local toy fixtures and the real episode loop, not an API
 controller, live Llama/GPT-2, or a claim that physical confirmation passed.
+
+## Diagnostic Route Follow-Up (2026-09-23)
+
+The diagnostic routing contract now filters already-measured objective/mode
+expansions out of the available menu, prevents a requested diagnostic from
+inheriting another frontier diagnostic's mode, and labels a replay with zero
+new mode-specific rows as `no_new_measurement` or `already_replayed` with zero
+diagnostic cost. A dedicated diagnostic name with a conflicting mode is an
+`invalid_request`, also without physical execution or diagnostic charge.
+The detailed request and `next_action` alias for the same objective/mode now
+deduplicate before dispatch. None of these changes grants apply permission.
+
+Final-code B0/C1 pairs used the same profile, checkpoint, seed, controller,
+prompt and 12-slot diagnostic limit as the earlier live smoke. Baseline identity
+checks passed; each pair sealed its source snapshot and hashes. The local
+[GPT-2 pair](../results/diagnostic_route_fix_gpt2_r2_20260923/) and
+[Llama pair](../results/diagnostic_route_fix_llama_r3_20260923/) retain the
+JSONL and audits. These paths are local experiment artifacts, not committed
+benchmark fixtures.
+
+| Observation, old -> final | GPT-2 | Llama 3.2 3B |
+| --- | ---: | ---: |
+| Identical generated-prefix set | 11 / 11 | 18 / 18 |
+| Charged diagnostics | 12 -> 11 | 12 -> 12 |
+| Conversion requests carrying another mode | 3 -> 0 | 3 -> 0 |
+| Rotation requests carrying readout mode | 0 -> 0 | 1 -> 0 |
+| Maximum visible candidate cards | 0 -> 0 | 0 -> 0 |
+| C1 score | 0.5875 -> 0.5875 | 0.938889 -> 0.938889 |
+
+The generated prefixes match, but the controller's diagnostic histories do
+not; this is a same-prefix routing comparison, not a causal operator-efficacy
+ablation. In the final Llama run the recovered slots went to rotation and
+readout deepening. GPT-2 retained one unused slot. Neither run requested
+`matched_response_probe` or `activation_patch_candidate_review`, so neither
+crossed the measurement-to-frozen-card handoff. GPT-2 did request an
+activation-patch production-trial gate review, but it yielded no card or apply
+permission. Zero-row replay accounting and invalid-mode rejection are covered
+by tests; the final live paths did not exercise those no-charge statuses.
+The remaining bottleneck is therefore candidate handoff selection, not proof
+that another operator or a looser apply gate is needed.
+
+Final validation: `473 passed, 15 warnings, 2 subtests passed` and
+`git diff --check` passed.
+
+## Seed-to-Card Handoff Follow-Up (2026-09-23)
+
+An opt-in `candidate_handoff_mode=soft` now distinguishes `measurable`,
+`unmeasurable`, and `carded`. A measurement offer is a preflight match against
+recorded activation-patch evidence and the actual `matched_response_probe`
+seed rules; it is not a binding check, frozen card, operator certification, or
+apply permission. An already-present required term is control-only, not a
+progress-oriented measurement offer. The controller can still select another
+diagnostic, but its selection report records the reason given for deferring
+measurement (or explicitly records that no reason was given). A small soft
+opportunity cost counts repeated charged, non-safety deferrals at the same
+prefix. Safety checks and zero-cost diagnostics are exempt. Measurement is
+never forced, and production apply gates are unchanged. The mode defaults to
+`off`.
+
+The local-only GPT-2 off pair
+(`results/candidate_handoff_off_gpt2_20260923/`) and soft pair
+(`results/candidate_handoff_soft_gpt2_r2_20260923/`)
+used the same task, checkpoint, seed, Luna controller, baseline reference and
+12 diagnostic slots. Their 11 generated prefixes and final score (`0.5875`)
+matched. The off pair produced no measured card. The soft pair reached a
+`measurable` Mira seed, ran one matched-response probe, and recorded two
+frozen cards after 12 charged diagnostics. Neither card passed the bound
+target-lift trial gate; there was no trial offer, compiled rollout edit, or
+score improvement. The soft opportunity cost did not activate in this pair,
+so the card handoff supports the measurement-offer plumbing, not a claim that
+the penalty improved controller behavior or reduced diagnostics-to-card.
+
+An initial Llama soft smoke recorded cards for `sample`, a required term
+already present in the generated prefix. Those cards were valid measurements
+but not progress toward the missing term, so the preflight now excludes such
+terms from progress offers. In the corrected
+Llama soft pair (`results/candidate_handoff_soft_llama_r2_20260923/`),
+no recorded activation-patch seed became measurable before the diagnostic
+budget was spent, and no card was produced. Its 18 generated prefixes matched
+the local Llama reference (`results/diagnostic_route_fix_llama_r3_20260923/`);
+the output and score (`0.938889`) were unchanged. This run did not isolate
+the already-present-term guard in live behavior; that guard is covered by a
+focused synthetic test. Both reported pairs preserve the production
+permission boundary. These are same-prefix routing observations, not a causal
+operator-efficacy or task-success result. The next useful comparison is a
+prefix where a missing-term seed is available *before* the final diagnostic
+slot, so repeated optional deferral and its reason can be observed live.
+
+Review follow-up: an invalid or different matched-response request does not
+consume the offered measurement. The offer is marked attempted only after
+physical replay or new measurement of the exact offered seed, dose and
+comparison axis. If that exact request cannot replay, the same-prefix offer
+becomes explicitly unavailable rather than being presented again while the
+loop's duplicate guard blocks it. Selection logs use this same full-request
+match, so a different dose is not recorded as selecting the offered probe.
+Completed expansion identities are kept for the episode independently of the
+bounded result display window; evicting an old result cannot re-offer and
+recharge the same objective/mode. Eligible activation-patch seed rows are also
+retained per objective and provenance, so one unrelated charged diagnostic
+cannot erase an offered measurement or hide a repeated deferral. The same
+retained seed catalog feeds both handoff preflight and matched-response
+execution; it remains evidence only, not a frozen card or apply permission.
+Dedicated activation-patch diagnostics also reject a conflicting
+`operator_recipe_expansion_mode` before replay or diagnostic charging; a shared
+`activation_patch_` prefix is not sufficient to identify the requested tool.
+Local JSONL and audit directories are not committed PR artifacts; the compact
+outcomes above are the reviewable summary.
+
+Final validation: `485 passed, 15 warnings, 7 subtests passed` and
+`git diff --check` passed.
