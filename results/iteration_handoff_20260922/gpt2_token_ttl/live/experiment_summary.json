@@ -1,0 +1,47 @@
+{
+  "b0": {
+    "output": " In the case of a rewrite, the budget draft.",
+    "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar\nDo not use these terms: in order to, should\nUse at most 9 words.\nReturn only the rewritten sentence.\nSOURCE: In order to stay on schedule, Mira should send the budget draft to Omar before lunch.\nANSWER:",
+    "score": 0.5875,
+    "steps": 11
+  },
+  "b1": null,
+  "c1": {
+    "output": " In the case of a rewrite, the budget draft.",
+    "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar\nDo not use these terms: in order to, should\nUse at most 9 words.\nReturn only the rewritten sentence.\nSOURCE: In order to stay on schedule, Mira should send the budget draft to Omar before lunch.\nANSWER:",
+    "score": 0.5875,
+    "steps": 11
+  },
+  "controller_model_name": "gpt-5.6-luna",
+  "controller_provider": "openai",
+  "controller_reflection_mode": "off",
+  "paired_trace_id": "paired_baseline",
+  "seed": 7,
+  "semantic_critic_mode": "off",
+  "semantic_critic_model_name": null,
+  "suite_mode": "minimal_baseline_suite",
+  "surface_ids": [
+    "s_resid_pre_l5_last",
+    "s_resid_post_l5_last",
+    "s_mlp_out_l5_last",
+    "s_resid_pre_l6_last",
+    "s_resid_post_l6_last",
+    "s_mlp_out_l6_last",
+    "s_resid_pre_l9_last",
+    "s_resid_post_l9_last",
+    "s_mlp_out_l9_last",
+    "s_resid_pre_l10_last",
+    "s_resid_post_l10_last",
+    "s_mlp_out_l10_last",
+    "s_resid_pre_l11_last",
+    "s_resid_post_l11_last",
+    "s_mlp_out_l11_last",
+    "s_resid_pre_l5_prev"
+  ],
+  "task_id": "spiral_constrained_rewrite_v0",
+  "worker_decoder_control_mode": "off",
+  "worker_loop_rescue_edits_per_run": 0,
+  "worker_loop_rescue_total_alpha": 0.0,
+  "worker_loop_rescue_total_edit_cost": 0.0,
+  "worker_model_name": "gpt2"
+}

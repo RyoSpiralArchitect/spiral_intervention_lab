@@ -32,9 +32,9 @@ def fixture_probe():
         return {"binding_id": f"binding:{token}", "chosen_target_token_id": token, "objective_term": "a",
                 "candidate_target_piece_rows": [{"token_id": 30, "baseline_rank": 31}, {"token_id": 31, "baseline_rank": 32}]}
     def materialize(candidate, **kwargs):
-        return {"target": {"surface_id": "s1"}, "source": {"expr": {"ref": {"tensor": "source"}}},
+        return {"id": "test_trial", "target": {"surface_id": "s1"}, "source": {"dtype": "vector", "expr": {"ref": {"scope": "runtime", "tensor": "hidden", "layer": 1, "token": {"mode": "last"}}}},
                 "op": {"kind": "activation_patch", "alpha": candidate["alpha"], "mode": "blend"},
-                "budget": {"ttl_steps": 1, "step_size": candidate["step_size"]}}
+                "budget": {"ttl_steps": 1, "step_size": candidate["step_size"], "revertible": True}}
     def replay(edits, **kwargs):
         dose = edits[0]["budget"]["step_size"]
         calls.append(dose)
@@ -237,7 +237,7 @@ def test_source_comparison_changes_construction_not_seed_label_or_dose(tmp_path)
     assert all(p["source_tensors_distinct"] and p["executions_distinct"] for p in result["source_direction_comparisons"])
     assert {r["seed_operator_recipe_id"] for r in result["rows"]} == {"direct"}
     assert {r["seed_source"] for r in result["rows"]} == {"direct_candidate"}
-    assert len({r["operator_recipe_id"] for r in result["rows"]}) == 2
+    assert len({r["operator_recipe_id"] for r in result["rows"]}) == 4
     assert {r["activation_patch_alpha"] for r in result["rows"]} == {0.04}
     assert not any(r["production_apply_allowed"] for r in result["rows"])
     log = tmp_path / "matrix.jsonl"
@@ -309,9 +309,16 @@ def fixture_promotable_response():
                  "_activation_patch_production_shadow_replay", "_activation_patch_production_trial_gate_review"):
         setattr(worker, name, getattr(HookedTransformerWorkerRuntime, name).__get__(worker))
     row = report["rows"][0]
-    packet = {"strategy_hints": {"diagnostic_frontier_bundle_key": objective}, "budget": {"production_trial_edits_left_this_run": 1}}
+    packet = {"strategy_hints": {"diagnostic_frontier_bundle_key": objective}, "budget": {
+        "production_trial_edits_left_this_run": 1, "production_trial_alpha_left_total": 0.15,
+        "production_trial_edit_cost_left_total": 0.15}}
     request = {"diagnostic": "activation_patch_production_trial_gate_review", "evidence_id": row["observable_id"], "objective_bundle_key": objective}
     return worker, row, request, packet, calls
+
+
+@pytest.fixture(autouse=True)
+def fixed_trial_context(monkeypatch):
+    monkeypatch.setattr("SpiralInterventionLab.runtime.candidate_trial.state_identity", lambda w: "context:fixed")
 
 
 def test_response_review_opens_only_bounded_trial_after_physical_confirmation():
@@ -320,7 +327,7 @@ def test_response_review_opens_only_bounded_trial_after_physical_confirmation():
     with patch("SpiralInterventionLab.runtime.response_promotion.state_identity", return_value="context:fixed"):
         result = review_response_evidence(worker, request, packet)
     assert result["production_trial_allowed"] is True
-    assert result["physical_replay_count"] == 3
+    assert result["physical_replay_count"] == 4
     assert result["confirmation"]["review_eligible"]
     assert not result["production_apply_allowed"] and not result["certified_for_apply"]
     assert result["production_trial_contract"]["ttl_steps"] == 1

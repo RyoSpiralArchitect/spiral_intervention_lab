@@ -1,0 +1,79 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended after 18 steps with the same output and task_done=false (c1.jsonl:L207).\n- Three diagnostic measurements were completed, with 12 physical replays and no production apply (c1.jsonl:L88; c1.jsonl:L121).\n- Candidate handoffs remained blocked despite restored measurements and executed hooks (c1.jsonl:L77; c1.jsonl:L88).\n\n## What made the run difficult?\n- The target token stayed outside the required lift or bound at later prefixes (c1.jsonl:L88; c1.jsonl:L121).\n- Historical candidates were explicitly not revalidated in the current context (c1.jsonl:L31; c1.jsonl:L98).\n- The visible trajectory omitted 201 event lines and controller step views (coverage_manifest).\n\n## Most likely failure factors\n- Candidate effects were small: target logit changes were 0.015625 and 0.0078125, with no top-20 improvement (c1.jsonl:L88; c1.jsonl:L121).\n- The strongest current candidate was blocked because its normal trial differed from the diagnostic (c1.jsonl:L88).\n- The run lacked enough validated evidence to justify progression from diagnostic replay to production trial.\n\n## Evidence supporting this reading\n- The matched response probe reported complete restored measurement but all four handoffs were blocked (c1.jsonl:L77).\n- The later measurement preserved rank 66 and failed bound-target lift (c1.jsonl:L121).\n- The final output matched the baseline result and was not marked task-complete (c1.jsonl:L207).\n\n## What I would try next\n- Compare candidate behavior across more matched current-prefix measurements before interpreting historical rows.\n- Record why the required bound and variation tests fail at each prefix.\n- Keep diagnostic evidence separate from any intervention authorization.\n\n## What would have made this easier?\n- missing_at_runtime | c1.jsonl:L88 | candidate_trial_comparison: the diagnostic-versus-normal mismatch blocked interpretation -> suggested_field: paired_trial_equivalence\n- present_but_not_shown | c1.jsonl:L77 | omitted candidate rows: the visible handoffs cannot be compared against all replayed rows -> suggested_field: full_candidate_row_payload\n- present_but_not_shown | coverage_manifest | controller step views: decision transitions are unavailable in this view -> suggested_field: per_step_decision_rationale\n\n## What should not be concluded\n- The run does not show that any intervention would have improved the task.\n- The unchanged output does not establish that diagnostics caused no effect.\n- Blocked handoffs do not identify a single underlying model failure.\n\n## Controller-perspective note\n- I would describe a completed diagnostic loop with no authorized production apply.\n- I kept seeing insufficient target lift at the observed prefixes.\n- I lacked evidence to distinguish candidate weakness from gate or context mismatch.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_0561d1f3daab391c006ab23767f36087d297463b7e2066a856",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L12",
+        "c1.jsonl:L121",
+        "c1.jsonl:L207",
+        "c1.jsonl:L31",
+        "c1.jsonl:L77",
+        "c1.jsonl:L88",
+        "c1.jsonl:L98"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 201,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 209
+    },
+    "event_counts": {
+      "controller_command": 21,
+      "controller_decision": 21,
+      "controller_diagnostic_request": 12,
+      "controller_diagnostic_result": 12,
+      "controller_effect_summary": 36,
+      "controller_loop_patience": 12,
+      "controller_observation": 21,
+      "controller_prefix_hold": 3,
+      "controller_prompt_telemetry": 21,
+      "controller_provider_attempt": 21,
+      "controller_selection": 21,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L121",
+      "c1.jsonl:L207",
+      "c1.jsonl:L31",
+      "c1.jsonl:L77",
+      "c1.jsonl:L88",
+      "c1.jsonl:L98"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 1,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 6569,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=6566)",
+    "output_tokens": 662,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=68)",
+    "total_tokens": 7231
+  }
+}

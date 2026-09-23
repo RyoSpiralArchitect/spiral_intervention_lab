@@ -2771,7 +2771,12 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                 "eval_context_fingerprint": {"max_new_tokens": kwargs["max_new_tokens"]},
             }
 
-        with patch.object(worker_runtime, "_activation_patch_trial_edit_from_candidate", side_effect=fake_trial_edit):
+        matrix_row = {"operator_axis": "target_piece_binding_seed_matrix", "measurement_complete": True,
+                      "state_restored": True, "no_edit_max_abs_logit_delta": 0.0,
+                      "repeat_max_abs_logit_delta": 0.0, "measurement_context_id": "context:fixture"}
+        with patch.object(worker_runtime, "_activation_patch_trial_edit_from_candidate", side_effect=fake_trial_edit), \
+             patch.object(worker_runtime, "_activation_patch_target_piece_binding_seed_matrix", return_value={
+                 "rows": [matrix_row], "status": "dose_matched_response_complete", "state_restored": True}):
             with patch.object(worker_runtime, "replay_candidate_edits_actual_delta", side_effect=fake_replay):
                 result = worker_runtime._execute_controller_diagnostic_request(
                     {
@@ -2788,6 +2793,8 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         assert result is not None
         self.assertEqual(result["status"], "ok")
         self.assertEqual(result["activation_patch_blueprint_materialization_count"], 3)
+        for key, value in matrix_row.items():
+            self.assertEqual(result["target_piece_binding_seed_matrix_rows"][0][key], value)
         self.assertTrue(result["activation_patch_candidate_pool"])
         first = result["activation_patch_candidate_pool"][0]
         self.assertEqual(first["evidence_kind"], "activation_patch_certification")
@@ -7592,7 +7599,8 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
 
         result = run_c1(_ThreeStepTaskEnv("c"), worker_runtime, controller)
 
-        self.assertEqual(result.output, "aca")
+        # TTL=2 covers two generated tokens, not registration plus one token.
+        self.assertEqual(result.output, "acc")
         self.assertEqual(result.score, 1.0)
 
     def test_activation_only_policy_keeps_cache_edits_but_denies_weight_patches(self):
@@ -7621,7 +7629,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
 
         self.assertEqual(suite.b0.output, "aaa")
         self.assertEqual(suite.b1.output, "abb")
-        self.assertEqual(suite.c1.output, "aca")
+        self.assertEqual(suite.c1.output, "acc")
         self.assertEqual(suite.b0.score, 0.0)
         self.assertEqual(suite.c1.score, 1.0)
         self.assertEqual(suite.paired_trace_id, "paired_baseline")
@@ -7651,7 +7659,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                 )
 
                 self.assertEqual(suite.b0.output, "aaa")
-                self.assertEqual(suite.c1.output, "aca")
+                self.assertEqual(suite.c1.output, "acc")
                 self.assertEqual(suite.c1.score, 1.0)
                 self.assertEqual(len(worker_refs), 3 if with_b1 else 2)
                 for traces in seeded_traces[1:]:

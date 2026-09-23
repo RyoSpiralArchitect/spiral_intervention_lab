@@ -1,0 +1,73 @@
+{
+  "profile": "llama_l1",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 28
+  },
+  "command_decisions": {
+    "noop": 28
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 2,
+    "readout_gap_confirmation_or_variant_sweep": 1,
+    "objective_rotation_pipeline": 2,
+    "carrier_to_actuator_conversion_sweep": 4,
+    "inspect_evidence": 2
+  },
+  "charges": {
+    "diagnostic_calls_left": 12,
+    "inspection_calls_left": 2
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 648972,
+    "output_tokens": 6447,
+    "cached_input_tokens": 80640
+  },
+  "position_exposure_steps": [],
+  "candidate_action_counts": {},
+  "candidate_action_statuses": {},
+  "action_measurement_count": 0,
+  "action_physical_replay_count": 0,
+  "action_transaction_statuses": {},
+  "visible_trial_offer_count": 0,
+  "action_contract_evidence": "not_exercised",
+  "action_timeline": [],
+  "production_policy_changed": true,
+  "physical_policy_caps_changed": false,
+  "candidate_handoff_rounds": 2,
+  "prefix_hold_requests": 10,
+  "prefix_holds_accepted": 10,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "08947d6bb5cf4f3ed4a9f3ce3265c255d9d2db3fb55b139c0fdba55ffd027beb",
+    "source_snapshot.tgz": "de173cd10537b9e7b7e55e2584712cff6958f7f31992065ae3ffd9e897d2a5e6",
+    "manifest.json": "328297b5ecf12672e89ce69aee6329f1d38240c3bb7ea8110be3401c6cf81be7",
+    "live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "live/post_run_debrief.md": "157f4bcf9510bcdaa076d401e275cee297151972a54d8ee0e69f7de78c8fae64",
+    "live/post_run_debrief.json": "90dc767663f3219d8547dbb08aa69832f8c79703a80389635721dccbfa10b325",
+    "live/c1.jsonl": "c976474101ae7ebf64ef66159cfb265f9b0174b4f50c4a5061ecb3dc2d018297",
+    "live/post_run_debrief_input.json": "c05ab423ac43a8daa23da580415b57c196655bdfa4824534e05d3ebb9978a162",
+    "live/experiment_summary.json": "f99c9c62b1139dd1bc8a6546cb398d1e95929037c930dd2ae12cbfa747b7db84"
+  }
+}

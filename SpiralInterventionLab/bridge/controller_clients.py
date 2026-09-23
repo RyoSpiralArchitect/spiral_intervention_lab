@@ -244,6 +244,10 @@ _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
     "bridge_plan_unavailable_reason",
     "diagnostic_evidence_ledger",
     "diagnostic_review_reuse",
+    "candidate_diagnostic_choices",
+    "generation_control",
+    "candidate_trial_handoffs",
+    "candidate_trial_offer",
     "bundle_diagnostic_status",
     "activation_patch_compile_preview",
     "activation_patch_compile_preview_blocked_reason",
@@ -305,6 +309,10 @@ def _compact_strategy_hints(value: Any) -> dict[str, Any]:
     compact: dict[str, Any] = {}
     for key in _STRATEGY_HINT_PRIORITY_KEYS:
         if key in value and value.get(key) not in (None, "", []):
+            if key in {"candidate_diagnostic_choices", "candidate_trial_handoffs", "candidate_trial_offer", "generation_control"}:
+                # Runtime bounds the catalog; preserve nested executable IDs.
+                compact[key] = _bounded_json(value[key], max_depth=8, max_items=12, max_string=260)
+                continue
             compact[key] = _bounded_json(value.get(key), max_depth=4, max_items=8, max_string=260)
     for key, item in value.items():
         if key in compact or item in (None, "", []):
@@ -892,13 +900,35 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
     summary: dict[str, Any] = {}
+    if value.get("diagnostic") == "candidate_action":
+        compact = {key: _bounded_json(value[key], max_depth=4, max_items=24, max_string=260)
+                for key in ("diagnostic", "status", "action_id", "requested_action", "executed_action",
+                    "candidate_id", "current_context_id", "measurement_context_id", "blocked_reason",
+                    "parent_candidate_id", "candidate_derivation", "inherits_measurement",
+                    "transaction_status", "required_diagnostic_calls", "diagnostic_call_cost",
+                    "confirmation_status", "confirmation_blocked_reasons", "trial_authorization_id",
+                    "production_trial_allowed",
+                    "requested_position",
+                    "candidate_trial_handoff", "same_prefix_followup_available", "next_evidence_needed",
+                    "evidence_scope", "diagnostic_budget_charged", "budget_before", "budget_after",
+                    "physical_replay_count", "new_measurement_count", "cached_measurement_count",
+                    "production_apply_allowed", "certified_for_apply") if key in value}
+        evidence = value.get("evidence")
+        if isinstance(evidence, Mapping):
+            compact["evidence"] = {key: _bounded_json(evidence[key], max_depth=3, max_items=20, max_string=260)
+                for key in ("measurement_context_id", "observed_at_step", "worker_step", "target_piece",
+                    "measurement_position",
+                    "target_piece_token_id", "source_tensor_identity", "metrics", "state_restored",
+                    "no_edit_control", "repeat_control", "continuation_identical", "measurement_origin", "error", "readout_failure_details")
+                if key in evidence}
+        return compact
     if value.get("review_reused"):
         return {key: _bounded_json(value[key], max_depth=2, max_items=8, max_string=200)
                 for key in ("diagnostic", "status", "objective_bundle_key", "review_reused",
                     "reviewed_at_step", "recorded_step", "prefix_changed_since_review", "evidence_scope",
                     "measurement_context_id", "evidence_ids", "compile_preview_blocked_reason",
                     "diagnostic_budget_charged", "budget_before", "budget_after", "new_measurement_count",
-                    "physical_replay_count", "explicit_measurement_diagnostic", "next_evidence_needed",
+                    "physical_replay_count", "explicit_measurement_diagnostic", "measurement_choices_hint", "next_evidence_needed",
                     "production_apply_allowed", "certified_for_apply") if key in value}
     if value.get("diagnostic") == "inspect_evidence":
         return {key: _bounded_json(value[key], max_depth=4, max_items=40, max_string=260)
@@ -914,7 +944,8 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
                 "measurement_context_id", "new_measurement_count", "physical_replay_count",
                 "observable_count", "state_restored", "unavailable_reason", "no_edit_max_abs_logit_delta",
                 "comparison_axis", "source_direction_comparisons") if key in matrix}
-    for key in ("response_promotion_readiness", "confirmation", "confirmation_scope", "blocked_reasons", "evidence_id"):
+    for key in ("response_promotion_readiness", "confirmation", "confirmation_scope", "blocked_reasons", "evidence_id",
+                "same_prefix_followup_available", "trial_authorization_id", "production_trial_allowed"):
         if key in value:
             summary[key] = _bounded_json(value[key], max_depth=3, max_items=24, max_string=160)
     for key in (

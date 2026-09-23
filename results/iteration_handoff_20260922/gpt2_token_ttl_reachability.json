@@ -1,0 +1,89 @@
+{
+  "schema": "trial_reachability_audit_v1",
+  "reports": [
+    {
+      "trace": "results/iteration_handoff_20260922/gpt2_token_ttl/live/c1.jsonl",
+      "sha256": "9bf0b85eafe47209724ca9a4a31740ad6b6b8da0a823c09865a3b6e1ace84347",
+      "scope": "recorded_path_only_not_proof_of_operator_absence_or_controller_intent",
+      "episode_complete": true,
+      "outcome": {
+        "output": " In the case of a rewrite, the budget draft.",
+        "score": 0.5875,
+        "steps": 11,
+        "task_done": false
+      },
+      "first_controller_prefix": " In",
+      "stage_counts": {
+        "recorded_handoffs": 4,
+        "readout_checks_passed": 0,
+        "confirmation_available": 0,
+        "evidence_id_review_results": 0,
+        "physical_confirmation_results": 0,
+        "unique_trial_offers_seen": 0,
+        "controller_apply_commands": 0,
+        "controller_noop_commands": 11,
+        "compiled_rollout_edits": 0
+      },
+      "handoff_blocker_counts": {
+        "bound_target_lift": 4,
+        "canonical_binding": 2,
+        "response_above_variation": 2
+      },
+      "diagnostic_counts": {
+        "target_entity_insertion_probe": 1,
+        "entity_insertion_operator_candidate_review": 1,
+        "operator_diagnostic_replay": 1,
+        "compare_extra_operator_diagnostics": 2,
+        "activation_patch_production_trial_gate_review": 2,
+        "activation_patch_production_shadow_replay": 3
+      },
+      "visible_candidates": [
+        {
+          "candidate_id": "frozen_candidate:d83531a6e311e1238dea9dda",
+          "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+          "target_piece": " Mir",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 11,
+            "site": "resid_pre",
+            "step_size": 0.04
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:266d2f382010212106d7ebd1",
+          "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+          "target_piece": " mir",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 11,
+            "site": "resid_pre",
+            "step_size": 0.04
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:f4bf09ee65e4c1c0c3923f61",
+          "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+          "target_piece": " Mir",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 11,
+            "site": "resid_pre",
+            "step_size": 0.16
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:a8d99879523c70eb70b1f7b1",
+          "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+          "target_piece": " mir",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 11,
+            "site": "resid_pre",
+            "step_size": 0.16
+          }
+        }
+      ],
+      "measurements": []
+    }
+  ]
+}

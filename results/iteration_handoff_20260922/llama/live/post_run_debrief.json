@@ -1,0 +1,77 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended after 18 steps with the unchanged output and `task_done: false` (c1.jsonl:L168).\n- Three current-prefix remeasurements were performed; production apply remained disallowed (c1.jsonl:L62; c1.jsonl:L103).\n- Diagnostics showed small or zero target-token effects, including a later zero delta (c1.jsonl:L52; c1.jsonl:L103).\n\n## What made the run difficult?\n- Candidate evidence was partly historical and explicitly not revalidated (c1.jsonl:L31; c1.jsonl:L83).\n- Measurements covered observed prefixes, while word completion and position quality were unknown without lookahead (c1.jsonl:L62; c1.jsonl:L103).\n- The run repeatedly revisited the same frozen candidate without establishing task completion (c1.jsonl:L62; c1.jsonl:L103; c1.jsonl:L168).\n\n## Most likely failure factors\n- The candidate’s current-prefix effect was weak or absent: target logit deltas were 0.015625 and 0.0 (c1.jsonl:L62; c1.jsonl:L103).\n- Earlier candidate labels did not transfer cleanly: matched rows included `rank_carrier`, `dead_actuator`, and `unassessed` (c1.jsonl:L52; c1.jsonl:L62).\n- Diagnostic readouts did not demonstrate a successful continuation or completed task (c1.jsonl:L62; c1.jsonl:L168).\n\n## Evidence supporting this reading\n- The matched-response probe reported zero target mass and zero top-20 movement for several rows (c1.jsonl:L52).\n- Current-prefix measurements preserved identical continuations and showed no top-20 hit improvement (c1.jsonl:L62; c1.jsonl:L103).\n- The final output remained incomplete relative to the task state (`task_done: false`) (c1.jsonl:L168).\n\n## What I would try next\n- Use diagnostics to compare candidate response across more task-relevant prefix positions before drawing actuator conclusions.\n- Separate historical candidate review from current-prefix validation.\n- Add an explicit completion check to distinguish fluent continuation from task completion.\n\n## What would have made this easier?\n- present_but_not_shown | c1.jsonl:L62 | decision rationale: would clarify why remeasurement was preferred -> suggested_field: decision_basis\n- present_but_not_shown | c1.jsonl:L103 | task-state signal: would connect prefix measurements to completion requirements -> suggested_field: task_state_at_measurement\n- unknown_from_supplied_evidence | c1.jsonl:L168 | failure diagnosis: would show whether termination followed a controller guard or provider limit -> suggested_field: termination_reason\n\n## What should not be concluded\n- The run does not establish that any physical intervention succeeded; production apply was disallowed (c1.jsonl:L62).\n- The unchanged output does not prove the candidate was causally irrelevant.\n- The reported score is not evidence of task completion because `task_done` was false (c1.jsonl:L168).\n\n## Controller-perspective note\n- I would describe the run as repeated diagnostic measurement without a demonstrated completion transition.\n- I kept seeing weak or zero current-prefix target effects.\n- I lacked evidence that historical candidate labels remained valid in the current context.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_0482333c91d2f30d006ab22932c45c87d28acb57f9d63da8ef",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L103",
+        "c1.jsonl:L168",
+        "c1.jsonl:L31",
+        "c1.jsonl:L52",
+        "c1.jsonl:L62",
+        "c1.jsonl:L83"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 163,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 170
+    },
+    "event_counts": {
+      "controller_command": 18,
+      "controller_decision": 18,
+      "controller_diagnostic_request": 12,
+      "controller_diagnostic_result": 12,
+      "controller_effect_summary": 18,
+      "controller_loop_patience": 12,
+      "controller_observation": 18,
+      "controller_prompt_telemetry": 18,
+      "controller_provider_attempt": 18,
+      "controller_selection": 18,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L103",
+      "c1.jsonl:L168",
+      "c1.jsonl:L31",
+      "c1.jsonl:L52",
+      "c1.jsonl:L62",
+      "c1.jsonl:L83"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 6784,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=6781)",
+    "output_tokens": 785,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=96)",
+    "total_tokens": 7569
+  }
+}

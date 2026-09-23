@@ -32,6 +32,8 @@ def _event_view(event: Mapping[str, Any], event_id: str, *, preserve_negative: b
             "budget_before", "budget_after", "new_measurement_count", "physical_replay_count",
             "cached_measurement_count", "new_gate_fact_count", "controller_selection_source",
             "controller_selected_bundle_key", "controller_rejected_signals",
+            "controller_round", "requested_action", "accepted", "blocked_reason",
+            "generated_tokens_during_hold", "same_prefix_rounds_left", "budget_pool",
             "actual_delta_class", "actuator_class", "verdict")
     view = {"event_id": event_id, **{k: event[k] for k in keys if k in event}}
     for key, value in list(view.items()):
@@ -41,7 +43,31 @@ def _event_view(event: Mapping[str, Any], event_id: str, *, preserve_negative: b
         command = event["command"]
         meta = command.get("meta") if isinstance(command.get("meta"), Mapping) else {}
         view["command"] = {"decision": command.get("decision"), "edit_count": len(command.get("edits", ())),
-                           "meta": {k: str(meta[k])[:250] for k in ("blocked_by", "why_not_apply", "micro_rationale", "next_action", "diagnostic_request") if k in meta}}
+                           "meta": {k: str(meta[k])[:250] for k in ("blocked_by", "why_not_apply", "micro_rationale", "next_action", "diagnostic_request", "generation_action") if k in meta}}
+    # Preserve the admission failure separately from effect size. A positive
+    # readout blocked by a changed cap must not be presented as a weak effect.
+    reports = [event.get("candidate_trial_handoff"), *(event.get("candidate_trial_handoffs") or ())]
+    handoffs = [{k: report[k] for k in ("evidence_id", "candidate_id", "status", "checks",
+                 "blocked_reasons", "production_trial_allowed") if k in report}
+                for report in reports if isinstance(report, Mapping)]
+    if handoffs:
+        view["candidate_trial_handoffs"] = handoffs[:4]
+    if event.get("diagnostic") == "candidate_action":
+        view["candidate_action"] = {k: event[k] for k in (
+            "action_id", "candidate_id", "requested_action", "executed_action", "current_context_id",
+            "parent_candidate_id", "candidate_derivation", "inherits_measurement",
+            "measurement_context_id", "requested_position", "blocked_reason", "evidence_scope",
+            "diagnostic_budget_charged", "production_apply_allowed") if k in event}
+        evidence = event.get("evidence")
+        if isinstance(evidence, Mapping):
+            view["candidate_action"]["evidence"] = {k: evidence[k] for k in (
+                "measurement_context_id", "measurement_position", "target_piece", "target_piece_token_id",
+                "state_restored", "no_edit_control", "repeat_control", "continuation_identical",
+                "measurement_origin", "error") if k in evidence}
+            metrics = evidence.get("metrics") or {}
+            view["candidate_action"]["evidence"]["metrics"] = {k: metrics[k] for k in (
+                "target_top20_threshold_gap_delta", "target_piece_prob_delta", "target_piece_logit_delta",
+                "target_rank_before", "target_rank_after", "bound_token_top20_hit_delta") if k in metrics}
     summary = event.get("target_piece_binding_seed_matrix_summary")
     if isinstance(summary, Mapping):
         view["matrix"] = {k: summary.get(k) for k in (
@@ -81,6 +107,9 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
     anchors: dict[str, tuple[str, int, dict[str, Any]]] = {}
     files = []
     total = 0
+    action_counts: Counter[str] = Counter()
+    action_statuses: Counter[str] = Counter()
+    action_totals: Counter[str] = Counter()
     for path in paths[:max_files]:
         file_hash = hashlib.sha256()
         relative = str(path.relative_to(base))
@@ -101,6 +130,17 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                 local_counts[name] += 1
                 kinds = []
                 if name == "controller_diagnostic_result":
+                    if event.get("diagnostic") == "candidate_action":
+                        action_counts[str(event.get("executed_action") or "not_executed")] += 1
+                        action_statuses[str(event.get("status") or "unknown")] += 1
+                        for key in ("new_measurement_count", "cached_measurement_count", "physical_replay_count"):
+                            action_totals[key] += int(event.get(key) or 0)
+                        action_totals["diagnostic_budget_charged"] += int(bool(event.get("diagnostic_budget_charged")))
+                        kinds.append("first_candidate_action")
+                        if event.get("status") == "measured":
+                            kinds.extend(("first_current_prefix_measurement", "last_current_prefix_measurement"))
+                        if event.get("status") in {"blocked", "incomplete", "held", "reviewed", "measurement_reused"}:
+                            kinds.append("first_candidate_action_" + event["status"])
                     if _matches(event, {"materialized_candidate_count", "entity_operator_materialization_count", "activation_patch_candidate_pool", "activation_patch_blueprint_materialization_rows"}):
                         kinds.append("first_materialization")
                     if event.get("target_piece_binding_seed_matrix_executed"):
@@ -113,10 +153,12 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                     kinds.append("first_negative_outcome")
                 if name == "episode_end":
                     kinds.append("termination")
+                if name == "controller_prefix_hold":
+                    kinds.append("first_prefix_hold_accepted" if event.get("accepted") else "first_prefix_hold_denied")
                 if not anchors:
                     kinds.append("first_event")
                 for kind in kinds:
-                    if kind not in anchors or kind == "termination":
+                    if kind not in anchors or kind in {"termination", "last_current_prefix_measurement"}:
                         anchors[kind] = (relative, line_number, event)
         files.append({"path": relative, "sha256": file_hash.hexdigest(), "event_counts": dict(local_counts)})
     anchor_views = []
@@ -153,6 +195,9 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
         anchor_views.append(view)
     result = {"log_dir": str(base) if base else None, "jsonl_file_count": len(paths),
               "event_counts": dict(counts), "log_files": files, "controller_step_views_tail": [],
+              "candidate_action_summary": {"executed_actions": dict(action_counts),
+                  "statuses": dict(action_statuses), **dict(action_totals),
+                  "scope": "public_diagnostic_results_not_rollout_apply_or_intervention_success"},
               "event_anchors": anchor_views,
               "coverage_manifest": {"selection": "deterministic_event_anchors", "total_event_lines": total,
                   "omitted_files": max(0, len(paths) - max_files), "character_budget": max_chars,

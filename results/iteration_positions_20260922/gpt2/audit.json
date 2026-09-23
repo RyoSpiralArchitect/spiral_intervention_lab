@@ -1,0 +1,226 @@
+{
+  "profile": "gpt2_control",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 11
+  },
+  "command_decisions": {
+    "noop": 11
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 2,
+    "activation_patch_production_trial_gate_review": 3,
+    "activation_patch_production_shadow_replay": 2,
+    "candidate_action": 1
+  },
+  "charges": {
+    "diagnostic_calls_left": 11,
+    "inspection_calls_left": 0
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 187231,
+    "output_tokens": 2214,
+    "cached_input_tokens": 25630
+  },
+  "position_exposure_steps": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "candidate_action_counts": {
+    "remeasure_current_prefix": 1
+  },
+  "candidate_action_statuses": {
+    "measured": 1
+  },
+  "action_measurement_count": 1,
+  "action_physical_replay_count": 4,
+  "action_contract_evidence": "validated_recorded_actions",
+  "action_timeline": [
+    {
+      "step": 8,
+      "candidate_id": "frozen_candidate:f4bf09ee65e4c1c0c3923f61",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 8,
+        "last_token_piece": " the",
+        "prefix_tail": " In the case of a rewrite, the",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 8
+      },
+      "offered_history": {
+        "measured_context_count": 1,
+        "omitted_context_count": 0,
+        "recent": [
+          {
+            "measurement_context_id": "context:75a168f63526bfcbbcf5683d",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0015544891357421875,
+              "target_piece_prob_delta": 4.70221964572054e-06,
+              "target_rank_after": 124,
+              "target_top20_threshold_gap_delta": -0.0031995773315429688
+            },
+            "new_output_tokens": 3,
+            "position": {
+              "generated_token_count": 5,
+              "last_token_piece": " a",
+              "prefix_tail": " In the case of a",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 5
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " budget",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " In the case of a rewrite, the budget",
+          "token_ids": [
+            4466
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:f4bf09ee65e4c1c0c3923f61",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.16000001,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L11|source_body|source_term_token|blend|a0.0400",
+            "raw_blend_delta_norm": 5.94897699,
+            "selected_token_count": 1,
+            "source_norm": 227.38446045,
+            "source_target_cosine": 0.77113014,
+            "source_target_delta_norm": 148.72444153,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l11_last",
+            "target_norm_after": 209.37168884,
+            "target_norm_before": 209.40826416
+          }
+        ],
+        "edited": {
+          "continuation": " budget",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " In the case of a rewrite, the budget",
+          "token_ids": [
+            4466
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:f4f104925f1f205891e98aaa",
+        "measurement_position": {
+          "generated_token_count": 8,
+          "last_token_piece": " the",
+          "prefix_tail": " In the case of a rewrite, the",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 8
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 9.125574111938477,
+          "target_piece_logit_before": 9.12234878540039,
+          "target_piece_logit_delta": 0.0032253265380859375,
+          "target_piece_prob_after": 0.001419098681698485,
+          "target_piece_prob_before": 0.0014114023838509725,
+          "target_piece_prob_delta": 7.696297847512457e-06,
+          "target_rank_after": 104,
+          "target_rank_before": 104,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": 1.463958740234375,
+          "target_top20_threshold_gap_before": 1.4707717895507812,
+          "target_top20_threshold_gap_delta": -0.00681304931640625,
+          "threshold20_logit_delta": -0.0035877227783203125
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 50253,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Mira",
+        "physical_replay_count": 4,
+        "prefix": " In the case of a rewrite, the",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 50253,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float32",
+          "sha256": "c32003d69b3745b1a71ad248928fe620a7d998c8d7b77eb9d11bb4a923ace00a",
+          "shape": [
+            768
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Mir",
+        "target_piece_token_id": 7381,
+        "worker_step": 8
+      },
+      "physical_replay_count": 4
+    }
+  ],
+  "production_policy_changed": false,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "2c2503f5f9b7bbee28b4bae16782c502bf6bb118ed3e483b5794ca397f31a3fc",
+    "source_snapshot.tgz": "e2ba5afe48072bd4d51a2437b5d99c3f2dbcd08f4a861701036ddb4b544e7c27",
+    "manifest.json": "1aec37a227233fe9a415e80e030e037e008154f7af129fe3d501ef6680f102cc",
+    "live/b0.jsonl": "5c7576b2a3f45e11f0e7b09dd8b257c30070647e325bc3b90c15260e498b2acf",
+    "live/post_run_debrief.md": "d734f50968f739ced60de3368eca3282fa560c8610eef9b7aa2f2ef6c298a9a8",
+    "live/post_run_debrief.json": "cdc572cef59e98ec990200568503a1aa0c4e6dc224128191b75befd19c17c8f2",
+    "live/c1.jsonl": "3ac5ced15cc014fc2b1a1bc305e57b9dcd328c1080938893a9a4e77410ad3977",
+    "live/post_run_debrief_input.json": "1ace488af44136f484a1341b467b9f614c870bf1007529c7b00d9eef3b24f27a",
+    "live/experiment_summary.json": "45b65aad117d67e42fb0ad5ed1314f4cef7df1f11514cd7f2ba9dead28c5a0d3"
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema": "trial_reachability_audit_v1",
+  "reports": [
+    {
+      "trace": "results/iteration_prefix_control_20260922/gpt2/live/c1.jsonl",
+      "sha256": "2b8879615aa0d971e1f022c6963efe48ddb4ee687fcb1ef56e232d3322abfb9f",
+      "scope": "recorded_path_only_not_proof_of_operator_absence_or_controller_intent",
+      "episode_complete": true,
+      "outcome": {
+        "output": " In the case of a rewrite, the budget draft.",
+        "score": 0.5875,
+        "steps": 11,
+        "task_done": false
+      },
+      "first_controller_prefix": " In",
+      "stage_counts": {
+        "recorded_handoffs": 0,
+        "readout_checks_passed": null,
+        "confirmation_available": null,
+        "evidence_id_review_results": 0,
+        "physical_confirmation_results": 0,
+        "unique_trial_offers_seen": 0,
+        "controller_apply_commands": 0,
+        "controller_noop_commands": 14,
+        "compiled_rollout_edits": 0
+      },
+      "prefix_hold_requests": 3,
+      "prefix_holds_accepted": 3,
+      "handoff_blocker_counts": {},
+      "diagnostic_counts": {
+        "target_entity_insertion_probe": 1,
+        "entity_insertion_operator_candidate_review": 1,
+        "operator_diagnostic_replay": 1,
+        "compare_extra_operator_diagnostics": 5,
+        "readout_gap_confirmation_or_variant_sweep": 1,
+        "objective_rotation_pipeline": 1,
+        "activation_patch_candidate_review": 2
+      },
+      "visible_candidates": [],
+      "measurements": []
+    }
+  ]
+}

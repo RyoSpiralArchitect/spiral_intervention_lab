@@ -1,0 +1,16 @@
+{
+  "status": "interrupted_resource_pressure",
+  "recorded_at_utc": "2026-09-21T17:36:06.784330+00:00",
+  "exit_code": 143,
+  "stopped_by": "assistant",
+  "user_followup_confirmed_interruption_and_gpt2_only_closeout": true,
+  "stopped_process_scope": "only the verified run_iteration_pair llama_l1 process",
+  "reason": "Prolonged local memory pressure and GPU synchronization waits; preserve the partial attempt rather than weaken model or policy settings.",
+  "elapsed_seconds_lower_bound": 1567,
+  "baseline_reference_match": true,
+  "c1_completed": false,
+  "c1_task_outcome": null,
+  "production_policy_changed": false,
+  "other_processes_modified": false,
+  "automatic_retry_scheduled": false
+}

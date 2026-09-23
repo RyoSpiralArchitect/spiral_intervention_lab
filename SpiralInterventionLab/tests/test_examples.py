@@ -3852,6 +3852,7 @@ class TestExamples(unittest.TestCase):
                     latest["next_evidence_needed"],
                     {
                         "production_activation_patch_operator_support",
+                        "same_context_physical_confirmation",
                         "activation_patch_promotion_gate_review",
                         "activation_patch_production_shadow_replay",
                         "activation_patch_production_trial_gate_review",

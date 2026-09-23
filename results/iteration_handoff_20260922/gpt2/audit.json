@@ -1,0 +1,154 @@
+{
+  "profile": "gpt2_control",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 11
+  },
+  "command_decisions": {
+    "noop": 11
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 3,
+    "activation_patch_production_trial_gate_review": 2,
+    "activation_patch_production_shadow_replay": 1,
+    "candidate_action": 1
+  },
+  "charges": {
+    "diagnostic_calls_left": 10,
+    "inspection_calls_left": 0
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 187455,
+    "output_tokens": 2620,
+    "cached_input_tokens": 26580
+  },
+  "position_exposure_steps": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "candidate_action_counts": {
+    "remeasure_current_prefix": 1
+  },
+  "candidate_action_statuses": {
+    "incomplete": 1
+  },
+  "action_measurement_count": 0,
+  "action_physical_replay_count": 4,
+  "action_contract_evidence": "validated_recorded_actions",
+  "action_timeline": [
+    {
+      "step": 10,
+      "candidate_id": "frozen_candidate:f4bf09ee65e4c1c0c3923f61",
+      "action": "remeasure_current_prefix",
+      "status": "incomplete",
+      "position": {
+        "generated_token_count": 10,
+        "last_token_piece": " draft",
+        "prefix_tail": " In the case of a rewrite, the budget draft",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 10
+      },
+      "offered_history": {
+        "measured_context_count": 1,
+        "omitted_context_count": 0,
+        "recent": [
+          {
+            "measurement_context_id": "context:75a168f63526bfcbbcf5683d",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0015544891357421875,
+              "target_piece_prob_delta": 4.70221964572054e-06,
+              "target_rank_after": 124,
+              "target_top20_threshold_gap_delta": -0.0031995773315429688
+            },
+            "new_output_tokens": 5,
+            "position": {
+              "generated_token_count": 5,
+              "last_token_piece": " a",
+              "prefix_tail": " In the case of a",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 5
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "candidate_id": "frozen_candidate:f4bf09ee65e4c1c0c3923f61",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "error": "ValueError:nonfinite_bound_token_or_top20_readout",
+        "horizon": 1,
+        "measurement_context_id": "context:33781168de3e4b060b8257bd",
+        "model_forward_token_count": 4,
+        "model_forward_token_count_is_lower_bound": true,
+        "objective_term": "Mira",
+        "physical_replay_count": 4,
+        "prefix": " In the case of a rewrite, the budget draft",
+        "production_apply_allowed": false,
+        "source_tensor_identity": {
+          "dtype": "torch.float32",
+          "sha256": "c32003d69b3745b1a71ad248928fe620a7d998c8d7b77eb9d11bb4a923ace00a",
+          "shape": [
+            768
+          ]
+        },
+        "state_restored": true,
+        "status": "incomplete",
+        "target_piece": " Mir",
+        "target_piece_token_id": 7381,
+        "worker_step": 10
+      },
+      "physical_replay_count": 4
+    }
+  ],
+  "production_policy_changed": true,
+  "physical_policy_caps_changed": false,
+  "candidate_handoff_rounds": 2,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "6004740b66990a9cb0700270bd0d8ff233689fd84c073c2c17fa87c31f70ec7e",
+    "source_snapshot.tgz": "380061d60146853a7386c950a8b0167a618e619d6cbef3d16c82e51e38789d6d",
+    "manifest.json": "bc772f09f0de1be158570dafb788cceb5f1173385289caa9236408db590af505",
+    "live/b0.jsonl": "5c7576b2a3f45e11f0e7b09dd8b257c30070647e325bc3b90c15260e498b2acf",
+    "live/post_run_debrief.md": "02046e2db1eb153908000c50b3f882e02c5c6253a8804403d13a38a68b104881",
+    "live/post_run_debrief.json": "49413cea6c0754ad6d8a4699bc727a85b49872b302ad423e953358051a24a2cd",
+    "live/c1.jsonl": "3af0e3ca5135071a48cd9255b95ac93a1dbcf258678ef57fa5fe7d461c61d8bd",
+    "live/post_run_debrief_input.json": "c27f1d746299911cf676555006ae8ccdfde01b85db93c506d96338d0a0b75096",
+    "live/experiment_summary.json": "45b65aad117d67e42fb0ad5ed1314f4cef7df1f11514cd7f2ba9dead28c5a0d3"
+  }
+}

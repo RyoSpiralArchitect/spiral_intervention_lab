@@ -1,0 +1,6 @@
+{
+  "status": "failed",
+  "error_type": "TypeError",
+  "error": "Value after * must be an iterable, not NoneType",
+  "elapsed_seconds": 248.40422329198918
+}

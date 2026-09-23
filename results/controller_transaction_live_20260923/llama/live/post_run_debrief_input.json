@@ -1,0 +1,397 @@
+{
+  "artifact_kind": "post_run_controller_debrief_packet",
+  "do_not_autofeed_into_next_run": true,
+  "interpretation_boundary": "The debrief may summarize controller trajectory evidence, but it is not a metric, not a success label, and not an authorization signal for future apply decisions.",
+  "log_digest": {
+    "candidate_action_summary": {
+      "executed_actions": {},
+      "scope": "public_diagnostic_results_not_rollout_apply_or_intervention_success",
+      "statuses": {}
+    },
+    "controller_step_views_tail": [],
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L10",
+        "c1.jsonl:L12",
+        "c1.jsonl:L266",
+        "c1.jsonl:L31",
+        "c1.jsonl:L8",
+        "c1.jsonl:L9"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 261,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 268
+    },
+    "event_anchors": [
+      {
+        "anchor_kind": "first_event",
+        "anchor_kinds": [
+          "first_event"
+        ],
+        "event": "episode_start",
+        "event_id": "b0.jsonl:L1",
+        "related_events": [],
+        "visible_fields": [
+          "event_id",
+          "event"
+        ]
+      },
+      {
+        "anchor_kind": "termination",
+        "anchor_kinds": [
+          "termination"
+        ],
+        "event": "episode_end",
+        "event_id": "c1.jsonl:L266",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "related_events": [],
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "steps",
+          "output",
+          "score",
+          "task_done"
+        ]
+      },
+      {
+        "accepted": true,
+        "anchor_kind": "first_prefix_hold_accepted",
+        "anchor_kinds": [
+          "first_prefix_hold_accepted"
+        ],
+        "blocked_reason": null,
+        "budget_pool": "shared_candidate_handoff_rounds",
+        "controller_round": 0,
+        "event": "controller_prefix_hold",
+        "event_id": "c1.jsonl:L12",
+        "generated_tokens_during_hold": 0,
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "blocked_by": "missing_required_terms_without_certified_actuator",
+                "diagnostic_request": "{'diagnostic': 'target_entity_insertion_probe', 'next_evidence_needed': 'early_target_entity_insertion_probe'}",
+                "generation_action": "hold_prefix",
+                "micro_rationale": "Required terms remain missing, so inspect target-term insertion evidence before editing.",
+                "next_action": "request_target_entity_insertion_probe",
+                "why_not_apply": "No certified production actuator or target-lift evidence."
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L8",
+            "step": 0,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L9",
+            "step": 0,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "diagnostic": "target_entity_insertion_probe",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L10",
+            "step": 0,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic"
+            ]
+          }
+        ],
+        "requested_action": "hold_prefix",
+        "same_prefix_rounds_left": 1,
+        "step": 0,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "controller_round",
+          "requested_action",
+          "accepted",
+          "blocked_reason",
+          "generated_tokens_during_hold",
+          "same_prefix_rounds_left",
+          "budget_pool"
+        ]
+      },
+      {
+        "anchor_kind": "first_materialization",
+        "anchor_kinds": [
+          "first_materialization"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 9,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "actual_delta_class": "readout_gap_movement",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:245c15c89ae51534ae0f6ea2",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+            "target_mass_delta": 5e-06,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.085938,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.085938
+          },
+          {
+            "actual_delta_class": "readout_gap_movement",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:0da53fed54d8d04f93d81840",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.085938,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.085938
+          },
+          {
+            "actual_delta_class": "readout_gap_movement",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:6c65f0cce1c195774201ed27",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+            "target_mass_delta": 5e-06,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.085938,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.085938
+          },
+          {
+            "actual_delta_class": "readout_gap_movement",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:456919ce7f66a34cc4bdde69",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.085938,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.085938
+          }
+        ],
+        "candidate_rows_omitted": 0,
+        "diagnostic": "operator_diagnostic_replay",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L31",
+        "matrix": {
+          "measurement_context_id": null,
+          "measurement_mode": null,
+          "new_measurement_count": null,
+          "no_edit_max_abs_logit_delta": null,
+          "physical_replay_count": null,
+          "row_count": 0,
+          "state_restored": null,
+          "status": "not_requested",
+          "unavailable_reason": null
+        },
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "blocked_by": "missing_required_terms_without_certified_actuator",
+                "diagnostic_request": "{'diagnostic': 'target_entity_insertion_probe', 'next_evidence_needed': 'early_target_entity_insertion_probe'}",
+                "generation_action": "hold_prefix",
+                "micro_rationale": "Required terms remain missing, so inspect target-term insertion evidence before editing.",
+                "next_action": "request_target_entity_insertion_probe",
+                "why_not_apply": "No certified production actuator or target-lift evidence."
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L8",
+            "step": 0,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L9",
+            "step": 0,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "diagnostic": "target_entity_insertion_probe",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L10",
+            "step": 0,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic"
+            ]
+          }
+        ],
+        "status": "ok",
+        "step": 0,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      }
+    ],
+    "event_counts": {
+      "controller_command": 28,
+      "controller_decision": 28,
+      "controller_diagnostic_request": 14,
+      "controller_diagnostic_result": 14,
+      "controller_diagnostic_veto": 1,
+      "controller_effect_summary": 36,
+      "controller_loop_patience": 17,
+      "controller_observation": 28,
+      "controller_prefix_hold": 10,
+      "controller_prompt_telemetry": 28,
+      "controller_provider_attempt": 28,
+      "controller_selection": 28,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "log_dir": "/Users/ryospiralarchitect/spiral_intervention_lab/results/controller_transaction_live_20260923/llama/live",
+    "log_files": [
+      {
+        "event_counts": {
+          "episode_end": 1,
+          "episode_start": 1
+        },
+        "path": "b0.jsonl",
+        "sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e"
+      },
+      {
+        "event_counts": {
+          "controller_command": 28,
+          "controller_decision": 28,
+          "controller_diagnostic_request": 14,
+          "controller_diagnostic_result": 14,
+          "controller_diagnostic_veto": 1,
+          "controller_effect_summary": 36,
+          "controller_loop_patience": 17,
+          "controller_observation": 28,
+          "controller_prefix_hold": 10,
+          "controller_prompt_telemetry": 28,
+          "controller_provider_attempt": 28,
+          "controller_selection": 28,
+          "episode_end": 1,
+          "episode_start": 1,
+          "observer_check": 4
+        },
+        "path": "c1.jsonl",
+        "sha256": "c976474101ae7ebf64ef66159cfb265f9b0174b4f50c4a5061ecb3dc2d018297"
+      }
+    ]
+  },
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "output_diet_contract": {
+    "max_bullets_per_section": 3,
+    "qualitative_affordances_only": true,
+    "what_would_have_helped_schema": "missing_signal: why_it_would_help -> suggested_field"
+  },
+  "qualitative_only": true,
+  "required_output_sections": [
+    "What happened?",
+    "What made the run difficult?",
+    "Most likely failure factors",
+    "Evidence supporting this reading",
+    "What I would try next",
+    "What would have made this easier?",
+    "What should not be concluded",
+    "Controller-perspective note"
+  ],
+  "run_result_digest": {
+    "b0": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "b1": null,
+    "c1": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "controller_model_name": "gpt-5.6-luna",
+    "controller_provider": "openai",
+    "controller_reflection_mode": "off",
+    "seed": 0,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1",
+    "worker_decoder_control_mode": "off",
+    "worker_loop_rescue_edits_per_run": 0,
+    "worker_model_name": "meta-llama/Llama-3.2-3B-Instruct"
+  }
+}

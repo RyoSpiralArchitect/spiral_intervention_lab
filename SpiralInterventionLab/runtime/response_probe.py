@@ -35,16 +35,27 @@ def state_identity(worker: Any) -> str:
     })
 
 
+class ReadoutUnavailable(ValueError):
+    def __init__(self, reason: str, details: dict[str, Any]):
+        super().__init__(reason)
+        self.details = details
+
+
 def bound_metrics(before: torch.Tensor, after: torch.Tensor, token_id: int) -> dict[str, Any]:
     # Audit arithmetic runs on CPU: MPS does not support float64. Model replay
     # stays on its configured device; casting cannot recover lost precision.
     before, after = before.detach().cpu().flatten().double(), after.detach().cpu().flatten().double()
     width = min(20, before.numel())
-    if (torch.isnan(before).any() or torch.isnan(after).any() or torch.isposinf(before).any()
-            or torch.isposinf(after).any() or not torch.isfinite(before[token_id])
-            or not torch.isfinite(after[token_id]) or torch.isfinite(before).sum() < width
-            or torch.isfinite(after).sum() < width):
-        raise ValueError("nonfinite_bound_token_or_top20_readout")
+    details = {"readout_stage": "post_constraints_and_decoder_control", "target_token_id": token_id,
+        "before_finite_count": int(torch.isfinite(before).sum()), "after_finite_count": int(torch.isfinite(after).sum()),
+        "before_target_masked": bool(torch.isneginf(before[token_id])),
+        "after_target_masked": bool(torch.isneginf(after[token_id]))}
+    if torch.isnan(before).any() or torch.isnan(after).any() or torch.isposinf(before).any() or torch.isposinf(after).any():
+        raise ReadoutUnavailable("nonfinite_bound_token_or_top20_readout", details)
+    if details["before_target_masked"] or details["after_target_masked"]:
+        raise ReadoutUnavailable("bound_target_masked_in_decode_readout", details)
+    if details["before_finite_count"] < width or details["after_finite_count"] < width:
+        raise ReadoutUnavailable("insufficient_finite_tokens_for_top20_readout", details)
     threshold_before = float(before.topk(width).values[-1])
     threshold_after = float(after.topk(width).values[-1])
     logit_delta = float(after[token_id] - before[token_id])
@@ -230,6 +241,13 @@ def matched_response_probe(worker: Any, seeds: Sequence[Mapping[str, Any]], *,
                 "stealer_bundle_key": seed.get("activation_patch_stealer_bundle_key"),
                 "recipe_name": seed.get("recipe_name"), "operator_recipe_id": seed.get("operator_recipe_id"),
             }
+            # The seed label can encode a different cap. Preserve lineage while
+            # naming the executable recipe by its actual controlled parameters.
+            candidate["seed_operator_recipe_id"] = seed.get("operator_recipe_id")
+            candidate["operator_recipe_id"] = identity("matched_recipe:", candidate)
+            candidate["recipe_name"] = (
+                f"matched_{candidate['site']}_l{candidate['layer']}_{candidate['source_localization']}"
+                f"_alpha={candidate['alpha']:.4f}_step_size={dose:.4f}")
             try:
                 edit = worker._activation_patch_trial_edit_from_candidate(candidate, trial_contract={
                     "max_alpha": max(0.08, float(candidate["alpha"])), "norm_clip": 1.0,
@@ -292,7 +310,7 @@ def matched_response_probe(worker: Any, seeds: Sequence[Mapping[str, Any]], *,
                         "status": "ok", "operator_axis": "target_piece_binding_seed_matrix", "diagnostic_family": "activation_patch",
                         "evidence_kind": "target_piece_binding_replay",
                         "objective_bundle_key": objective_bundle_key, "bundle_key": objective_bundle_key, "intended_term": objective_term,
-                        "recipe_name": seed.get("recipe_name"), "operator_recipe_id": seed.get("operator_recipe_id"),
+                        "recipe_name": candidate["recipe_name"], "operator_recipe_id": candidate["operator_recipe_id"],
                         "seed_recipe_name": seed.get("seed_recipe_name") or seed.get("recipe_name"),
                         "seed_operator_recipe_id": seed.get("seed_operator_recipe_id") or seed.get("operator_recipe_id"),
                         "seed_source": seed.get("seed_source"),

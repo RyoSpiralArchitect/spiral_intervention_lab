@@ -1,0 +1,47 @@
+{
+  "b0": {
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+    "score": 0.938889,
+    "steps": 18
+  },
+  "b1": null,
+  "c1": {
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+    "score": 0.938889,
+    "steps": 18
+  },
+  "controller_model_name": "gpt-5.6-luna",
+  "controller_provider": "openai",
+  "controller_reflection_mode": "off",
+  "paired_trace_id": "paired_baseline",
+  "seed": 0,
+  "semantic_critic_mode": "off",
+  "semantic_critic_model_name": null,
+  "suite_mode": "minimal_baseline_suite",
+  "surface_ids": [
+    "s_resid_pre_l13_last",
+    "s_resid_post_l13_last",
+    "s_mlp_out_l13_last",
+    "s_resid_pre_l14_last",
+    "s_resid_post_l14_last",
+    "s_mlp_out_l14_last",
+    "s_resid_pre_l25_last",
+    "s_resid_post_l25_last",
+    "s_mlp_out_l25_last",
+    "s_resid_pre_l26_last",
+    "s_resid_post_l26_last",
+    "s_mlp_out_l26_last",
+    "s_resid_pre_l27_last",
+    "s_resid_post_l27_last",
+    "s_mlp_out_l27_last",
+    "s_resid_pre_l13_prev"
+  ],
+  "task_id": "spiral_constrained_rewrite_l1_v1",
+  "worker_decoder_control_mode": "off",
+  "worker_loop_rescue_edits_per_run": 0,
+  "worker_loop_rescue_total_alpha": 0.0,
+  "worker_loop_rescue_total_edit_cost": 0.0,
+  "worker_model_name": "meta-llama/Llama-3.2-3B-Instruct"
+}

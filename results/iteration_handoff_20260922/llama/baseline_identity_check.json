@@ -1,0 +1,9 @@
+{
+  "observed": {
+    "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "steps": 18
+  },
+  "reference_match": true
+}

@@ -14,7 +14,8 @@ from .edit_budget import (
     PRODUCTION_TRIAL_EDIT_BUDGET_POOL,
     PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
 )
-from .policy import budget_violation_reason, command_budget_usage
+from .policy import PolicyViolation, budget_violation_reason, command_budget_usage
+from . import prefix_control
 
 
 class TaskEnv(Protocol):
@@ -502,6 +503,53 @@ def _extract_tool_requests(command: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _dispatch_controller_observer_and_tools(
+    worker_runtime: Any, command: Any, *, logger: StructuredLogger | None,
+    step: int, controller_round: int | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    event_round = {} if controller_round is None else {"controller_round": controller_round}
+    requests: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    observer_request = _extract_observer_check_request(command)
+    if observer_request is not None:
+        requests.append({"kind": "observer_check", **dict(observer_request)})
+        requester = getattr(worker_runtime, "request_observer_check", None)
+        result = None
+        if callable(requester):
+            try:
+                result = requester(observer_request, source="controller")
+            except TypeError:
+                result = requester(observer_request)
+        if isinstance(result, Mapping):
+            results.append(dict(result))
+        if logger is not None:
+            event = {"event": "controller_observer_check_request", "step": step,
+                     **event_round, **dict(observer_request), "executed": bool(result)}
+            if isinstance(result, Mapping):
+                event.update(result_trigger=result.get("trigger"),
+                             result_verdict=result.get("verdict"), result_score=result.get("score"))
+            logger.log(event)
+        _log_pending_observer_check_events(logger, step=step, worker_runtime=worker_runtime)
+
+    tool_requests = _extract_tool_requests(command)
+    if tool_requests:
+        requests.extend({"kind": "tool_request", **dict(request)} for request in tool_requests)
+        requester = getattr(worker_runtime, "request_controller_tools", None)
+        tool_results = []
+        if callable(requester):
+            try:
+                tool_results = requester(tool_requests, source="controller") or []
+            except TypeError:
+                tool_results = requester(tool_requests) or []
+        results.extend(dict(result) for result in tool_results if isinstance(result, Mapping))
+        if logger is not None:
+            for request in tool_requests:
+                logger.log({"event": "controller_tool_request", "step": step,
+                            **event_round, **dict(request), "executed": bool(tool_results)})
+        _log_pending_tool_events(logger, step=step, worker_runtime=worker_runtime)
+    return requests, results
+
+
 def _diagnostic_request_from_next_action(value: Any) -> str | None:
     text = str(value or "").strip().lower().replace("-", "_")
     return {
@@ -661,6 +709,14 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
     canonical_request = _strategy_canonical_diagnostic_request(strategy_hints)
     raw_requests: list[Any] = []
     diagnostic_request = meta.get("diagnostic_request")
+    if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("diagnostic") == "candidate_action":
+        # A selected offer is exclusive; stale next_action/memory prose must not
+        # append a second diagnostic or rewrite a read into a measurement.
+        return [{"diagnostic": "candidate_action", "action_id": diagnostic_request.get("action_id")}]
+    if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("evidence_id"):
+        from .response_promotion import REVIEW_NAMES
+        if diagnostic_request.get("diagnostic") in REVIEW_NAMES:
+            return [dict(diagnostic_request)]
     if diagnostic_request not in (None, ""):
         if (
             canonical_request is not None
@@ -823,7 +879,7 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
             "objective_bundle_key",
             "next_evidence_needed",
             "operator_recipe_expansion_mode",
-            "execution_id", "evidence_id", "dose_grid", "candidate_ids", "limit", "comparison_axis",
+            "execution_id", "evidence_id", "action_id", "dose_grid", "candidate_ids", "limit", "comparison_axis",
         )
     ) + "|" + str(candidate_recipe_id or "")
 
@@ -1597,6 +1653,11 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         "certified_for_apply": None if certified_for_apply is None else bool(certified_for_apply),
         "controller_why_not_apply": controller_why_not_apply,
         "controller_selected_bundle_key": controller_selected_bundle_key,
+        "candidate_diagnostic_choices": strategy_hints.get("candidate_diagnostic_choices"),
+        "generation_control": strategy_hints.get("generation_control"),
+        "controller_generation_action": meta.get("generation_action", "advance"),
+        "candidate_trial_handoffs": strategy_hints.get("candidate_trial_handoffs"),
+        "candidate_trial_offer": strategy_hints.get("candidate_trial_offer"),
         "controller_rejected_signals": controller_rejected_signals,
         "controller_selection_source": controller_selection_source,
         **diagnostic_context,
@@ -1680,6 +1741,7 @@ def run_episode(
     logger: StructuredLogger | None = None,
     policy: Any | None = None,
     max_controller_diagnostic_rethink_rounds: int = 0,
+    max_candidate_handoff_rounds: int = 0,
 ) -> EpisodeResult:
     prompt = task_env.reset(seed=ctx.runtime_state.seed)
     worker_runtime.reset(prompt)
@@ -1687,10 +1749,35 @@ def run_episode(
         logger.log({"event": "episode_start", "seed": ctx.runtime_state.seed, "prompt": prompt})
 
     step_count = 0
+    pending_trial_expiry = []
+    max_handoff_rounds = min(2, max(0, int(max_candidate_handoff_rounds)))
     while not worker_runtime.done():
         worker_runtime.step()
+        # TTL counts generated tokens, not controller/diagnostic rounds. Observe
+        # the generated effect before expiring hooks and building the next packet.
+        worker_runtime.observe_recent_effects()
+        _log_effect_trace(logger, step=step_count, worker_runtime=worker_runtime)
+        if pending_trial_expiry:
+            for compiled in pending_trial_expiry:
+                compiled.rollback(ctx)
+                ctx.active_edits.pop(compiled.edit_id, None)
+                if logger is not None:
+                    logger.log({"event": "production_trial_expired", "step": step_count,
+                                "edit_id": compiled.edit_id, "generated_tokens_under_trial": 1})
+            pending_trial_expiry = []
+        worker_runtime.tick_ttl()
+        worker_runtime.cleanup_expired()
+        for edit_id, compiled in list(ctx.active_edits.items()):
+            compiled.ttl_steps -= 1
+            if compiled.ttl_steps <= 0:
+                compiled.rollback(ctx)
+                ctx.active_edits.pop(edit_id, None)
+                if logger is not None:
+                    logger.log({"event": "runtime_edit_expired", "step": step_count,
+                                "edit_id": edit_id, "reason": "generated_token_ttl_elapsed"})
         _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
-        packet = worker_runtime.build_controller_packet()
+        packet = prefix_control.annotate(worker_runtime.build_controller_packet(),
+            rounds_left=max_handoff_rounds, terminal=worker_runtime.done())
         try:
             command = controller_client.invoke(packet)
         except Exception as exc:
@@ -1712,40 +1799,8 @@ def run_episode(
             logger.log({"event": "controller_command", "step": step_count, "command": command, **selection_report})
             logger.log({"event": "controller_selection", "step": step_count, **selection_report})
         _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
-        observer_check_request = _extract_observer_check_request(command)
-        if observer_check_request is not None:
-            requester = getattr(worker_runtime, "request_observer_check", None)
-            result = None
-            if callable(requester):
-                try:
-                    result = requester(observer_check_request, source="controller")
-                except TypeError:
-                    result = requester(observer_check_request)
-            if logger is not None:
-                request_event = {"event": "controller_observer_check_request", "step": step_count, **dict(observer_check_request)}
-                request_event["executed"] = bool(result)
-                if isinstance(result, Mapping):
-                    request_event["result_trigger"] = result.get("trigger")
-                    request_event["result_verdict"] = result.get("verdict")
-                    request_event["result_score"] = result.get("score")
-                logger.log(request_event)
-            _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
-
-        tool_requests = _extract_tool_requests(command)
-        if tool_requests:
-            requester = getattr(worker_runtime, "request_controller_tools", None)
-            results = []
-            if callable(requester):
-                try:
-                    results = requester(tool_requests, source="controller") or []
-                except TypeError:
-                    results = requester(tool_requests) or []
-            if logger is not None:
-                for request in tool_requests:
-                    request_event = {"event": "controller_tool_request", "step": step_count, **dict(request)}
-                    request_event["executed"] = bool(results)
-                    logger.log(request_event)
-            _log_pending_tool_events(logger, step=step_count, worker_runtime=worker_runtime)
+        auxiliary_requests, auxiliary_results = _dispatch_controller_observer_and_tools(
+            worker_runtime, command, logger=logger, step=step_count)
 
         diagnostic_requests = _extract_diagnostic_requests(command, packet)
         diagnostic_results: list[Any] = []
@@ -1773,6 +1828,21 @@ def run_episode(
             _log_pending_diagnostic_events(logger, step=step_count, worker_runtime=worker_runtime)
 
         rethink_round = 0
+        candidate_handoff_round = 0
+        legacy_rethink_round = 0
+        followup_reader = getattr(worker_runtime, "candidate_trial_followup_available", None)
+        def handoff_available() -> bool:
+            return bool(callable(followup_reader) and followup_reader(diagnostic_results))
+        def explicit_hold_available() -> bool:
+            report = prefix_control.evaluate(command,
+                [*diagnostic_requests, *auxiliary_requests],
+                [*diagnostic_results, *auxiliary_results],
+                rounds_left=max_handoff_rounds - candidate_handoff_round, terminal=worker_runtime.done())
+            if report is not None and logger is not None:
+                logger.log({"event": "controller_prefix_hold", "step": step_count,
+                            "controller_round": rethink_round, **report})
+            return bool(report and report["accepted"])
+        hold_available = explicit_hold_available()
         max_rethink_rounds = max(0, int(max_controller_diagnostic_rethink_rounds))
         readout_escape_rethink_enabled = str(packet.get("control_phase_hint", "") or "") == "readout_escape"
         diagnostic_next_evidence_after = _diagnostic_results_next_evidence(diagnostic_results)
@@ -1793,18 +1863,26 @@ def run_episode(
                     "next_evidence_after": diagnostic_next_evidence_after,
                     "next_evidence_transition": bool(diagnostic_transition_open),
                     "repeated_diagnostic_veto": False,
+                    "candidate_handoff_budget_left": max_handoff_rounds,
+                    "candidate_handoff_available": handoff_available(),
                 }
             )
         while (
-            rethink_round < max_rethink_rounds
-            and diagnostic_requests
-            and diagnostic_results
+            not worker_runtime.done()
+            and (diagnostic_requests or auxiliary_requests)
+            and (diagnostic_results or auxiliary_results)
             and _command_decision(command) == "noop"
-            and readout_escape_rethink_enabled
-            and diagnostic_transition_open
+            and ((legacy_rethink_round < max_rethink_rounds and readout_escape_rethink_enabled and diagnostic_transition_open)
+                 or (candidate_handoff_round < max_handoff_rounds and handoff_available())
+                 or hold_available)
         ):
             rethink_round += 1
-            packet = worker_runtime.build_controller_packet()
+            candidate_round = not hold_available and candidate_handoff_round < max_handoff_rounds and handoff_available()
+            round_kind = "controller_prefix_hold" if hold_available else "candidate_trial_handoff" if candidate_round else "diagnostic_rethink"
+            candidate_handoff_round += int(candidate_round or hold_available)
+            legacy_rethink_round += int(not (candidate_round or hold_available))
+            packet = prefix_control.annotate(worker_runtime.build_controller_packet(),
+                rounds_left=max_handoff_rounds - candidate_handoff_round, terminal=worker_runtime.done())
             try:
                 command = controller_client.invoke(packet)
             except Exception as exc:
@@ -1850,7 +1928,7 @@ def run_episode(
                         "event": "controller_command",
                         "step": step_count,
                         "controller_round": rethink_round,
-                        "controller_round_kind": "diagnostic_rethink",
+                        "controller_round_kind": round_kind,
                         "command": command,
                         **selection_report,
                     }
@@ -1860,11 +1938,15 @@ def run_episode(
                         "event": "controller_selection",
                         "step": step_count,
                         "controller_round": rethink_round,
-                        "controller_round_kind": "diagnostic_rethink",
+                        "controller_round_kind": round_kind,
                         **selection_report,
                     }
                 )
             _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
+
+            auxiliary_requests, auxiliary_results = _dispatch_controller_observer_and_tools(
+                worker_runtime, command, logger=logger, step=step_count,
+                controller_round=rethink_round)
 
             diagnostic_requests = _extract_diagnostic_requests(command, packet)
             diagnostic_requests, repeated_diagnostic_requests = _filter_repeated_diagnostic_requests(
@@ -1880,7 +1962,7 @@ def run_episode(
                             "controller_round": rethink_round,
                             "reason": "repeated_diagnostic_veto",
                             "repeated_diagnostic_veto": True,
-                            "loop_patience_budget_left": max(0, max_rethink_rounds - rethink_round),
+                            "loop_patience_budget_left": max(0, max_rethink_rounds - legacy_rethink_round),
                             **dict(request),
                         }
                     )
@@ -1916,6 +1998,7 @@ def run_episode(
                         logger.log(request_event)
                 _log_pending_diagnostic_events(logger, step=step_count, worker_runtime=worker_runtime)
             diagnostic_next_evidence_after = _diagnostic_results_next_evidence(diagnostic_results)
+            hold_available = explicit_hold_available()
             diagnostic_transition_open = _diagnostic_next_evidence_transition(
                 diagnostic_next_evidence_before,
                 diagnostic_next_evidence_after,
@@ -1928,14 +2011,39 @@ def run_episode(
                         "controller_round": rethink_round,
                         "control_phase_hint": packet.get("control_phase_hint"),
                         "readout_escape_rethink_enabled": bool(readout_escape_rethink_enabled),
-                        "loop_patience_budget_left": max(0, max_rethink_rounds - rethink_round),
+                        "loop_patience_budget_left": max(0, max_rethink_rounds - legacy_rethink_round),
                         "next_evidence_before": diagnostic_next_evidence_before,
                         "next_evidence_after": diagnostic_next_evidence_after,
                         "next_evidence_transition": bool(diagnostic_transition_open),
                         "repeated_diagnostic_veto": bool(repeated_diagnostic_requests),
+                        "candidate_handoff_budget_left": max(0, max_handoff_rounds - candidate_handoff_round),
+                        "candidate_handoff_available": handoff_available(),
                     }
                 )
 
+        trial_validator = getattr(worker_runtime, "validate_controller_trial", None)
+        if _command_decision(command) == "apply":
+            rejection_reason = "trial_authorization_rejected"
+            try:
+                if worker_runtime.done():
+                    rejection_reason = "no_next_token_for_edit"
+                    raise PolicyViolation(rejection_reason)
+                if callable(trial_validator):
+                    command = trial_validator(command, packet)
+            except PolicyViolation as exc:
+                command = _guarded_noop_command(command,
+                    noop_reason=rejection_reason, apply_block_reason=str(exc))
+                command["meta"].update(blocked_by=str(exc), why_not_apply=str(exc))
+                _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
+                if logger is not None:
+                    logger.log({"event": "controller_guardrail", "step": step_count,
+                                "controller_round": rethink_round, "reason": rejection_reason, "detail": str(exc)})
+                    logger.log({"event": "controller_command", "step": step_count,
+                                "controller_round_kind": "trial_guardrail", "command": command,
+                                **_build_controller_selection_report(packet, command)})
+                    logger.log({"event": "controller_selection", "step": step_count,
+                                "controller_round_kind": "trial_guardrail",
+                                **_build_controller_selection_report(packet, command)})
         try:
             compiled_edits = compile_command(command, packet, ctx, policy=policy)
         except Exception as exc:
@@ -1960,6 +2068,10 @@ def run_episode(
                     }
                 )
 
+        if compiled_edits:
+            consume_trial = getattr(worker_runtime, "consume_controller_trial", None)
+            if callable(consume_trial):
+                consume_trial(command)
         worker_runtime.observe_recent_effects()
         _log_effect_trace(logger, step=step_count, worker_runtime=worker_runtime)
         production_trial_apply_executed = (
@@ -1968,6 +2080,7 @@ def run_episode(
             and bool(compiled_edits)
         )
         if production_trial_apply_executed:
+            pending_trial_expiry = list(compiled_edits)
             if logger is not None:
                 logger.log(
                     {
@@ -1976,9 +2089,6 @@ def run_episode(
                         "reason": "trial edit must survive one generated token before ttl tick",
                     }
                 )
-        else:
-            worker_runtime.tick_ttl()
-            worker_runtime.cleanup_expired()
         step_count += 1
 
     output = worker_runtime.final_text()

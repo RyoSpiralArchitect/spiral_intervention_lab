@@ -1,0 +1,84 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended without task completion: the output remained “In the case of a rewrite, the budget draft.” with score 0.5875 at `c1.jsonl:L203`.\n- The controller initially held the prefix and requested a target-entity insertion probe at `c1.jsonl:L8`–`c1.jsonl:L12`.\n- No actions were executed; the action summary reports an empty execution set.\n\n## What made the run difficult?\n- Candidate signals showed rank movement but no target-mass or top-20 lift at `c1.jsonl:L31`.\n- The controller lacked a certified actuator and therefore continued using no-op decisions at `c1.jsonl:L101`.\n- A later prefix hold was denied because no fresh requested result was available at `c1.jsonl:L114`.\n\n## Most likely failure factors\n- Historical candidate evidence was not revalidated in the current context at `c1.jsonl:L31`.\n- Diagnostic evidence did not establish actionable target lift at `c1.jsonl:L31`.\n- Repeated diagnostic and hold cycles did not produce a certified path before termination at `c1.jsonl:L114` and `c1.jsonl:L203`.\n\n## Evidence supporting this reading\n- The initial command explicitly cited missing required terms and no certified actuator or target lift at `c1.jsonl:L8`.\n- Candidate rows had tiny logit changes, zero top-20 hit delta, and negative threshold-gap changes at `c1.jsonl:L31`.\n- Termination recorded `task_done: false` after 11 steps at `c1.jsonl:L203`.\n\n## What I would try next\n- Revalidate candidate effects on the actual current prompt before treating rank-carrier evidence as useful.\n- Separate diagnostics that establish target lift from diagnostics that only show rank movement.\n- Preserve a fresh-result handoff before requesting another prefix hold.\n\n## What would have made this easier?\n- missing_at_runtime | `c1.jsonl:L114` | fresh_requested_result: it would clarify whether another hold was evidence-supported -> `fresh_result_id`, `result_timestamp`, `request_to_result_link`\n- missing_at_runtime | `c1.jsonl:L101` | certified_actuator_status: it would clarify why candidate signals could not become an actionable option -> `actuator_certification_status`, `certification_scope`\n- unknown_from_supplied_evidence | `c1.jsonl:L31` | current-context revalidation: it would distinguish historical replay from present-run effectiveness -> `revalidated_on_current_prompt`, `measurement_context_id`\n\n## What should not be concluded\n- This run does not show that the candidate operators are intrinsically ineffective.\n- The no-op trajectory does not authorize any future intervention or rollout.\n- The exposed diagnostics do not establish hidden model mechanisms or a definitive root cause.\n\n## Controller-perspective note\n- I would describe a repeated gap between rank-carrier evidence and actionable target lift.\n- I kept seeing no-op selections because certification and fresh results were unavailable.\n- I lacked evidence that any intervention would improve the current output.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_039c70752c4108bd006ab38f9aff9c87d098816d4aea156e2a",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L10",
+        "c1.jsonl:L101",
+        "c1.jsonl:L102",
+        "c1.jsonl:L103",
+        "c1.jsonl:L114",
+        "c1.jsonl:L12",
+        "c1.jsonl:L203",
+        "c1.jsonl:L31",
+        "c1.jsonl:L8",
+        "c1.jsonl:L9"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 194,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 205
+    },
+    "event_counts": {
+      "controller_command": 20,
+      "controller_decision": 20,
+      "controller_diagnostic_request": 13,
+      "controller_diagnostic_result": 13,
+      "controller_diagnostic_veto": 2,
+      "controller_effect_summary": 22,
+      "controller_loop_patience": 16,
+      "controller_observation": 20,
+      "controller_observer_check_request": 1,
+      "controller_prefix_hold": 11,
+      "controller_prompt_telemetry": 20,
+      "controller_provider_attempt": 20,
+      "controller_selection": 20,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 3
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_v0"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L101",
+      "c1.jsonl:L114",
+      "c1.jsonl:L12",
+      "c1.jsonl:L203",
+      "c1.jsonl:L31",
+      "c1.jsonl:L8"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 3865,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=3862)",
+    "output_tokens": 727,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=94)",
+    "total_tokens": 4592
+  }
+}
