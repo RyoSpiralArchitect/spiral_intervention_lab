@@ -325,6 +325,11 @@ def test_response_review_opens_only_bounded_trial_after_physical_confirmation():
     assert not result["production_apply_allowed"] and not result["certified_for_apply"]
     assert result["production_trial_contract"]["ttl_steps"] == 1
     assert result["production_trial_candidate"]["apply_kind"] == "production_trial"
+    compact = _compact_diagnostic_result(result)
+    assert compact["production_trial_allowed"] is True
+    assert compact["production_trial_candidate"]["trial_edit"] == result["production_trial_candidate"]["trial_edit"]
+    assert compact["production_trial_contract"] == result["production_trial_contract"]
+    assert compact["production_apply_allowed"] is False
 
 
 @pytest.mark.parametrize("change,reason", [
