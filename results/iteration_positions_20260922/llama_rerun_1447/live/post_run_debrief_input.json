@@ -1,0 +1,723 @@
+{
+  "artifact_kind": "post_run_controller_debrief_packet",
+  "do_not_autofeed_into_next_run": true,
+  "interpretation_boundary": "The debrief may summarize controller trajectory evidence, but it is not a metric, not a success label, and not an authorization signal for future apply decisions.",
+  "log_digest": {
+    "candidate_action_summary": {
+      "cached_measurement_count": 0,
+      "diagnostic_budget_charged": 6,
+      "executed_actions": {
+        "remeasure_current_prefix": 6
+      },
+      "new_measurement_count": 6,
+      "physical_replay_count": 24,
+      "scope": "public_diagnostic_results_not_rollout_apply_or_intervention_success",
+      "statuses": {
+        "measured": 6
+      }
+    },
+    "controller_step_views_tail": [],
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L103",
+        "c1.jsonl:L133",
+        "c1.jsonl:L171",
+        "c1.jsonl:L31",
+        "c1.jsonl:L52",
+        "c1.jsonl:L73"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 166,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 173
+    },
+    "event_anchors": [
+      {
+        "anchor_kind": "first_event",
+        "anchor_kinds": [
+          "first_event"
+        ],
+        "event": "episode_start",
+        "event_id": "b0.jsonl:L1",
+        "related_events": [],
+        "visible_fields": [
+          "event_id",
+          "event"
+        ]
+      },
+      {
+        "anchor_kind": "termination",
+        "anchor_kinds": [
+          "termination"
+        ],
+        "event": "episode_end",
+        "event_id": "c1.jsonl:L171",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "related_events": [],
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "steps",
+          "output",
+          "score",
+          "task_done"
+        ]
+      },
+      {
+        "anchor_kind": "first_materialization",
+        "anchor_kinds": [
+          "first_materialization"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 9,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "actual_delta_class": "collapse_suppressor",
+            "actuator_class": "collapse_suppressor",
+            "evidence_id": "evidence:a29aa94397842bd5b633e148",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+            "target_mass_delta": 0.001479,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.015625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.015625
+          },
+          {
+            "actual_delta_class": "collapse_suppressor",
+            "actuator_class": "collapse_suppressor",
+            "evidence_id": "evidence:3359098948c516fcfe96d102",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+            "target_mass_delta": 0.000426,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0625
+          },
+          {
+            "actual_delta_class": "collapse_suppressor",
+            "actuator_class": "collapse_suppressor",
+            "evidence_id": "evidence:6d308b00b797c2b9e9481ec6",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+            "target_mass_delta": 0.001479,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.015625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.015625
+          },
+          {
+            "actual_delta_class": "collapse_suppressor",
+            "actuator_class": "collapse_suppressor",
+            "evidence_id": "evidence:c43d7376799d73ee72a14bdf",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0500",
+            "target_mass_delta": 0.000426,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0625,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0625
+          }
+        ],
+        "candidate_rows_omitted": 0,
+        "diagnostic": "operator_diagnostic_replay",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L31",
+        "matrix": {
+          "measurement_context_id": null,
+          "measurement_mode": null,
+          "new_measurement_count": null,
+          "no_edit_max_abs_logit_delta": null,
+          "physical_replay_count": null,
+          "row_count": 0,
+          "state_restored": null,
+          "status": "not_requested",
+          "unavailable_reason": null
+        },
+        "related_events": [],
+        "status": "ok",
+        "step": 2,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      },
+      {
+        "anchor_kind": "first_actual_matrix",
+        "anchor_kinds": [
+          "first_actual_matrix"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 7,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 8,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "rank_carrier",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:41d44e1ed947516db89de7b5",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:589550eef2d5e047ffdb0595",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "rank_carrier",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:754fbf7425d847739e794ddf",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:589550eef2d5e047ffdb0595",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": 0.0,
+            "target_piece": " sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.16,
+            "actual_delta_class": "dead_actuator",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "positive_above_repeat_variation",
+            "evidence_id": "obs:8404be939dc254d2c37fb094",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:36b9b616b84ce714f2422e12",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0078125,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0078125,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.16,
+            "actual_delta_class": "dead_actuator",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "positive_above_repeat_variation",
+            "evidence_id": "obs:7dd555391b1af16ab9d5b920",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:36b9b616b84ce714f2422e12",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "seed_source": "observed_gap_carrier",
+            "target_mass_delta": 0.0,
+            "target_piece": " sel",
+            "target_piece_logit_delta": 0.0078125,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.0078125,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.03,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:b3eb0d56a18d5929d059ff9a",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.05,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:7d3dfce1cef04a39f7bc0eda",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0500",
+            "target_mass_delta": -0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          }
+        ],
+        "candidate_rows_omitted": 18,
+        "diagnostic": "activation_patch_candidate_review",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L52",
+        "matrix": {
+          "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+          "measurement_mode": "matched_response_probe",
+          "new_measurement_count": 2,
+          "no_edit_max_abs_logit_delta": 0.0,
+          "physical_replay_count": 6,
+          "row_count": 4,
+          "state_restored": true,
+          "status": "dose_matched_response_complete",
+          "unavailable_reason": null
+        },
+        "related_events": [],
+        "status": "ok",
+        "step": 4,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      },
+      {
+        "anchor_kind": "first_candidate_action",
+        "anchor_kinds": [
+          "first_candidate_action",
+          "first_current_prefix_measurement"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 6,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 7,
+          "inspection_calls_left": 4
+        },
+        "candidate_action": {
+          "action_id": "action:e3d19a4af81e375ee22f9b72",
+          "blocked_reason": null,
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "current_context_id": "context:f59cc44139686c03ab8dec63",
+          "diagnostic_budget_charged": true,
+          "evidence": {
+            "continuation_identical": true,
+            "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+            "measurement_position": {
+              "generated_token_count": 7,
+              "last_token_piece": " I",
+              "prefix_tail": " Nora will take the sample to I",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 7
+            },
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.00390625,
+              "target_piece_prob_delta": 1.0026470754621616e-13,
+              "target_rank_after": 3195,
+              "target_rank_before": 3211,
+              "target_top20_threshold_gap_delta": 0.00390625
+            },
+            "no_edit_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "repeat_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "state_restored": true,
+            "target_piece": " Sel",
+            "target_piece_token_id": 24082
+          },
+          "evidence_scope": "frozen_candidate_current_prefix_measurement",
+          "executed_action": "remeasure_current_prefix",
+          "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+          "production_apply_allowed": false,
+          "requested_action": "remeasure_current_prefix",
+          "requested_position": {
+            "generated_token_count": 7,
+            "last_token_piece": " I",
+            "prefix_tail": " Nora will take the sample to I",
+            "scope": "observed_prefix_only_not_position_quality",
+            "trailing_surface": "open_text",
+            "word_completion": "unknown_without_lookahead",
+            "worker_step": 7
+          }
+        },
+        "diagnostic": "candidate_action",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L73",
+        "new_measurement_count": 1,
+        "physical_replay_count": 4,
+        "related_events": [],
+        "status": "measured",
+        "step": 7,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "new_measurement_count",
+          "physical_replay_count",
+          "candidate_action"
+        ]
+      },
+      {
+        "anchor_kind": "last_current_prefix_measurement",
+        "anchor_kinds": [
+          "last_current_prefix_measurement"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 0,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 1,
+          "inspection_calls_left": 4
+        },
+        "candidate_action": {
+          "action_id": "action:cd8cd251a4e189debc524214",
+          "blocked_reason": null,
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "current_context_id": "context:8246db534181c5d539f770e9",
+          "diagnostic_budget_charged": true,
+          "evidence": {
+            "continuation_identical": true,
+            "measurement_context_id": "context:8246db534181c5d539f770e9",
+            "measurement_position": {
+              "generated_token_count": 13,
+              "last_token_piece": " to",
+              "prefix_tail": " Nora will take the sample to Ivo before sending the report to",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 13
+            },
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.015625,
+              "target_piece_prob_delta": 0.0001813027265944716,
+              "target_rank_after": 2,
+              "target_rank_before": 2,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "no_edit_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "repeat_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "state_restored": true,
+            "target_piece": " Sel",
+            "target_piece_token_id": 24082
+          },
+          "evidence_scope": "frozen_candidate_current_prefix_measurement",
+          "executed_action": "remeasure_current_prefix",
+          "measurement_context_id": "context:8246db534181c5d539f770e9",
+          "production_apply_allowed": false,
+          "requested_action": "remeasure_current_prefix",
+          "requested_position": {
+            "generated_token_count": 13,
+            "last_token_piece": " to",
+            "prefix_tail": " Nora will take the sample to Ivo before sending the report to",
+            "scope": "observed_prefix_only_not_position_quality",
+            "trailing_surface": "open_text",
+            "word_completion": "unknown_without_lookahead",
+            "worker_step": 13
+          }
+        },
+        "diagnostic": "candidate_action",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L133",
+        "new_measurement_count": 1,
+        "physical_replay_count": 4,
+        "related_events": [],
+        "status": "measured",
+        "step": 13,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "new_measurement_count",
+          "physical_replay_count",
+          "candidate_action"
+        ]
+      },
+      {
+        "anchor_kind": "first_cached_review",
+        "anchor_kinds": [
+          "first_cached_review"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 3,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 4,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "activation_patch_step_size": 0.03,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:b3eb0d56a18d5929d059ff9a",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.05,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:7d3dfce1cef04a39f7bc0eda",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0500",
+            "target_mass_delta": -0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.05,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:ac5be8f2ba5a21b75901d81e",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0500",
+            "target_mass_delta": -0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.08,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:0bcfc27599a165a47176adb3",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "target_mass_delta": -0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.08,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:cfba098e73a3a3276e62012a",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.0800",
+            "target_mass_delta": -0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.12,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:a936ab8be5e2699346ff0e00",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.1200",
+            "target_mass_delta": -0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": -0.007812,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.12,
+            "actual_delta_class": "rank_carrier",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:4d2990ea4d9b6743d5fafe5b",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|mlp_out|L27|source_body|source_term_token|blend|a0.0300|step_size=0.1200",
+            "target_mass_delta": -0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.03,
+            "actual_delta_class": "dead_actuator",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:5904370022f992bdbe6a20ae",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_post|L27|source_body|source_term_token|blend|a0.0300",
+            "target_mass_delta": 0.0,
+            "target_piece": " Sel",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0
+          }
+        ],
+        "candidate_rows_omitted": 14,
+        "diagnostic": "activation_patch_candidate_review",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L103",
+        "matrix": {
+          "measurement_context_id": null,
+          "measurement_mode": null,
+          "new_measurement_count": null,
+          "no_edit_max_abs_logit_delta": null,
+          "physical_replay_count": null,
+          "row_count": 0,
+          "state_restored": null,
+          "status": "already_replayed",
+          "unavailable_reason": null
+        },
+        "related_events": [],
+        "status": "ok",
+        "step": 9,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      }
+    ],
+    "event_counts": {
+      "controller_command": 18,
+      "controller_decision": 18,
+      "controller_diagnostic_request": 13,
+      "controller_diagnostic_result": 13,
+      "controller_effect_summary": 18,
+      "controller_loop_patience": 13,
+      "controller_observation": 18,
+      "controller_prompt_telemetry": 18,
+      "controller_provider_attempt": 18,
+      "controller_selection": 18,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "log_dir": "/Users/ryospiralarchitect/spiral_intervention_lab/results/iteration_positions_20260922/llama_rerun_1447/live",
+    "log_files": [
+      {
+        "event_counts": {
+          "episode_end": 1,
+          "episode_start": 1
+        },
+        "path": "b0.jsonl",
+        "sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e"
+      },
+      {
+        "event_counts": {
+          "controller_command": 18,
+          "controller_decision": 18,
+          "controller_diagnostic_request": 13,
+          "controller_diagnostic_result": 13,
+          "controller_effect_summary": 18,
+          "controller_loop_patience": 13,
+          "controller_observation": 18,
+          "controller_prompt_telemetry": 18,
+          "controller_provider_attempt": 18,
+          "controller_selection": 18,
+          "episode_end": 1,
+          "episode_start": 1,
+          "observer_check": 4
+        },
+        "path": "c1.jsonl",
+        "sha256": "c3cba3966d8b24069480a0e3201a0c82e200291778cd82eef15981231130f259"
+      }
+    ]
+  },
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "output_diet_contract": {
+    "max_bullets_per_section": 3,
+    "qualitative_affordances_only": true,
+    "what_would_have_helped_schema": "missing_signal: why_it_would_help -> suggested_field"
+  },
+  "qualitative_only": true,
+  "required_output_sections": [
+    "What happened?",
+    "What made the run difficult?",
+    "Most likely failure factors",
+    "Evidence supporting this reading",
+    "What I would try next",
+    "What would have made this easier?",
+    "What should not be concluded",
+    "Controller-perspective note"
+  ],
+  "run_result_digest": {
+    "b0": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "b1": null,
+    "c1": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "controller_model_name": "gpt-5.6-luna",
+    "controller_provider": "openai",
+    "controller_reflection_mode": "off",
+    "seed": 0,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1",
+    "worker_decoder_control_mode": "off",
+    "worker_loop_rescue_edits_per_run": 0,
+    "worker_model_name": "meta-llama/Llama-3.2-3B-Instruct"
+  }
+}

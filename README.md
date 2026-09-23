@@ -41,6 +41,40 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/controller_transaction_design_audit.md`](docs/controller_transaction_design_audit.md)
+  Design audit separates zero trial offers from refused offers. Its synthetic failures
+  motivated a shared round dispatcher and a bounded normal-cap investigation that can
+  measure, conditionally confirm, and return a trial offer before the prefix expires.
+  Apply still needs a separate controller decision; live task uplift is unmeasured.
+
+- [`docs/explicit_prefix_investigation.md`](docs/explicit_prefix_investigation.md)
+  Explicit normal-cap remeasurement creates a new candidate, not inherited permission.
+  Exact physical context is separated from helper-frontier preference. Controller-chosen
+  hold-prefix diagnostics share existing handoff rounds without advancing token/TTL time;
+  physical caps and trial safety/effect checks remain unchanged.
+
+- [`docs/intervention_reachability_audit.md`](docs/intervention_reachability_audit.md)
+  Separates observed no-apply choices from unreachable admission/execution paths.
+  The matched Llama handoff run found readout lift blocked by diagnostic-versus-normal
+  cap mismatch; the audit also fixes ordinary edit TTL before generation and
+  preserves rejection reasons in memory/debriefs. No caps or apply gates are relaxed.
+
+- [`docs/current_prefix_trial_handoff.md`](docs/current_prefix_trial_handoff.md)
+  Current-prefix evidence can reach a bounded controller-chosen trial without
+  advancing generation first. Exact source/site/dose, physical confirmation,
+  one-token TTL and existing caps remain mandatory; diagnostic evidence alone
+  still grants no apply permission. Includes harness budget/TTL audit corrections.
+
+- [`docs/iteration_position_evidence.md`](docs/iteration_position_evidence.md)
+  Prefix-only position facts and bounded same-candidate measurement history;
+  the controller still chooses when to measure. A repeatable paired runner
+  checks GPT-2 and Llama separately, with local checkpoint paths, sealed evidence,
+  unchanged apply gates, and explicit measurement coverage in post-run interviews.
+- [`docs/controller_candidate_actions.md`](docs/controller_candidate_actions.md)
+  Explicit historical-review/current-prefix measurement choices with frozen
+  source and token binding, context-bound request IDs and unchanged apply gates.
+  Luna selected seven current-prefix measurements (28 replays, all restored);
+  B0/C1 still match at 0.938889 with Selim missing. Tool execution is not task uplift.
 - [`docs/llama_live_review_reuse.md`](docs/llama_live_review_reuse.md)
   Fresh Luna/Llama L1 pair: four historical reviews reused without a new charge,
   but all twelve diagnostic slots are still consumed and no explicit new-prefix

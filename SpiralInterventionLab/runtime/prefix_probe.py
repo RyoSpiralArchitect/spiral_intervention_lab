@@ -7,8 +7,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import gc
+import math
 import re
 from typing import Any
 
@@ -128,6 +129,51 @@ def _release_probe_buffers(worker: Any) -> None:
         torch.mps.empty_cache()
 
 
+def normal_cap_variant(worker: Any, frozen: FrozenCandidate) -> FrozenCandidate:
+    """Derive one policy-sized dose, never transfer its parent's measurements."""
+    edit = worker._activation_patch_trial_edit_from_candidate(frozen.descriptor, trial_contract={
+        "max_alpha": 0.15, "norm_clip": 1.0, "trial_budget_class": "primary"})
+    if not edit:
+        raise ValueError("normal_cap_materialization_unavailable")
+    if (edit["target"] != frozen.edit["target"] or edit["op"] != frozen.edit["op"]
+            or edit["source"]["expr"] != frozen.original_source_expr):
+        raise ValueError("normal_cap_changed_source_target_or_operator")
+    old_budget, new_budget = frozen.edit["budget"], edit["budget"]
+    step = new_budget.get("step_size")
+    if (isinstance(step, bool) or not isinstance(step, (int, float)) or not math.isfinite(step)
+            or not 0 < step <= old_budget["step_size"]
+            or {k: v for k, v in new_budget.items() if k != "step_size"}
+            != {k: v for k, v in old_budget.items() if k != "step_size"}):
+        raise ValueError("normal_cap_changed_non_step_budget")
+    if step == old_budget["step_size"]:
+        raise ValueError("already_normal_cap_candidate")
+    # Called while building offers: do not recursively build another packet.
+    ctx = StepContext(packet=getattr(worker, "_last_packet", None) or {},
+                      runtime_state=worker.runtime_state, adapter=worker.adapter,
+                      traces={}, stats={}, active_edits={})
+    if tensor_identity(compile_expr(edit["source"]["expr"])(ctx)) != frozen.source_identity:
+        raise ValueError("normal_cap_source_tensor_changed")
+    candidate_id = identity("frozen_candidate:", [edit["target"], edit["op"], new_budget,
+        frozen.source_identity, frozen.term, frozen.token_id])
+    trace_id = candidate_id + ":source"
+    edit = deepcopy(edit)
+    # The normal materializer supplies the dose, not a trial authorization.
+    edit.setdefault("meta", {}).update(
+        apply_kind="diagnostic_probe", diagnostic_only=True,
+        production_trial_allowed=False, production_apply_allowed=False,
+        production_policy_would_apply=False, certified_for_apply=False,
+        production_trial_budget_class="diagnostic_only", production_trial_followup_allowed=False,
+        hypothesis="normal_cap_prefix_probe", expected_effect="measure_normal_cap_response",
+        production_trial_contract={"trial_budget_class": "diagnostic_only",
+                                   "allow_step_size_cap_release": False, "normal_caps_only": True})
+    edit["source"] = deepcopy(frozen.edit["source"])
+    edit["source"]["expr"]["ref"]["trace_id"] = trace_id
+    edit.update(id="prefix_probe", bundle_key=frozen.objective, focus_feature=frozen.term,
+                phase_objective="readout_escape")
+    return replace(frozen, candidate_id=candidate_id, edit=edit, trace_id=trace_id,
+                   descriptor={**deepcopy(frozen.descriptor), "step_size": step})
+
+
 def _one_token_then_unedited(worker: Any, *, horizon: int, edit: Mapping[str, Any] | None) -> dict[str, Any]:
     command = {"version": "0.1", "decision": "apply", "edits": [deepcopy(edit)]} if edit else None
     first = worker._simulate_decode(max_new_tokens=1, top_k=6, command=command,
@@ -196,6 +242,7 @@ def measure_prefix(worker: Any, frozen: FrozenCandidate, *, horizon: int = 8,
         baseline, null, edited, repeat = trials
         no_edit_control = logit_variation(baseline["first_logits"], null["first_logits"])
         repeat_control = logit_variation(edited["first_logits"], repeat["first_logits"])
+        report.update(no_edit_control=no_edit_control, repeat_control=repeat_control)
         if baseline["continuation_token_ids"] != null["continuation_token_ids"] or edited["continuation_token_ids"] != repeat["continuation_token_ids"]:
             raise ValueError("continuation_repeat_drift")
         metrics = bound_metrics(baseline["first_logits"], edited["first_logits"], frozen.token_id)
@@ -232,6 +279,8 @@ def measure_prefix(worker: Any, frozen: FrozenCandidate, *, horizon: int = 8,
     except Exception as exc:
         report.update(status="incomplete", error=f"{type(exc).__name__}:{exc}",
                       model_forward_token_count_is_lower_bound=True)
+        if isinstance(getattr(exc, "details", None), Mapping):
+            report["readout_failure_details"] = dict(exc.details)
     finally:
         del state.trace_caches[frozen.trace_id]
         state.trace_alignment_step = saved_alignment

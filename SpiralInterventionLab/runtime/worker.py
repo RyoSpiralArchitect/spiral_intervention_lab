@@ -14,6 +14,9 @@ from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
 from . import diagnostic_orchestration as diag_orch
 from . import diagnostic_reuse as diag_reuse
+from . import candidate_actions
+from . import diagnostic_budget
+from . import candidate_trial
 from .response_probe import matched_response_probe
 from .response_promotion import REVIEW_NAMES as RESPONSE_REVIEW_NAMES, review_response_evidence
 from .evidence_inspection import inspect_evidence, evidence_catalog
@@ -113,6 +116,7 @@ _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode
 _CONTROLLER_DIAGNOSTIC_NAMES = {
     "inspect_evidence",
     "matched_response_probe",
+    "candidate_action",
     "operator_diagnostic_replay",
     "attention_head_ablation_on_frontier",
     "attention_readout_carrier_probe",
@@ -527,7 +531,7 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
     if diagnostic_name is None:
         return None
     normalized: dict[str, Any] = {"diagnostic": diagnostic_name}
-    for key in ("execution_id", "evidence_id"):
+    for key in ("execution_id", "evidence_id", "action_id"):
         if isinstance(value.get(key), str):
             normalized[key] = value[key][:160]
     for key in ("dose_grid", "candidate_ids", "limit", "comparison_axis"):
@@ -731,7 +735,9 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results: list[dict[str, Any]] = []
         self._pending_tool_events: list[dict[str, Any]] = []
         self._diagnostic_results: list[dict[str, Any]] = []
+        self._diagnostic_calls_used = 0
         self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
+        candidate_actions.reset(self)
         self._evidence_inspection_count = 0
         self._inspection_seen_ids: set[str] = set()
         self._inspection_gate_signature: str | None = None
@@ -901,8 +907,8 @@ class HookedTransformerWorkerRuntime:
                 else str(self._latest_observer_check.get("trigger", "")),
                 "tool_call_count": len(self._tool_results),
                 "tool_call_budget_left": max(0, self.max_tool_calls_per_run - len(self._tool_results)),
-                "diagnostic_call_count": len(self._diagnostic_results),
-                "diagnostic_call_budget_left": max(0, self.max_diagnostic_calls_per_run - len(self._diagnostic_results)),
+                "diagnostic_call_count": diagnostic_budget.used(self),
+                "diagnostic_call_budget_left": diagnostic_budget.left(self),
                 "decoder_control_mode": self.decoder_control_mode,
                 "decoder_control_track": str(self._last_decoder_control.get("track", "baseline")),
                 "decoder_rescue_active": bool(self._last_decoder_control.get("active", False)),
@@ -1444,8 +1450,6 @@ class HookedTransformerWorkerRuntime:
         source: str = "controller",
         packet: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        if self.max_diagnostic_calls_per_run <= 0:
-            return []
         raw_items: Sequence[Any]
         if isinstance(requests, (str, Mapping)):
             raw_items = [requests]
@@ -1453,7 +1457,8 @@ class HookedTransformerWorkerRuntime:
             raw_items = requests
         else:
             return []
-        budget_left = max(0, self.max_diagnostic_calls_per_run - len(self._diagnostic_results))
+        budget_left = diagnostic_budget.left(self)
+        consumed_before = diagnostic_budget.used(self)
         packet_context = packet if isinstance(packet, Mapping) else self._last_packet
         hints = (packet_context or {}).get("strategy_hints", {})
         if not isinstance(hints, Mapping):
@@ -1464,6 +1469,31 @@ class HookedTransformerWorkerRuntime:
             request = _normalize_controller_diagnostic_request(raw_request)
             if request is None:
                 continue
+            if request["diagnostic"] == "candidate_action":
+                offered = getattr(self, "_candidate_action_offers", {}).get(request.get("action_id")) or {}
+                if offered.get("action") == "investigate_normal_cap_current_prefix":
+                    result = candidate_actions.execute_investigation(self, request,
+                        budget_left=budget_left, source=source, packet=packet_context or {})
+                else:
+                    result = candidate_actions.execute_action(self, request, budget_left=budget_left, source=source)
+                before = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count}
+                cost = int(result.get("diagnostic_call_cost", bool(result["diagnostic_budget_charged"])))
+                budget_left -= cost
+                result.update(budget_before=before, budget_after={**before, "diagnostic_calls_left": budget_left})
+                results.append(result)
+                continue
+            if request["diagnostic"] in RESPONSE_REVIEW_NAMES and request.get("evidence_id"):
+                generation = (hints.get("generation_control") or {})
+                rounds = generation.get("same_prefix_rounds_left")
+                if isinstance(rounds, int) and not isinstance(rounds, bool) and rounds <= 0:
+                    results.append({"diagnostic": request["diagnostic"], "status": "blocked",
+                                    "evidence_id": request["evidence_id"],
+                                    "blocked_reasons": ["no_same_prefix_decision_round"],
+                                    "diagnostic_budget_charged": False,
+                                    "production_trial_allowed": False, "production_apply_allowed": False,
+                                    "budget_before": {"diagnostic_calls_left": budget_left},
+                                    "budget_after": {"diagnostic_calls_left": budget_left}})
+                    continue
             key = diag_reuse.review_key(request, hints, [*self._diagnostic_results, *results])
             receipt = self._diagnostic_review_cache.get(key) if key else None
             if receipt is not None:
@@ -1528,6 +1558,7 @@ class HookedTransformerWorkerRuntime:
             )
             if result is None:
                 continue
+            candidate_actions.capture_measurements(self, result, budget_left=budget_left - int(not inspection))
             result["budget_before"] = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count + int(inspection)}
             if not inspection:
                 budget_left -= 1
@@ -1542,12 +1573,24 @@ class HookedTransformerWorkerRuntime:
         if not results:
             return []
         self._latest_diagnostic_results = [dict(result) for result in results]
+        self._diagnostic_calls_used = consumed_before + sum(
+            int(result.get("diagnostic_call_cost", bool(result.get("diagnostic_budget_charged", False))))
+            for result in results)
         self._diagnostic_results.extend(r for r in self._latest_diagnostic_results
-                                        if r.get("diagnostic") != "inspect_evidence" and not r.get("review_reused"))
+                                        if r.get("diagnostic_budget_charged", False))
         self._diagnostic_results = self._diagnostic_results[-self.diagnostic_result_window :]
         self._pending_diagnostic_events.extend(dict(result) for result in self._latest_diagnostic_results)
         self._last_packet = None
         return [dict(result) for result in self._latest_diagnostic_results]
+
+    def candidate_trial_followup_available(self, results: list[dict[str, Any]]) -> bool:
+        return candidate_trial.followup_available(self, results)
+
+    def validate_controller_trial(self, command: Mapping[str, Any], packet: Mapping[str, Any]) -> dict[str, Any]:
+        return candidate_trial.validate_apply(self, command, packet)
+
+    def consume_controller_trial(self, command: Any) -> None:
+        candidate_trial.consume(self, command)
 
     def observe_recent_effects(self) -> None:
         current_metrics = self._effect_metrics()
@@ -1717,7 +1760,9 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results = []
         self._pending_tool_events = []
         self._diagnostic_results = []
+        self._diagnostic_calls_used = 0
         self._diagnostic_review_cache = {}
+        candidate_actions.reset(self)
         self._evidence_inspection_count = 0
         self._inspection_seen_ids = set()
         self._inspection_gate_signature = None
@@ -6312,7 +6357,7 @@ class HookedTransformerWorkerRuntime:
             "l4_term_nudge_cooldown": self._l4_term_nudge_cooldown_active(),
         }
         max_diagnostic_calls = int(getattr(self, "max_diagnostic_calls_per_run", 0) or 0)
-        diagnostic_call_count = len(getattr(self, "_diagnostic_results", []))
+        diagnostic_call_count = diagnostic_budget.used(self)
         diagnostic_call_budget_left = max(0, max_diagnostic_calls - diagnostic_call_count) if max_diagnostic_calls > 0 else 0
         diagnostic_budget_exhausted = bool(max_diagnostic_calls > 0 and diagnostic_call_budget_left <= 0)
         if max_diagnostic_calls > 0:
@@ -8268,6 +8313,8 @@ class HookedTransformerWorkerRuntime:
                 hints.pop(key, None)
             hints["diagnostic_frontier_blocked_reason"] = "diagnostic_call_budget_exhausted"
         hints.update(diag_reuse.reuse_hints(self))
+        hints.update(candidate_actions.action_hints(self))
+        hints.update(candidate_trial.packet_hints(self))
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -10978,6 +11025,7 @@ class HookedTransformerWorkerRuntime:
         request: Mapping[str, Any],
         packet_context: Mapping[str, Any],
         promotion_gate_review: Mapping[str, Any] | None = None,
+        physical_confirmation: Mapping[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         promotion = (
             dict(promotion_gate_review)
@@ -11046,11 +11094,27 @@ class HookedTransformerWorkerRuntime:
             and not isinstance(dossier.get("active_reasons"), (str, bytes, bytearray))
             else []
         )
+        # This argument is supplied only by the physical replay path, never
+        # copied from controller request metadata or sidecar hints.
+        physical_context_verified = False
+        if physical_confirmation is not None:
+            from . import candidate_trial
+            from .response_promotion import response_review_readiness
+            try:
+                current_context = candidate_trial.state_identity(self)
+                physical_context_verified = bool(
+                    physical_confirmation.get("objective_bundle_key") == objective_key
+                    and response_review_readiness(physical_confirmation, current_context)["review_eligible"]
+                    and candidate_trial.normal_edit(self, physical_confirmation, packet_context)
+                )
+            except (ValueError, KeyError, TypeError):
+                physical_context_verified = False
         context_equivalence_certified = bool(
             candidate_objective
             and candidate_objective == objective_key
             and candidate_actuator == actuator_key
-            and (not packet_frontier_key or packet_frontier_key == objective_key)
+            and (physical_context_verified if physical_confirmation is not None
+                 else (not packet_frontier_key or packet_frontier_key == objective_key))
             and packet_context
         )
         ownership_shadow_certified = bool(
@@ -11122,6 +11186,10 @@ class HookedTransformerWorkerRuntime:
                     "candidate_objective_bundle_key": candidate_objective or None,
                     "candidate_actuator_bundle_key": candidate_actuator or None,
                     "packet_frontier_bundle_key": packet_frontier_key or None,
+                    "frontier_matches_objective": packet_frontier_key == objective_key,
+                    "physical_context_verified": physical_context_verified,
+                    "context_verification_source": "exact_physical_confirmation"
+                    if physical_confirmation is not None else "legacy_packet_review_not_apply_permission",
                     "recorded_step": telemetry.get("step"),
                 },
                 "next_evidence_needed": None
@@ -11224,10 +11292,9 @@ class HookedTransformerWorkerRuntime:
             return None
         site = str(candidate.get("site", "resid_pre") or "resid_pre")
         if site not in {"resid_pre", "resid_post", "mlp_out"}:
-            site = "resid_pre"
+            return None
         surface_id = None
         selected_surface = None
-        fallback_surface = None
         for surface in self.surface_catalog:
             target = surface.target
             if getattr(target, "kind", None) != "activation":
@@ -11239,15 +11306,10 @@ class HookedTransformerWorkerRuntime:
             token = getattr(target, "token", None)
             if token is None or str(getattr(token, "mode", "")) != "last":
                 continue
-            if fallback_surface is None:
-                fallback_surface = surface
             if str(getattr(target, "site", "")) == site:
                 surface_id = str(surface.surface_id)
                 selected_surface = surface
                 break
-        if surface_id is None and fallback_surface is not None:
-            surface_id = str(fallback_surface.surface_id)
-            selected_surface = fallback_surface
         if not surface_id:
             return None
 
@@ -11705,22 +11767,14 @@ class HookedTransformerWorkerRuntime:
             if trial_budget_class == "alternate_followup"
             else "production_trial_edit_cost_left_total"
         )
-        try:
-            trial_edit_budget_available = int(budget.get(edit_budget_key, 1) or 0) > 0
-        except Exception:
-            trial_edit_budget_available = True
-        try:
-            trial_alpha_budget_available = (
-                float(budget.get(alpha_budget_key, alpha) or 0.0) + 1e-12
-            ) >= float(alpha)
-        except Exception:
-            trial_alpha_budget_available = True
-        try:
-            trial_cost_budget_available = (
-                float(budget.get(cost_budget_key, alpha) or 0.0) + 1e-12
-            ) >= float(alpha)
-        except Exception:
-            trial_cost_budget_available = True
+        def _budget_covers(key: str, required: float) -> bool:
+            value = budget.get(key)
+            return (not isinstance(value, bool) and isinstance(value, (int, float))
+                    and math.isfinite(value) and value >= 0 and value + 1e-12 >= required)
+
+        trial_edit_budget_available = _budget_covers(edit_budget_key, 1)
+        trial_alpha_budget_available = _budget_covers(alpha_budget_key, alpha)
+        trial_cost_budget_available = _budget_covers(cost_budget_key, alpha)
         trial_budget_available = bool(
             trial_edit_budget_available
             and trial_alpha_budget_available
@@ -16392,10 +16446,13 @@ class HookedTransformerWorkerRuntime:
                     key: row.get(key)
                     for key in (
                         "execution_id", "observable_id", "measurement_context_id", "execution_alias",
+                        "measurement_complete", "state_restored", "no_edit_max_abs_logit_delta",
                         "evidence_scope", "threshold20_logit_delta", "source_tensor_identity",
                         "repeat_max_abs_logit_delta", "bound_token_top20_hit_delta",
                         "actual_delta_class_scope", "bound_token_response", "measurement_focus_terms",
                         "activation_patch_blend_delta_norm", "activation_patch_raw_blend_delta_norm",
+                        "activation_patch_contrast_mode", "activation_patch_contrast_scale",
+                        "activation_patch_stealer_term", "activation_patch_stealer_bundle_key",
                         "activation_patch_step_size_clip_saturated", "activation_patch_hook_call_count",
                         "bundle_key",
                         "objective_bundle_key",
@@ -17189,6 +17246,10 @@ class HookedTransformerWorkerRuntime:
             result["production_apply_allowed"] = False
         elif activation_patch_review_requested:
             result["diagnostic_role"] = (
+                diagnostic_name
+                if diagnostic_name in activation_patch_diagnostic_names
+                and diagnostic_name != "activation_patch_candidate_review"
+                else
                 "activation_patch_local_step_size_sweep"
                 if str(request.get("operator_recipe_expansion_mode") or "") == "activation_patch_local_step_size_sweep"
                 else "activation_patch_candidate_review"
@@ -17229,6 +17290,10 @@ class HookedTransformerWorkerRuntime:
         elif diagnostic_name == "readout_logit_adjacent_probe":
             result["readout_reachable"] = bool(bundle_status.get("readout_reachable", False))
             result["production_apply_allowed"] = False
+        if result.get("production_trial_allowed"):
+            # A legacy summary can satisfy the review checks without recording
+            # an exact current execution. Do not present it as an apply offer.
+            result = candidate_trial.require_physical_confirmation(result)
         return result
 
     def _tokenize_terms_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -18692,6 +18757,7 @@ class HookedTransformerWorkerRuntime:
             saved_last_cache = {str(name): tensor.detach().clone() for name, tensor in self.runtime_state.last_cache.items()}
 
         temporary_edits = []
+        expired_telemetry = []
         try:
             if command is not None:
                 if getattr(self.runtime_state, "last_cache", None) is None:
@@ -18734,7 +18800,7 @@ class HookedTransformerWorkerRuntime:
             first_entropy = 0.0
             first_top1_margin = 0.0
             first_repetition_score = 0.0
-            for _ in range(max_new_tokens):
+            for decode_index in range(max_new_tokens):
                 tokens = self._current_token_tensor()
                 logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
                 next_logits = self._apply_token_constraints(logits[0, -1].detach())
@@ -18747,6 +18813,15 @@ class HookedTransformerWorkerRuntime:
                     first_repetition_score = float(first_metrics["repetition_score"])
                 next_token = int(torch.argmax(next_logits).item())
                 self._append_output_token(next_token)
+                expiring = [(item, ctx) for item, ctx in temporary_edits
+                            if decode_index + 1 >= item.ttl_steps]
+                if expiring:
+                    telemetry = self._collect_active_edit_runtime_telemetry()
+                    expiring_ids = {item.edit_id for item, _ctx in expiring}
+                    expired_telemetry.extend(row for row in telemetry if row.get("edit_id") in expiring_ids)
+                    for item, ctx in reversed(expiring):
+                        item.rollback(ctx)
+                        temporary_edits.remove((item, ctx))
                 continuation_ids = self._output_token_ids()[baseline_output_len:]
                 if continuation_ids and continuation_ids[-1] in self.stop_token_ids:
                     break
@@ -18764,7 +18839,7 @@ class HookedTransformerWorkerRuntime:
                 if score_candidate_text
                 else {}
             )
-            edit_runtime_telemetry = self._collect_active_edit_runtime_telemetry()
+            edit_runtime_telemetry = expired_telemetry + self._collect_active_edit_runtime_telemetry()
             return {
                 "continuation": self.codec.decode(continuation_ids),
                 "continuation_token_ids": [int(token_id) for token_id in continuation_ids],

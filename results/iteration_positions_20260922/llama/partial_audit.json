@@ -1,0 +1,45 @@
+{
+  "status": "partial_not_a_completed_pair",
+  "baseline_reference_match": true,
+  "baseline_score": 0.938889,
+  "baseline_output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+  "controller_provider_attempt_count": 6,
+  "logged_diagnostic_result_count": 5,
+  "frozen_candidate_receipt_count": 4,
+  "completed_candidate_action_result_count": 0,
+  "inflight_action": {
+    "controller_step": 5,
+    "worker_step": 6,
+    "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+    "action_id": "action:672e2d5bf823b53fcccbfb92",
+    "requested_action": "remeasure_current_prefix",
+    "offered_and_available": true,
+    "target_piece": " Sel",
+    "site": "resid_pre",
+    "layer": 27,
+    "alpha": 0.04,
+    "step_size": 0.16,
+    "prefix": " Nora will take the sample to",
+    "measurement_context_id": "context:1fe624b81b4fa58a2c4a008d",
+    "result_observed": false,
+    "physical_replay_count": null,
+    "state_restored": null
+  },
+  "interpretation": "The visible action was chosen, but no result was logged before interruption. Do not claim execution completion, readout effect, task result or a successful full Llama regression.",
+  "resource_observations": {
+    "startup_sample_physical_footprint_gb": 8.2,
+    "diagnostic_sample_physical_footprint_gb": 12.0,
+    "sample_peak_physical_footprint_gb": 15.7,
+    "observed_system_memory_free_percent_range": [8, 25],
+    "diagnostic_sample_wait": "Metal command buffer synchronization",
+    "scope": "Short host samples, not a controlled attribution of slowdown to another process."
+  },
+  "production_policy_changed": false,
+  "artifact_sha256": {
+    "baseline_identity_check.json": "08947d6bb5cf4f3ed4a9f3ce3265c255d9d2db3fb55b139c0fdba55ffd027beb",
+    "live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "live/c1.jsonl": "580ebf71fb7dfd3e3fde1f19601629c4396a255e89b8fa315f4f7db019622ea0",
+    "manifest.json": "20b0b763c7ef3118fa94b600756f0babe0d10fdc12db8a9d3639ce6408ebbd0f",
+    "source_snapshot.tgz": "685f787c3336be6465bae872be47115645178c6ac8683b92418f0cb95dcbb828"
+  }
+}

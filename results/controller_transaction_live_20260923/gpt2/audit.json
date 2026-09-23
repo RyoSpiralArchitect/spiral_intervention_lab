@@ -1,0 +1,73 @@
+{
+  "profile": "gpt2_control",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 20
+  },
+  "command_decisions": {
+    "noop": 20
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 2,
+    "readout_gap_confirmation_or_variant_sweep": 1,
+    "objective_rotation_pipeline": 2,
+    "carrier_to_actuator_conversion_sweep": 4,
+    "inspect_evidence": 1
+  },
+  "charges": {
+    "diagnostic_calls_left": 12,
+    "inspection_calls_left": 1
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 399368,
+    "output_tokens": 5106,
+    "cached_input_tokens": 54720
+  },
+  "position_exposure_steps": [],
+  "candidate_action_counts": {},
+  "candidate_action_statuses": {},
+  "action_measurement_count": 0,
+  "action_physical_replay_count": 0,
+  "action_transaction_statuses": {},
+  "visible_trial_offer_count": 0,
+  "action_contract_evidence": "not_exercised",
+  "action_timeline": [],
+  "production_policy_changed": true,
+  "physical_policy_caps_changed": false,
+  "candidate_handoff_rounds": 2,
+  "prefix_hold_requests": 11,
+  "prefix_holds_accepted": 9,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "6004740b66990a9cb0700270bd0d8ff233689fd84c073c2c17fa87c31f70ec7e",
+    "source_snapshot.tgz": "62fd67bf93c84bc786cf11d59d0c81ed748aa0fb2a3b29229d445a7c6cf792d1",
+    "manifest.json": "4f961602aaca391808a863f9e8474f4af806700615a1cdf8544f8fad81449647",
+    "live/b0.jsonl": "5c7576b2a3f45e11f0e7b09dd8b257c30070647e325bc3b90c15260e498b2acf",
+    "live/post_run_debrief.md": "0b29af52e40955d89f4ef7a2d835cdb2f6c3030f7672b6452e22f9269d5eb092",
+    "live/post_run_debrief.json": "8d2507e4f54fb295682139db8092b49d306e17377cb2bd189ed1da17ffe1a368",
+    "live/c1.jsonl": "1e3d157efe474213081b1078404624a3e0851bbae980bb2a01025bc356957d6c",
+    "live/post_run_debrief_input.json": "a6e9bced5f7b3ad9718d1358d030ae8d1b2e4031da50fece8e7910524effb5c3",
+    "live/experiment_summary.json": "45b65aad117d67e42fb0ad5ed1314f4cef7df1f11514cd7f2ba9dead28c5a0d3"
+  }
+}

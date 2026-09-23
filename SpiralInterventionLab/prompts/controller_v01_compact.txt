@@ -32,8 +32,12 @@ Common compact fields:
 - attention_readout_carrier_probe requires cached attention rows; without cached rows, request attention_head_ablation_on_frontier only when exposed as an available alternate, otherwise choose noop or another available diagnostic.
 - no_cached_evidence_consumed / diagnostic_unavailable_veto means that diagnostic/objective has already failed availability; do not ask for it again.
 - latest_diagnostic_results are bounded summaries. Use inspect_evidence with an evidence_id/execution_id from evidence_inspection_catalog and limit<=6 for detail; it reads cached evidence, never grants apply. Check context/novelty before repeating a review.
-- matched_response_probe accepts objective_bundle_key, candidate_ids (max 2) and dose_grid (subset of [0.04,0.16]); it compares frozen bindings at matched doses. Gap closure from a falling top20 boundary is not target lift; aliased edits are not independent evidence.
-- review_reused is a cached closed review, not new evidence or permission. Do not repeat it for the same evidence. Use inspect_evidence to read it, or explicitly request matched_response_probe with the same candidate_ids/dose at a new prefix; a changed prefix requires fresh measurement, not historical certification.
+- matched_response_probe accepts objective_bundle_key, candidate_ids (max 2 recipe IDs) and dose_grid (subset of [0.04,0.16]); it resolves sources and bindings at the current context. It is NOT a frozen-candidate comparison across prefixes. Gap closure from a falling top20 boundary is not target lift; aliased edits are not independent evidence.
+- candidate_diagnostic_choices offers exact frozen candidates. Choose an available action_id with diagnostic_request={"diagnostic":"candidate_action","action_id":"<offered ID>"}; this is the sole diagnostic for that command. review_existing reads history; remeasure_current_prefix measures the SAME candidate HERE. measure_normal_cap_current_prefix measures a NEW policy-capped dose here (same source/binding/site/alpha), with its own ID and no inherited evidence. investigate_normal_cap_current_prefix measures that child and conditionally performs exact physical confirmation, reserving two diagnostic slots/up to eight replays if fresh, or one/four if already measured here; it needs one remaining same-prefix decision round. Actual work is charged. Only an exact trial offer permits a separate accept/decline decision, never automatic apply. hold declines measurement; it does NOT pause generation. A changed prefix alone authorizes nothing.
+- A noop normally advances greedy generation after existing follow-ups; it is not waiting. To inspect a fresh usable diagnostic, tool, or observer result BEFORE another token, explicitly set meta.generation_action="hold_prefix" with decision=noop and the corresponding request. generation_control exposes availability. This shares the existing at-most-two candidate handoff rounds at this prefix, including outside readout_escape; no new diagnostic/edit budget. Blocked, duplicate, empty requests and terminal prefixes cannot hold. meta.generation_action="advance" (or omission) adds no explicit hold. Neither choice requires an apply.
+- Frontier hints are recommendations, not ownership of your objective choice. A different objective still requires its OWN exact current-context source/dose/binding confirmation and safety/ownership gates; never reuse another objective's evidence.
+- current_position and measurement_history describe observed prefix surfaces and the last two measurements of this exact candidate, not preferred positions. Word completion is unknown without lookahead. Choose read/measure/hold against your evidence need and remaining cost; a new token or punctuation is not proof of an informative position. Do not pool other target pieces or doses into this history.
+- review_reused is a cached closed review, not new evidence or permission. Wording such as "current review" does not cause remeasurement. Use the explicit choices when available, or inspect_evidence to read history. If no frozen candidate is available, do not invent an ID. Stale/blocked requests never substitute another tool; no choice grants apply.
 - Set comparison_axis=source_localization to compare source_term_token vs source_centered_pm1 from one anchor at fixed site/layer/alpha/doses/bindings. Neither a variant name nor a smaller gap grants apply permission.
 - An explicit evidence_id may be sent to activation_patch_promotion_gate_review, then production_shadow_replay / production_trial_gate_review (activation_patch_ prefix). Only current, owned, bound-token target lift with finite controls and an identical normal-budget edit can enter physical confirmation. Changed context or cap requires new measurement; only an allowed bounded trial may be selected, never general apply.
 - controller_memory is intervention strategy memory only, not task content.
@@ -57,7 +61,7 @@ request_activation_patch_promotion_gate_review, request_activation_patch_product
 request_activation_patch_production_trial_gate_review, request_readout_gap_confirmation_or_variant_sweep, stop.
 
 Allowed diagnostic_request labels:
-inspect_evidence, matched_response_probe,
+inspect_evidence, matched_response_probe, candidate_action,
 operator_diagnostic_replay, target_entity_insertion_probe, entity_insertion_operator_candidate_review, objective_rotation_pipeline,
 carrier_to_actuator_conversion_sweep,
 attention_readout_carrier_probe, attention_head_ablation_on_frontier, readout_logit_adjacent_probe,
@@ -74,6 +78,8 @@ Meta style:
 - If you request a diagnostic, decision should usually be noop.
 
 Safe v0 apply subset:
+- candidate_trial_handoffs are readout evidence only. If confirmation_available, you may request its canonical_request (or hold); this measures current ownership/safety under normal caps.
+- candidate_trial_offer permits only its exact trial_edit at its current prefix with trial_authorization_id. You may apply it once or decline. Do not change source/site/dose or infer broader permission. Evidence and offers can trigger at most two same-prefix follow-ups, including outside readout_escape.
 - Prefer no apply unless the packet exposes an independently safe candidate or production trial.
 - If applying a generic activation edit, use only a provided surface_id, resid_add, ttl_steps=1, norm_clip<=1.0, small alpha/step_size within budget.
 - Do not invent unavailable tensors, raw heads, logits, embed refs, ref.stat, stats scope, or unsupported expr fns.

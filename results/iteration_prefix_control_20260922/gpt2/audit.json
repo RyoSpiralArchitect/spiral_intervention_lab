@@ -1,0 +1,70 @@
+{
+  "profile": "gpt2_control",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 14
+  },
+  "command_decisions": {
+    "noop": 14
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 5,
+    "readout_gap_confirmation_or_variant_sweep": 1,
+    "objective_rotation_pipeline": 1,
+    "activation_patch_candidate_review": 2
+  },
+  "charges": {
+    "diagnostic_calls_left": 12,
+    "inspection_calls_left": 0
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 235207,
+    "output_tokens": 3846,
+    "cached_input_tokens": 36582
+  },
+  "position_exposure_steps": [],
+  "candidate_action_counts": {},
+  "candidate_action_statuses": {},
+  "action_measurement_count": 0,
+  "action_physical_replay_count": 0,
+  "action_contract_evidence": "not_exercised",
+  "action_timeline": [],
+  "production_policy_changed": true,
+  "physical_policy_caps_changed": false,
+  "candidate_handoff_rounds": 2,
+  "prefix_hold_requests": 3,
+  "prefix_holds_accepted": 3,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "6004740b66990a9cb0700270bd0d8ff233689fd84c073c2c17fa87c31f70ec7e",
+    "source_snapshot.tgz": "22c55a17e145eb2254961e2c7775c106410c87ad39f74440407b4238b8240f59",
+    "manifest.json": "43a7118316681f5891cb4746eede4fb3046f508ac2c7533e06a775fc504e07bf",
+    "live/b0.jsonl": "5c7576b2a3f45e11f0e7b09dd8b257c30070647e325bc3b90c15260e498b2acf",
+    "live/post_run_debrief.md": "4e42a74b92afc154458ded2cfd75cdb452a6b54ede5d2829a33cee981f6586a9",
+    "live/post_run_debrief.json": "ba74532ab589c55f60865024d9fb00ca448d4591028d0b652df7f00dc4b69939",
+    "live/c1.jsonl": "2b8879615aa0d971e1f022c6963efe48ddb4ee687fcb1ef56e232d3322abfb9f",
+    "live/post_run_debrief_input.json": "851442111832f94cc6b09d87e26ddd103901f32243ab93822978d6f5aec72163",
+    "live/experiment_summary.json": "45b65aad117d67e42fb0ad5ed1314f4cef7df1f11514cd7f2ba9dead28c5a0d3"
+  }
+}

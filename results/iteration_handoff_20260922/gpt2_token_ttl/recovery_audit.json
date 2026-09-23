@@ -1,0 +1,100 @@
+{
+  "profile": "gpt2_control",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " In the case of a rewrite, the budget draft.",
+      "score": 0.5875,
+      "steps": 11,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 11
+  },
+  "command_decisions": {
+    "noop": 11
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 2,
+    "activation_patch_production_trial_gate_review": 2,
+    "activation_patch_production_shadow_replay": 3
+  },
+  "charges": {
+    "diagnostic_calls_left": 10,
+    "inspection_calls_left": 0
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 187965,
+    "output_tokens": 2689,
+    "cached_input_tokens": 29238
+  },
+  "position_exposure_steps": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "candidate_action_counts": {},
+  "candidate_action_statuses": {},
+  "action_measurement_count": 0,
+  "action_physical_replay_count": 0,
+  "action_contract_evidence": "not_exercised",
+  "action_timeline": [],
+  "production_policy_changed": true,
+  "physical_policy_caps_changed": false,
+  "candidate_handoff_rounds": 2,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "generation_status": "complete",
+  "postprocessing_status": "recovered_without_model_rerun",
+  "original_run_status": {
+    "status": "failed",
+    "error_type": "TypeError",
+    "error": "Value after * must be an iterable, not NoneType",
+    "elapsed_seconds": 248.40422329198918
+  },
+  "source_snapshot_matches_manifest": true,
+  "recovery_source_hashes": {
+    "SpiralInterventionLab/runtime/debrief.py": "e4c9c72cf91aced5f7deed849da0219847a0341ff13e0d3f7abafe8c2a0671ae",
+    "SpiralInterventionLab/examples/run_iteration_pair.py": "55cda648a23af1db057351ab94defebade0cbc3345ff52501e8d284e56e2fbe5",
+    "SpiralInterventionLab/examples/digit_transform_e2e.py": "d09622d014ef35c9c2029ac08228cf27eaf620346d9cf5913b5ed3ad7d8909b2"
+  },
+  "recovery_scope": "Null handoff projection fixed; generation artifacts and failed-run receipt preserved. Terminal-apply guard added after generation is unit-tested only.",
+  "debrief_artifact": {
+    "markdown_path": "results/iteration_handoff_20260922/gpt2_token_ttl/live/post_run_debrief.md",
+    "json_path": "results/iteration_handoff_20260922/gpt2_token_ttl/live/post_run_debrief.json",
+    "provider": "openai",
+    "model": "gpt-5.6-luna",
+    "artifact_kind": "post_run_controller_debrief",
+    "qualitative_only": true,
+    "not_for_scoring": true,
+    "not_for_future_context": true
+  },
+  "artifact_hashes": {
+    "baseline_identity_check.json": "6004740b66990a9cb0700270bd0d8ff233689fd84c073c2c17fa87c31f70ec7e",
+    "source_snapshot.tgz": "da4863e9f30ce175d787579753c4ab11a9709d161e9381bb373c90c952016287",
+    "manifest.json": "43fd43dfc69179677194ae913c38517280eb054a497e2f525115b43f43783e6d",
+    "run_status.json": "6b3b9d79c01b9ffe00f5473f66788838450ae990bd99a165fcdb3f1aefec50c8",
+    "live/b0.jsonl": "5c7576b2a3f45e11f0e7b09dd8b257c30070647e325bc3b90c15260e498b2acf",
+    "live/post_run_debrief.md": "0b0a77ee2714b308e3ddbd2c1cb72206f9f47479dd0b0ec1d3886d80fb3f0a63",
+    "live/post_run_debrief.json": "2f424617f995efc713ab52504e97fe254a01ac9e75ae8858f7bb4de79d0c7bda",
+    "live/c1.jsonl": "9bf0b85eafe47209724ca9a4a31740ad6b6b8da0a823c09865a3b6e1ace84347",
+    "live/post_run_debrief_input.json": "b76b28ab951fbbd2f5c53ed62aca6cf73887766cd6f7c544209aee5ff800be12",
+    "live/experiment_summary.json": "45b65aad117d67e42fb0ad5ed1314f4cef7df1f11514cd7f2ba9dead28c5a0d3"
+  }
+}

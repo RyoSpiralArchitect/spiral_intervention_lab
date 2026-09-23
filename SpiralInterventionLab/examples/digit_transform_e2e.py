@@ -5346,6 +5346,7 @@ def run_digit_transform_experiment(
     worker_loop_rescue_total_edit_cost: float | None = None,
     max_diagnostic_calls_per_run: int = 8,
     diagnostic_result_window: int = 8,
+    max_candidate_handoff_rounds: int = 2,
 ) -> DigitTransformExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -5403,6 +5404,7 @@ def run_digit_transform_experiment(
         c1_controller=c1_controller,
         b1_controller=b1_controller,
         logger_factory=_logger_factory(log_dir),
+        max_candidate_handoff_rounds=max_candidate_handoff_rounds,
     )
 
     worker = make_worker_runtime()
@@ -5467,6 +5469,7 @@ def run_digit_transform_c1_only_experiment(
     worker_loop_rescue_total_edit_cost: float | None = None,
     max_diagnostic_calls_per_run: int = 8,
     diagnostic_result_window: int = 8,
+    max_candidate_handoff_rounds: int = 2,
 ) -> DigitTransformC1OnlyExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -5516,6 +5519,7 @@ def run_digit_transform_c1_only_experiment(
         worker,
         c1_controller,
         logger=None if logger_factory is None else logger_factory("c1"),
+        max_candidate_handoff_rounds=max_candidate_handoff_rounds,
     )
     surface_ids = tuple(surface["surface_id"] for surface in worker._surface_catalog_raw)
     result = DigitTransformC1OnlyExperimentResult(
@@ -9283,6 +9287,7 @@ def run_digit_transform_sweep(
     worker_loop_rescue_total_edit_cost: float | None = None,
     max_diagnostic_calls_per_run: int = 8,
     diagnostic_result_window: int = 8,
+    max_candidate_handoff_rounds: int = 2,
 ) -> DigitTransformSweepResult:
     resolved_seeds = tuple(int(seed) for seed in seeds)
     if not resolved_seeds:
@@ -9342,6 +9347,7 @@ def run_digit_transform_sweep(
                 worker_loop_rescue_total_alpha=worker_loop_rescue_total_alpha,
                 worker_loop_rescue_total_edit_cost=worker_loop_rescue_total_edit_cost,
                 max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
+                max_candidate_handoff_rounds=max_candidate_handoff_rounds,
                 diagnostic_result_window=diagnostic_result_window,
             )
         )
@@ -9519,6 +9525,8 @@ def _build_parser() -> argparse.ArgumentParser:
         default=8,
         help="Maximum controller diagnostic requests that may execute during one C1 run.",
     )
+    parser.add_argument("--candidate-handoff-rounds", type=int, choices=(0, 1, 2), default=2,
+        help="Shared same-prefix rounds for explicit hold_prefix diagnostics and qualified trial handoffs; no automatic apply.")
     parser.add_argument(
         "--diagnostic-result-window",
         type=int,
@@ -9603,6 +9611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
             max_diagnostic_calls_per_run=args.max_diagnostic_calls_per_run,
+            max_candidate_handoff_rounds=args.candidate_handoff_rounds,
             diagnostic_result_window=args.diagnostic_result_window,
         )
         payload = result.to_dict()
@@ -9639,6 +9648,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
             max_diagnostic_calls_per_run=args.max_diagnostic_calls_per_run,
+            max_candidate_handoff_rounds=args.candidate_handoff_rounds,
             diagnostic_result_window=args.diagnostic_result_window,
         )
         payload = result.to_dict()
@@ -9675,6 +9685,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_loop_rescue_total_alpha=args.worker_loop_rescue_total_alpha,
             worker_loop_rescue_total_edit_cost=args.worker_loop_rescue_total_edit_cost,
             max_diagnostic_calls_per_run=args.max_diagnostic_calls_per_run,
+            max_candidate_handoff_rounds=args.candidate_handoff_rounds,
             diagnostic_result_window=args.diagnostic_result_window,
         )
         payload = sweep.to_dict()

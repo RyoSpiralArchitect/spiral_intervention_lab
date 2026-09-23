@@ -1,0 +1,77 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended after 11 steps without completing the task, producing the same rewrite output and score 0.5875 at `c1.jsonl:L122`.\n- The controller issued no applied action; it requested diagnostics instead because no operator was certified for apply at `c1.jsonl:L30`.\n- Replay diagnostics found small rank-carrier effects, but no candidate passed the production gate at `c1.jsonl:L55`.\n\n## What made the run difficult?\n- Candidate effects were below the required bound-target-lift threshold at `c1.jsonl:L55`.\n- Several candidates also lacked canonical binding or response above variation at `c1.jsonl:L55`.\n- Later review was cached rather than newly measured at `c1.jsonl:L77`.\n\n## Most likely failure factors\n- The tested controls produced negligible target movement and no top-20 hit improvement at `c1.jsonl:L55`.\n- Historical candidate evidence was explicitly not revalidated at `c1.jsonl:L33`.\n- The task remained incomplete despite repeated controller cycles at `c1.jsonl:L122`.\n\n## Evidence supporting this reading\n- The actual matrix recorded target logit changes only around 0.0004–0.0016 and zero top-20 hits at `c1.jsonl:L55`.\n- Four trial handoffs were blocked, primarily for missing bound target lift at `c1.jsonl:L55`.\n- The run reported `task_done: false` at `c1.jsonl:L122`.\n\n## What I would try next\n- Re-measure promising candidates in the exact canonical context before interpreting historical evidence.\n- Prioritize diagnostics that distinguish true target lift from rank-carrier movement.\n- Preserve the no-apply posture until binding, lift, and response-above-variation checks all pass.\n\n## What would have made this easier?\n- unknown_from_supplied_evidence | `c1.jsonl:L55` | missing per-candidate baseline and repeat-variation values: would clarify whether small effects are meaningful -> `baseline_logit`, `repeat_variation`, `effect_confidence`\n- unknown_from_supplied_evidence | `c1.jsonl:L122` | missing intermediate task-progress observations: would show where completion stalled -> `progress_state`, `remaining_constraint`\n- present_but_not_shown | `c1.jsonl:L77` | cached replay details were not exposed: would separate duplicate review from new evidence -> `replay_parent_event_id`, `new_measurement`\n\n## What should not be concluded\n- This run does not establish that every candidate or actuator is ineffective.\n- The diagnostic results do not authorize applying any intervention.\n- The incomplete task does not by itself identify an internal model cause.\n\n## Controller-perspective note\n- I would describe a stalled run with no completed task and no applied action.\n- I kept seeing weak or ambiguous candidate effects and blocked gates.\n- I lacked evidence that any candidate met the required apply criteria.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_058f0f910e14d1e2006ab22cd450a087d2893e64c21c8046f8",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L122",
+        "c1.jsonl:L30",
+        "c1.jsonl:L31",
+        "c1.jsonl:L32",
+        "c1.jsonl:L33",
+        "c1.jsonl:L55",
+        "c1.jsonl:L77"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 116,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 124
+    },
+    "event_counts": {
+      "controller_command": 11,
+      "controller_decision": 11,
+      "controller_diagnostic_request": 10,
+      "controller_diagnostic_result": 10,
+      "controller_effect_summary": 22,
+      "controller_loop_patience": 10,
+      "controller_observation": 11,
+      "controller_prompt_telemetry": 11,
+      "controller_provider_attempt": 11,
+      "controller_selection": 11,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 2
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_v0"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L122",
+      "c1.jsonl:L30",
+      "c1.jsonl:L33",
+      "c1.jsonl:L55",
+      "c1.jsonl:L77"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 6616,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=6613)",
+    "output_tokens": 694,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=86)",
+    "total_tokens": 7310
+  }
+}

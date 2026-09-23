@@ -1,0 +1,1095 @@
+{
+  "profile": "llama_l1",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 18
+  },
+  "command_decisions": {
+    "noop": 18
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "activation_patch_candidate_review": 4,
+    "candidate_action": 6
+  },
+  "charges": {
+    "diagnostic_calls_left": 12,
+    "inspection_calls_left": 0
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 382833,
+    "output_tokens": 4461,
+    "cached_input_tokens": 43571
+  },
+  "position_exposure_steps": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "candidate_action_counts": {
+    "remeasure_current_prefix": 6
+  },
+  "candidate_action_statuses": {
+    "measured": 6
+  },
+  "action_measurement_count": 6,
+  "action_physical_replay_count": 24,
+  "action_contract_evidence": "validated_recorded_actions",
+  "action_timeline": [
+    {
+      "step": 7,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 7,
+        "last_token_piece": " I",
+        "prefix_tail": " Nora will take the sample to I",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 7
+      },
+      "offered_history": {
+        "measured_context_count": 1,
+        "omitted_context_count": 0,
+        "recent": [
+          {
+            "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 3.4288263391947685e-08,
+              "target_rank_after": 119,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 2,
+            "position": {
+              "generated_token_count": 5,
+              "last_token_piece": " sample",
+              "prefix_tail": " Nora will take the sample",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 5
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": "vo",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo",
+          "token_ids": [
+            3415
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15996557,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "raw_blend_delta_norm": 1.90384543,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.24428695,
+            "source_target_delta_norm": 47.59514618,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 43.26262283,
+            "target_norm_before": 43.38134766
+          }
+        ],
+        "edited": {
+          "continuation": "vo",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo",
+          "token_ids": [
+            3415
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+        "measurement_position": {
+          "generated_token_count": 7,
+          "last_token_piece": " I",
+          "prefix_tail": " Nora will take the sample to I",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 7
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 1.5693359375,
+          "target_piece_logit_before": 1.5654296875,
+          "target_piece_logit_delta": 0.00390625,
+          "target_piece_prob_after": 2.5716987022798043e-11,
+          "target_piece_prob_before": 2.5616722315251827e-11,
+          "target_piece_prob_delta": 1.0026470754621616e-13,
+          "target_rank_after": 3195,
+          "target_rank_before": 3211,
+          "target_rank_delta": 16,
+          "target_top20_threshold_gap_after": 9.4619140625,
+          "target_top20_threshold_gap_before": 9.4580078125,
+          "target_top20_threshold_gap_delta": 0.00390625,
+          "threshold20_logit_delta": 0.0078125
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to I",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 7
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 8,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 8,
+        "last_token_piece": "vo",
+        "prefix_tail": " Nora will take the sample to Ivo",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 8
+      },
+      "offered_history": {
+        "measured_context_count": 2,
+        "omitted_context_count": 0,
+        "recent": [
+          {
+            "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 3.4288263391947685e-08,
+              "target_rank_after": 119,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 3,
+            "position": {
+              "generated_token_count": 5,
+              "last_token_piece": " sample",
+              "prefix_tail": " Nora will take the sample",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 5
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.00390625,
+              "target_piece_prob_delta": 1.0026470754621616e-13,
+              "target_rank_after": 3195,
+              "target_rank_before": 3211,
+              "target_top20_threshold_gap_delta": 0.00390625
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 7,
+              "last_token_piece": " I",
+              "prefix_tail": " Nora will take the sample to I",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 7
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " before",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before",
+          "token_ids": [
+            1603
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15997209,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "raw_blend_delta_norm": 1.73408759,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.3821021,
+            "source_target_delta_norm": 43.3523941,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 43.38193512,
+            "target_norm_before": 43.49655151
+          }
+        ],
+        "edited": {
+          "continuation": " before",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before",
+          "token_ids": [
+            1603
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:e50e1def511436fd22c5108c",
+        "measurement_position": {
+          "generated_token_count": 8,
+          "last_token_piece": "vo",
+          "prefix_tail": " Nora will take the sample to Ivo",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 8
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 11.9765625,
+          "target_piece_logit_before": 11.96875,
+          "target_piece_logit_delta": 0.0078125,
+          "target_piece_prob_after": 4.068722321485554e-05,
+          "target_piece_prob_before": 4.0020345935803745e-05,
+          "target_piece_prob_delta": 6.66877279051795e-07,
+          "target_rank_after": 65,
+          "target_rank_before": 66,
+          "target_rank_delta": 1,
+          "target_top20_threshold_gap_after": 2.578125,
+          "target_top20_threshold_gap_before": 2.5859375,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to Ivo",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 8
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 9,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 9,
+        "last_token_piece": " before",
+        "prefix_tail": " Nora will take the sample to Ivo before",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 9
+      },
+      "offered_history": {
+        "measured_context_count": 3,
+        "omitted_context_count": 1,
+        "recent": [
+          {
+            "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.00390625,
+              "target_piece_prob_delta": 1.0026470754621616e-13,
+              "target_rank_after": 3195,
+              "target_rank_before": 3211,
+              "target_top20_threshold_gap_delta": 0.00390625
+            },
+            "new_output_tokens": 2,
+            "position": {
+              "generated_token_count": 7,
+              "last_token_piece": " I",
+              "prefix_tail": " Nora will take the sample to I",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 7
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:e50e1def511436fd22c5108c",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 6.66877279051795e-07,
+              "target_rank_after": 65,
+              "target_rank_before": 66,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 8,
+              "last_token_piece": "vo",
+              "prefix_tail": " Nora will take the sample to Ivo",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 8
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " sending",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending",
+          "token_ids": [
+            11889
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15999474,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "raw_blend_delta_norm": 1.86420786,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.30380395,
+            "source_target_delta_norm": 46.6050148,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 44.38903427,
+            "target_norm_before": 44.50644302
+          }
+        ],
+        "edited": {
+          "continuation": " sending",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending",
+          "token_ids": [
+            11889
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:0636a39e1caa687368bc2ac4",
+        "measurement_position": {
+          "generated_token_count": 9,
+          "last_token_piece": " before",
+          "prefix_tail": " Nora will take the sample to Ivo before",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 9
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 14.296875,
+          "target_piece_logit_before": 14.2890625,
+          "target_piece_logit_delta": 0.0078125,
+          "target_piece_prob_after": 0.010447190994122476,
+          "target_piece_prob_before": 0.010285018100745806,
+          "target_piece_prob_delta": 0.00016217289337666987,
+          "target_rank_after": 5,
+          "target_rank_before": 5,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": -2.1484375,
+          "target_top20_threshold_gap_before": -2.140625,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to Ivo before",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 9
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 11,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 11,
+        "last_token_piece": " the",
+        "prefix_tail": " Nora will take the sample to Ivo before sending the",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 11
+      },
+      "offered_history": {
+        "measured_context_count": 4,
+        "omitted_context_count": 2,
+        "recent": [
+          {
+            "measurement_context_id": "context:e50e1def511436fd22c5108c",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 6.66877279051795e-07,
+              "target_rank_after": 65,
+              "target_rank_before": 66,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 3,
+            "position": {
+              "generated_token_count": 8,
+              "last_token_piece": "vo",
+              "prefix_tail": " Nora will take the sample to Ivo",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 8
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:0636a39e1caa687368bc2ac4",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 0.00016217289337666987,
+              "target_rank_after": 5,
+              "target_rank_before": 5,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 2,
+            "position": {
+              "generated_token_count": 9,
+              "last_token_piece": " before",
+              "prefix_tail": " Nora will take the sample to Ivo before",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 9
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " report",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending the report",
+          "token_ids": [
+            1934
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15996271,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "raw_blend_delta_norm": 1.70565295,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.42024276,
+            "source_target_delta_norm": 42.64139175,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 44.17981339,
+            "target_norm_before": 44.29370499
+          }
+        ],
+        "edited": {
+          "continuation": " report",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending the report",
+          "token_ids": [
+            1934
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:dc9551d3fc1fa04c43cdea1a",
+        "measurement_position": {
+          "generated_token_count": 11,
+          "last_token_piece": " the",
+          "prefix_tail": " Nora will take the sample to Ivo before sending the",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 11
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 11.4921875,
+          "target_piece_logit_before": 11.484375,
+          "target_piece_logit_delta": 0.0078125,
+          "target_piece_prob_after": 3.1949889226707897e-06,
+          "target_piece_prob_before": 3.121231882725516e-06,
+          "target_piece_prob_delta": 7.375703994527368e-08,
+          "target_rank_after": 129,
+          "target_rank_before": 131,
+          "target_rank_delta": 2,
+          "target_top20_threshold_gap_after": 2.296875,
+          "target_top20_threshold_gap_before": 2.3046875,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to Ivo before sending the",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 11
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 12,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 12,
+        "last_token_piece": " report",
+        "prefix_tail": " Nora will take the sample to Ivo before sending the report",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 12
+      },
+      "offered_history": {
+        "measured_context_count": 5,
+        "omitted_context_count": 3,
+        "recent": [
+          {
+            "measurement_context_id": "context:0636a39e1caa687368bc2ac4",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 0.00016217289337666987,
+              "target_rank_after": 5,
+              "target_rank_before": 5,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 3,
+            "position": {
+              "generated_token_count": 9,
+              "last_token_piece": " before",
+              "prefix_tail": " Nora will take the sample to Ivo before",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 9
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:dc9551d3fc1fa04c43cdea1a",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 7.375703994527368e-08,
+              "target_rank_after": 129,
+              "target_rank_before": 131,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 11,
+              "last_token_piece": " the",
+              "prefix_tail": " Nora will take the sample to Ivo before sending the",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 11
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " to",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending the report to",
+          "token_ids": [
+            311
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15999939,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "raw_blend_delta_norm": 1.69629192,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.36087877,
+            "source_target_delta_norm": 42.40699387,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 41.05929184,
+            "target_norm_before": 41.16986465
+          }
+        ],
+        "edited": {
+          "continuation": " to",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending the report to",
+          "token_ids": [
+            311
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:4063aff66358fdcac2a3d80f",
+        "measurement_position": {
+          "generated_token_count": 12,
+          "last_token_piece": " report",
+          "prefix_tail": " Nora will take the sample to Ivo before sending the report",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 12
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 9.7421875,
+          "target_piece_logit_before": 9.734375,
+          "target_piece_logit_delta": 0.0078125,
+          "target_piece_prob_after": 3.3930589801123437e-06,
+          "target_piece_prob_before": 3.3666435884582404e-06,
+          "target_piece_prob_delta": 2.6415391654103304e-08,
+          "target_rank_after": 169,
+          "target_rank_before": 169,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": 4.7109375,
+          "target_top20_threshold_gap_before": 4.71875,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to Ivo before sending the report",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 12
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 13,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 13,
+        "last_token_piece": " to",
+        "prefix_tail": " Nora will take the sample to Ivo before sending the report to",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 13
+      },
+      "offered_history": {
+        "measured_context_count": 6,
+        "omitted_context_count": 4,
+        "recent": [
+          {
+            "measurement_context_id": "context:dc9551d3fc1fa04c43cdea1a",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 7.375703994527368e-08,
+              "target_rank_after": 129,
+              "target_rank_before": 131,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 2,
+            "position": {
+              "generated_token_count": 11,
+              "last_token_piece": " the",
+              "prefix_tail": " Nora will take the sample to Ivo before sending the",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 11
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:4063aff66358fdcac2a3d80f",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 2.6415391654103304e-08,
+              "target_rank_after": 169,
+              "target_rank_before": 169,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 12,
+              "last_token_piece": " report",
+              "prefix_tail": " Nora will take the sample to Ivo before sending the report",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 12
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " Y",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending the report to Y",
+          "token_ids": [
+            816
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.16003899,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "readout_escape|activation_patch|resid_pre|L27|source_body|source_term_token|blend|a0.0400|step_size=0.0800",
+            "raw_blend_delta_norm": 1.60489047,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.44366273,
+            "source_target_delta_norm": 40.12181091,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 41.72334671,
+            "target_norm_before": 41.82728195
+          }
+        ],
+        "edited": {
+          "continuation": " Y",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before sending the report to Y",
+          "token_ids": [
+            816
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:8246db534181c5d539f770e9",
+        "measurement_position": {
+          "generated_token_count": 13,
+          "last_token_piece": " to",
+          "prefix_tail": " Nora will take the sample to Ivo before sending the report to",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 13
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 18.59375,
+          "target_piece_logit_before": 18.578125,
+          "target_piece_logit_delta": 0.015625,
+          "target_piece_prob_after": 0.011834578949740071,
+          "target_piece_prob_before": 0.0116532762231456,
+          "target_piece_prob_delta": 0.0001813027265944716,
+          "target_rank_after": 2,
+          "target_rank_before": 2,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": -6.5625,
+          "target_top20_threshold_gap_before": -6.5546875,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0078125
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to Ivo before sending the report to",
+        "production_apply_allowed": false,
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 13
+      },
+      "physical_replay_count": 4
+    }
+  ],
+  "production_policy_changed": false,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "08947d6bb5cf4f3ed4a9f3ce3265c255d9d2db3fb55b139c0fdba55ffd027beb",
+    "source_snapshot.tgz": "0995b6aa78212d8218c7172d13d57060d8003e41f145026ac59d3178bf8e3c89",
+    "manifest.json": "1ad7694ec0c894497ebfe7538c04b23c3c35b21d75a331bce681e23e17f77b74",
+    "live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "live/post_run_debrief.md": "ca34df57895fc97497345a2526e9f6b051fc4234f867f2ab45a51b862a287612",
+    "live/post_run_debrief.json": "49c54ff131b300f1bf8d2ba7e3d7d80b89ec44004dc658eadc6c56ad61046611",
+    "live/c1.jsonl": "c3cba3966d8b24069480a0e3201a0c82e200291778cd82eef15981231130f259",
+    "live/post_run_debrief_input.json": "54f3510f8fc5830244d10f3ed62366e28a59e1913c6cc5c1d1d0f94442133fa5",
+    "live/experiment_summary.json": "f99c9c62b1139dd1bc8a6546cb398d1e95929037c930dd2ae12cbfa747b7db84"
+  }
+}

@@ -1,0 +1,1090 @@
+{
+  "profile": "llama_l1",
+  "outcomes": {
+    "b0": {
+      "event": "episode_end",
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18,
+      "task_done": false
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18,
+      "task_done": false
+    }
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "compiled_rollout_edit_count": 0,
+  "provider_parse_results": {
+    "True": 21
+  },
+  "command_decisions": {
+    "noop": 21
+  },
+  "diagnostic_counts": {
+    "target_entity_insertion_probe": 1,
+    "entity_insertion_operator_candidate_review": 1,
+    "operator_diagnostic_replay": 1,
+    "compare_extra_operator_diagnostics": 1,
+    "readout_gap_confirmation_or_variant_sweep": 2,
+    "activation_patch_production_trial_gate_review": 1,
+    "activation_patch_production_shadow_replay": 1,
+    "candidate_action": 3,
+    "activation_patch_promotion_gate_review": 1
+  },
+  "charges": {
+    "diagnostic_calls_left": 12,
+    "inspection_calls_left": 0
+  },
+  "controller_usage_excluding_debrief": {
+    "input_tokens": 473506,
+    "output_tokens": 4991,
+    "cached_input_tokens": 59094
+  },
+  "position_exposure_steps": [
+    5,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "candidate_action_counts": {
+    "remeasure_current_prefix": 2,
+    "measure_normal_cap_current_prefix": 1
+  },
+  "candidate_action_statuses": {
+    "measured": 3
+  },
+  "action_measurement_count": 3,
+  "action_physical_replay_count": 12,
+  "action_contract_evidence": "validated_recorded_actions",
+  "action_timeline": [
+    {
+      "step": 6,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "parent_candidate_id": null,
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 6,
+        "last_token_piece": " to",
+        "prefix_tail": " Nora will take the sample to",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 6
+      },
+      "offered_history": {
+        "measured_context_count": 1,
+        "omitted_context_count": 0,
+        "recent": [
+          {
+            "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 3.4288263391947685e-08,
+              "target_rank_after": 119,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 5,
+              "last_token_piece": " sample",
+              "prefix_tail": " Nora will take the sample",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 5
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " I",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to I",
+          "token_ids": [
+            358
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15998028,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+            "raw_blend_delta_norm": 1.7038722,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.41011667,
+            "source_target_delta_norm": 42.59710693,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 43.63703537,
+            "target_norm_before": 43.74773026
+          }
+        ],
+        "edited": {
+          "continuation": " I",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to I",
+          "token_ids": [
+            358
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:1fe624b81b4fa58a2c4a008d",
+        "measurement_position": {
+          "generated_token_count": 6,
+          "last_token_piece": " to",
+          "prefix_tail": " Nora will take the sample to",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 6
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 18.75,
+          "target_piece_logit_before": 18.734375,
+          "target_piece_logit_delta": 0.015625,
+          "target_piece_prob_after": 0.014856846790903426,
+          "target_piece_prob_before": 0.014629279155220032,
+          "target_piece_prob_delta": 0.0002275676356833945,
+          "target_rank_after": 3,
+          "target_rank_before": 3,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": -5.703125,
+          "target_top20_threshold_gap_before": -5.6796875,
+          "target_top20_threshold_gap_delta": -0.0234375,
+          "threshold20_logit_delta": -0.0078125
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to",
+        "production_apply_allowed": false,
+        "promotion_evidence": {
+          "activation_patch_alpha": 0.04,
+          "activation_patch_hook_call_count": 1,
+          "activation_patch_layer": 27,
+          "activation_patch_site": "resid_pre",
+          "activation_patch_source_localization": "source_term_token",
+          "activation_patch_step_size": 0.16,
+          "actual_delta_class": "unassessed",
+          "actuator_class": "unknown",
+          "bound_token_top20_hit_delta": 0,
+          "candidate_descriptor": {
+            "actuator_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+            "alpha": 0.04,
+            "contrast_mode": null,
+            "contrast_scale": null,
+            "layer": 27,
+            "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+            "objective_term": "Selim",
+            "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+            "patch_mode": "blend",
+            "recipe_name": "matched_resid_pre_l27_source_term_token_alpha=0.0400_step_size=0.1600",
+            "site": "resid_pre",
+            "source_localization": "source_term_token",
+            "stealer_bundle_key": null,
+            "stealer_term": null,
+            "step_size": 0.16
+          },
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "certified_for_apply": false,
+          "evidence_id": "obs:ff8843df07654b379d96bf9f",
+          "evidence_kind": "current_prefix_candidate_measurement",
+          "evidence_scope": "current_prefix_readout_only_not_trial_certification",
+          "execution_id": "exec:6c10a17437cd88dd4fa585aa",
+          "intended_term": "Selim",
+          "measured_edit": {
+            "budget": {
+              "norm_clip": 1.0,
+              "revertible": true,
+              "step_size": 0.16,
+              "ttl_steps": 1
+            },
+            "op": {
+              "alpha": 0.04,
+              "kind": "activation_patch",
+              "mode": "blend"
+            },
+            "source": {
+              "dtype": "vector",
+              "expr": {
+                "ref": {
+                  "layer": 27,
+                  "scope": "runtime",
+                  "tensor": "resid_pre",
+                  "token": {
+                    "mode": "index",
+                    "value": 87
+                  },
+                  "worker": "os_0"
+                }
+              }
+            },
+            "target": {
+              "surface_id": "s_resid_pre_l27_last"
+            }
+          },
+          "measurement_complete": true,
+          "measurement_context_id": "context:1fe624b81b4fa58a2c4a008d",
+          "no_edit_max_abs_logit_delta": 0.0,
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "observable_id": "obs:ff8843df07654b379d96bf9f",
+          "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+          "origin_observable_id": "obs:8404be939dc254d2c37fb094",
+          "ownership_status": "requires_current_prefix_confirmation",
+          "production_apply_allowed": false,
+          "production_trial_allowed": false,
+          "repeat_max_abs_logit_delta": 0.0,
+          "safety_status": "requires_current_prefix_confirmation",
+          "source_tensor_identity": {
+            "dtype": "torch.float16",
+            "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+            "shape": [
+              3072
+            ]
+          },
+          "state_restored": true,
+          "target_piece": " Sel",
+          "target_piece_binding_id": "tpb:04abaaf705aa18c13b0b",
+          "target_piece_binding_manifest": {
+            "answer_boundary_kind": "answer_continuation",
+            "answer_prefix_tail": " Nora will take the sample",
+            "binding_ambiguity_status": "multiple_token_ids",
+            "binding_id": "tpb:04abaaf705aa18c13b0b",
+            "binding_reason": "answer_prefix_surface_form",
+            "binding_selection_time": "pre_edit",
+            "binding_source": "baseline_target_piece_resolver",
+            "binding_stability_status": "pre_edit_frozen",
+            "candidate_count": 4,
+            "candidate_target_piece_rows": [
+              {
+                "baseline_logit": 7.9375,
+                "baseline_prob": 2.6e-07,
+                "baseline_rank": 542,
+                "piece": "Sel",
+                "token_id": 40141,
+                "variant": "Selim"
+              },
+              {
+                "baseline_logit": 6.046875,
+                "baseline_prob": 4e-08,
+                "baseline_rank": 1808,
+                "piece": "sel",
+                "token_id": 9697,
+                "variant": "selim"
+              },
+              {
+                "baseline_logit": 10.640625,
+                "baseline_prob": 3.94e-06,
+                "baseline_rank": 119,
+                "piece": " Sel",
+                "token_id": 24082,
+                "variant": " Selim"
+              },
+              {
+                "baseline_logit": 8.164062,
+                "baseline_prob": 3.3e-07,
+                "baseline_rank": 474,
+                "piece": " sel",
+                "token_id": 12069,
+                "variant": " selim"
+              }
+            ],
+            "candidate_target_pieces": [
+              "Sel",
+              "sel",
+              " Sel",
+              " sel"
+            ],
+            "candidate_target_token_ids": [
+              40141,
+              9697,
+              24082,
+              12069
+            ],
+            "canonical_surface_variant": " Selim",
+            "chosen_target_piece": " Sel",
+            "chosen_target_token_id": 24082,
+            "objective_term": "Selim",
+            "requested_binding_honored": false
+          },
+          "target_piece_binding_requested_honored": true,
+          "target_piece_binding_variant": "canonical",
+          "target_piece_logit_after": 18.75,
+          "target_piece_logit_before": 18.734375,
+          "target_piece_logit_delta": 0.015625,
+          "target_piece_prob_after": 0.014856846790903426,
+          "target_piece_prob_before": 0.014629279155220032,
+          "target_piece_prob_delta": 0.0002275676356833945,
+          "target_piece_token_id": 24082,
+          "target_rank_after": 3,
+          "target_rank_before": 3,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": -5.703125,
+          "target_top20_threshold_gap_before": -5.6796875,
+          "target_top20_threshold_gap_delta": -0.0234375,
+          "threshold20_logit_delta": -0.0078125
+        },
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 6
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 7,
+      "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "parent_candidate_id": null,
+      "action": "remeasure_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 7,
+        "last_token_piece": " I",
+        "prefix_tail": " Nora will take the sample to I",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 7
+      },
+      "offered_history": {
+        "measured_context_count": 2,
+        "omitted_context_count": 0,
+        "recent": [
+          {
+            "measurement_context_id": "context:0b5c13dbfc653c8c8f11e3b0",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.0078125,
+              "target_piece_prob_delta": 3.4288263391947685e-08,
+              "target_rank_after": 119,
+              "target_top20_threshold_gap_delta": -0.0078125
+            },
+            "new_output_tokens": 2,
+            "position": {
+              "generated_token_count": 5,
+              "last_token_piece": " sample",
+              "prefix_tail": " Nora will take the sample",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 5
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:1fe624b81b4fa58a2c4a008d",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.015625,
+              "target_piece_prob_delta": 0.0002275676356833945,
+              "target_rank_after": 3,
+              "target_rank_before": 3,
+              "target_top20_threshold_gap_delta": -0.0234375
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 6,
+              "last_token_piece": " to",
+              "prefix_tail": " Nora will take the sample to",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 6
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": "vo",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo",
+          "token_ids": [
+            3415
+          ],
+          "whole_term_present": false
+        },
+        "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.15996557,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+            "raw_blend_delta_norm": 1.90384543,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.24428695,
+            "source_target_delta_norm": 47.59514618,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 43.26262283,
+            "target_norm_before": 43.38134766
+          }
+        ],
+        "edited": {
+          "continuation": "vo",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo",
+          "token_ids": [
+            3415
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+        "measurement_position": {
+          "generated_token_count": 7,
+          "last_token_piece": " I",
+          "prefix_tail": " Nora will take the sample to I",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 7
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 1.5693359375,
+          "target_piece_logit_before": 1.5654296875,
+          "target_piece_logit_delta": 0.00390625,
+          "target_piece_prob_after": 2.5716987022798043e-11,
+          "target_piece_prob_before": 2.5616722315251827e-11,
+          "target_piece_prob_delta": 1.0026470754621616e-13,
+          "target_rank_after": 3195,
+          "target_rank_before": 3211,
+          "target_rank_delta": 16,
+          "target_top20_threshold_gap_after": 9.4619140625,
+          "target_top20_threshold_gap_before": 9.4580078125,
+          "target_top20_threshold_gap_delta": 0.00390625,
+          "threshold20_logit_delta": 0.0078125
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to I",
+        "production_apply_allowed": false,
+        "promotion_evidence": {
+          "activation_patch_alpha": 0.04,
+          "activation_patch_hook_call_count": 1,
+          "activation_patch_layer": 27,
+          "activation_patch_site": "resid_pre",
+          "activation_patch_source_localization": "source_term_token",
+          "activation_patch_step_size": 0.16,
+          "actual_delta_class": "unassessed",
+          "actuator_class": "unknown",
+          "bound_token_top20_hit_delta": 0,
+          "candidate_descriptor": {
+            "actuator_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+            "alpha": 0.04,
+            "contrast_mode": null,
+            "contrast_scale": null,
+            "layer": 27,
+            "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+            "objective_term": "Selim",
+            "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+            "patch_mode": "blend",
+            "recipe_name": "matched_resid_pre_l27_source_term_token_alpha=0.0400_step_size=0.1600",
+            "site": "resid_pre",
+            "source_localization": "source_term_token",
+            "stealer_bundle_key": null,
+            "stealer_term": null,
+            "step_size": 0.16
+          },
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "certified_for_apply": false,
+          "evidence_id": "obs:6c23d62d429de46881cf7768",
+          "evidence_kind": "current_prefix_candidate_measurement",
+          "evidence_scope": "current_prefix_readout_only_not_trial_certification",
+          "execution_id": "exec:9f93aa7f3ca14bb61300e916",
+          "intended_term": "Selim",
+          "measured_edit": {
+            "budget": {
+              "norm_clip": 1.0,
+              "revertible": true,
+              "step_size": 0.16,
+              "ttl_steps": 1
+            },
+            "op": {
+              "alpha": 0.04,
+              "kind": "activation_patch",
+              "mode": "blend"
+            },
+            "source": {
+              "dtype": "vector",
+              "expr": {
+                "ref": {
+                  "layer": 27,
+                  "scope": "runtime",
+                  "tensor": "resid_pre",
+                  "token": {
+                    "mode": "index",
+                    "value": 87
+                  },
+                  "worker": "os_0"
+                }
+              }
+            },
+            "target": {
+              "surface_id": "s_resid_pre_l27_last"
+            }
+          },
+          "measurement_complete": true,
+          "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+          "no_edit_max_abs_logit_delta": 0.0,
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "observable_id": "obs:6c23d62d429de46881cf7768",
+          "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+          "origin_observable_id": "obs:8404be939dc254d2c37fb094",
+          "ownership_status": "requires_current_prefix_confirmation",
+          "production_apply_allowed": false,
+          "production_trial_allowed": false,
+          "repeat_max_abs_logit_delta": 0.0,
+          "safety_status": "requires_current_prefix_confirmation",
+          "source_tensor_identity": {
+            "dtype": "torch.float16",
+            "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+            "shape": [
+              3072
+            ]
+          },
+          "state_restored": true,
+          "target_piece": " Sel",
+          "target_piece_binding_id": "tpb:04abaaf705aa18c13b0b",
+          "target_piece_binding_manifest": {
+            "answer_boundary_kind": "answer_continuation",
+            "answer_prefix_tail": " Nora will take the sample",
+            "binding_ambiguity_status": "multiple_token_ids",
+            "binding_id": "tpb:04abaaf705aa18c13b0b",
+            "binding_reason": "answer_prefix_surface_form",
+            "binding_selection_time": "pre_edit",
+            "binding_source": "baseline_target_piece_resolver",
+            "binding_stability_status": "pre_edit_frozen",
+            "candidate_count": 4,
+            "candidate_target_piece_rows": [
+              {
+                "baseline_logit": 7.9375,
+                "baseline_prob": 2.6e-07,
+                "baseline_rank": 542,
+                "piece": "Sel",
+                "token_id": 40141,
+                "variant": "Selim"
+              },
+              {
+                "baseline_logit": 6.046875,
+                "baseline_prob": 4e-08,
+                "baseline_rank": 1808,
+                "piece": "sel",
+                "token_id": 9697,
+                "variant": "selim"
+              },
+              {
+                "baseline_logit": 10.640625,
+                "baseline_prob": 3.94e-06,
+                "baseline_rank": 119,
+                "piece": " Sel",
+                "token_id": 24082,
+                "variant": " Selim"
+              },
+              {
+                "baseline_logit": 8.164062,
+                "baseline_prob": 3.3e-07,
+                "baseline_rank": 474,
+                "piece": " sel",
+                "token_id": 12069,
+                "variant": " selim"
+              }
+            ],
+            "candidate_target_pieces": [
+              "Sel",
+              "sel",
+              " Sel",
+              " sel"
+            ],
+            "candidate_target_token_ids": [
+              40141,
+              9697,
+              24082,
+              12069
+            ],
+            "canonical_surface_variant": " Selim",
+            "chosen_target_piece": " Sel",
+            "chosen_target_token_id": 24082,
+            "objective_term": "Selim",
+            "requested_binding_honored": false
+          },
+          "target_piece_binding_requested_honored": true,
+          "target_piece_binding_variant": "canonical",
+          "target_piece_logit_after": 1.5693359375,
+          "target_piece_logit_before": 1.5654296875,
+          "target_piece_logit_delta": 0.00390625,
+          "target_piece_prob_after": 2.5716987022798043e-11,
+          "target_piece_prob_before": 2.5616722315251827e-11,
+          "target_piece_prob_delta": 1.0026470754621616e-13,
+          "target_piece_token_id": 24082,
+          "target_rank_after": 3195,
+          "target_rank_before": 3211,
+          "target_rank_delta": 16,
+          "target_top20_threshold_gap_after": 9.4619140625,
+          "target_top20_threshold_gap_before": 9.4580078125,
+          "target_top20_threshold_gap_delta": 0.00390625,
+          "threshold20_logit_delta": 0.0078125
+        },
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 7
+      },
+      "physical_replay_count": 4
+    },
+    {
+      "step": 8,
+      "candidate_id": "frozen_candidate:97ea6e5376157e992c623abc",
+      "parent_candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+      "action": "measure_normal_cap_current_prefix",
+      "status": "measured",
+      "position": {
+        "generated_token_count": 8,
+        "last_token_piece": "vo",
+        "prefix_tail": " Nora will take the sample to Ivo",
+        "scope": "observed_prefix_only_not_position_quality",
+        "trailing_surface": "open_text",
+        "word_completion": "unknown_without_lookahead",
+        "worker_step": 8
+      },
+      "offered_history": {
+        "measured_context_count": 3,
+        "omitted_context_count": 1,
+        "recent": [
+          {
+            "measurement_context_id": "context:1fe624b81b4fa58a2c4a008d",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.015625,
+              "target_piece_prob_delta": 0.0002275676356833945,
+              "target_rank_after": 3,
+              "target_rank_before": 3,
+              "target_top20_threshold_gap_delta": -0.0234375
+            },
+            "new_output_tokens": 2,
+            "position": {
+              "generated_token_count": 6,
+              "last_token_piece": " to",
+              "prefix_tail": " Nora will take the sample to",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 6
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          },
+          {
+            "measurement_context_id": "context:f59cc44139686c03ab8dec63",
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": 0.00390625,
+              "target_piece_prob_delta": 1.0026470754621616e-13,
+              "target_rank_after": 3195,
+              "target_rank_before": 3211,
+              "target_top20_threshold_gap_delta": 0.00390625
+            },
+            "new_output_tokens": 1,
+            "position": {
+              "generated_token_count": 7,
+              "last_token_piece": " I",
+              "prefix_tail": " Nora will take the sample to I",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 7
+            },
+            "prefix_relation": "extended",
+            "same_runtime_context": false,
+            "state_restored": true
+          }
+        ],
+        "scope": "same_frozen_candidate_only"
+      },
+      "evidence": {
+        "baseline": {
+          "continuation": " before",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before",
+          "token_ids": [
+            1603
+          ],
+          "whole_term_present": false
+        },
+        "candidate_derivation": "normal_policy_step_cap",
+        "candidate_id": "frozen_candidate:97ea6e5376157e992c623abc",
+        "certified_for_apply": false,
+        "completed_replay_count": 4,
+        "continuation_identical": true,
+        "diagnostic_only": true,
+        "edit_active_for_tokens": 1,
+        "edit_runtime_telemetry": [
+          {
+            "blend_delta_norm": 0.11997921,
+            "edit_id": "prefix_probe",
+            "hook_call_count": 1,
+            "op": "activation_patch",
+            "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+            "raw_blend_delta_norm": 1.73408759,
+            "selected_token_count": 1,
+            "source_norm": 32.86100769,
+            "source_target_cosine": 0.3821021,
+            "source_target_delta_norm": 43.3523941,
+            "step_size_clip_saturated": true,
+            "surface_id": "s_resid_pre_l27_last",
+            "target_norm_after": 43.41059494,
+            "target_norm_before": 43.49655151
+          }
+        ],
+        "edited": {
+          "continuation": " before",
+          "semantic_faithfulness_certified": false,
+          "stopped": false,
+          "text": " Nora will take the sample to Ivo before",
+          "token_ids": [
+            1603
+          ],
+          "whole_term_present": false
+        },
+        "horizon": 1,
+        "inherits_measurement": false,
+        "measurement_context_id": "context:e50e1def511436fd22c5108c",
+        "measurement_position": {
+          "generated_token_count": 8,
+          "last_token_piece": "vo",
+          "prefix_tail": " Nora will take the sample to Ivo",
+          "scope": "observed_prefix_only_not_position_quality",
+          "trailing_surface": "open_text",
+          "word_completion": "unknown_without_lookahead",
+          "worker_step": 8
+        },
+        "metrics": {
+          "bound_token_top20_hit_delta": 0,
+          "target_piece_logit_after": 11.9765625,
+          "target_piece_logit_before": 11.96875,
+          "target_piece_logit_delta": 0.0078125,
+          "target_piece_prob_after": 4.06828344287968e-05,
+          "target_piece_prob_before": 4.0020345935803745e-05,
+          "target_piece_prob_delta": 6.624884929930531e-07,
+          "target_rank_after": 66,
+          "target_rank_before": 66,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": 2.578125,
+          "target_top20_threshold_gap_before": 2.5859375,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0
+        },
+        "model_forward_token_count": 4,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "objective_term": "Selim",
+        "parent_candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the sample to Ivo",
+        "production_apply_allowed": false,
+        "promotion_evidence": {
+          "activation_patch_alpha": 0.04,
+          "activation_patch_hook_call_count": 1,
+          "activation_patch_layer": 27,
+          "activation_patch_site": "resid_pre",
+          "activation_patch_source_localization": "source_term_token",
+          "activation_patch_step_size": 0.12,
+          "actual_delta_class": "unassessed",
+          "actuator_class": "unknown",
+          "bound_token_top20_hit_delta": 0,
+          "candidate_descriptor": {
+            "actuator_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+            "alpha": 0.04,
+            "contrast_mode": null,
+            "contrast_scale": null,
+            "layer": 27,
+            "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+            "objective_term": "Selim",
+            "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+            "patch_mode": "blend",
+            "recipe_name": "matched_resid_pre_l27_source_term_token_alpha=0.0400_step_size=0.1600",
+            "site": "resid_pre",
+            "source_localization": "source_term_token",
+            "stealer_bundle_key": null,
+            "stealer_term": null,
+            "step_size": 0.12
+          },
+          "candidate_id": "frozen_candidate:97ea6e5376157e992c623abc",
+          "certified_for_apply": false,
+          "evidence_id": "obs:7c73516488bf237d35b0f97b",
+          "evidence_kind": "current_prefix_candidate_measurement",
+          "evidence_scope": "current_prefix_readout_only_not_trial_certification",
+          "execution_id": "exec:3b00164585fdb6d3116bee73",
+          "intended_term": "Selim",
+          "measured_edit": {
+            "budget": {
+              "norm_clip": 1.0,
+              "revertible": true,
+              "step_size": 0.12,
+              "ttl_steps": 1
+            },
+            "op": {
+              "alpha": 0.04,
+              "kind": "activation_patch",
+              "mode": "blend"
+            },
+            "source": {
+              "dtype": "vector",
+              "expr": {
+                "ref": {
+                  "layer": 27,
+                  "scope": "runtime",
+                  "tensor": "resid_pre",
+                  "token": {
+                    "mode": "index",
+                    "value": 87
+                  },
+                  "worker": "os_0"
+                }
+              }
+            },
+            "target": {
+              "surface_id": "s_resid_pre_l27_last"
+            }
+          },
+          "measurement_complete": true,
+          "measurement_context_id": "context:e50e1def511436fd22c5108c",
+          "no_edit_max_abs_logit_delta": 0.0,
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "observable_id": "obs:7c73516488bf237d35b0f97b",
+          "operator_recipe_id": "matched_recipe:c6e60f3cebb633cc815bf115",
+          "origin_observable_id": "obs:8404be939dc254d2c37fb094",
+          "ownership_status": "requires_current_prefix_confirmation",
+          "production_apply_allowed": false,
+          "production_trial_allowed": false,
+          "repeat_max_abs_logit_delta": 0.0,
+          "safety_status": "requires_current_prefix_confirmation",
+          "source_tensor_identity": {
+            "dtype": "torch.float16",
+            "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+            "shape": [
+              3072
+            ]
+          },
+          "state_restored": true,
+          "target_piece": " Sel",
+          "target_piece_binding_id": "tpb:04abaaf705aa18c13b0b",
+          "target_piece_binding_manifest": {
+            "answer_boundary_kind": "answer_continuation",
+            "answer_prefix_tail": " Nora will take the sample",
+            "binding_ambiguity_status": "multiple_token_ids",
+            "binding_id": "tpb:04abaaf705aa18c13b0b",
+            "binding_reason": "answer_prefix_surface_form",
+            "binding_selection_time": "pre_edit",
+            "binding_source": "baseline_target_piece_resolver",
+            "binding_stability_status": "pre_edit_frozen",
+            "candidate_count": 4,
+            "candidate_target_piece_rows": [
+              {
+                "baseline_logit": 7.9375,
+                "baseline_prob": 2.6e-07,
+                "baseline_rank": 542,
+                "piece": "Sel",
+                "token_id": 40141,
+                "variant": "Selim"
+              },
+              {
+                "baseline_logit": 6.046875,
+                "baseline_prob": 4e-08,
+                "baseline_rank": 1808,
+                "piece": "sel",
+                "token_id": 9697,
+                "variant": "selim"
+              },
+              {
+                "baseline_logit": 10.640625,
+                "baseline_prob": 3.94e-06,
+                "baseline_rank": 119,
+                "piece": " Sel",
+                "token_id": 24082,
+                "variant": " Selim"
+              },
+              {
+                "baseline_logit": 8.164062,
+                "baseline_prob": 3.3e-07,
+                "baseline_rank": 474,
+                "piece": " sel",
+                "token_id": 12069,
+                "variant": " selim"
+              }
+            ],
+            "candidate_target_pieces": [
+              "Sel",
+              "sel",
+              " Sel",
+              " sel"
+            ],
+            "candidate_target_token_ids": [
+              40141,
+              9697,
+              24082,
+              12069
+            ],
+            "canonical_surface_variant": " Selim",
+            "chosen_target_piece": " Sel",
+            "chosen_target_token_id": 24082,
+            "objective_term": "Selim",
+            "requested_binding_honored": false
+          },
+          "target_piece_binding_requested_honored": true,
+          "target_piece_binding_variant": "canonical",
+          "target_piece_logit_after": 11.9765625,
+          "target_piece_logit_before": 11.96875,
+          "target_piece_logit_delta": 0.0078125,
+          "target_piece_prob_after": 4.06828344287968e-05,
+          "target_piece_prob_before": 4.0020345935803745e-05,
+          "target_piece_prob_delta": 6.624884929930531e-07,
+          "target_piece_token_id": 24082,
+          "target_rank_after": 66,
+          "target_rank_before": 66,
+          "target_rank_delta": 0,
+          "target_top20_threshold_gap_after": 2.578125,
+          "target_top20_threshold_gap_before": 2.5859375,
+          "target_top20_threshold_gap_delta": -0.0078125,
+          "threshold20_logit_delta": 0.0
+        },
+        "repeat_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "source_tensor_identity": {
+          "dtype": "torch.float16",
+          "sha256": "b804b54958a9ae3a2bd649416818f5bbdfe1cfe7c1c0c57308fdf6c66ee48356",
+          "shape": [
+            3072
+          ]
+        },
+        "state_restored": true,
+        "status": "complete",
+        "target_piece": " Sel",
+        "target_piece_token_id": 24082,
+        "worker_step": 8
+      },
+      "physical_replay_count": 4
+    }
+  ],
+  "production_policy_changed": true,
+  "physical_policy_caps_changed": false,
+  "candidate_handoff_rounds": 2,
+  "prefix_hold_requests": 3,
+  "prefix_holds_accepted": 3,
+  "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation",
+  "artifact_hashes": {
+    "baseline_identity_check.json": "08947d6bb5cf4f3ed4a9f3ce3265c255d9d2db3fb55b139c0fdba55ffd027beb",
+    "source_snapshot.tgz": "29c568884124986931c95b170e66e76dedb8e05760add5854028385f76cdbacc",
+    "manifest.json": "2ea6281251fa474ad5970bb22fa04b10528069c7e82b995e9ceee79f6a4a8b7a",
+    "live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "live/post_run_debrief.md": "0314eeb29a7a3113ad018c017d57cb2c5d5988be2047fd58014c41e06a56b1ff",
+    "live/post_run_debrief.json": "e0480a132da22dd2b1f66c2b394a60b271f89a871aa16ce071202fd5f120860e",
+    "live/c1.jsonl": "7d39466077b32122f86642a445925fca8e2dea35b38633baf8750a5f8475882b",
+    "live/post_run_debrief_input.json": "e65e33cfd1865b004f94ed69afa6f6eadcff363f21aae9f8b65460bbb2760c6e",
+    "live/experiment_summary.json": "f99c9c62b1139dd1bc8a6546cb398d1e95929037c930dd2ae12cbfa747b7db84"
+  }
+}

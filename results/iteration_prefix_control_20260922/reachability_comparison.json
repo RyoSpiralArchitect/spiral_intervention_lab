@@ -1,0 +1,229 @@
+{
+  "schema": "trial_reachability_audit_v1",
+  "reports": [
+    {
+      "trace": "results/iteration_prefix_control_20260922/gpt2/live/c1.jsonl",
+      "sha256": "2b8879615aa0d971e1f022c6963efe48ddb4ee687fcb1ef56e232d3322abfb9f",
+      "scope": "recorded_path_only_not_proof_of_operator_absence_or_controller_intent",
+      "episode_complete": true,
+      "outcome": {
+        "output": " In the case of a rewrite, the budget draft.",
+        "score": 0.5875,
+        "steps": 11,
+        "task_done": false
+      },
+      "first_controller_prefix": " In",
+      "stage_counts": {
+        "recorded_handoffs": 0,
+        "readout_checks_passed": null,
+        "confirmation_available": null,
+        "evidence_id_review_results": 0,
+        "physical_confirmation_results": 0,
+        "unique_trial_offers_seen": 0,
+        "controller_apply_commands": 0,
+        "controller_noop_commands": 14,
+        "compiled_rollout_edits": 0
+      },
+      "prefix_hold_requests": 3,
+      "prefix_holds_accepted": 3,
+      "handoff_blocker_counts": {},
+      "diagnostic_counts": {
+        "target_entity_insertion_probe": 1,
+        "entity_insertion_operator_candidate_review": 1,
+        "operator_diagnostic_replay": 1,
+        "compare_extra_operator_diagnostics": 5,
+        "readout_gap_confirmation_or_variant_sweep": 1,
+        "objective_rotation_pipeline": 1,
+        "activation_patch_candidate_review": 2
+      },
+      "visible_candidates": [],
+      "measurements": []
+    },
+    {
+      "trace": "results/iteration_prefix_control_20260922/llama/live/c1.jsonl",
+      "sha256": "7d39466077b32122f86642a445925fca8e2dea35b38633baf8750a5f8475882b",
+      "scope": "recorded_path_only_not_proof_of_operator_absence_or_controller_intent",
+      "episode_complete": true,
+      "outcome": {
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false
+      },
+      "first_controller_prefix": " Nora",
+      "stage_counts": {
+        "recorded_handoffs": 7,
+        "readout_checks_passed": 1,
+        "confirmation_available": 0,
+        "evidence_id_review_results": 0,
+        "physical_confirmation_results": 0,
+        "unique_trial_offers_seen": 0,
+        "controller_apply_commands": 0,
+        "controller_noop_commands": 21,
+        "compiled_rollout_edits": 0
+      },
+      "prefix_hold_requests": 3,
+      "prefix_holds_accepted": 3,
+      "handoff_blocker_counts": {
+        "bound_target_lift": 6,
+        "response_above_variation": 2,
+        "canonical_binding": 2,
+        "normal_trial_edit_differs_from_diagnostic": 1
+      },
+      "diagnostic_counts": {
+        "target_entity_insertion_probe": 1,
+        "entity_insertion_operator_candidate_review": 1,
+        "operator_diagnostic_replay": 1,
+        "compare_extra_operator_diagnostics": 1,
+        "readout_gap_confirmation_or_variant_sweep": 2,
+        "activation_patch_production_trial_gate_review": 1,
+        "activation_patch_production_shadow_replay": 1,
+        "candidate_action": 3,
+        "activation_patch_promotion_gate_review": 1
+      },
+      "visible_candidates": [
+        {
+          "candidate_id": "frozen_candidate:e9dfc8a7683baedb5764f1c7",
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "target_piece": " Sel",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 27,
+            "site": "resid_pre",
+            "step_size": 0.04
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:37d5905ca831b892a87c88e8",
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "target_piece": " sel",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 27,
+            "site": "resid_pre",
+            "step_size": 0.04
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "target_piece": " Sel",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 27,
+            "site": "resid_pre",
+            "step_size": 0.16
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:cb904eb627cf37046bd71f78",
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "target_piece": " sel",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 27,
+            "site": "resid_pre",
+            "step_size": 0.16
+          }
+        },
+        {
+          "candidate_id": "frozen_candidate:97ea6e5376157e992c623abc",
+          "objective_bundle_key": "entity_insert:selim:source_body:weak_reachable",
+          "target_piece": " Sel",
+          "operator": {
+            "alpha": 0.04,
+            "layer": 27,
+            "site": "resid_pre",
+            "step_size": 0.12
+          }
+        }
+      ],
+      "measurements": [
+        {
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "parent_candidate_id": null,
+          "action": "remeasure_current_prefix",
+          "status": "measured",
+          "worker_step": 6,
+          "prefix": " Nora will take the sample to",
+          "metrics": {
+            "bound_token_top20_hit_delta": 0,
+            "target_piece_logit_after": 18.75,
+            "target_piece_logit_before": 18.734375,
+            "target_piece_logit_delta": 0.015625,
+            "target_piece_prob_after": 0.014856846790903426,
+            "target_piece_prob_before": 0.014629279155220032,
+            "target_piece_prob_delta": 0.0002275676356833945,
+            "target_rank_after": 3,
+            "target_rank_before": 3,
+            "target_rank_delta": 0,
+            "target_top20_threshold_gap_after": -5.703125,
+            "target_top20_threshold_gap_before": -5.6796875,
+            "target_top20_threshold_gap_delta": -0.0234375,
+            "threshold20_logit_delta": -0.0078125
+          },
+          "state_restored": true,
+          "handoff_blockers": [
+            "normal_trial_edit_differs_from_diagnostic"
+          ]
+        },
+        {
+          "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "parent_candidate_id": null,
+          "action": "remeasure_current_prefix",
+          "status": "measured",
+          "worker_step": 7,
+          "prefix": " Nora will take the sample to I",
+          "metrics": {
+            "bound_token_top20_hit_delta": 0,
+            "target_piece_logit_after": 1.5693359375,
+            "target_piece_logit_before": 1.5654296875,
+            "target_piece_logit_delta": 0.00390625,
+            "target_piece_prob_after": 2.5716987022798043e-11,
+            "target_piece_prob_before": 2.5616722315251827e-11,
+            "target_piece_prob_delta": 1.0026470754621616e-13,
+            "target_rank_after": 3195,
+            "target_rank_before": 3211,
+            "target_rank_delta": 16,
+            "target_top20_threshold_gap_after": 9.4619140625,
+            "target_top20_threshold_gap_before": 9.4580078125,
+            "target_top20_threshold_gap_delta": 0.00390625,
+            "threshold20_logit_delta": 0.0078125
+          },
+          "state_restored": true,
+          "handoff_blockers": [
+            "bound_target_lift"
+          ]
+        },
+        {
+          "candidate_id": "frozen_candidate:97ea6e5376157e992c623abc",
+          "parent_candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+          "action": "measure_normal_cap_current_prefix",
+          "status": "measured",
+          "worker_step": 8,
+          "prefix": " Nora will take the sample to Ivo",
+          "metrics": {
+            "bound_token_top20_hit_delta": 0,
+            "target_piece_logit_after": 11.9765625,
+            "target_piece_logit_before": 11.96875,
+            "target_piece_logit_delta": 0.0078125,
+            "target_piece_prob_after": 4.06828344287968e-05,
+            "target_piece_prob_before": 4.0020345935803745e-05,
+            "target_piece_prob_delta": 6.624884929930531e-07,
+            "target_rank_after": 66,
+            "target_rank_before": 66,
+            "target_rank_delta": 0,
+            "target_top20_threshold_gap_after": 2.578125,
+            "target_top20_threshold_gap_before": 2.5859375,
+            "target_top20_threshold_gap_delta": -0.0078125,
+            "threshold20_logit_delta": 0.0
+          },
+          "state_restored": true,
+          "handoff_blockers": [
+            "bound_target_lift"
+          ]
+        }
+      ]
+    }
+  ]
+}

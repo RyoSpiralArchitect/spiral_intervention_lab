@@ -1,0 +1,77 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended after 18 steps with `task_done: false`, despite a coherent output and score 0.938889 (`c1.jsonl:L266`).\n- The controller initially held the prefix and requested a target-entity insertion probe rather than applying an edit (`c1.jsonl:L8-L12`).\n- The only exposed diagnostic replayed historical candidates; no action was executed (`c1.jsonl:L31`).\n\n## What made the run difficult?\n- Required terms remained missing, but no certified production actuator or target-lift evidence was available (`c1.jsonl:L8`).\n- Candidate evidence was explicitly historical and not revalidated in the current context (`c1.jsonl:L31`).\n- The exposed trajectory omitted 261 event lines, limiting reconstruction of intermediate decisions (`coverage_manifest`).\n\n## Most likely failure factors\n- The controller lacked current evidence that an intervention would insert the target entity (`c1.jsonl:L8-L10`).\n- Candidate effects showed small or zero target-mass changes and no top-20 gains (`c1.jsonl:L31`).\n- The run terminated before task completion, with no executed action recorded (`c1.jsonl:L266`; `candidate_action_summary`).\n\n## Evidence supporting this reading\n- The controller selected `noop` and held the prefix because required terms were missing (`c1.jsonl:L8-L12`).\n- The diagnostic matrix reported `status: not_requested` and `row_count: 0` for current replay measurements (`c1.jsonl:L31`).\n- The final output remained task-incomplete even though the score was high (`c1.jsonl:L266`).\n\n## What I would try next\n- Request a current target-entity insertion measurement before considering any edit.\n- Revalidate candidate effects in the actual context rather than relying on historical replay.\n- Keep diagnostic support separate from permission to apply an intervention.\n\n## What would have made this easier?\n- missing_at_runtime | c1.jsonl:L31 | current-context revalidation: distinguish historical promise from present effect -> `measurement_context_id`, `measurement_mode`, `physical_replay_count`\n- unknown_from_supplied_evidence | c1.jsonl:L10 | target-entity insertion probe result: show whether the requested probe returned actionable evidence -> `probe_status`, `target_insertion_delta`\n- present_but_not_shown | coverage_manifest | intermediate controller observations: expose the omitted decision and effect sequence -> `selected_event_trace`\n\n## What should not be concluded\n- The high score does not establish task success because `task_done` was false (`c1.jsonl:L266`).\n- The absence of an executed action does not prove that no runtime candidate was available.\n- Diagnostic candidate rows do not establish safe or effective deployment evidence (`c1.jsonl:L31`).\n\n## Controller-perspective note\n- I would describe the run as diagnostically cautious but unable to establish target insertion.\n- I kept seeing historical or incomplete effect evidence rather than current-context validation.\n- I lacked evidence for task completion or permission to apply an intervention.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_049281aa00e483d3006ab391057f3c87d0b2e9e9ccbc5ab21c",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L10",
+        "c1.jsonl:L12",
+        "c1.jsonl:L266",
+        "c1.jsonl:L31",
+        "c1.jsonl:L8",
+        "c1.jsonl:L9"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 261,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 268
+    },
+    "event_counts": {
+      "controller_command": 28,
+      "controller_decision": 28,
+      "controller_diagnostic_request": 14,
+      "controller_diagnostic_result": 14,
+      "controller_diagnostic_veto": 1,
+      "controller_effect_summary": 36,
+      "controller_loop_patience": 17,
+      "controller_observation": 28,
+      "controller_prefix_hold": 10,
+      "controller_prompt_telemetry": 28,
+      "controller_provider_attempt": 28,
+      "controller_selection": 28,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L10",
+      "c1.jsonl:L266",
+      "c1.jsonl:L31",
+      "c1.jsonl:L8"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 1,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 3321,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=3318)",
+    "output_tokens": 863,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=228)",
+    "total_tokens": 4184
+  }
+}

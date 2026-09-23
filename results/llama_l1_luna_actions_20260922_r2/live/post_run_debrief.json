@@ -1,0 +1,80 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended after 18 steps without task completion, despite a score of 0.938889 and a repeated output. [c1.jsonl:L175]\n- The controller repeatedly chose no-op commands and requested diagnostics instead of applying edits. [c1.jsonl:L28] [c1.jsonl:L49]\n- Diagnostics produced candidate evidence, but no production intervention was executed. [c1.jsonl:L31] [c1.jsonl:L52]\n\n## What made the run difficult?\n- Candidate evidence was diagnostic-only and not certified for application. [c1.jsonl:L28]\n- Several candidates showed zero target-mass or top-20 lift. [c1.jsonl:L52]\n- The trajectory supplied little visible evidence that the repeated output was progressing toward task completion. [c1.jsonl:L175]\n\n## Most likely failure factors\n- The controller conservatively remained in no-op mode because production apply was disallowed. [c1.jsonl:L28] [c1.jsonl:L49]\n- Historical candidate evidence was not revalidated in the current context. [c1.jsonl:L31] [c1.jsonl:L52]\n- The available activation candidates were weak or inconsistent, including rank-carrier and dead-actuator classifications. [c1.jsonl:L52]\n\n## Evidence supporting this reading\n- The first diagnostic returned historical candidates with small deltas and no top-20 gain. [c1.jsonl:L31]\n- The actual matrix reported zero target-mass change for several candidates. [c1.jsonl:L52]\n- Termination explicitly recorded `task_done: false`. [c1.jsonl:L175]\n\n## What I would try next\n- Reassess the task-facing signal before relying on candidate rankings.\n- Compare candidate behavior under the exact live context rather than historical replay.\n- Preserve the no-op boundary until diagnostic evidence is independently sufficient.\n\n## What would have made this easier?\n- shown_but_ambiguous | c1.jsonl:L31 | full_context_revalidation_status: historical candidates were not revalidated -> suggested_field: `full_context_revalidation`\n- shown_but_ambiguous | c1.jsonl:L52 | live_task_effect: target deltas did not establish task progress -> suggested_field: `task_progress_delta`\n- present_but_not_shown | c1.jsonl:L175 | intermediate_completion_signal: termination showed failure but not the transition history -> suggested_field: `completion_state_by_step`\n\n## What should not be concluded\n- The score does not establish that the task succeeded. [c1.jsonl:L175]\n- No-op behavior does not prove that every candidate was ineffective.\n- Diagnostic evidence does not authorize applying an intervention.\n\n## Controller-perspective note\n- I would describe the run as conservative and diagnostically active but operationally stalled.\n- I kept seeing candidate evidence without clear live task lift.\n- I lacked evidence that applying any candidate was both permitted and sufficient.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_01986c1e4c0e415d006ab155ba1c7887d0844de99bfcaac210",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L175",
+        "c1.jsonl:L28",
+        "c1.jsonl:L29",
+        "c1.jsonl:L30",
+        "c1.jsonl:L31",
+        "c1.jsonl:L49",
+        "c1.jsonl:L50",
+        "c1.jsonl:L51",
+        "c1.jsonl:L52"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 167,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 177
+    },
+    "event_counts": {
+      "controller_command": 18,
+      "controller_decision": 18,
+      "controller_diagnostic_request": 14,
+      "controller_diagnostic_result": 14,
+      "controller_effect_summary": 18,
+      "controller_loop_patience": 14,
+      "controller_observation": 18,
+      "controller_observer_check_request": 1,
+      "controller_prompt_telemetry": 18,
+      "controller_provider_attempt": 18,
+      "controller_selection": 18,
+      "episode_end": 2,
+      "episode_start": 2,
+      "observer_check": 4
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L175",
+      "c1.jsonl:L28",
+      "c1.jsonl:L31",
+      "c1.jsonl:L49",
+      "c1.jsonl:L52"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 4886,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4883)",
+    "output_tokens": 819,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=207)",
+    "total_tokens": 5705
+  }
+}

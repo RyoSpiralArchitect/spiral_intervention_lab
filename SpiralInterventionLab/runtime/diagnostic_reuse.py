@@ -38,6 +38,13 @@ def review_key(request: Mapping[str, Any], hints: Mapping[str, Any], results: Se
         "reason", "requested_by", "source", "canonical_followup_request_applied",
         "bundle_key", "objective_bundle_key", "step_actuator_bundle_key",
     }}
+    # These observed labels describe an intent, not a different executable query.
+    # Never turn "current" in prose into authority to spend replay budget.
+    if intent.get("next_evidence_needed") in {
+        "activation_patch_candidate_compiler_review", "activation_patch_candidate_review_on_current_prefix",
+        "current_activation_patch_candidate_review", "alternate_activation_patch_or_bridge_evidence",
+    }:
+        intent.pop("next_evidence_needed")
     return identity("review:", [objective, intent, evidence])
 
 
@@ -80,7 +87,8 @@ def reuse_report(worker: Any, receipt: Mapping[str, Any], *, source: str) -> dic
         "review_reused": True, "diagnostic_budget_charged": False,
         "new_measurement_count": 0, "physical_replay_count": 0,
         "next_evidence_needed": "explicit_current_prefix_measurement_or_evidence_inspection",
-        "explicit_measurement_diagnostic": "matched_response_probe",
+        "explicit_measurement_diagnostic": "candidate_action",
+        "measurement_choices_hint": "candidate_diagnostic_choices",
         "why_not_apply": "Reusing a closed review supplies no current-prefix certification or permission.",
         "diagnostic_only": True, "production_apply_allowed": False,
         "certified_for_apply": False, "policy_candidate_ready": False,
@@ -95,6 +103,7 @@ def reuse_hints(worker: Any) -> dict[str, Any]:
     return {"diagnostic_review_reuse": [{
         **r, "prefix_changed_since_review": current != r["reviewed_prefix_id"],
         "evidence_scope": "historical_review_not_current_measurement",
-        "explicit_measurement_diagnostic": "matched_response_probe",
+        "explicit_measurement_diagnostic": "candidate_action",
+        "measurement_choices_hint": "candidate_diagnostic_choices",
         "production_apply_allowed": False,
     } for r in receipts]}
