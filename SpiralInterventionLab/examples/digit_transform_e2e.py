@@ -36,11 +36,13 @@ from ..runtime import (
 )
 from ..tasks import (
     MiniLMSemanticCritic,
+    REWRITE_LADDER_TASKS,
     SpiralConstrainedRewriteEnv,
     SpiralDigitCopyEnv,
     SpiralDigitTransformEnv,
     SpiralEasyConstrainedRewriteEnv,
     SpiralEntailmentReasoningEnv,
+    SpiralRewriteLadderEnv,
     SpiralSentenceOrderingEnv,
     SpiralStructuredSummaryEnv,
 )
@@ -461,7 +463,12 @@ def _load_local_hooked_transformer_from_hf(
         tokenizer,
         move_to_device=False,
     )
-    model.load_and_process_state_dict(state_dict)
+    if str(getattr(hf_model.config, "model_type", "")) == "llama":
+        # Preserve the checkpoint's RMSNorm/activation coordinates. Processing
+        # can also upcast an entire 3B state dict to FP32 before copying it.
+        model.load_state_dict(model.fill_missing_keys(state_dict), strict=True)
+    else:
+        model.load_and_process_state_dict(state_dict)
     if move_to_device:
         model.move_model_modules_to_device()
     return model
@@ -497,6 +504,7 @@ def load_worker_model(
             resolved_model_ref,
             trust_remote_code=trust_remote_code,
             local_files_only=local_files_only,
+            torch_dtype=_resolve_torch_dtype(dtype),
         )
         tokenizer = AutoTokenizer.from_pretrained(
             resolved_tokenizer_ref,
@@ -4867,6 +4875,8 @@ def create_task_env(task_name: str, *, semantic_critic: Any | None = None) -> Ex
         return SpiralConstrainedRewriteEnv(semantic_critic=semantic_critic)
     if normalized in {"constrained_rewrite_easy", "easy_constrained_rewrite", "rewrite_easy", "easy_rewrite"}:
         return SpiralEasyConstrainedRewriteEnv(semantic_critic=semantic_critic)
+    if normalized in REWRITE_LADDER_TASKS:
+        return SpiralRewriteLadderEnv(level=int(normalized[-1]), semantic_critic=semantic_critic)
     if normalized in {"structured_summary", "summary"}:
         return SpiralStructuredSummaryEnv(semantic_critic=semantic_critic)
     raise ValueError(f"unknown task '{task_name}'")
@@ -9372,6 +9382,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "entailment_reasoning",
             "constrained_rewrite",
             "constrained_rewrite_easy",
+            *REWRITE_LADDER_TASKS,
             "structured_summary",
         ],
         help="Task environment to run",

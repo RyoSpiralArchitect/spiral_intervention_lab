@@ -126,12 +126,15 @@ def run_minimal_baseline_suite(
     b0_worker = make_worker_runtime()
     b0 = run_b0(task_env, b0_worker, logger=_make_logger(logger_factory, "b0"), trace_snapshot_id=paired_trace_id)
     baseline_trace = _export_trace_artifact(b0_worker, paired_trace_id)
+    # The exported trace owns the paired evidence; keep no completed worker caches.
+    del b0_worker
 
     b1 = None
     if b1_controller is not None:
         b1_worker = make_worker_runtime()
         _seed_trace_artifact(b1_worker, paired_trace_id, baseline_trace)
         b1 = run_b1(task_env, b1_worker, b1_controller, logger=_make_logger(logger_factory, "b1"))
+        del b1_worker
 
     c1_worker = make_worker_runtime()
     _seed_trace_artifact(c1_worker, paired_trace_id, baseline_trace)

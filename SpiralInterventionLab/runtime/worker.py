@@ -13,6 +13,7 @@ from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
 from . import diagnostic_orchestration as diag_orch
+from . import diagnostic_reuse as diag_reuse
 from .response_probe import matched_response_probe
 from .response_promotion import REVIEW_NAMES as RESPONSE_REVIEW_NAMES, review_response_evidence
 from .evidence_inspection import inspect_evidence, evidence_catalog
@@ -730,6 +731,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results: list[dict[str, Any]] = []
         self._pending_tool_events: list[dict[str, Any]] = []
         self._diagnostic_results: list[dict[str, Any]] = []
+        self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
         self._evidence_inspection_count = 0
         self._inspection_seen_ids: set[str] = set()
         self._inspection_gate_signature: str | None = None
@@ -1212,6 +1214,10 @@ class HookedTransformerWorkerRuntime:
                     cache_tensor = cache_tensor_cache.get(cache_key)
                     if cache_key not in cache_tensor_cache:
                         cache_tensor = self._cache_tensor_for_scan(layer=int(cache_spec["layer"]), site=str(cache_spec["site"]))
+                        if cache_tensor is not None:
+                            # Scan on one CPU snapshot, not thousands of tiny
+                            # device transfers per term/head/source position.
+                            cache_tensor = cache_tensor.detach().cpu().float()
                         cache_tensor_cache[cache_key] = cache_tensor
                     if cache_tensor is None:
                         continue
@@ -1449,10 +1455,22 @@ class HookedTransformerWorkerRuntime:
             return []
         budget_left = max(0, self.max_diagnostic_calls_per_run - len(self._diagnostic_results))
         packet_context = packet if isinstance(packet, Mapping) else self._last_packet
+        hints = (packet_context or {}).get("strategy_hints", {})
+        if not isinstance(hints, Mapping):
+            hints = {}
+        self._diagnostic_review_cache = getattr(self, "_diagnostic_review_cache", {})
         results: list[dict[str, Any]] = []
         for raw_request in raw_items[: self.max_diagnostic_calls_per_run + 4]:
             request = _normalize_controller_diagnostic_request(raw_request)
             if request is None:
+                continue
+            key = diag_reuse.review_key(request, hints, [*self._diagnostic_results, *results])
+            receipt = self._diagnostic_review_cache.get(key) if key else None
+            if receipt is not None:
+                reused = diag_reuse.reuse_report(self, receipt, source=source)
+                remaining = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count}
+                reused.update(budget_before=dict(remaining), budget_after=dict(remaining))
+                results.append(reused)
                 continue
             inspection = request["diagnostic"] == "inspect_evidence"
             if inspection:
@@ -1514,12 +1532,18 @@ class HookedTransformerWorkerRuntime:
             if not inspection:
                 budget_left -= 1
             result["budget_after"] = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count}
+            result["diagnostic_budget_charged"] = not inspection
             results.append(result)
+            if diag_reuse.closed_review(result):
+                key = diag_reuse.review_key(request, hints, [*self._diagnostic_results, *results])
+                if key:
+                    self._diagnostic_review_cache[key] = diag_reuse.review_receipt(self, request, result)
 
         if not results:
             return []
         self._latest_diagnostic_results = [dict(result) for result in results]
-        self._diagnostic_results.extend(r for r in self._latest_diagnostic_results if r.get("diagnostic") != "inspect_evidence")
+        self._diagnostic_results.extend(r for r in self._latest_diagnostic_results
+                                        if r.get("diagnostic") != "inspect_evidence" and not r.get("review_reused"))
         self._diagnostic_results = self._diagnostic_results[-self.diagnostic_result_window :]
         self._pending_diagnostic_events.extend(dict(result) for result in self._latest_diagnostic_results)
         self._last_packet = None
@@ -1693,6 +1717,7 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results = []
         self._pending_tool_events = []
         self._diagnostic_results = []
+        self._diagnostic_review_cache = {}
         self._evidence_inspection_count = 0
         self._inspection_seen_ids = set()
         self._inspection_gate_signature = None
@@ -8242,6 +8267,7 @@ class HookedTransformerWorkerRuntime:
             ):
                 hints.pop(key, None)
             hints["diagnostic_frontier_blocked_reason"] = "diagnostic_call_budget_exhausted"
+        hints.update(diag_reuse.reuse_hints(self))
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -9282,6 +9308,7 @@ class HookedTransformerWorkerRuntime:
             return []
         seq_len = int(cache_tensor.shape[1])
         max_positions = max(1, int(max_positions))
+        head_vectors = cache_tensor[0, :, head, :].detach().cpu().float()
         rows: list[dict[str, Any]] = []
         projection_cache: dict[int, torch.Tensor | None] = {}
         base_projected: torch.Tensor | None = None
@@ -9297,13 +9324,19 @@ class HookedTransformerWorkerRuntime:
             projected_once = torch.matmul(proto, projection[int(head)].cpu().float())
             if projected_once.numel() == int(width):
                 base_projected = projected_once.detach().cpu().float()
+        rotated_positions = None
+        if base_projected is not None and site == "k_cache":
+            rotated_positions = self._apply_k_rotary_vectors(
+                base_projected.reshape(1, 1, 1, -1).expand(1, seq_len, 1, -1),
+                layer=layer, token_index=0,
+            )
 
         def _fast_projected_for_position(position: int) -> torch.Tensor | None:
             if base_projected is None:
                 return None
             projected = base_projected
             if site == "k_cache":
-                projected = self._apply_k_rotary_projection(projected, layer=layer, token_index=position, head=head)
+                projected = None if rotated_positions is None else rotated_positions[0, position, 0]
                 if projected is None:
                     return None
             norm = float(projected.norm().item())
@@ -9367,7 +9400,7 @@ class HookedTransformerWorkerRuntime:
                 projection_cache[projection_key] = projected
             if projected is None:
                 continue
-            cache_vector = cache_tensor[0, position, head, :].detach().reshape(-1).cpu().float()
+            cache_vector = head_vectors[position].reshape(-1)
             if cache_vector.numel() != int(width):
                 continue
             alignment = _cosine_similarity(projected, cache_vector)
@@ -23650,8 +23683,9 @@ class HookedTransformerWorkerRuntime:
                 token_index = batch0.shape[0] - 1
                 head_count = int(batch0.shape[1])
                 width = int(batch0.shape[2])
+                last_vectors = batch0[token_index].detach().cpu().float()
                 for head in range(head_count):
-                    vector = batch0[token_index, head, :].detach().reshape(-1).cpu().float()
+                    vector = last_vectors[head].reshape(-1)
                     if vector.numel() != width:
                         continue
                     vectors.append(
@@ -23679,9 +23713,9 @@ class HookedTransformerWorkerRuntime:
             getattr(getattr(model, "embed", None), "weight", None),
         ):
             if isinstance(candidate, torch.nn.Parameter):
-                return candidate.detach().float()
+                return candidate.detach()
             if isinstance(candidate, torch.Tensor):
-                return candidate.detach().float()
+                return candidate.detach()
         return None
 
     def _feature_prototype_vector(self, term: str) -> torch.Tensor | None:
@@ -23706,7 +23740,7 @@ class HookedTransformerWorkerRuntime:
             if any(token_id < 0 or token_id >= embedding_matrix.shape[0] for token_id in encoded):
                 continue
             token_index = torch.tensor(encoded, dtype=torch.long, device=embedding_matrix.device)
-            vector = embedding_matrix.index_select(0, token_index).mean(dim=0).reshape(-1).float()
+            vector = embedding_matrix.index_select(0, token_index).float().mean(dim=0).reshape(-1)
             norm = float(vector.norm().item())
             if norm <= 0.0:
                 continue
@@ -23835,6 +23869,8 @@ class HookedTransformerWorkerRuntime:
             return None
         raw = getattr(attn, "W_K" if site == "k_cache" else "W_V", None)
         tensor = self._reshape_kv_projection_tensor(raw, head_count=head_count, d_model=d_model, width=width)
+        if tensor is not None:
+            tensor = tensor.detach().cpu().float()
         self._kv_projection_cache[cache_key] = tensor
         return tensor
 
@@ -23905,6 +23941,15 @@ class HookedTransformerWorkerRuntime:
         token_index: int,
         head: int,
     ) -> torch.Tensor | None:
+        rotated = self._apply_k_rotary_vectors(
+            projected.detach().float().reshape(1, 1, 1, -1),
+            layer=layer, token_index=token_index,
+        )
+        return None if rotated is None else rotated[0, 0, 0]
+
+    def _apply_k_rotary_vectors(
+        self, projected: torch.Tensor, *, layer: int, token_index: int,
+    ) -> torch.Tensor | None:
         model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
         try:
             attn = model.blocks[int(layer)].attn if model is not None else None
@@ -23912,19 +23957,29 @@ class HookedTransformerWorkerRuntime:
             attn = None
         if attn is None:
             return projected
+        # TransformerLens hook_k is pre-RoPE; hook_rot_k is a different
+        # observable. Never compare a rotated prototype to unrotated keys.
+        if self._cache_hook_name(layer=layer, site="k_cache").endswith(".attn.hook_k"):
+            return projected
+        cfg = getattr(attn, "cfg", None)
+        if cfg is not None and getattr(cfg, "positional_embedding_type", None) != "rotary":
+            return projected
         apply_rotary = getattr(attn, "apply_rotary", None)
         if not callable(apply_rotary):
             return projected
         try:
+            rotary_cos = getattr(attn, "rotary_cos", None)
+            if isinstance(rotary_cos, torch.Tensor):
+                projected = projected.to(device=rotary_cos.device)
             rotated = apply_rotary(
-                projected.detach().float().reshape(1, 1, 1, -1),
+                projected.detach().float(),
                 past_kv_pos_offset=max(0, int(token_index)),
             )
         except Exception:
             return None
         if not isinstance(rotated, torch.Tensor):
             return None
-        return rotated[0, 0, 0].detach().cpu().float()
+        return rotated.detach().cpu().float()
 
     def _build_trace_bank(self) -> list[dict[str, Any]]:
         trace_caches = getattr(self.runtime_state, "trace_caches", {})

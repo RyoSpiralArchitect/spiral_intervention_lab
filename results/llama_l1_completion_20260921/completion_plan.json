@@ -1,0 +1,39 @@
+{
+  "binding": {
+    "term": "Selim",
+    "surface": " Selim",
+    "token_ids": [
+      24082,
+      318
+    ],
+    "pieces": [
+      " Sel",
+      "im"
+    ],
+    "first_token_id": 24082,
+    "competitor_token_id": 11889,
+    "competitor_piece": " sending",
+    "competitor_source": "recorded_no_edit_greedy_next_token",
+    "forced_prefix_source": "recorded_required_term_tokenization",
+    "conditional_branch_is_task_result": false,
+    "production_apply_allowed": false
+  },
+  "reference": {
+    "worker_step": 9,
+    "prefix": " Nora will take the sample to Ivo before",
+    "candidate_id": "frozen_candidate:110296027c25eea11f40e151",
+    "measurement_context_id": "context:0636a39e1caa687368bc2ac4",
+    "competitor_token_id": 11889,
+    "reference_artifact_sha256": {
+      "manifest.json": "6ddc4610d97315b35c621cc632a9359c5a7b100a233c586fa4a0e158d0b1ae84",
+      "status.json": "8f3879a97f17108876a400d4e86b0e62faffd00bcc743e29767023896c49e46e",
+      "rows.jsonl": "2cc4fc297099c9761bee92effaefe1ef30b2673eb27268b91ffe5f56358a131a",
+      "frozen_candidate.json": "52c5101a40bf9bef6ea86a734aeca85e7d30d1460e83e5393db9b4285e2bc55f"
+    },
+    "reference_directory": "/Users/ryospiralarchitect/spiral_intervention_lab/results/llama_l1_frozen_prefix_20260921_r2"
+  },
+  "horizon": 16,
+  "planned_total_replays": 6,
+  "production_apply_allowed": false,
+  "candidate_id": "frozen_candidate:110296027c25eea11f40e151"
+}

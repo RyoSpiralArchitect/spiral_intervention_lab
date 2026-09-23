@@ -1,0 +1,2 @@
+{"event": "episode_start", "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar\nDo not use these terms: in order to, should\nUse at most 9 words.\nReturn only the rewritten sentence.\nSOURCE: In order to stay on schedule, Mira should send the budget draft to Omar before lunch.\nANSWER:", "seed": 7}
+{"event": "episode_end", "output": " Mira will send Omar the budget draft before lunch.", "score": 1.0, "steps": 11, "task_done": true}

@@ -1,0 +1,39 @@
+{
+  "verified_at_utc": "2026-09-21T00:57:37.559771+00:00",
+  "status": "passed",
+  "checks": {
+    "all_statuses_complete": true,
+    "row_hash_matches": true,
+    "original_source_jsonl_hash_matches": true,
+    "original_source_manifest_hash_matches": true,
+    "code_hashes_match": true,
+    "reference_hashes_match": true,
+    "checkpoint_hashes_match": true,
+    "all_reconstructed_prefixes_match": true,
+    "frozen_identity_matches_previous_point": true,
+    "original_primary_metrics_reproduced_exactly": true,
+    "original_primary_output_reproduced": true,
+    "repeat_controls_zero": true,
+    "state_restored": true,
+    "conditional_branch_excluded_from_task_results": true,
+    "no_apply_permission_added": true,
+    "no_new_controller_call": true,
+    "measured_replay_count_matches_plan": true
+  },
+  "artifact_sha256": {
+    "manifest.json": "e9af0d56f42e504535b9cec9bf7198f2d4328438dba3f719d8927e97a2158b7f",
+    "completion_plan.json": "675b1d9b7f1614b824cd7a8e6187900ad62106026e83b18c4f6a1d41f91e7a0b",
+    "frozen_candidate.json": "52c5101a40bf9bef6ea86a734aeca85e7d30d1460e83e5393db9b4285e2bc55f",
+    "frozen_source.pt": "bd657b16d52788ca6eaa3ca246565100ae87c33f558ab5980904d4b38081bdcd",
+    "rows.jsonl": "3fbec170cef1604ecedd0f6ea36f0f4afb668d32802b36e40013a04b6f705dad",
+    "summary.json": "2466e88f0e39949a8cba147c917dc7f4547baf114e6578c8ff29a46ea2244123",
+    "status.json": "b938c5c78e9d221bd8f580a690a95f493fa8776586319f02db6b5b5d9081444f"
+  },
+  "source_code_file_count": 63,
+  "validation": {
+    "full_suite": "356 passed, 2 subtests passed, 16 warnings",
+    "focused_suite": "22 passed",
+    "git_diff_check": "passed"
+  },
+  "claim_scope": "fixed-condition local diagnostic only; no task improvement or production certification"
+}

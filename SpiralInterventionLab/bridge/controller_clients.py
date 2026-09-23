@@ -243,6 +243,7 @@ _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
     "bridge_plan_reason",
     "bridge_plan_unavailable_reason",
     "diagnostic_evidence_ledger",
+    "diagnostic_review_reuse",
     "bundle_diagnostic_status",
     "activation_patch_compile_preview",
     "activation_patch_compile_preview_blocked_reason",
@@ -891,6 +892,14 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
     summary: dict[str, Any] = {}
+    if value.get("review_reused"):
+        return {key: _bounded_json(value[key], max_depth=2, max_items=8, max_string=200)
+                for key in ("diagnostic", "status", "objective_bundle_key", "review_reused",
+                    "reviewed_at_step", "recorded_step", "prefix_changed_since_review", "evidence_scope",
+                    "measurement_context_id", "evidence_ids", "compile_preview_blocked_reason",
+                    "diagnostic_budget_charged", "budget_before", "budget_after", "new_measurement_count",
+                    "physical_replay_count", "explicit_measurement_diagnostic", "next_evidence_needed",
+                    "production_apply_allowed", "certified_for_apply") if key in value}
     if value.get("diagnostic") == "inspect_evidence":
         return {key: _bounded_json(value[key], max_depth=4, max_items=40, max_string=260)
                 for key in ("diagnostic", "status", "rows", "evidence_scope", "budget_before", "budget_after",

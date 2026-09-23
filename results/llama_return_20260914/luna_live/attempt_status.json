@@ -1,0 +1,13 @@
+{
+  "status": "interrupted_for_observer_transfer_diagnosis",
+  "completed": false,
+  "phase": "b0_before_controller",
+  "provider_calls": 0,
+  "elapsed_process_seconds_at_interrupt": 244,
+  "signal": "SIGINT",
+  "stack_location": "HookedTransformerWorkerRuntime._kv_source_positions_for_feature",
+  "operation": "per-position cache_tensor slice .cpu().float()",
+  "process_sample": "../runtime_sample.txt",
+  "replacement_attempt": "../luna_live_r2",
+  "note": "An incomplete performance-diagnosis attempt, not a scored model failure."
+}

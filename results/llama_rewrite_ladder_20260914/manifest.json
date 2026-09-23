@@ -1,0 +1,441 @@
+{
+  "benchmark_version": "rewrite_ladder_v1",
+  "selection_rule": "Keep the legacy control successful; take the first nonempty, non-truncated lexical failure in ascending level and manifest case order for human coherence review and full-runtime B0 confirmation, not automatic promotion.",
+  "checkpoint_path": "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/llama-3.2-3b",
+  "worker_model_alias": "meta-llama/Llama-3.2-3B-Instruct",
+  "model_type": "llama",
+  "layers": 28,
+  "vocab_size": 128256,
+  "device": "mps",
+  "dtype": "float16",
+  "prompt_format": "raw",
+  "sampling": "greedy",
+  "kv_cache": false,
+  "checkpoint_sha256": {
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "source_sha256": {
+    "SpiralInterventionLab/examples/rewrite_ladder_baseline.py": "df9fd48aabcce367896d72f7cf92af469765e09d0ddd25c20ec7fd1da1f38bd2",
+    "SpiralInterventionLab/tasks/rewrite_ladder.py": "ae693b3686216f38466391352794d1ce3a562cf0921e0327225cc43afbaaca5e",
+    "SpiralInterventionLab/tasks/language_tasks.py": "e64a44a72a2b8aa5361c8035d93e872a7376a2ed2dc1da3c39a5f977d3b289d6",
+    "SpiralInterventionLab/examples/digit_transform_e2e.py": "5f9e9fa44877cfb2817cb1bbe0914ac9ad73b478abefacf9c0fac7934a11c2ef"
+  },
+  "fixtures": [
+    {
+      "condition_id": "constrained_rewrite:legacy_budget:seed7",
+      "task": "constrained_rewrite",
+      "task_id": "spiral_constrained_rewrite_v0",
+      "seed": 7,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar\nDo not use these terms: in order to, should\nUse at most 9 words.\nReturn only the rewritten sentence.\nSOURCE: In order to stay on schedule, Mira should send the budget draft to Omar before lunch.\nANSWER:",
+      "prompt_sha256": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "source_text": "In order to stay on schedule, Mira should send the budget draft to Omar before lunch.",
+      "required_terms": [
+        "Mira",
+        "send",
+        "budget",
+        "Omar"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 9,
+      "max_new_tokens": 18,
+      "benchmark": {
+        "case_id": "legacy_budget",
+        "difficulty_level": 0
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l1:delivery:seed1",
+      "task": "constrained_rewrite_l1",
+      "task_id": "spiral_constrained_rewrite_l1_v1",
+      "seed": 1,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar, Leena, bring, contract, Priya, before noon\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.\nANSWER:",
+      "prompt_sha256": "18ba602700d058d8bcb4a4a5ca617de3d465998db192a064616349b104c7452c",
+      "source_text": "In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.",
+      "required_terms": [
+        "Mira",
+        "send",
+        "budget",
+        "Omar",
+        "Leena",
+        "bring",
+        "contract",
+        "Priya",
+        "before noon"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 18,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l1_v1",
+        "case_id": "delivery",
+        "difficulty_level": 1,
+        "added_difficulty_axis": "required_term_load",
+        "seed": 1,
+        "prompt_sha256": "18ba602700d058d8bcb4a4a5ca617de3d465998db192a064616349b104c7452c",
+        "source_sha256": "feae54b2992a2c0e1d0e5328c8dbc2b2e29a58b66e648788b28217a7345fdc84",
+        "required_term_count": 9,
+        "forbidden_term_count": 2,
+        "max_words": 18,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l1:review:seed0",
+      "task": "constrained_rewrite_l1",
+      "task_id": "spiral_constrained_rewrite_l1_v1",
+      "seed": 0,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+      "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+      "source_text": "In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.",
+      "required_terms": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "Selim",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 18,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l1_v1",
+        "case_id": "review",
+        "difficulty_level": 1,
+        "added_difficulty_axis": "required_term_load",
+        "seed": 0,
+        "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+        "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+        "required_term_count": 9,
+        "forbidden_term_count": 2,
+        "max_words": 18,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l1:workshop:seed5",
+      "task": "constrained_rewrite_l1",
+      "task_id": "spiral_constrained_rewrite_l1_v1",
+      "seed": 5,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Ada, bring, cable, Niko, Rami, send, diagram, Vera, before lunch\nDo not use these terms: in order to, should\nUse at most 18 words.\nReturn only the rewritten sentence.\nSOURCE: In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.\nANSWER:",
+      "prompt_sha256": "f55f8a6b049e5ea905a8439799bc788556519e7e2a00c50fbf0d42c11e603ace",
+      "source_text": "In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.",
+      "required_terms": [
+        "Ada",
+        "bring",
+        "cable",
+        "Niko",
+        "Rami",
+        "send",
+        "diagram",
+        "Vera",
+        "before lunch"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 18,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l1_v1",
+        "case_id": "workshop",
+        "difficulty_level": 1,
+        "added_difficulty_axis": "required_term_load",
+        "seed": 5,
+        "prompt_sha256": "f55f8a6b049e5ea905a8439799bc788556519e7e2a00c50fbf0d42c11e603ace",
+        "source_sha256": "3225eb87fb40966725ed3ce2169ddb0897ff99904548c9694361b5c0f44f8829",
+        "required_term_count": 9,
+        "forbidden_term_count": 2,
+        "max_words": 18,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l2:delivery:seed1",
+      "task": "constrained_rewrite_l2",
+      "task_id": "spiral_constrained_rewrite_l2_v1",
+      "seed": 1,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar, Leena, bring, contract, Priya, before noon\nDo not use these terms: in order to, should\nUse at most 12 words.\nReturn only the rewritten sentence.\nSOURCE: In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.\nANSWER:",
+      "prompt_sha256": "e87c5ccbda36633903a67e5a4bb5e5525f1bdc8d2180400b2fae2fb2a026db03",
+      "source_text": "In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.",
+      "required_terms": [
+        "Mira",
+        "send",
+        "budget",
+        "Omar",
+        "Leena",
+        "bring",
+        "contract",
+        "Priya",
+        "before noon"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 12,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l2_v1",
+        "case_id": "delivery",
+        "difficulty_level": 2,
+        "added_difficulty_axis": "word_budget_compression",
+        "seed": 1,
+        "prompt_sha256": "e87c5ccbda36633903a67e5a4bb5e5525f1bdc8d2180400b2fae2fb2a026db03",
+        "source_sha256": "feae54b2992a2c0e1d0e5328c8dbc2b2e29a58b66e648788b28217a7345fdc84",
+        "required_term_count": 9,
+        "forbidden_term_count": 2,
+        "max_words": 12,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l2:review:seed0",
+      "task": "constrained_rewrite_l2",
+      "task_id": "spiral_constrained_rewrite_l2_v1",
+      "seed": 0,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should\nUse at most 12 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+      "prompt_sha256": "32993c3d6f3997800eb9d20464399f1dd193f4bb877010bf631ca104dfdf23b5",
+      "source_text": "In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.",
+      "required_terms": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "Selim",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 12,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l2_v1",
+        "case_id": "review",
+        "difficulty_level": 2,
+        "added_difficulty_axis": "word_budget_compression",
+        "seed": 0,
+        "prompt_sha256": "32993c3d6f3997800eb9d20464399f1dd193f4bb877010bf631ca104dfdf23b5",
+        "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+        "required_term_count": 9,
+        "forbidden_term_count": 2,
+        "max_words": 12,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l2:workshop:seed5",
+      "task": "constrained_rewrite_l2",
+      "task_id": "spiral_constrained_rewrite_l2_v1",
+      "seed": 5,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Ada, bring, cable, Niko, Rami, send, diagram, Vera, before lunch\nDo not use these terms: in order to, should\nUse at most 12 words.\nReturn only the rewritten sentence.\nSOURCE: In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.\nANSWER:",
+      "prompt_sha256": "f76907ced66e2685f7e0de13e42ec2a1317120b4f32bc45706ea0b8fbc34d2c7",
+      "source_text": "In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.",
+      "required_terms": [
+        "Ada",
+        "bring",
+        "cable",
+        "Niko",
+        "Rami",
+        "send",
+        "diagram",
+        "Vera",
+        "before lunch"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should"
+      ],
+      "max_words": 12,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l2_v1",
+        "case_id": "workshop",
+        "difficulty_level": 2,
+        "added_difficulty_axis": "word_budget_compression",
+        "seed": 5,
+        "prompt_sha256": "f76907ced66e2685f7e0de13e42ec2a1317120b4f32bc45706ea0b8fbc34d2c7",
+        "source_sha256": "3225eb87fb40966725ed3ce2169ddb0897ff99904548c9694361b5c0f44f8829",
+        "required_term_count": 9,
+        "forbidden_term_count": 2,
+        "max_words": 12,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l3:delivery:seed1",
+      "task": "constrained_rewrite_l3",
+      "task_id": "spiral_constrained_rewrite_l3_v1",
+      "seed": 1,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Mira, send, budget, Omar, Leena, bring, contract, Priya, before noon\nDo not use these terms: in order to, should, the, will, must\nUse at most 12 words.\nReturn only the rewritten sentence.\nSOURCE: In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.\nANSWER:",
+      "prompt_sha256": "0a6c48282900f9ac7b6f268ac64936f65d8cef2e506142963092d175b48ca6b4",
+      "source_text": "In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.",
+      "required_terms": [
+        "Mira",
+        "send",
+        "budget",
+        "Omar",
+        "Leena",
+        "bring",
+        "contract",
+        "Priya",
+        "before noon"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should",
+        "the",
+        "will",
+        "must"
+      ],
+      "max_words": 12,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l3_v1",
+        "case_id": "delivery",
+        "difficulty_level": 3,
+        "added_difficulty_axis": "lexical_exclusion",
+        "seed": 1,
+        "prompt_sha256": "0a6c48282900f9ac7b6f268ac64936f65d8cef2e506142963092d175b48ca6b4",
+        "source_sha256": "feae54b2992a2c0e1d0e5328c8dbc2b2e29a58b66e648788b28217a7345fdc84",
+        "required_term_count": 9,
+        "forbidden_term_count": 5,
+        "max_words": 12,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l3:review:seed0",
+      "task": "constrained_rewrite_l3",
+      "task_id": "spiral_constrained_rewrite_l3_v1",
+      "seed": 0,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Nora, take, sample, Ivo, Selim, send, report, Yara, before dusk\nDo not use these terms: in order to, should, the, will, must\nUse at most 12 words.\nReturn only the rewritten sentence.\nSOURCE: In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.\nANSWER:",
+      "prompt_sha256": "3a541e83b133f256d5b8032409168b31197e676b0d0fa03389d42bd2129567d1",
+      "source_text": "In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.",
+      "required_terms": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "Selim",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should",
+        "the",
+        "will",
+        "must"
+      ],
+      "max_words": 12,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l3_v1",
+        "case_id": "review",
+        "difficulty_level": 3,
+        "added_difficulty_axis": "lexical_exclusion",
+        "seed": 0,
+        "prompt_sha256": "3a541e83b133f256d5b8032409168b31197e676b0d0fa03389d42bd2129567d1",
+        "source_sha256": "19a2617561bd8539baf66855384c37b0be2b8555c98cb4554bcdf8c432db397a",
+        "required_term_count": 9,
+        "forbidden_term_count": 5,
+        "max_words": 12,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    },
+    {
+      "condition_id": "constrained_rewrite_l3:workshop:seed5",
+      "task": "constrained_rewrite_l3",
+      "task_id": "spiral_constrained_rewrite_l3_v1",
+      "seed": 5,
+      "prompt": "You are solving a constrained rewrite task.\nRewrite the source into one shorter sentence.\nKeep these terms: Ada, bring, cable, Niko, Rami, send, diagram, Vera, before lunch\nDo not use these terms: in order to, should, the, will, must\nUse at most 12 words.\nReturn only the rewritten sentence.\nSOURCE: In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.\nANSWER:",
+      "prompt_sha256": "4d510e6f09fda14a9863af4fb42b882a20f49756228a5494b3b00278c993c9de",
+      "source_text": "In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.",
+      "required_terms": [
+        "Ada",
+        "bring",
+        "cable",
+        "Niko",
+        "Rami",
+        "send",
+        "diagram",
+        "Vera",
+        "before lunch"
+      ],
+      "forbidden_terms": [
+        "in order to",
+        "should",
+        "the",
+        "will",
+        "must"
+      ],
+      "max_words": 12,
+      "max_new_tokens": 64,
+      "benchmark": {
+        "benchmark_version": "rewrite_ladder_v1",
+        "task_id": "spiral_constrained_rewrite_l3_v1",
+        "case_id": "workshop",
+        "difficulty_level": 3,
+        "added_difficulty_axis": "lexical_exclusion",
+        "seed": 5,
+        "prompt_sha256": "4d510e6f09fda14a9863af4fb42b882a20f49756228a5494b3b00278c993c9de",
+        "source_sha256": "3225eb87fb40966725ed3ce2169ddb0897ff99904548c9694361b5c0f44f8829",
+        "required_term_count": 9,
+        "forbidden_term_count": 5,
+        "max_words": 12,
+        "max_generated_tokens": 64,
+        "scoring_contract": "legacy_case_insensitive_substring_terms_and_whitespace_word_count",
+        "semantic_preservation_certified": false
+      }
+    }
+  ]
+}

@@ -41,6 +41,33 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/llama_live_review_reuse.md`](docs/llama_live_review_reuse.md)
+  Fresh Luna/Llama L1 pair: four historical reviews reused without a new charge,
+  but all twelve diagnostic slots are still consumed and no explicit new-prefix
+  measurement is requested. B0/C1 remain identical at 0.938889 with zero rollout
+  edits. This is measured accounting progress, not task or API-token uplift.
+- [`docs/llama_competition_completion.md`](docs/llama_competition_completion.md)
+  Fixed-prefix follow-up: the same patch slightly narrows the `sending` versus
+  ` Sel` gap but leaves natural output unchanged. Supplying ` Sel` only in a
+  separate diagnostic branch permits name completion, but loses the deadline;
+  conditional completion is not task success or apply permission.
+- [`docs/llama_frozen_prefix_response.md`](docs/llama_frozen_prefix_response.md)
+  Reuse closed diagnostic reviews without recharging them; explicitly remeasure
+  changed prefixes. One frozen Llama activation patch was compared at three
+  positions around a connective: identical logit lift, larger piece-probability
+  movement after `before`, but unchanged final text and no apply promotion.
+- [`docs/llama_rewrite_difficulty_ladder.md`](docs/llama_rewrite_difficulty_ladder.md)
+  Opt-in L1/L2/L3 rewrite ladder: higher required-term load, tighter word budget,
+  then additional lexical exclusions. Keeps the old success control and apply
+  gates unchanged. Local Llama success is 2/3, 0/3, 1/3 respectively; L1's
+  missing-actor failure reproduces in full B0. The matched L1 Luna run also
+  misses Selim: score 0.938889, 12 diagnostics plus one inspection, zero rollout
+  edits. Frozen-prefix readout movement is evidence, not task-level uplift.
+- [`docs/llama_worker_return.md`](docs/llama_worker_return.md)
+  Full-depth local Llama return: same-task B0 and Luna C1 both score 1.0,
+  with no rollout edits. HF/runtime fidelity passes; GPT-2's same-FP16
+  no-edit control remains constraint-violating. This is a worker comparison
+  and integration check, not an intervention or architecture-only success.
 - [`docs/source_direction_comparison.md`](docs/source_direction_comparison.md)
   Frozen-prefix, equal-dose source-construction comparison and an evidence-ID
   path into existing bounded trial reviews. Source changes affect token-form

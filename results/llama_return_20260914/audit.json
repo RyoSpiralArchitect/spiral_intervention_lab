@@ -1,0 +1,390 @@
+{
+  "measurement_scope": "one-seed worker comparison; not an architecture-only causal claim",
+  "preflight": [
+    {
+      "artifact": "hf/report.json",
+      "worker": "llama",
+      "backend": "hf",
+      "format": "raw",
+      "dtype": "float16",
+      "prompt_hash": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "input_token_count": 79,
+      "output": " Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "task_done": true,
+      "fidelity_passed": null,
+      "greedy_tokens_match": null,
+      "teacher_forced_count": 0,
+      "max_kl": null,
+      "max_centered_logit_rmse": null
+    },
+    {
+      "artifact": "hf/report.json",
+      "worker": "llama",
+      "backend": "hf",
+      "format": "native_chat",
+      "dtype": "float16",
+      "prompt_hash": "a49a365b452de390d2f50a5c3ebf878df22a8ec4b8b4033b56299771c1f4ce76",
+      "input_token_count": 114,
+      "output": "Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "task_done": true,
+      "fidelity_passed": null,
+      "greedy_tokens_match": null,
+      "teacher_forced_count": 0,
+      "max_kl": null,
+      "max_centered_logit_rmse": null
+    },
+    {
+      "artifact": "tlens/report.json",
+      "worker": "llama",
+      "backend": "tlens",
+      "format": "raw",
+      "dtype": "float16",
+      "prompt_hash": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "input_token_count": 79,
+      "output": " Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "task_done": true,
+      "fidelity_passed": true,
+      "greedy_tokens_match": true,
+      "teacher_forced_count": 11,
+      "max_kl": 2.4813272830215283e-05,
+      "max_centered_logit_rmse": 0.0039304764941334724
+    },
+    {
+      "artifact": "tlens/report.json",
+      "worker": "llama",
+      "backend": "tlens",
+      "format": "native_chat",
+      "dtype": "float16",
+      "prompt_hash": "a49a365b452de390d2f50a5c3ebf878df22a8ec4b8b4033b56299771c1f4ce76",
+      "input_token_count": 114,
+      "output": "Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "task_done": true,
+      "fidelity_passed": true,
+      "greedy_tokens_match": true,
+      "teacher_forced_count": 11,
+      "max_kl": 3.6443576391320676e-05,
+      "max_centered_logit_rmse": 0.0037625383120030165
+    },
+    {
+      "artifact": "gpt2_hf_fp16/report.json",
+      "worker": "gpt2",
+      "backend": "hf",
+      "format": "raw",
+      "dtype": "float16",
+      "prompt_hash": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "input_token_count": 83,
+      "output": " In order to stay on schedule, the budget draft should be sent",
+      "score": 0.270833,
+      "task_done": false,
+      "fidelity_passed": null,
+      "greedy_tokens_match": null,
+      "teacher_forced_count": 0,
+      "max_kl": null,
+      "max_centered_logit_rmse": null
+    },
+    {
+      "artifact": "gpt2_tlens_fp16/report.json",
+      "worker": "gpt2",
+      "backend": "tlens",
+      "format": "raw",
+      "dtype": "float16",
+      "prompt_hash": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "input_token_count": 83,
+      "output": " In order to stay on schedule, the budget draft should be sent",
+      "score": 0.270833,
+      "task_done": false,
+      "fidelity_passed": true,
+      "greedy_tokens_match": true,
+      "teacher_forced_count": 13,
+      "max_kl": 0.00030240436899475753,
+      "max_centered_logit_rmse": 0.03643716126680374
+    },
+    {
+      "artifact": "gpt2_hf_fp32/report.json",
+      "worker": "gpt2",
+      "backend": "hf",
+      "format": "raw",
+      "dtype": "float32",
+      "prompt_hash": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "input_token_count": 83,
+      "output": " In order to stay on schedule, the budget draft should be sent",
+      "score": 0.270833,
+      "task_done": false,
+      "fidelity_passed": null,
+      "greedy_tokens_match": null,
+      "teacher_forced_count": 0,
+      "max_kl": null,
+      "max_centered_logit_rmse": null
+    },
+    {
+      "artifact": "gpt2_tlens_fp32/report.json",
+      "worker": "gpt2",
+      "backend": "tlens",
+      "format": "raw",
+      "dtype": "float32",
+      "prompt_hash": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+      "input_token_count": 83,
+      "output": " In order to stay on schedule, the budget draft should be sent",
+      "score": 0.270833,
+      "task_done": false,
+      "fidelity_passed": true,
+      "greedy_tokens_match": true,
+      "teacher_forced_count": 13,
+      "max_kl": 4.548880951915635e-07,
+      "max_centered_logit_rmse": 8.084066939773038e-05
+    }
+  ],
+  "raw_prompt_identical_across_models": true,
+  "runtime_pair": {
+    "controller": "gpt-5.6-luna",
+    "worker_layers": 28,
+    "dtype": "float16",
+    "device": "mps",
+    "b0": {
+      "event": "episode_end",
+      "output": " Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "steps": 11,
+      "task_done": true
+    },
+    "c1": {
+      "event": "episode_end",
+      "output": " Mira will send Omar the budget draft before lunch.",
+      "score": 1.0,
+      "steps": 11,
+      "task_done": true
+    },
+    "output_identical": true,
+    "prompt_identical": true,
+    "command_decisions": {
+      "noop": 11
+    },
+    "event_counts": {
+      "episode_start": 1,
+      "observer_check": 4,
+      "controller_prompt_telemetry": 11,
+      "controller_observation": 11,
+      "controller_provider_attempt": 11,
+      "controller_decision": 11,
+      "controller_command": 11,
+      "controller_selection": 11,
+      "controller_diagnostic_request": 6,
+      "controller_diagnostic_result": 6,
+      "controller_loop_patience": 6,
+      "controller_effect_summary": 11,
+      "episode_end": 1
+    },
+    "diagnostic_count": 6,
+    "diagnostic_names": [
+      "target_entity_insertion_probe",
+      "entity_insertion_operator_candidate_review",
+      "operator_diagnostic_replay",
+      "activation_patch_candidate_review",
+      "activation_patch_candidate_review",
+      "operator_diagnostic_replay"
+    ],
+    "rollout_apply_command_count": 0,
+    "matched_response_controls": [
+      {
+        "aliased_observation_count": 0,
+        "cached_measurement_count": 0,
+        "certified_for_apply": false,
+        "comparison_axis": "seed_provenance",
+        "diagnostic_only": true,
+        "dominant_logit_response_axis": "not_inferred_from_dose_confounded_aggregate",
+        "dose_grid": [
+          0.04,
+          0.16
+        ],
+        "errors": [],
+        "measurement_context_id": "context:740c07176345f4b0ab492fc1",
+        "measurement_mode": "matched_response_probe",
+        "new_measurement_count": 2,
+        "no_edit_control": {
+          "finite_token_count": 128252,
+          "mask_identical": true,
+          "masked_token_count": 4,
+          "max_abs_logit_delta": 0.0
+        },
+        "no_edit_max_abs_logit_delta": 0.0,
+        "objective_bundle_key": "entity_insert:send:source_body:weak_reachable",
+        "objective_term": "send",
+        "observable_count": 4,
+        "operator_axis": "target_piece_binding_seed_matrix",
+        "physical_replay_count": 6,
+        "policy_candidate_ready": false,
+        "production_apply_allowed": false,
+        "requested_objective_term": "send",
+        "row_count": 4,
+        "seed_sources": [
+          "observed_gap_carrier"
+        ],
+        "state_restored": true,
+        "status": "dose_matched_response_complete",
+        "target_piece_binding_seed_matrix_id": "tpbsm:cc4f104a605af9a4c71ae903",
+        "term_mass_is_binding_invariant_by_definition": true
+      }
+    ],
+    "selection_sources": {
+      "controller_noop": 11
+    },
+    "policy_changed": false,
+    "paired_baseline_trace_available": true
+  },
+  "incomplete_attempt": {
+    "status": "interrupted_for_observer_transfer_diagnosis",
+    "completed": false,
+    "phase": "b0_before_controller",
+    "provider_calls": 0,
+    "elapsed_process_seconds_at_interrupt": 244,
+    "signal": "SIGINT",
+    "stack_location": "HookedTransformerWorkerRuntime._kv_source_positions_for_feature",
+    "operation": "per-position cache_tensor slice .cpu().float()",
+    "process_sample": "../runtime_sample.txt",
+    "replacement_attempt": "../luna_live_r2",
+    "note": "An incomplete performance-diagnosis attempt, not a scored model failure."
+  },
+  "confounds": [
+    "parameter_count",
+    "pretraining_and_instruction_tuning",
+    "tokenizer",
+    "architecture",
+    "Llama_unprocessed_RMSNorm_vs_GPT2_weight_processing",
+    "older_GPT2_live_runs_used_FP32_and_older_observer_code"
+  ],
+  "not_claimed": [
+    "controller_caused_task_success",
+    "architecture_is_the_unique_cause",
+    "operator_certification_from_baseline_success",
+    "generalization_beyond_seed_7"
+  ],
+  "code_base_commit": "397e6d282b61cdd80e2fdaa60d785797daee0ac5",
+  "code_hash_scope": "working-tree implementations used by completed r2 run, not a committed release",
+  "code_hashes": {
+    "SpiralInterventionLab/examples/digit_transform_e2e.py": "e54f3a5dd32393614e9620bec4c3e5987334490de213d2d10ef3248cf6393eca",
+    "SpiralInterventionLab/examples/worker_fidelity_preflight.py": "2ef45a3b2970fe920b2f1c9245d44eecac3a97dfab7951b253f6914e912d4de8",
+    "SpiralInterventionLab/runtime/worker.py": "df99c362e661711702dbf91409b6fdf431586bcf78c7fd9491184228b265c464"
+  },
+  "artifacts": {
+    "build_audit.py": {
+      "sha256": "7a5f2c6366638d3a875c4337e10485e46dca50c3f6221bb70e00a9274fe1390c",
+      "bytes": 5115
+    },
+    "checkpoint_sha256.txt": {
+      "sha256": "30466060182463a9271cbbd6573d9fd3da12d09f443760fd6fbd7ee553a3cade",
+      "bytes": 332
+    },
+    "gpt2_fp32_stdout.log": {
+      "sha256": "e7510075d50a638dd09474a40b54532fbc97936a44d53db28593c20a44d4ade7",
+      "bytes": 2354
+    },
+    "gpt2_hf_fp16/raw_logits.pt": {
+      "sha256": "4422df0ddde6987c06a4ec047256a086458379ce2560a7b0792b5e0f36c707df",
+      "bytes": 2614910
+    },
+    "gpt2_hf_fp16/report.json": {
+      "sha256": "78317a952b691deefa4a87bd2687ab578524bfba9e68f23c9619ce7d2286f365",
+      "bytes": 26559
+    },
+    "gpt2_hf_fp32/raw_logits.pt": {
+      "sha256": "050960c7eeae6eda416e240ef2b90efb27e587e2e68fc2c16f3c7d64ae4346bc",
+      "bytes": 2614910
+    },
+    "gpt2_hf_fp32/report.json": {
+      "sha256": "6777c4aeea9579b558d5a55250cc699afc41f008ff2cae62f55ce14b35447f57",
+      "bytes": 26558
+    },
+    "gpt2_tlens_fp16/raw_logits.pt": {
+      "sha256": "92a12f1b4948f25d384590948ccf3dffd3a3b94b1c9a4910f36ab49b03ef6ec0",
+      "bytes": 2614910
+    },
+    "gpt2_tlens_fp16/report.json": {
+      "sha256": "8bfe7c3fd9aff60eec2736dcac54bd66e44dbaa8c796162d52f2bc0aa5732d26",
+      "bytes": 30893
+    },
+    "gpt2_tlens_fp32/raw_logits.pt": {
+      "sha256": "804763cb94562563eb758e3197141123cd31167a88f7da086b35979c7a949817",
+      "bytes": 2614910
+    },
+    "gpt2_tlens_fp32/report.json": {
+      "sha256": "08da48c0c06ddf258f1a7cf6de4bcffc3b4aa0e04a3f830860782caac50c4848",
+      "bytes": 30938
+    },
+    "gpt2_tlens_fp32_stdout.log": {
+      "sha256": "b94a3a9131805f30304c8de17580beee7e68fbd13b65db8d307c85abea434767",
+      "bytes": 5509
+    },
+    "hf/native_chat_logits.pt": {
+      "sha256": "ebc7c7807ad6993bedf6da838a35024d0b99b925f7a596db5e3bed5e56b02718",
+      "bytes": 5644918
+    },
+    "hf/raw_logits.pt": {
+      "sha256": "c194c2641a648ffa6c02c10e9e63584383a6c6b830cd1cc6f77e0c52ca58d1bf",
+      "bytes": 5644862
+    },
+    "hf/report.json": {
+      "sha256": "d744f53e071ff01efb6a3a4e474a7ee79b13e639953e7a8b55d456385f40d67d",
+      "bytes": 50971
+    },
+    "live_stdout.log": {
+      "sha256": "590f29b719c839794549c4bd3bd5b1b280efb3b9158b47056f3e81c9b1e5cebc",
+      "bytes": 12600
+    },
+    "luna_live/attempt_status.json": {
+      "sha256": "e0db1c7d7ad3c628ee187aa3da442b507ee14cb9c7d24208a2f5e0ab1ce2b03e",
+      "bytes": 538
+    },
+    "luna_live/b0.jsonl": {
+      "sha256": "cf7e4f67006835a9a7784fc4e35f880455fa8aff7f7a40da085d1a6a62c68363",
+      "bytes": 394
+    },
+    "luna_live_r2/b0.jsonl": {
+      "sha256": "7657b1d541b661862e4048b611fa4b494d5be163a9a92d80c813a8e42699a6a5",
+      "bytes": 530
+    },
+    "luna_live_r2/c1.jsonl": {
+      "sha256": "a475cf19e7ddc0105272d090776a0d4786972677f9539ae76cf39e648c2a1d0e",
+      "bytes": 1008677
+    },
+    "luna_live_r2/experiment_summary.json": {
+      "sha256": "0cecf8c4e239dd9298c7b35ab0ecfade730a7d9c0f1694125728105c9c6b75d5",
+      "bytes": 1993
+    },
+    "luna_live_r2/post_run_debrief.json": {
+      "sha256": "7dc309d028a72381982d841abd0ac41cc7842645b93ec12bb4b77ec8045a0814",
+      "bytes": 5211
+    },
+    "luna_live_r2/post_run_debrief.md": {
+      "sha256": "d69f84145a8a23dfda00e1ed03146b0407b91a634b4f3860ef106c9f79dff62f",
+      "bytes": 2728
+    },
+    "luna_live_r2/post_run_debrief_input.json": {
+      "sha256": "2defd051aa09ad4dec8677a9817ba1a645098597c5d3904b656f8869d229c25e",
+      "bytes": 19043
+    },
+    "run_live.py": {
+      "sha256": "011543bc41ed12f484806632b0879df7bf7ae51100664ea41889868a1c093df4",
+      "bytes": 938
+    },
+    "runtime_sample.txt": {
+      "sha256": "80202fcaf630586d747ca98f56149bd963dc8402c56b04c579baf349c0d06473",
+      "bytes": 218636
+    },
+    "tlens/native_chat_logits.pt": {
+      "sha256": "b5175e4f75db4d442d0532cbaa2e0076675cc8af606ba76120046a4ee13bf525",
+      "bytes": 5644918
+    },
+    "tlens/raw_logits.pt": {
+      "sha256": "2cd5fcadc099838517feca14d6a14d7480fe0078681da5a1303e586b60f0ef4f",
+      "bytes": 5644862
+    },
+    "tlens/report.json": {
+      "sha256": "92ee3ef330d93feaed12d960d981ea299ca49526913a2498dc41fe34c6cb9611",
+      "bytes": 58328
+    }
+  }
+}
