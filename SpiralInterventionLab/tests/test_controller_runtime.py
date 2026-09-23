@@ -2809,6 +2809,32 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertTrue(result["activation_patch_compile_preview_created"])
         self.assertFalse(result["activation_patch_candidate_review"]["compile_preview"]["production_apply_allowed"])
 
+    def test_activation_patch_dedicated_diagnostics_reject_cross_mode_without_replay(self):
+        worker_runtime = self._make_worker_runtime()
+        diagnostics = (
+            "activation_patch_candidate_review",
+            "activation_patch_runtime_support_probe",
+            "activation_patch_promotion_gate_review",
+            "activation_patch_production_shadow_replay",
+            "activation_patch_production_trial_gate_review",
+        )
+        with patch.object(worker_runtime, "_simulate_decode") as replay:
+            for diagnostic, conflicting_mode in zip(diagnostics, diagnostics[1:] + diagnostics[:1]):
+                with self.subTest(diagnostic=diagnostic, conflicting_mode=conflicting_mode):
+                    result = worker_runtime._execute_controller_diagnostic_request(
+                        {"diagnostic": diagnostic, "operator_recipe_expansion_mode": conflicting_mode},
+                        source="unit_test",
+                    )
+                    self.assertIsNotNone(result)
+                    assert result is not None
+                    self.assertEqual(result["status"], "invalid_request")
+                    self.assertEqual(result["blocked_reason"], "diagnostic_mode_mismatch")
+                    self.assertEqual(result["expected_operator_recipe_expansion_mode"], diagnostic)
+                    self.assertEqual(result["physical_replay_count"], 0)
+                    self.assertEqual(result["new_measurement_count"], 0)
+                    self.assertEqual(result["diagnostic_call_cost"], 0)
+            replay.assert_not_called()
+
     def test_activation_patch_review_rejects_stale_name_then_accepts_canonical_request(self):
         worker_runtime = self._make_worker_runtime()
         blueprint = {

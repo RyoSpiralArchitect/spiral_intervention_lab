@@ -344,8 +344,11 @@ retained per objective and provenance, so one unrelated charged diagnostic
 cannot erase an offered measurement or hide a repeated deferral. The same
 retained seed catalog feeds both handoff preflight and matched-response
 execution; it remains evidence only, not a frozen card or apply permission.
+Dedicated activation-patch diagnostics also reject a conflicting
+`operator_recipe_expansion_mode` before replay or diagnostic charging; a shared
+`activation_patch_` prefix is not sufficient to identify the requested tool.
 Local JSONL and audit directories are not committed PR artifacts; the compact
 outcomes above are the reviewable summary.
 
-Final validation: `484 passed, 15 warnings, 2 subtests passed` and
+Final validation: `485 passed, 15 warnings, 7 subtests passed` and
 `git diff --check` passed.

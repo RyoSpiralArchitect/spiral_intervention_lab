@@ -12410,6 +12410,11 @@ class HookedTransformerWorkerRuntime:
         dedicated_modes = {
             "carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_sweep",
             "readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_or_variant_sweep",
+            "activation_patch_candidate_review": "activation_patch_candidate_review",
+            "activation_patch_runtime_support_probe": "activation_patch_runtime_support_probe",
+            "activation_patch_promotion_gate_review": "activation_patch_promotion_gate_review",
+            "activation_patch_production_shadow_replay": "activation_patch_production_shadow_replay",
+            "activation_patch_production_trial_gate_review": "activation_patch_production_trial_gate_review",
         }
         expected_mode = dedicated_modes.get(diagnostic_name)
         requested_next = str(request.get("next_evidence_needed") or "")
