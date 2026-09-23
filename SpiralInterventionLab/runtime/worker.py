@@ -1575,6 +1575,7 @@ class HookedTransformerWorkerRuntime:
             result["diagnostic_budget_charged"] = cost > 0
             candidate_handoff.record_diagnostic(
                 self, hints.get("candidate_handoff") or {}, request, result, cost=cost, source=source)
+            candidate_handoff.capture_seed_rows(self, result)
             if not hasattr(self, "_completed_expansion_keys"):
                 self._completed_expansion_keys = set()
             self._completed_expansion_keys.update(diag_orch.completed_expansion_keys(result))
@@ -12476,7 +12477,7 @@ class HookedTransformerWorkerRuntime:
             return {"diagnostic": diagnostic_name, "step": self._steps, "source": source,
                     **inspect_evidence(self, request, strategy_hints)}
         if diagnostic_name == "matched_response_probe":
-            rows = evidence_catalog(self._diagnostic_results, full=True)
+            rows = candidate_handoff.seed_catalog(self)
             objective = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
             report = matched_response_probe(self, rows, objective_bundle_key=objective,
                 objective_term=str(request.get("focus_term") or self._term_from_bundle_key(objective)),

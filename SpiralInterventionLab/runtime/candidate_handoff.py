@@ -31,11 +31,50 @@ def reset(worker: Any) -> None:
     worker._candidate_handoff_deferred = {}
     worker._candidate_handoff_attempted = set()
     worker._candidate_handoff_unavailable = set()
+    worker._candidate_handoff_seed_rows = {}
+
+
+def seed_catalog(worker: Any) -> list[dict[str, Any]]:
+    """Include retained seed rows without extending the packet's result window."""
+    rows = evidence_catalog(getattr(worker, "_diagnostic_results", ()), full=True)
+    seen = {(str(row.get("objective_bundle_key") or row.get("bundle_key") or ""),
+             str(row.get("operator_recipe_id") or "")) for row in rows}
+    for retained in getattr(worker, "_candidate_handoff_seed_rows", {}).values():
+        key = (str(retained.get("objective_bundle_key") or retained.get("bundle_key") or ""),
+               str(retained.get("operator_recipe_id") or ""))
+        if key not in seen:
+            rows.append(dict(retained))
+            seen.add(key)
+    return rows
+
+
+def capture_seed_rows(worker: Any, result: Mapping[str, Any]) -> None:
+    """Retain only the best executable preflight seed per objective and provenance."""
+    retained = getattr(worker, "_candidate_handoff_seed_rows", None)
+    if not isinstance(retained, dict):
+        retained = {}
+        worker._candidate_handoff_seed_rows = retained
+    for row in evidence_catalog([result], full=True):
+        objective = str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+        if not objective:
+            continue
+        term = str(row.get("intended_term") or row.get("objective_term") or
+                   (objective.split(":")[1] if ":" in objective else objective))
+        selected, reason = select_probe_seeds(
+            [row], objective_bundle_key=objective, objective_term=term,
+            comparison_axis="source_localization")
+        if reason:
+            continue
+        key = (objective, str(selected[0]["seed_source"]))
+        previous = retained.get(key)
+        score = -float(row.get("target_top20_threshold_gap_delta") or 0.0)
+        if previous is None or score > -float(previous.get("target_top20_threshold_gap_delta") or 0.0):
+            retained[key] = dict(row)
 
 
 def report(worker: Any) -> dict[str, Any]:
     """Seed preflight is not a binding check, physical measurement, or permission."""
-    catalog = evidence_catalog(getattr(worker, "_diagnostic_results", ()), full=True)
+    catalog = seed_catalog(worker)
     pool = [row for row in catalog if row.get("activation_patch_site") in {"resid_pre", "resid_post", "mlp_out"}
             and str(row.get("objective_bundle_key") or row.get("bundle_key") or "")]
     objectives = sorted({str(row.get("objective_bundle_key") or row.get("bundle_key")) for row in pool})
@@ -92,7 +131,8 @@ def report(worker: Any) -> dict[str, Any]:
         state = "carded"
     else:
         state = "unmeasurable"
-    context_id = identity("handoff-offers:", [prefix_id, [offer["objective_bundle_key"] for offer in offers]])
+    context_id = identity("handoff-offers:", [prefix_id, [
+        (offer["objective_bundle_key"], offer["seed_recipe_id"]) for offer in offers]])
     deferred = getattr(worker, "_candidate_handoff_deferred", {}) or {}
     defer_count = int(deferred.get(context_id, 0)) if state == "measurable" else 0
     blocked_reason = blocked

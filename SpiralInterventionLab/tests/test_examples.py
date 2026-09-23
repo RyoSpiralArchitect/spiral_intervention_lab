@@ -40,6 +40,7 @@ from SpiralInterventionLab.examples.digit_transform_e2e import (
 from SpiralInterventionLab.examples.summarize_activation_patch_jsonl import summarize_activation_patch_jsonl
 from SpiralInterventionLab.examples.compare_activation_patch_jsonl import compare_activation_patch_runs
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
+from SpiralInterventionLab.runtime import candidate_handoff
 from SpiralInterventionLab.runtime.diagnostic_orchestration import (
     completed_expansion_keys,
     confirmed_gap_only_objective_rows,
@@ -1456,6 +1457,30 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(rows[0]["blocked_reason"], "no_candidate_seed")
         self.assertFalse(rows[0]["diagnostic_budget_charged"])
         self.assertEqual(rows[0]["budget_after"]["diagnostic_calls_left"], 12)
+
+    def test_matched_probe_executor_uses_retained_seed_after_result_eviction(self):
+        objective = "entity_insert:mira:source_body:weak_reachable"
+        row = {"operator_recipe_id": "readout_escape|activation_patch|resid_pre|L11|mira",
+               "operator_axis": "activation_patch_blueprint_materialization",
+               "objective_bundle_key": objective, "intended_term": "Mira",
+               "actual_delta_class": "rank_carrier", "activation_patch_site": "resid_pre",
+               "activation_patch_layer": 11, "activation_patch_alpha": 0.04,
+               "activation_patch_source_localization": "source_term_token"}
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        runtime._diagnostic_results = []
+        candidate_handoff.reset(runtime)
+        candidate_handoff.capture_seed_rows(runtime, {"evidence_rows": [row]})
+        with patch("SpiralInterventionLab.runtime.worker.matched_response_probe", return_value={
+            "status": "unavailable", "rows": [], "new_measurement_count": 0,
+            "physical_replay_count": 0,
+        }) as probe:
+            runtime._execute_controller_diagnostic_request(
+                {"diagnostic": "matched_response_probe", "objective_bundle_key": objective,
+                 "focus_term": "Mira", "comparison_axis": "source_localization",
+                 "candidate_ids": [row["operator_recipe_id"]], "dose_grid": [0.04]},
+                source="unit_test", packet={"strategy_hints": {}})
+        self.assertEqual(probe.call_args.args[1][0]["operator_recipe_id"], row["operator_recipe_id"])
 
     def test_already_replayed_diagnostic_does_not_consume_budget(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)

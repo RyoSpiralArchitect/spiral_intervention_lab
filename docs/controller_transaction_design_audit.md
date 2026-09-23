@@ -339,8 +339,13 @@ loop's duplicate guard blocks it. Selection logs use this same full-request
 match, so a different dose is not recorded as selecting the offered probe.
 Completed expansion identities are kept for the episode independently of the
 bounded result display window; evicting an old result cannot re-offer and
-recharge the same objective/mode. Local JSONL and audit directories are not
-committed PR artifacts; the compact outcomes above are the reviewable summary.
+recharge the same objective/mode. Eligible activation-patch seed rows are also
+retained per objective and provenance, so one unrelated charged diagnostic
+cannot erase an offered measurement or hide a repeated deferral. The same
+retained seed catalog feeds both handoff preflight and matched-response
+execution; it remains evidence only, not a frozen card or apply permission.
+Local JSONL and audit directories are not committed PR artifacts; the compact
+outcomes above are the reviewable summary.
 
-Final validation: `482 passed, 15 warnings, 2 subtests passed` and
+Final validation: `484 passed, 15 warnings, 2 subtests passed` and
 `git diff --check` passed.

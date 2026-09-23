@@ -63,6 +63,27 @@ def test_handoff_unmeasurable_and_carded_are_not_offered_for_measurement():
     assert candidate_handoff.report(worker)["state"] == "carded"
 
 
+def test_materializable_seed_survives_result_display_window_eviction():
+    worker = worker_with_pool()
+    candidate_handoff.capture_seed_rows(worker, worker._diagnostic_results[0])
+    worker._diagnostic_results = []
+    handoff = candidate_handoff.report(worker)
+    assert handoff["state"] == "measurable"
+    assert handoff["measurement_offers"][0]["request"]["candidate_ids"] == [
+        seed_row()["operator_recipe_id"]]
+    assert candidate_handoff.seed_catalog(worker)[0]["operator_recipe_id"] == (
+        seed_row()["operator_recipe_id"])
+    for expected_count in (1, 2):
+        deferred = {}
+        candidate_handoff.record_diagnostic(worker, handoff,
+            {"diagnostic": "objective_rotation_pipeline", "objective_bundle_key": OBJECTIVE},
+            deferred, cost=1, source="controller")
+        handoff = candidate_handoff.report(worker)
+        assert handoff["state"] == "measurable"
+        assert handoff["deferred_diagnostic_count"] == expected_count
+    assert handoff["soft_opportunity_cost"] == 1
+
+
 def test_already_present_required_term_is_control_only_not_a_progress_offer():
     worker = worker_with_pool()
     worker._last_task_feedback = {"required_terms_present": ["Mira"],
