@@ -2809,7 +2809,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertTrue(result["activation_patch_compile_preview_created"])
         self.assertFalse(result["activation_patch_candidate_review"]["compile_preview"]["production_apply_allowed"])
 
-    def test_activation_patch_review_honors_expansion_mode_when_diagnostic_name_is_stale(self):
+    def test_activation_patch_review_rejects_stale_name_then_accepts_canonical_request(self):
         worker_runtime = self._make_worker_runtime()
         blueprint = {
             "kind": "entity_insertion_candidate_blueprint",
@@ -2872,14 +2872,29 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
                     source="unit_test",
                     packet={"strategy_hints": {"diagnostic_frontier_bundle_key": "entity_insert:a:source_body:near_reachable"}},
                 )
+                canonical = worker_runtime._execute_controller_diagnostic_request(
+                    {
+                        "diagnostic": "activation_patch_candidate_review",
+                        "bundle_key": "entity_insert:a:source_body:near_reachable",
+                        "objective_bundle_key": "entity_insert:a:source_body:near_reachable",
+                        "operator_recipe_expansion_mode": "activation_patch_candidate_review",
+                        "next_evidence_needed": "activation_patch_candidate_review",
+                    },
+                    source="unit_test",
+                    packet={"strategy_hints": {"diagnostic_frontier_bundle_key": "entity_insert:a:source_body:near_reachable"}},
+                )
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result["diagnostic_role"], "activation_patch_candidate_review")
-        self.assertEqual(result["diagnostic_intent_source"], "operator_recipe_expansion_mode")
-        self.assertEqual(result["activation_patch_blueprint_materialization_count"], 3)
-        self.assertTrue(result["activation_patch_candidate_pool"])
-        self.assertFalse(result["production_apply_allowed"])
+        self.assertEqual(result["status"], "invalid_request")
+        self.assertEqual(result["blocked_reason"], "diagnostic_mode_mismatch")
+        self.assertEqual(result["diagnostic_call_cost"], 0)
+        self.assertIsNotNone(canonical)
+        assert canonical is not None
+        self.assertEqual(canonical["diagnostic_role"], "activation_patch_candidate_review")
+        self.assertEqual(canonical["activation_patch_blueprint_materialization_count"], 3)
+        self.assertTrue(canonical["activation_patch_candidate_pool"])
+        self.assertFalse(canonical["production_apply_allowed"])
 
     def test_activation_patch_local_step_size_sweep_replays_saturated_carriers(self):
         worker_runtime = self._make_worker_runtime()

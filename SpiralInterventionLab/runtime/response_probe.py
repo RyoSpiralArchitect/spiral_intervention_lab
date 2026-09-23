@@ -117,26 +117,10 @@ def with_ownership(worker: Any, replay: Mapping[str, Any], objective: str, term:
         "actuator_class", "realized_lift_bundle_key")}, "ownership_scope": "execution_measured_term_set"}
 
 
-def matched_response_probe(worker: Any, seeds: Sequence[Mapping[str, Any]], *,
-                           objective_bundle_key: str, objective_term: str,
-                           dose_grid: Any = (0.04, 0.16), candidate_ids: Any = (),
-                           comparison_axis: str = "seed_provenance") -> dict[str, Any]:
-    report: dict[str, Any] = {
-        "status": "unavailable", "operator_axis": "target_piece_binding_seed_matrix",
-        "measurement_mode": "matched_response_probe", "rows": [], "row_count": 0,
-        "comparison_axis": comparison_axis,
-        "objective_bundle_key": objective_bundle_key, "diagnostic_only": True,
-        "production_apply_allowed": False, "certified_for_apply": False, "policy_candidate_ready": False,
-        "physical_replay_count": 0, "new_measurement_count": 0, "cached_measurement_count": 0,
-    }
-    try:
-        if not isinstance(comparison_axis, str) or comparison_axis not in {"seed_provenance", "source_localization"}:
-            raise ValueError("comparison_axis must be seed_provenance or source_localization")
-        doses = validate_doses(dose_grid)
-        if not isinstance(candidate_ids, (list, tuple)) or len(candidate_ids) > 2 or any(not isinstance(x, str) or not 1 <= len(x) <= 512 for x in candidate_ids):
-            raise ValueError("candidate_ids must contain at most two recipe IDs")
-    except ValueError as exc:
-        return {**report, "status": "invalid_request", "unavailable_reason": str(exc)}
+def select_probe_seeds(seeds: Sequence[Mapping[str, Any]], *, objective_bundle_key: str,
+                       objective_term: str, candidate_ids: Sequence[str] = (),
+                       comparison_axis: str = "seed_provenance") -> tuple[list[dict[str, Any]], str | None]:
+    """Preflight recorded seeds; binding and state restoration still require replay."""
     groups: dict[str, list[dict[str, Any]]] = {}
     for raw in seeds:
         if not isinstance(raw, Mapping) or raw.get("objective_bundle_key", raw.get("bundle_key")) != objective_bundle_key:
@@ -170,10 +154,9 @@ def matched_response_probe(worker: Any, seeds: Sequence[Mapping[str, Any]], *,
     selected = [max(groups[s], key=lambda r: -float(r.get("target_top20_threshold_gap_delta") or 0.0))
                 for s in ("direct_candidate", "observed_gap_carrier") if s in groups]
     if not selected:
-        return {**report, "unavailable_reason": "no_materializable_activation_patch_seed"}
+        return [], "no_materializable_activation_patch_seed"
     if comparison_axis == "source_localization":
         # One recorded anchor fixes every axis other than source construction.
-        # A derived variant is not relabeled as an observed positive seed.
         anchor = selected[0]
         selected = []
         for localization in ("source_term_token", "source_centered_pm1"):
@@ -187,14 +170,41 @@ def matched_response_probe(worker: Any, seeds: Sequence[Mapping[str, Any]], *,
                 "activation_patch_source_localization": localization,
                 "activation_patch_contrast_mode": "none", "activation_patch_contrast_scale": 0.0,
                 "activation_patch_stealer_term": None, "activation_patch_stealer_bundle_key": None})
-    report["requested_objective_term"] = objective_term
-    objective_term = str(selected[0].get("intended_term") or selected[0].get("objective_term") or objective_term)
-    report["objective_term"] = objective_term
     controls = ("activation_patch_site", "activation_patch_layer", "activation_patch_alpha")
     if comparison_axis == "seed_provenance":
         controls += ("activation_patch_source_localization",)
     if any(tuple(r.get(k) for k in controls) != tuple(selected[0].get(k) for k in controls) for r in selected[1:]):
-        return {**report, "unavailable_reason": "seed_site_layer_alpha_localization_mismatch"}
+        return [], "seed_site_layer_alpha_localization_mismatch"
+    return selected, None
+
+
+def matched_response_probe(worker: Any, seeds: Sequence[Mapping[str, Any]], *,
+                           objective_bundle_key: str, objective_term: str,
+                           dose_grid: Any = (0.04, 0.16), candidate_ids: Any = (),
+                           comparison_axis: str = "seed_provenance") -> dict[str, Any]:
+    report: dict[str, Any] = {
+        "status": "unavailable", "operator_axis": "target_piece_binding_seed_matrix",
+        "measurement_mode": "matched_response_probe", "rows": [], "row_count": 0,
+        "comparison_axis": comparison_axis,
+        "objective_bundle_key": objective_bundle_key, "diagnostic_only": True,
+        "production_apply_allowed": False, "certified_for_apply": False, "policy_candidate_ready": False,
+        "physical_replay_count": 0, "new_measurement_count": 0, "cached_measurement_count": 0,
+    }
+    try:
+        if not isinstance(comparison_axis, str) or comparison_axis not in {"seed_provenance", "source_localization"}:
+            raise ValueError("comparison_axis must be seed_provenance or source_localization")
+        doses = validate_doses(dose_grid)
+        if not isinstance(candidate_ids, (list, tuple)) or len(candidate_ids) > 2 or any(not isinstance(x, str) or not 1 <= len(x) <= 512 for x in candidate_ids):
+            raise ValueError("candidate_ids must contain at most two recipe IDs")
+    except ValueError as exc:
+        return {**report, "status": "invalid_request", "unavailable_reason": str(exc)}
+    selected, unavailable_reason = select_probe_seeds(seeds, objective_bundle_key=objective_bundle_key,
+        objective_term=objective_term, candidate_ids=candidate_ids, comparison_axis=comparison_axis)
+    if unavailable_reason:
+        return {**report, "unavailable_reason": unavailable_reason}
+    report["requested_objective_term"] = objective_term
+    objective_term = str(selected[0].get("intended_term") or selected[0].get("objective_term") or objective_term)
+    report["objective_term"] = objective_term
     context_id = state_identity(worker)
     report["measurement_context_id"] = context_id
     report["dose_grid"] = list(doses)

@@ -15,6 +15,7 @@ from .compiler import StepContext, compile_command
 from . import diagnostic_orchestration as diag_orch
 from . import diagnostic_reuse as diag_reuse
 from . import candidate_actions
+from . import candidate_handoff
 from . import diagnostic_budget
 from . import candidate_trial
 from .response_probe import matched_response_probe
@@ -640,6 +641,7 @@ class HookedTransformerWorkerRuntime:
         tool_result_window: int = 6,
         max_diagnostic_calls_per_run: int = 8,
         diagnostic_result_window: int = 8,
+        candidate_handoff_mode: str = "off",
         readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
         readout_analyzer_rerank_mode: str = "apply",
     ) -> None:
@@ -701,6 +703,9 @@ class HookedTransformerWorkerRuntime:
         self.tool_result_window = max(1, int(tool_result_window))
         self.max_diagnostic_calls_per_run = max(0, int(max_diagnostic_calls_per_run))
         self.diagnostic_result_window = max(1, int(diagnostic_result_window))
+        if candidate_handoff_mode not in {"off", "soft"}:
+            raise ValueError("candidate_handoff_mode must be off or soft")
+        self.candidate_handoff_mode = candidate_handoff_mode
         self.readout_sidecar_analyzer = readout_sidecar_analyzer
         self.readout_analyzer_rerank_mode = _normalize_readout_analyzer_rerank_mode(readout_analyzer_rerank_mode)
 
@@ -738,6 +743,7 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_calls_used = 0
         self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
         candidate_actions.reset(self)
+        candidate_handoff.reset(self)
         self._evidence_inspection_count = 0
         self._inspection_seen_ids: set[str] = set()
         self._inspection_gate_signature: str | None = None
@@ -1558,12 +1564,16 @@ class HookedTransformerWorkerRuntime:
             )
             if result is None:
                 continue
-            candidate_actions.capture_measurements(self, result, budget_left=budget_left - int(not inspection))
+            cost = 0 if inspection else int(result.get("diagnostic_call_cost", 1))
+            if cost not in (0, 1):
+                raise ValueError("diagnostic_call_cost must be zero or one")
+            candidate_actions.capture_measurements(self, result, budget_left=budget_left - cost)
             result["budget_before"] = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count + int(inspection)}
-            if not inspection:
-                budget_left -= 1
+            budget_left -= cost
             result["budget_after"] = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count}
-            result["diagnostic_budget_charged"] = not inspection
+            result["diagnostic_budget_charged"] = cost > 0
+            candidate_handoff.record_diagnostic(
+                self, hints.get("candidate_handoff") or {}, request, result, cost=cost, source=source)
             results.append(result)
             if diag_reuse.closed_review(result):
                 key = diag_reuse.review_key(request, hints, [*self._diagnostic_results, *results])
@@ -1763,6 +1773,7 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_calls_used = 0
         self._diagnostic_review_cache = {}
         candidate_actions.reset(self)
+        candidate_handoff.reset(self)
         self._evidence_inspection_count = 0
         self._inspection_seen_ids = set()
         self._inspection_gate_signature = None
@@ -6479,9 +6490,70 @@ class HookedTransformerWorkerRuntime:
                 blocked.sort(key=lambda item: (int(item.get("priority", 10) or 10), str(item.get("diagnostic") or "")))
                 del blocked[8:]
 
+        def _expansion_already_replayed(request: Mapping[str, Any]) -> bool:
+            mode = str(request.get("operator_recipe_expansion_mode") or "")
+            objective = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+            if not mode or not objective:
+                return False
+            matching_axes = {
+                "non_kv_variant_or_two_stage_design": {
+                    "non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review",
+                },
+                "two_stage_suppress_then_target_review": {
+                    "non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review",
+                },
+            }.get(mode, {mode})
+            count_key = {
+                "readout_steering_deepening": "readout_steering_deepening_followup_count",
+                "readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_variant_count",
+                "carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_variant_count",
+                "non_kv_variant_or_two_stage_design": "non_kv_variant_or_two_stage_rows",
+                "two_stage_suppress_then_target_review": "non_kv_variant_or_two_stage_rows",
+                "anti_attractor_suppression_calibration_sweep": "anti_attractor_suppression_calibration_row_count",
+            }.get(mode)
+            if not count_key:
+                return False
+            for previous in self._diagnostic_results:
+                if not isinstance(previous, Mapping):
+                    continue
+                for field in (
+                    "operator_recipe_expansion_matrix",
+                    "non_kv_variant_or_two_stage_rows",
+                    "inline_anti_attractor_suppression_calibration_rows",
+                    "inline_suppress_then_target_after_calibration_rows",
+                ):
+                    rows = previous.get(field)
+                    if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
+                        continue
+                    for row in rows:
+                        if not isinstance(row, Mapping):
+                            continue
+                        row_objective = str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+                        row_mode = str(row.get("operator_axis") or row.get("operator_recipe_expansion_mode") or "")
+                        if row_objective == objective and row_mode in matching_axes:
+                            return True
+                if str(previous.get("operator_recipe_expansion_mode") or "") != mode:
+                    continue
+                if str(previous.get("objective_bundle_key") or previous.get("bundle_key") or "") != objective:
+                    continue
+                count = previous.get(count_key)
+                if mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}:
+                    count = (previous.get("non_kv_variant_or_two_stage_summary") or {}).get(count_key, 0)
+                if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+                    return True
+            return False
+
         def _add_available_next_diagnostic(request: Mapping[str, Any], *, reason: str, priority: int = 10) -> None:
             diagnostic = str(request.get("diagnostic") or "")
             if not diagnostic:
+                return
+            if _expansion_already_replayed(request):
+                _block_next_diagnostic(
+                    request,
+                    reason="already_replayed_no_new_measurement",
+                    priority=priority,
+                    status="already_replayed",
+                )
                 return
             if diagnostic_budget_exhausted:
                 _block_next_diagnostic(
@@ -7043,6 +7115,10 @@ class HookedTransformerWorkerRuntime:
                 and current_role == "gap_closer_candidate"
                 and not current_trial_eligible
                 and not current_has_target_lift
+                and not _expansion_already_replayed({
+                    "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                    "objective_bundle_key": objective_key,
+                })
             )
             if reserve_conversion_after_one_confirmed:
                 objective_keys: list[str] = []
@@ -7216,7 +7292,15 @@ class HookedTransformerWorkerRuntime:
                     and int(result.get("recorded_step", -1) or -1) > latest_gap_step
                     for result in self._diagnostic_results
                 )
-                if role == "gap_closer_candidate" and not trial_eligible and len(confirmed_gap_only_rows) >= 2:
+                if (
+                    role == "gap_closer_candidate"
+                    and not trial_eligible
+                    and len(confirmed_gap_only_rows) >= 2
+                    and not _expansion_already_replayed({
+                        "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep",
+                        "objective_bundle_key": objective_key,
+                    })
+                ):
                     objective_keys = [
                         str(row.get("objective_bundle_key") or "")
                         for row in confirmed_gap_only_rows
@@ -8266,6 +8350,22 @@ class HookedTransformerWorkerRuntime:
                 hints["phase_policy"] = "Favor entity insertion and dry-run checks; avoid new loop-rescue edits unless looping returns."
         else:
             hints["phase_policy"] = "Prefer noop or monitoring unless fresh evidence justifies a small edit."
+        frontier_request = hints.get("diagnostic_frontier_canonical_request")
+        if isinstance(frontier_request, Mapping) and _expansion_already_replayed(frontier_request):
+            _block_next_diagnostic(
+                frontier_request,
+                reason="already_replayed_no_new_measurement",
+                priority=1,
+                status="already_replayed",
+            )
+            for key in (
+                "diagnostic_frontier_request",
+                "diagnostic_frontier_next_evidence",
+                "diagnostic_frontier_operator_recipe_expansion_mode",
+                "diagnostic_frontier_canonical_request",
+            ):
+                hints.pop(key, None)
+            hints["diagnostic_frontier_blocked_reason"] = "already_replayed_no_new_measurement"
         if diagnostic_budget_exhausted:
             frontier_request = hints.get("diagnostic_frontier_canonical_request")
             if isinstance(frontier_request, Mapping):
@@ -8315,6 +8415,13 @@ class HookedTransformerWorkerRuntime:
         hints.update(diag_reuse.reuse_hints(self))
         hints.update(candidate_actions.action_hints(self))
         hints.update(candidate_trial.packet_hints(self))
+        if getattr(self, "candidate_handoff_mode", "off") == "soft":
+            handoff = candidate_handoff.report(self)
+            hints["candidate_handoff"] = handoff
+            for offer in handoff["measurement_offers"]:
+                _add_available_next_diagnostic(
+                    offer["request"], reason="recorded_seed_preflight_ready_for_same_prefix_measurement",
+                    priority=2)
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -12342,6 +12449,54 @@ class HookedTransformerWorkerRuntime:
         diagnostic_name = str(request.get("diagnostic", "") or "")
         if diagnostic_name not in _CONTROLLER_DIAGNOSTIC_NAMES:
             return None
+        mode = str(request.get("operator_recipe_expansion_mode") or "")
+        dedicated_modes = {
+            "carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_sweep",
+            "readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_or_variant_sweep",
+        }
+        expected_mode = dedicated_modes.get(diagnostic_name)
+        requested_next = str(request.get("next_evidence_needed") or "")
+        other_intents = {
+            "readout_steering_deepening",
+            "non_kv_variant_or_two_stage_design",
+            "two_stage_suppress_then_target_review",
+            "anti_attractor_suppression_calibration_sweep",
+            "activation_patch_candidate_review",
+            "activation_patch_runtime_support_probe",
+            "activation_patch_production_shadow_replay",
+            *dedicated_modes.values(),
+        }
+        mode_capable_diagnostics = {
+            "compare_extra_operator_diagnostics",
+            *dedicated_modes,
+            "activation_patch_candidate_review",
+            "activation_patch_runtime_support_probe",
+            "activation_patch_promotion_gate_review",
+            "activation_patch_production_shadow_replay",
+            "activation_patch_production_trial_gate_review",
+        }
+        if (
+            (mode and diagnostic_name not in mode_capable_diagnostics)
+            or (expected_mode and mode not in ("", expected_mode))
+            or (expected_mode and requested_next in other_intents and requested_next != expected_mode)
+            or (diagnostic_name.startswith("activation_patch_") and mode and not mode.startswith("activation_patch_"))
+        ):
+            return {
+                "diagnostic": diagnostic_name,
+                "status": "invalid_request",
+                "blocked_reason": "diagnostic_mode_mismatch",
+                "operator_recipe_expansion_mode": mode,
+                "expected_operator_recipe_expansion_mode": expected_mode,
+                "recorded_step": int(self._steps),
+                "new_measurement_count": 0,
+                "physical_replay_count": 0,
+                "diagnostic_call_cost": 0,
+                "production_apply_allowed": False,
+                "policy_candidate_ready": False,
+            }
+        if expected_mode and not mode:
+            request = {**request, "operator_recipe_expansion_mode": expected_mode}
+            mode = expected_mode
         packet_context = packet if isinstance(packet, Mapping) else {}
         strategy_hints = packet_context.get("strategy_hints") if isinstance(packet_context.get("strategy_hints"), Mapping) else {}
         if diagnostic_name == "inspect_evidence":
@@ -12354,12 +12509,16 @@ class HookedTransformerWorkerRuntime:
                 objective_term=str(request.get("focus_term") or self._term_from_bundle_key(objective)),
                 dose_grid=request.get("dose_grid", (0.04, 0.16)), candidate_ids=request.get("candidate_ids", ()),
                 comparison_axis=request.get("comparison_axis", "seed_provenance"))
+            no_work = not report.get("new_measurement_count") and not report.get("physical_replay_count")
             return {"diagnostic": diagnostic_name, "step": self._steps, "source": source,
+                    "status": report.get("status"),
+                    "blocked_reason": report.get("unavailable_reason"),
                     "target_piece_binding_seed_matrix_rows": report.pop("rows"),
                     "target_piece_binding_seed_matrix_summary": report,
                     "target_piece_binding_seed_matrix_executed": bool(report.get("new_measurement_count")),
                     "new_measurement_count": report.get("new_measurement_count", 0),
                     "physical_replay_count": report.get("physical_replay_count", 0),
+                    **({"diagnostic_call_cost": 0} if no_work else {}),
                     "production_apply_allowed": False, "diagnostic_only": True}
         if diagnostic_name in RESPONSE_REVIEW_NAMES and request.get("evidence_id"):
             return {"step": self._steps, "source": source, **review_response_evidence(self, request, packet_context)}
@@ -15206,6 +15365,7 @@ class HookedTransformerWorkerRuntime:
         }
         if (
             diagnostic_name == "carrier_to_actuator_conversion_sweep"
+            and not carrier_to_actuator_conversion_already_replayed
             and isinstance(readout_deepening_review_summary, Mapping)
             and str(readout_deepening_review_summary.get("best_candidate_role") or "")
             == "carrier_only_no_target_actuator"
@@ -17295,6 +17455,58 @@ class HookedTransformerWorkerRuntime:
             # A legacy summary can satisfy the review checks without recording
             # an exact current execution. Do not present it as an apply offer.
             result = candidate_trial.require_physical_confirmation(result)
+        replay_status = (
+            result.get("non_kv_variant_or_two_stage_review_status")
+            if mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+            else result.get("readout_steering_deepening_followup_status")
+            if mode in {
+                "readout_steering_deepening",
+                "readout_gap_confirmation_or_variant_sweep",
+                "carrier_to_actuator_conversion_sweep",
+                "anti_attractor_suppression_calibration_sweep",
+            }
+            else None
+        )
+        fresh_rows = (
+            len(result.get("non_kv_variant_or_two_stage_rows") or ())
+            if mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}
+            else int(result.get("carrier_to_actuator_conversion_variant_count") or 0)
+            if mode == "carrier_to_actuator_conversion_sweep"
+            else int(result.get("readout_gap_confirmation_variant_count") or 0)
+            if mode == "readout_gap_confirmation_or_variant_sweep"
+            else int(result.get("anti_attractor_suppression_calibration_row_count") or 0)
+            if mode == "anti_attractor_suppression_calibration_sweep"
+            else int(result.get("readout_steering_deepening_followup_count") or 0)
+            if mode == "readout_steering_deepening"
+            else 0
+        )
+        fresh_rows += sum(len(result.get(key) or ()) for key in (
+            "mini_non_kv_first_pass_evidence_rows",
+            "inline_anti_attractor_suppression_calibration_rows",
+            "inline_suppress_then_target_after_calibration_rows",
+        ))
+        replay_modes = {
+            "readout_steering_deepening",
+            "readout_gap_confirmation_or_variant_sweep",
+            "carrier_to_actuator_conversion_sweep",
+            "non_kv_variant_or_two_stage_design",
+            "two_stage_suppress_then_target_review",
+            "anti_attractor_suppression_calibration_sweep",
+        }
+        if mode in replay_modes and fresh_rows == 0:
+            empty_status = "already_replayed" if replay_status == "already_replayed" else "no_new_measurement"
+            result.update(
+                status=empty_status,
+                blocked_reason=(
+                    "already_replayed_no_new_measurement"
+                    if empty_status == "already_replayed"
+                    else "no_new_measurement"
+                ),
+                new_measurement_count=0,
+                physical_replay_count=0,
+                diagnostic_call_cost=0,
+                next_evidence_needed="choose_unreplayed_diagnostic",
+            )
         return result
 
     def _tokenize_terms_tool_result(self, request: Mapping[str, Any]) -> dict[str, Any] | None:

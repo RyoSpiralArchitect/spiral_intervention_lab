@@ -28,7 +28,8 @@ PROFILES = {
 }
 
 
-def build_argv(profile: str, checkpoint: Path, root: Path, *, device: str, controller: str) -> list[str]:
+def build_argv(profile: str, checkpoint: Path, root: Path, *, device: str, controller: str,
+               candidate_handoff_mode: str = "off") -> list[str]:
     spec = PROFILES[profile]
     return ["--provider", "openai", "--controller-model", controller,
         "--worker-model", spec["worker_model"], "--worker-model-path", str(checkpoint),
@@ -39,6 +40,7 @@ def build_argv(profile: str, checkpoint: Path, root: Path, *, device: str, contr
         "--activation-surface-profile", "activation_patch_expanded",
         "--max-diagnostic-calls-per-run", "12", "--diagnostic-result-window", "12",
         "--candidate-handoff-rounds", "2",
+        "--candidate-handoff-mode", candidate_handoff_mode,
         "--post-run-debrief", "controller", "--post-run-debrief-max-output-tokens", "1200",
         "--log-dir", str(root / "live")]
 
@@ -81,7 +83,15 @@ def audit(root: Path, manifest: dict) -> dict:
     actions, offers, requests, timeline = [], {}, Counter(), []
     charges, diagnostics, usage = Counter(), Counter(), Counter()
     exposure_steps = []
+    handoff_measurable_steps = []
+    handoff_deferred_results = 0
+    handoff_missing_reasons = 0
+    first_card = None
+    diagnostic_used = 0
     for row in rows:
+        if row.get("event") == "controller_selection" and row.get("candidate_handoff_state") == "measurable":
+            handoff_measurable_steps.append(row["step"])
+            handoff_missing_reasons += int(row.get("candidate_handoff_defer_reason") == "not_stated_by_controller")
         if row.get("event") == "controller_selection" and row.get("candidate_diagnostic_choices"):
             choices = row["candidate_diagnostic_choices"]
             exposure_steps.append(row["step"])
@@ -96,6 +106,11 @@ def audit(root: Path, manifest: dict) -> dict:
             diagnostics[row["diagnostic"]] += 1
             for key in ("diagnostic_calls_left", "inspection_calls_left"):
                 charges[key] += row["budget_before"][key] - row["budget_after"][key]
+            diagnostic_used += row["budget_before"]["diagnostic_calls_left"] - row["budget_after"]["diagnostic_calls_left"]
+            handoff_deferred_results += int(row.get("candidate_handoff_choice") == "deferred_for_other_diagnostic")
+            if first_card is None and any(receipt.get("status") == "frozen"
+                                         for receipt in row.get("frozen_candidate_receipts", ())):
+                first_card = {"step": row["step"], "diagnostics_used": diagnostic_used}
             if row.get("diagnostic") == "candidate_action":
                 offered = offers[row["action_id"]]
                 assert requests[row["action_id"]] > 0
@@ -141,6 +156,10 @@ def audit(root: Path, manifest: dict) -> dict:
         "command_decisions": dict(Counter(row["command"]["decision"] for row in rows if row.get("event") == "controller_command")),
         "diagnostic_counts": dict(diagnostics), "charges": dict(charges),
         "controller_usage_excluding_debrief": dict(usage), "position_exposure_steps": exposure_steps,
+        "candidate_handoff_measurable_steps": handoff_measurable_steps,
+        "candidate_handoff_deferred_results": handoff_deferred_results,
+        "candidate_handoff_missing_controller_reasons": handoff_missing_reasons,
+        "first_measured_card": first_card,
         "candidate_action_counts": dict(Counter(row["requested_action"] for row in actions)),
         "candidate_action_statuses": dict(Counter(row["status"] for row in actions)),
         "action_measurement_count": sum(row["new_measurement_count"] for row in actions),
@@ -164,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--controller-model", default="gpt-5.6-luna")
     parser.add_argument("--device", choices=("cpu", "mps"), default="mps")
+    parser.add_argument("--candidate-handoff-mode", choices=("off", "soft"), default="off")
     parser.add_argument("--baseline-reference", type=Path, help="Optional previous experiment_summary.json; stop if B0 changed")
     args = parser.parse_args(argv)
     if not os.environ.get("OPENAI_API_KEY"):
@@ -179,7 +199,8 @@ def main(argv: list[str] | None = None) -> int:
     root = args.output_dir.expanduser().resolve()
     root.mkdir(parents=True, exist_ok=False)
     repo = Path(__file__).resolve().parents[2]
-    call = build_argv(args.profile, checkpoint, root, device=args.device, controller=args.controller_model)
+    call = build_argv(args.profile, checkpoint, root, device=args.device, controller=args.controller_model,
+                      candidate_handoff_mode=args.candidate_handoff_mode)
     import torch
     from SpiralInterventionLab.examples.digit_transform_e2e import create_task_env, main as run_pair
     from SpiralInterventionLab.runtime import baselines
@@ -201,6 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         "mps_memory_fraction": 0.7 if args.device == "mps" else None,
         "production_policy_changed": True, "physical_policy_caps_changed": False,
         "controller_handoff_changed": True, "candidate_handoff_rounds": 2,
+        "candidate_handoff_mode": args.candidate_handoff_mode,
         "policy_change_scope": "exact_context_not_frontier_preference_no_looser_caps",
         "normal_cap_variants": "new_identity_explicit_measurement_no_inherited_evidence",
         "prefix_hold_budget_pool": "shared_candidate_handoff_rounds",
