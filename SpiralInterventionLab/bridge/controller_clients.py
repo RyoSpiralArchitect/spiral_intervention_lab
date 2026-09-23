@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from time import perf_counter
@@ -960,6 +961,7 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
         "feature_supported",
         "certified_for_apply",
         "production_apply_allowed",
+        "production_trial_allowed",
         "feature_backend",
         "top20_reachable_count",
         "near_reachable_count",
@@ -976,6 +978,17 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     ):
         if value.get(key) not in (None, "", []):
             summary[key] = value.get(key)
+    if value.get("production_trial_allowed") is True:
+        trial_candidate = value.get("production_trial_candidate")
+        if isinstance(trial_candidate, Mapping) and isinstance(trial_candidate.get("trial_edit"), Mapping):
+            summary["production_trial_candidate"] = {
+                key: deepcopy(trial_candidate[key])
+                for key in ("kind", "apply_kind", "operator_recipe_id", "objective_bundle_key", "trial_edit")
+                if key in trial_candidate
+            }
+            trial_contract = value.get("production_trial_contract")
+            if isinstance(trial_contract, Mapping):
+                summary["production_trial_contract"] = deepcopy(trial_contract)
     focus_terms = value.get("focus_terms")
     if isinstance(focus_terms, Sequence) and not isinstance(focus_terms, (str, bytes, bytearray)):
         compact_terms = [str(item) for item in focus_terms[:6] if str(item)]

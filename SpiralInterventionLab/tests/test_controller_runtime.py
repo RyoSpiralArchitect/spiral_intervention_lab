@@ -6252,6 +6252,7 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(metrics["target_piece_token_id"], 3)
         self.assertEqual(metrics["target_piece"], " ")
         self.assertEqual(metrics["post_edit_best_token_id"], 1)
+        self.assertFalse(metrics["post_edit_matches_binding"])
         self.assertFalse(metrics["target_piece_binding_report"]["post_edit_matches_binding"])
         self.assertEqual(
             metrics["target_piece_binding_report"]["binding_selection_time"],

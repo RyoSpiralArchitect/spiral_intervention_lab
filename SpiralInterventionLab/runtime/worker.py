@@ -10168,6 +10168,7 @@ class HookedTransformerWorkerRuntime:
                 metrics.get("post_edit_best_token_id") == int(binding_report["chosen_target_token_id"])
                 and metrics.get("post_edit_best_term") == str(binding_report["objective_term"])
             )
+            metrics["post_edit_matches_binding"] = report["post_edit_matches_binding"]
             metrics["target_piece_binding_report"] = report
         return metrics
 
