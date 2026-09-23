@@ -13,6 +13,9 @@ from .adapter import ModelAdapter
 from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
 from . import diagnostic_orchestration as diag_orch
+from .response_probe import matched_response_probe
+from .response_promotion import REVIEW_NAMES as RESPONSE_REVIEW_NAMES, review_response_evidence
+from .evidence_inspection import inspect_evidence, evidence_catalog
 from .edit_budget import (
     LOOP_RESCUE_EDIT_BUDGET_POOL,
     MAIN_EDIT_BUDGET_POOL,
@@ -107,6 +110,8 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
 _CONTROLLER_DIAGNOSTIC_NAMES = {
+    "inspect_evidence",
+    "matched_response_probe",
     "operator_diagnostic_replay",
     "attention_head_ablation_on_frontier",
     "attention_readout_carrier_probe",
@@ -521,6 +526,12 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
     if diagnostic_name is None:
         return None
     normalized: dict[str, Any] = {"diagnostic": diagnostic_name}
+    for key in ("execution_id", "evidence_id"):
+        if isinstance(value.get(key), str):
+            normalized[key] = value[key][:160]
+    for key in ("dose_grid", "candidate_ids", "limit", "comparison_axis"):
+        if key in value:
+            normalized[key] = value[key]
     for key, limit in (
         ("reason", 120),
         ("bundle_key", 160),
@@ -719,6 +730,10 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results: list[dict[str, Any]] = []
         self._pending_tool_events: list[dict[str, Any]] = []
         self._diagnostic_results: list[dict[str, Any]] = []
+        self._evidence_inspection_count = 0
+        self._inspection_seen_ids: set[str] = set()
+        self._inspection_gate_signature: str | None = None
+        self._inspection_gate_facts: dict[str, Any] = {}
         self._latest_diagnostic_results: list[dict[str, Any]] = []
         self._pending_diagnostic_events: list[dict[str, Any]] = []
         self._last_observer_candidate_hash: str | None = None
@@ -934,6 +949,13 @@ class HookedTransformerWorkerRuntime:
             "control_phase_hint": control_phase_hint,
             "strategy_hints": strategy_hints,
         }
+        catalog = evidence_catalog(self._diagnostic_results)
+        if catalog:
+            strategy_hints["evidence_inspection_catalog"] = [
+                {k: row[k] for k in ("evidence_id", "execution_id", "objective_bundle_key", "operator_recipe_id", "evidence_scope") if k in row}
+                for row in catalog[:4]
+            ]
+            strategy_hints["evidence_inspection_calls_left"] = max(0, 4 - self._evidence_inspection_count)
         missing_required_terms = packet["task_feedback"].get("missing_required_terms")
         if not isinstance(missing_required_terms, SequenceABC) or isinstance(
             missing_required_terms, (str, bytes, bytearray)
@@ -1426,14 +1448,18 @@ class HookedTransformerWorkerRuntime:
         else:
             return []
         budget_left = max(0, self.max_diagnostic_calls_per_run - len(self._diagnostic_results))
-        if budget_left <= 0:
-            return []
-
         packet_context = packet if isinstance(packet, Mapping) else self._last_packet
         results: list[dict[str, Any]] = []
-        for raw_request in raw_items[:budget_left]:
+        for raw_request in raw_items[: self.max_diagnostic_calls_per_run + 4]:
             request = _normalize_controller_diagnostic_request(raw_request)
             if request is None:
+                continue
+            inspection = request["diagnostic"] == "inspect_evidence"
+            if inspection:
+                if self._evidence_inspection_count >= 4:
+                    continue
+                self._evidence_inspection_count += 1
+            elif budget_left <= 0:
                 continue
             if (
                 str(request.get("diagnostic") or "") == "entity_insertion_operator_candidate_review"
@@ -1484,12 +1510,16 @@ class HookedTransformerWorkerRuntime:
             )
             if result is None:
                 continue
+            result["budget_before"] = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count + int(inspection)}
+            if not inspection:
+                budget_left -= 1
+            result["budget_after"] = {"diagnostic_calls_left": budget_left, "inspection_calls_left": 4 - self._evidence_inspection_count}
             results.append(result)
 
         if not results:
             return []
         self._latest_diagnostic_results = [dict(result) for result in results]
-        self._diagnostic_results.extend(self._latest_diagnostic_results)
+        self._diagnostic_results.extend(r for r in self._latest_diagnostic_results if r.get("diagnostic") != "inspect_evidence")
         self._diagnostic_results = self._diagnostic_results[-self.diagnostic_result_window :]
         self._pending_diagnostic_events.extend(dict(result) for result in self._latest_diagnostic_results)
         self._last_packet = None
@@ -1663,6 +1693,10 @@ class HookedTransformerWorkerRuntime:
         self._latest_tool_results = []
         self._pending_tool_events = []
         self._diagnostic_results = []
+        self._evidence_inspection_count = 0
+        self._inspection_seen_ids = set()
+        self._inspection_gate_signature = None
+        self._inspection_gate_facts = {}
         self._latest_diagnostic_results = []
         self._pending_diagnostic_events = []
         self._last_observer_candidate_hash = None
@@ -9732,12 +9766,161 @@ class HookedTransformerWorkerRuntime:
         higher = torch.count_nonzero(logits > token_value).item()
         return int(higher) + 1
 
+    def _resolve_target_piece_binding(
+        self,
+        baseline_logits: torch.Tensor,
+        *,
+        focus_terms: Sequence[str],
+        preferred_term: str | None = None,
+        requested_binding: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Resolve a first-piece observable without consulting edited logits."""
+
+        baseline_logits = baseline_logits.detach().cpu().float()
+        vocab_size = int(baseline_logits.shape[-1])
+        target_sequences = self._target_token_sequences(focus_terms, vocab_size=vocab_size)
+        if not target_sequences:
+            return None
+
+        requested_term = str(
+            (requested_binding or {}).get("objective_term")
+            or preferred_term
+            or ""
+        ).strip()
+        available_terms = [str(sequence.term) for sequence in target_sequences]
+        available_term_by_key = {
+            str(term).casefold(): str(term)
+            for term in available_terms
+            if str(term)
+        }
+        objective_term = available_term_by_key.get(requested_term.casefold(), "")
+        if not objective_term:
+            for raw_term in focus_terms:
+                candidate_term = str(raw_term or "").strip()
+                resolved_term = available_term_by_key.get(candidate_term.casefold())
+                if resolved_term:
+                    objective_term = resolved_term
+                    break
+        if not objective_term:
+            objective_term = available_terms[0]
+
+        if not bool(torch.isfinite(baseline_logits).any().item()):
+            return None
+        baseline_probs = torch.softmax(baseline_logits, dim=-1)
+        candidate_rows: list[dict[str, Any]] = []
+        seen_token_ids: set[int] = set()
+        for sequence in target_sequences:
+            if str(sequence.term) != objective_term or not sequence.token_ids:
+                continue
+            token_id = int(sequence.token_ids[0])
+            if token_id in seen_token_ids:
+                continue
+            baseline_logit = float(baseline_logits[token_id].item())
+            if not math.isfinite(baseline_logit):
+                continue
+            seen_token_ids.add(token_id)
+            candidate_rows.append(
+                {
+                    "piece": self.codec.decode([token_id]),
+                    "token_id": token_id,
+                    "variant": str(sequence.variant),
+                    "baseline_rank": self._token_rank_for_logits(baseline_logits, token_id),
+                    "baseline_logit": round(baseline_logit, 6),
+                    "baseline_prob": round(float(baseline_probs[token_id].item()), 8),
+                }
+            )
+        if not candidate_rows:
+            return None
+
+        answer_prefix = self.final_text()
+        boundary_source = answer_prefix if answer_prefix else self.prompt
+        needs_leading_space = bool(boundary_source and not boundary_source[-1].isspace())
+        canonical_variant = f" {objective_term}" if needs_leading_space else objective_term
+
+        requested_token_id = (requested_binding or {}).get("chosen_target_token_id")
+        try:
+            requested_token_id = (
+                None
+                if isinstance(requested_token_id, bool) or requested_token_id is None
+                else int(requested_token_id)
+            )
+        except Exception:
+            requested_token_id = None
+
+        chosen = next(
+            (row for row in candidate_rows if requested_token_id is not None and row["token_id"] == requested_token_id),
+            None,
+        )
+        if chosen is not None:
+            binding_reason = "requested_frozen_token_id"
+        else:
+            chosen = next((row for row in candidate_rows if row["variant"] == canonical_variant), None)
+            binding_reason = "answer_prefix_surface_form"
+        if chosen is None:
+            chosen = min(
+                candidate_rows,
+                key=lambda row: (
+                    int(row["baseline_rank"]),
+                    0 if str(row["variant"]).strip() == objective_term else 1,
+                    int(row["token_id"]),
+                ),
+            )
+            binding_reason = "baseline_rank_fallback"
+
+        model = self.model if self.model is not None else getattr(self.runtime_state, "model", None)
+        cfg = getattr(model, "cfg", None)
+        model_identity = str(
+            getattr(cfg, "model_name", None)
+            or getattr(cfg, "model_name_or_path", None)
+            or type(model).__name__
+        )
+        prompt_hash = hashlib.sha256(str(self.prompt).encode("utf-8")).hexdigest()
+        binding_payload = "|".join(
+            (
+                str(self.worker_id),
+                type(self.codec).__name__,
+                model_identity,
+                prompt_hash,
+                answer_prefix,
+                objective_term,
+                str(chosen["token_id"]),
+            )
+        )
+        binding_id = "tpb:" + hashlib.sha256(binding_payload.encode("utf-8")).hexdigest()[:20]
+        unique_token_ids = {int(row["token_id"]) for row in candidate_rows}
+        requested_binding_honored = bool(
+            requested_token_id is not None and int(chosen["token_id"]) == requested_token_id
+        )
+        return {
+            "binding_id": binding_id,
+            "objective_term": objective_term,
+            "candidate_target_pieces": [str(row["piece"]) for row in candidate_rows],
+            "candidate_target_token_ids": [int(row["token_id"]) for row in candidate_rows],
+            "chosen_target_piece": str(chosen["piece"]),
+            "chosen_target_token_id": int(chosen["token_id"]),
+            "canonical_surface_variant": canonical_variant,
+            "binding_reason": binding_reason,
+            "binding_source": "baseline_target_piece_resolver",
+            "binding_selection_time": "pre_edit",
+            "binding_stability_status": "pre_edit_frozen",
+            "binding_ambiguity_status": (
+                "single_token_id" if len(unique_token_ids) <= 1 else "multiple_token_ids"
+            ),
+            "requested_binding_honored": requested_binding_honored,
+            "answer_boundary_kind": "answer_start" if not answer_prefix else "answer_continuation",
+            "answer_prefix_tail": answer_prefix[-32:],
+            "candidate_count": len(candidate_rows),
+            "candidate_target_piece_rows": candidate_rows[:8],
+        }
+
     def _first_token_target_readout_metrics(
         self,
         baseline_logits: torch.Tensor,
         edited_logits: torch.Tensor,
         *,
         focus_terms: Sequence[str],
+        preferred_term: str | None = None,
+        target_piece_binding: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         vocab_size = int(baseline_logits.shape[-1])
         target_sequences = self._target_token_sequences(focus_terms, vocab_size=vocab_size)
@@ -9747,15 +9930,22 @@ class HookedTransformerWorkerRuntime:
         edited_probs = torch.softmax(edited_logits.detach().cpu().float(), dim=-1)
         baseline_logits = baseline_logits.detach().cpu().float()
         edited_logits = edited_logits.detach().cpu().float()
+        binding_report = self._resolve_target_piece_binding(
+            baseline_logits,
+            focus_terms=focus_terms,
+            preferred_term=preferred_term,
+            requested_binding=target_piece_binding,
+        )
         best_focus: dict[str, Any] | None = None
-        best_rank_focus: dict[str, Any] | None = None
-        seen_token_ids: set[int] = set()
+        post_edit_best_rank_focus: dict[str, Any] | None = None
+        seen_term_token_ids: set[tuple[str, int]] = set()
         target_rows: list[dict[str, Any]] = []
         for sequence in target_sequences:
             token_id = int(sequence.token_ids[0])
-            if token_id in seen_token_ids:
+            term_token_key = (str(sequence.term), token_id)
+            if term_token_key in seen_term_token_ids:
                 continue
-            seen_token_ids.add(token_id)
+            seen_term_token_ids.add(term_token_key)
             baseline_rank = self._token_rank_for_logits(baseline_logits, token_id)
             edited_rank = self._token_rank_for_logits(edited_logits, token_id)
             row = {
@@ -9782,21 +9972,40 @@ class HookedTransformerWorkerRuntime:
                 float(best_focus["logit_delta"]),
             ):
                 best_focus = row
-            if best_rank_focus is None or (
+            if post_edit_best_rank_focus is None or (
                 int(row["rank_delta"]),
                 -int(row["edited_rank"]),
                 float(row["prob_delta"]),
                 float(row["logit_delta"]),
                 1 if str(sequence.variant).startswith(" ") else 0,
             ) > (
-                int(best_rank_focus["rank_delta"]),
-                -int(best_rank_focus["edited_rank"]),
-                float(best_rank_focus["prob_delta"]),
-                float(best_rank_focus["logit_delta"]),
-                1 if str(best_rank_focus["variant"]).startswith(" ") else 0,
+                int(post_edit_best_rank_focus["rank_delta"]),
+                -int(post_edit_best_rank_focus["edited_rank"]),
+                float(post_edit_best_rank_focus["prob_delta"]),
+                float(post_edit_best_rank_focus["logit_delta"]),
+                1 if str(post_edit_best_rank_focus["variant"]).startswith(" ") else 0,
             ):
-                best_rank_focus = row
-        target_token_ids = sorted(seen_token_ids)
+                post_edit_best_rank_focus = row
+        measurement_term = str((binding_report or {}).get("objective_term") or "")
+        measurement_rows = [
+            row for row in target_rows if not measurement_term or str(row.get("term") or "") == measurement_term
+        ]
+        if measurement_rows:
+            best_focus = max(
+                measurement_rows,
+                key=lambda row: (float(row["prob_delta"]), float(row["logit_delta"])),
+            )
+            post_edit_best_rank_focus = max(
+                measurement_rows,
+                key=lambda row: (
+                    int(row["rank_delta"]),
+                    -int(row["edited_rank"]),
+                    float(row["prob_delta"]),
+                    float(row["logit_delta"]),
+                    1 if str(row["variant"]).startswith(" ") else 0,
+                ),
+            )
+        target_token_ids = sorted({int(row["token_id"]) for row in measurement_rows})
         target_mass_baseline = sum(float(baseline_probs[token_id].item()) for token_id in target_token_ids)
         target_mass_edited = sum(float(edited_probs[token_id].item()) for token_id in target_token_ids)
         top_k_width = min(20, vocab_size)
@@ -9830,21 +10039,38 @@ class HookedTransformerWorkerRuntime:
             metrics["focus_rank_delta"] = int(best_focus["rank_delta"])
             metrics["focus_rank_baseline"] = int(best_focus["baseline_rank"])
             metrics["focus_rank_edited"] = int(best_focus["edited_rank"])
-        if best_rank_focus is not None:
-            metrics["rank_focus_term"] = str(best_rank_focus["term"])
-            metrics["rank_focus_piece"] = str(best_rank_focus["piece"])
-            metrics["rank_focus_delta"] = int(best_rank_focus["rank_delta"])
-            metrics["rank_focus_rank_baseline"] = int(best_rank_focus["baseline_rank"])
-            metrics["rank_focus_rank_edited"] = int(best_rank_focus["edited_rank"])
-            metrics["target_piece"] = str(best_rank_focus["piece"])
-            metrics["target_piece_token_id"] = int(best_rank_focus["token_id"])
-            metrics["target_piece_logit_delta"] = round(float(best_rank_focus["logit_delta"]), 6)
-            metrics["target_piece_prob_delta"] = round(float(best_rank_focus["prob_delta"]), 6)
-            metrics["target_rank_before"] = int(best_rank_focus["baseline_rank"])
-            metrics["target_rank_after"] = int(best_rank_focus["edited_rank"])
-            metrics["target_rank_delta"] = int(best_rank_focus["rank_delta"])
-            target_logit_before = float(best_rank_focus["baseline_logit"])
-            target_logit_after = float(best_rank_focus["edited_logit"])
+        if post_edit_best_rank_focus is not None:
+            metrics["rank_focus_term"] = str(post_edit_best_rank_focus["term"])
+            metrics["rank_focus_piece"] = str(post_edit_best_rank_focus["piece"])
+            metrics["rank_focus_delta"] = int(post_edit_best_rank_focus["rank_delta"])
+            metrics["rank_focus_rank_baseline"] = int(post_edit_best_rank_focus["baseline_rank"])
+            metrics["rank_focus_rank_edited"] = int(post_edit_best_rank_focus["edited_rank"])
+            metrics["post_edit_best_piece"] = str(post_edit_best_rank_focus["piece"])
+            metrics["post_edit_best_token_id"] = int(post_edit_best_rank_focus["token_id"])
+            metrics["post_edit_best_term"] = str(post_edit_best_rank_focus["term"])
+        bound_row = None
+        if binding_report is not None:
+            bound_token_id = int(binding_report["chosen_target_token_id"])
+            bound_term = str(binding_report["objective_term"])
+            bound_row = next(
+                (
+                    row
+                    for row in target_rows
+                    if int(row["token_id"]) == bound_token_id and str(row["term"]) == bound_term
+                ),
+                None,
+            )
+        if bound_row is not None:
+            metrics["target_piece_binding_id"] = str(binding_report["binding_id"])
+            metrics["target_piece"] = str(bound_row["piece"])
+            metrics["target_piece_token_id"] = int(bound_row["token_id"])
+            metrics["target_piece_logit_delta"] = round(float(bound_row["logit_delta"]), 6)
+            metrics["target_piece_prob_delta"] = round(float(bound_row["prob_delta"]), 6)
+            metrics["target_rank_before"] = int(bound_row["baseline_rank"])
+            metrics["target_rank_after"] = int(bound_row["edited_rank"])
+            metrics["target_rank_delta"] = int(bound_row["rank_delta"])
+            target_logit_before = float(bound_row["baseline_logit"])
+            target_logit_after = float(bound_row["edited_logit"])
             gap_before = float(baseline_top20_threshold - target_logit_before)
             gap_after = float(edited_top20_threshold - target_logit_after)
             metrics["target_top20_threshold_gap_baseline"] = round(gap_before, 6)
@@ -9854,37 +10080,16 @@ class HookedTransformerWorkerRuntime:
             metrics["target_piece_logit_baseline"] = round(target_logit_before, 6)
             metrics["target_piece_logit_after"] = round(target_logit_after, 6)
             metrics["target_top20_margin"] = round(float(target_logit_after - edited_top20_threshold), 6)
-            same_term_rows = [
-                row for row in target_rows if str(row.get("term") or "") == str(best_rank_focus["term"])
-            ]
-            candidate_pieces = [
-                {
-                    "piece": str(row.get("piece") or ""),
-                    "token_id": int(row["token_id"]),
-                    "variant": str(row.get("variant") or ""),
-                    "baseline_rank": int(row["baseline_rank"]),
-                    "edited_rank": int(row["edited_rank"]),
-                    "rank_delta": int(row["rank_delta"]),
-                    "logit_delta": round(float(row["logit_delta"]), 6),
-                    "prob_delta": round(float(row["prob_delta"]), 8),
-                }
-                for row in same_term_rows[:8]
-            ]
-            unique_piece_ids = {
-                (str(row.get("piece") or ""), int(row["token_id"])) for row in same_term_rows
-            }
-            metrics["target_piece_binding_report"] = {
-                "objective_term": str(best_rank_focus["term"]),
-                "candidate_target_pieces": [item["piece"] for item in candidate_pieces],
-                "candidate_target_token_ids": [int(item["token_id"]) for item in candidate_pieces],
-                "chosen_target_piece": str(best_rank_focus["piece"]),
-                "chosen_target_token_id": int(best_rank_focus["token_id"]),
-                "binding_reason": "rank_delta_then_edited_rank",
-                "binding_source": "first_token_target_readout_metrics",
-                "binding_stability_status": "stable" if len(unique_piece_ids) <= 1 else "divergent",
-                "candidate_count": len(candidate_pieces),
-                "candidate_target_piece_rows": candidate_pieces,
-            }
+            report = dict(binding_report)
+            report["post_edit_best_piece"] = metrics.get("post_edit_best_piece")
+            report["post_edit_best_token_id"] = metrics.get("post_edit_best_token_id")
+            report["post_edit_best_term"] = metrics.get("post_edit_best_term")
+            report["post_edit_matches_binding"] = bool(
+                metrics.get("post_edit_best_token_id") == int(binding_report["chosen_target_token_id"])
+                and metrics.get("post_edit_best_term") == str(binding_report["objective_term"])
+            )
+            metrics["post_edit_matches_binding"] = report["post_edit_matches_binding"]
+            metrics["target_piece_binding_report"] = report
         return metrics
 
     def _current_answer_readout_canary(
@@ -12020,6 +12225,26 @@ class HookedTransformerWorkerRuntime:
             result["entity_operator_materialization_count"] = 0
         return result
 
+    @staticmethod
+    def _diagnostic_evidence_row_identity(row: Mapping[str, Any]) -> tuple[str, ...]:
+        """Keep distinct measurement axes from collapsing in diagnostic history."""
+
+        return (
+            str(row.get("bundle_key") or row.get("objective_bundle_key") or ""),
+            str(row.get("operator_recipe_id") or ""),
+            str(row.get("recipe_name") or ""),
+            str(row.get("diagnostic_family") or ""),
+            str(row.get("evidence_kind") or ""),
+            str(row.get("operator_axis") or row.get("operator_recipe_expansion_mode") or ""),
+            str(row.get("target_piece_binding_seed_matrix_id") or ""),
+            str(row.get("target_piece_binding_id") or ""),
+            str(row.get("target_piece_binding_variant") or ""),
+            str(row.get("activation_patch_seed_source") or row.get("seed_source") or ""),
+            str(row.get("execution_id") or ""),
+            str(row.get("observable_id") or ""),
+            str(row.get("activation_patch_step_size") or ""),
+        )
+
     def _execute_controller_diagnostic_request(
         self,
         request: Mapping[str, Any],
@@ -12032,6 +12257,25 @@ class HookedTransformerWorkerRuntime:
             return None
         packet_context = packet if isinstance(packet, Mapping) else {}
         strategy_hints = packet_context.get("strategy_hints") if isinstance(packet_context.get("strategy_hints"), Mapping) else {}
+        if diagnostic_name == "inspect_evidence":
+            return {"diagnostic": diagnostic_name, "step": self._steps, "source": source,
+                    **inspect_evidence(self, request, strategy_hints)}
+        if diagnostic_name == "matched_response_probe":
+            rows = evidence_catalog(self._diagnostic_results, full=True)
+            objective = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
+            report = matched_response_probe(self, rows, objective_bundle_key=objective,
+                objective_term=str(request.get("focus_term") or self._term_from_bundle_key(objective)),
+                dose_grid=request.get("dose_grid", (0.04, 0.16)), candidate_ids=request.get("candidate_ids", ()),
+                comparison_axis=request.get("comparison_axis", "seed_provenance"))
+            return {"diagnostic": diagnostic_name, "step": self._steps, "source": source,
+                    "target_piece_binding_seed_matrix_rows": report.pop("rows"),
+                    "target_piece_binding_seed_matrix_summary": report,
+                    "target_piece_binding_seed_matrix_executed": bool(report.get("new_measurement_count")),
+                    "new_measurement_count": report.get("new_measurement_count", 0),
+                    "physical_replay_count": report.get("physical_replay_count", 0),
+                    "production_apply_allowed": False, "diagnostic_only": True}
+        if diagnostic_name in RESPONSE_REVIEW_NAMES and request.get("evidence_id"):
+            return {"step": self._steps, "source": source, **review_response_evidence(self, request, packet_context)}
         activation_patch_diagnostic_names = {
             "activation_patch_candidate_review",
             "activation_patch_runtime_support_probe",
@@ -12150,6 +12394,7 @@ class HookedTransformerWorkerRuntime:
                     "activation_patch_candidate_pool",
                     "activation_patch_local_step_size_sweep_rows",
                     "activation_patch_cap_release_response_curve_rows",
+                    "target_piece_binding_seed_matrix_rows",
                 )
             else:
                 continue
@@ -12201,8 +12446,14 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_candidate_pool",
                         "activation_patch_local_step_size_sweep_rows",
                         "activation_patch_cap_release_response_curve_rows",
+                        "target_piece_binding_seed_matrix_rows",
                     }:
-                        row.setdefault("evidence_kind", "activation_patch_certification")
+                        row.setdefault(
+                            "evidence_kind",
+                            "target_piece_binding_replay"
+                            if row_key == "target_piece_binding_seed_matrix_rows"
+                            else "activation_patch_certification",
+                        )
                         row.setdefault("diagnostic_family", "activation_patch")
                         if row_key == "activation_patch_local_step_size_sweep_rows":
                             row.setdefault("operator_axis", "activation_patch_local_step_size_sweep")
@@ -12215,6 +12466,12 @@ class HookedTransformerWorkerRuntime:
                             row.setdefault(
                                 "operator_recipe_expansion_mode",
                                 "activation_patch_cap_release_response_curve",
+                            )
+                        elif row_key == "target_piece_binding_seed_matrix_rows":
+                            row.setdefault("operator_axis", "target_piece_binding_seed_matrix")
+                            row.setdefault(
+                                "operator_recipe_expansion_mode",
+                                "target_piece_binding_seed_matrix",
                             )
                     if (
                         str(row.get("diagnostic_family") or "") == "entity_insertion_materialized_candidate"
@@ -12233,21 +12490,11 @@ class HookedTransformerWorkerRuntime:
                         historical_diagnostic_rows.append(row)
         if historical_diagnostic_rows:
             seen_rows = {
-                (
-                    str(row.get("bundle_key") or ""),
-                    str(row.get("operator_recipe_id") or ""),
-                    str(row.get("recipe_name") or ""),
-                    str(row.get("diagnostic_family") or ""),
-                )
+                self._diagnostic_evidence_row_identity(row)
                 for row in all_ledger_rows
             }
             for row in historical_diagnostic_rows:
-                key = (
-                    str(row.get("bundle_key") or ""),
-                    str(row.get("operator_recipe_id") or ""),
-                    str(row.get("recipe_name") or ""),
-                    str(row.get("diagnostic_family") or ""),
-                )
+                key = self._diagnostic_evidence_row_identity(row)
                 if key not in seen_rows:
                     all_ledger_rows.append(row)
                     seen_rows.add(key)
@@ -12282,6 +12529,7 @@ class HookedTransformerWorkerRuntime:
             "sae_feature_emitter_scan": {"feature_emitter"},
             "activation_patch_candidate_review": {
                 "activation_patch_certification",
+                "target_piece_binding_replay",
                 "feature_emitter",
             },
             "cross_bundle_bridge_search": {
@@ -12290,15 +12538,19 @@ class HookedTransformerWorkerRuntime:
             },
             "activation_patch_runtime_support_probe": {
                 "activation_patch_certification",
+                "target_piece_binding_replay",
             },
             "activation_patch_promotion_gate_review": {
                 "activation_patch_certification",
+                "target_piece_binding_replay",
             },
             "activation_patch_production_shadow_replay": {
                 "activation_patch_certification",
+                "target_piece_binding_replay",
             },
             "activation_patch_production_trial_gate_review": {
                 "activation_patch_certification",
+                "target_piece_binding_replay",
             },
         }
         evidence_kinds = evidence_kinds_by_request.get(diagnostic_name)
@@ -12604,13 +12856,14 @@ class HookedTransformerWorkerRuntime:
             # decomposition rows.
             evidence_priority = {
                 "attention_guided_operator_certification": 0,
-                "activation_patch_certification": 1,
-                "operator_mode_decomposition": 2,
-                "operator_replay": 3,
-                "operator_probe": 4,
-                "readout_probe": 5,
-                "attention_readout_carrier": 6,
-                "attention_shadow_actuator": 7,
+                "target_piece_binding_replay": 1,
+                "activation_patch_certification": 2,
+                "operator_mode_decomposition": 3,
+                "operator_replay": 4,
+                "operator_probe": 5,
+                "readout_probe": 6,
+                "attention_readout_carrier": 7,
+                "attention_shadow_actuator": 8,
             }
             status_priority = {
                 "certified": 0,
@@ -12725,6 +12978,76 @@ class HookedTransformerWorkerRuntime:
                     *activation_patch_rows,
                     *activation_patch_cap_release_response_curve_rows,
                 ]
+        target_piece_binding_seed_matrix_already_replayed = any(
+            str(row.get("operator_axis") or "") == "target_piece_binding_seed_matrix"
+            and (
+                not requested_activation_objective_key
+                or str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+                == requested_activation_objective_key
+            )
+            for row in matching_rows
+            if isinstance(row, Mapping)
+        )
+        target_piece_binding_seed_matrix_report: dict[str, Any] = {
+            "status": "not_requested",
+            "objective_bundle_key": requested_activation_objective_key or None,
+            "operator_axis": "target_piece_binding_seed_matrix",
+            "rows": [],
+            "row_count": 0,
+            "diagnostic_only": True,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "policy_candidate_ready": False,
+        }
+        if activation_patch_review_requested and activation_patch_rows:
+            if target_piece_binding_seed_matrix_already_replayed:
+                target_piece_binding_seed_matrix_report["status"] = "already_replayed"
+            else:
+                matrix_objective_key = requested_activation_objective_key or str(
+                    activation_patch_rows[0].get("objective_bundle_key")
+                    or activation_patch_rows[0].get("bundle_key")
+                    or ""
+                )
+                matrix_objective_term = str(
+                    request.get("objective_term")
+                    or activation_patch_rows[0].get("intended_term")
+                    or self._term_from_bundle_key(matrix_objective_key)
+                    or ""
+                ).strip()
+                target_piece_binding_seed_matrix_report = (
+                    self._activation_patch_target_piece_binding_seed_matrix(
+                        activation_patch_rows,
+                        objective_bundle_key=matrix_objective_key,
+                        objective_term=matrix_objective_term,
+                        max_seed_sources=2,
+                        matched_doses=True,
+                    )
+                )
+                matrix_rows = target_piece_binding_seed_matrix_report.get("rows")
+                if isinstance(matrix_rows, SequenceABC) and not isinstance(
+                    matrix_rows,
+                    (str, bytes, bytearray),
+                ):
+                    matching_rows = [
+                        *matching_rows,
+                        *(dict(row) for row in matrix_rows if isinstance(row, Mapping)),
+                    ]
+        target_piece_binding_seed_matrix_rows = [
+            dict(row)
+            for row in target_piece_binding_seed_matrix_report.get("rows", ())
+            if isinstance(row, Mapping)
+        ] if isinstance(
+            target_piece_binding_seed_matrix_report.get("rows"),
+            SequenceABC,
+        ) and not isinstance(
+            target_piece_binding_seed_matrix_report.get("rows"),
+            (str, bytes, bytearray),
+        ) else []
+        target_piece_binding_seed_matrix_summary = {
+            key: value
+            for key, value in target_piece_binding_seed_matrix_report.items()
+            if key != "rows"
+        }
 
         def _ap_sweep_float(value: Any, default: float = 0.0) -> float:
             try:
@@ -15603,7 +15926,11 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_hit_delta",
                         "target_piece",
                         "target_piece_token_id",
+                        "target_piece_binding_id",
+                        "target_piece_binding_manifest",
                         "target_piece_binding_report",
+                        "post_edit_best_piece",
+                        "post_edit_best_token_id",
                         "target_piece_logit_delta",
                         "target_rank_after",
                         "target_top20_threshold_gap_baseline",
@@ -15738,7 +16065,11 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_hit_delta",
                         "target_piece",
                         "target_piece_token_id",
+                        "target_piece_binding_id",
+                        "target_piece_binding_manifest",
                         "target_piece_binding_report",
+                        "post_edit_best_piece",
+                        "post_edit_best_token_id",
                         "target_piece_logit_delta",
                         "target_top20_threshold_gap",
                         "target_top20_threshold_gap_delta",
@@ -15880,6 +16211,7 @@ class HookedTransformerWorkerRuntime:
                         "diagnostic_family",
                         "operator_axis",
                         "operator_recipe_expansion_mode",
+                        "target_piece_binding_seed_matrix_id",
                         "status",
                         "actuator_class",
                         "ownership_role",
@@ -16016,6 +16348,78 @@ class HookedTransformerWorkerRuntime:
                     if row.get(key) not in (None, "", [])
                 }
                 for row in activation_patch_cap_release_response_curve_rows[:8]
+            ],
+            "target_piece_binding_seed_matrix_executed": bool(
+                target_piece_binding_seed_matrix_rows
+            ),
+            "target_piece_binding_seed_matrix_summary": dict(
+                target_piece_binding_seed_matrix_summary
+            ),
+            "target_piece_binding_seed_matrix_rows": [
+                {
+                    key: row.get(key)
+                    for key in (
+                        "execution_id", "observable_id", "measurement_context_id", "execution_alias",
+                        "evidence_scope", "threshold20_logit_delta", "source_tensor_identity",
+                        "repeat_max_abs_logit_delta", "bound_token_top20_hit_delta",
+                        "actual_delta_class_scope", "bound_token_response", "measurement_focus_terms",
+                        "activation_patch_blend_delta_norm", "activation_patch_raw_blend_delta_norm",
+                        "activation_patch_step_size_clip_saturated", "activation_patch_hook_call_count",
+                        "bundle_key",
+                        "objective_bundle_key",
+                        "actuator_bundle_key",
+                        "intended_term",
+                        "evidence_kind",
+                        "diagnostic_family",
+                        "operator_axis",
+                        "operator_recipe_expansion_mode",
+                        "target_piece_binding_seed_matrix_id",
+                        "status",
+                        "actual_delta_class",
+                        "recipe_name",
+                        "operator_recipe_id",
+                        "recipe_family",
+                        "activation_patch_site",
+                        "activation_patch_layer",
+                        "activation_patch_alpha",
+                        "activation_patch_step_size",
+                        "activation_patch_source_localization",
+                        "activation_patch_patch_mode",
+                        "activation_patch_seed_source",
+                        "seed_source",
+                        "seed_recipe_name",
+                        "target_piece_binding_variant",
+                        "target_piece_binding_id",
+                        "target_piece_binding_manifest",
+                        "target_piece_binding_report",
+                        "target_piece_binding_requested_honored",
+                        "target_piece",
+                        "target_piece_token_id",
+                        "target_piece_logit_delta",
+                        "target_piece_prob_delta",
+                        "target_rank_delta",
+                        "target_rank_after",
+                        "target_mass_delta",
+                        "target_top20_hit_delta",
+                        "target_top20_threshold_gap_delta",
+                        "post_edit_best_piece",
+                        "post_edit_best_token_id",
+                        "post_edit_matches_binding",
+                        "focus_rank_delta",
+                        "entropy_delta",
+                        "top1_margin_delta",
+                        "repeat_delta",
+                        "candidate_fingerprint",
+                        "eval_context_fingerprint",
+                        "replay_error",
+                        "diagnostic_only",
+                        "production_apply_allowed",
+                        "certified_for_apply",
+                        "policy_candidate_ready",
+                    )
+                    if row.get(key) not in (None, "", [])
+                }
+                for row in target_piece_binding_seed_matrix_rows[:8]
             ],
             "bridge_plan_shadow_actuator": activation_patch_bridge_plan_shadow,
             "bridge_plan_reason": (
@@ -16311,6 +16715,20 @@ class HookedTransformerWorkerRuntime:
                 "activation_patch_cap_release_response_curve_summary": dict(
                     activation_patch_cap_release_response_curve_summary
                 ),
+                "target_piece_binding_seed_matrix_executed": bool(
+                    target_piece_binding_seed_matrix_rows
+                ),
+                "target_piece_binding_seed_matrix_status": (
+                    target_piece_binding_seed_matrix_summary.get("status")
+                ),
+                "target_piece_binding_seed_matrix_rows": len(
+                    target_piece_binding_seed_matrix_rows
+                ),
+                "target_piece_binding_seed_matrix_dominant_axis": (
+                    target_piece_binding_seed_matrix_summary.get(
+                        "dominant_logit_response_axis"
+                    )
+                ),
                 "contrastive_neighborhood_status": dict(contrastive_neighborhood_status),
                 "cross_bundle_bridge_search_status": (
                     cross_bundle_bridge_search.get("status")
@@ -16498,7 +16916,11 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_hit_delta",
                         "target_piece",
                         "target_piece_token_id",
+                        "target_piece_binding_id",
+                        "target_piece_binding_manifest",
                         "target_piece_binding_report",
+                        "post_edit_best_piece",
+                        "post_edit_best_token_id",
                         "target_piece_logit_delta",
                         "target_piece_prob_delta",
                         "target_rank_after",
@@ -16598,7 +17020,11 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_hit_delta",
                         "target_piece",
                         "target_piece_token_id",
+                        "target_piece_binding_id",
+                        "target_piece_binding_manifest",
                         "target_piece_binding_report",
+                        "post_edit_best_piece",
+                        "post_edit_best_token_id",
                         "target_piece_logit_delta",
                         "target_piece_prob_delta",
                         "target_rank_after",
@@ -17085,13 +17511,23 @@ class HookedTransformerWorkerRuntime:
         for term in self._feedback_terms(("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")):
             if term not in focus_terms:
                 focus_terms.append(term)
+        preferred_term = feature or (focus_terms[0] if focus_terms else None)
+        resolved_target_piece_binding = self._resolve_target_piece_binding(
+            baseline["first_logits"],
+            focus_terms=focus_terms,
+            preferred_term=preferred_term,
+        )
         readout_metrics = self._first_token_target_readout_metrics(
             baseline["first_logits"],
             edited["first_logits"],
             focus_terms=focus_terms,
+            preferred_term=preferred_term,
+            target_piece_binding=resolved_target_piece_binding,
         )
         if readout_metrics:
             result.update(readout_metrics)
+        if resolved_target_piece_binding is not None:
+            result["target_piece_binding_manifest"] = dict(resolved_target_piece_binding)
         probe_summary = self._classify_probe_result(result)
         if probe_summary is not None:
             result["probe_family"] = probe_summary.get("probe_family")
@@ -17121,11 +17557,14 @@ class HookedTransformerWorkerRuntime:
         intended_term: str | None = None,
         contrast_partner_bundle_key: str | None = None,
         contrast_partner_term: str | None = None,
+        target_piece_binding: Mapping[str, Any] | None = None,
+        _baseline_snapshot: Mapping[str, Any] | None = None,
+        _measurement_capture: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         edits = [dict(item) for item in candidate_edits if isinstance(item, Mapping)]
         if not edits:
             return {"status": "error", "error": "missing_candidate_edits", "label": label}
-        baseline = self._simulate_decode(
+        baseline = _baseline_snapshot if _baseline_snapshot is not None else self._simulate_decode(
             max_new_tokens=max_new_tokens,
             top_k=top_k,
             score_candidate_text=score_candidate_text,
@@ -17170,6 +17609,17 @@ class HookedTransformerWorkerRuntime:
                 normalized_term = str(term or "")
                 if normalized_term and normalized_term not in focus_terms:
                     focus_terms.append(normalized_term)
+        measurement_term = str(
+            (target_piece_binding or {}).get("objective_term")
+            or intended_term
+            or (focus_terms[0] if focus_terms else "")
+        ).strip()
+        resolved_target_piece_binding = self._resolve_target_piece_binding(
+            baseline["first_logits"],
+            focus_terms=focus_terms,
+            preferred_term=measurement_term or None,
+            requested_binding=target_piece_binding,
+        )
         command = {"version": "0.1", "decision": "apply", "edits": prepared_edits}
         policy_override = self._replay_policy(max_edits_per_step_override=max_edits_per_step_override)
         effective_max_edits_per_step = (
@@ -17194,6 +17644,8 @@ class HookedTransformerWorkerRuntime:
                 "bundle_keys": sorted({str(item.get("bundle_key", "") or "") for item in edits if str(item.get("bundle_key", "") or "")}),
                 "operator_family_keys": sorted({str(key) for key in operator_family_keys if str(key)}),
             }
+        if _measurement_capture is not None:
+            _measurement_capture["edited_logits"] = edited["first_logits"].detach().clone()
         baseline_score = baseline.get("scoring", {})
         edited_score = edited.get("scoring", {})
         result = {
@@ -17271,9 +17723,13 @@ class HookedTransformerWorkerRuntime:
             baseline["first_logits"],
             edited["first_logits"],
             focus_terms=focus_terms,
+            preferred_term=measurement_term or None,
+            target_piece_binding=resolved_target_piece_binding,
         )
         if readout_metrics:
             result.update(readout_metrics)
+        if resolved_target_piece_binding is not None:
+            result["target_piece_binding_manifest"] = dict(resolved_target_piece_binding)
         term_readout_deltas = self._term_readout_deltas(
             baseline["first_logits"],
             edited["first_logits"],
@@ -17298,12 +17754,23 @@ class HookedTransformerWorkerRuntime:
             intended_bundle_key=intended_bundle_key,
             label=label,
         )
+        if resolved_target_piece_binding is not None:
+            result["candidate_fingerprint"]["target_piece_binding_id"] = resolved_target_piece_binding.get(
+                "binding_id"
+            )
         result["eval_context_fingerprint"] = self._eval_context_fingerprint(
             max_new_tokens=max_new_tokens,
             top_k=top_k,
             max_edits_per_step=effective_max_edits_per_step,
             focus_terms=focus_terms,
         )
+        if resolved_target_piece_binding is not None:
+            result["eval_context_fingerprint"]["target_piece_binding_id"] = resolved_target_piece_binding.get(
+                "binding_id"
+            )
+            result["eval_context_fingerprint"]["target_piece_token_id"] = resolved_target_piece_binding.get(
+                "chosen_target_token_id"
+            )
         probe_summary = self._classify_probe_result(
             {
                 **result,
@@ -18818,7 +19285,33 @@ class HookedTransformerWorkerRuntime:
         site = _text(row.get("activation_patch_site"))
         layer = _text(row.get("activation_patch_layer"))
         localization = _text(row.get("activation_patch_source_localization"))
-        return f"{objective_term}|{site}|L{layer}|{localization}"
+        binding_manifest = (
+            row.get("target_piece_binding_manifest")
+            if isinstance(row.get("target_piece_binding_manifest"), Mapping)
+            else {}
+        )
+        binding_report = (
+            row.get("target_piece_binding_report")
+            if isinstance(row.get("target_piece_binding_report"), Mapping)
+            else {}
+        )
+        binding_identity = _text(
+            row.get("target_piece_binding_id")
+            or binding_manifest.get("binding_id")
+            or binding_report.get("binding_id")
+            or row.get("target_piece_token_id")
+            or binding_manifest.get("chosen_target_token_id")
+            or binding_report.get("chosen_target_token_id")
+        )
+        seed_source = _text(
+            row.get("activation_patch_seed_source")
+            or row.get("seed_source")
+            or "direct_candidate"
+        )
+        return (
+            f"{objective_term}|{site}|L{layer}|{localization}|"
+            f"binding={binding_identity}|seed={seed_source}"
+        )
 
     @classmethod
     def _iter_activation_patch_evidence_rows_from_value(
@@ -19251,7 +19744,11 @@ class HookedTransformerWorkerRuntime:
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
                     "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                    "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                     "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                    "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                    "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -19826,7 +20323,11 @@ class HookedTransformerWorkerRuntime:
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
                     "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                    "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                     "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                    "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                    "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                     "target_piece_logit_delta": _finite_or_none(replay.get("target_piece_logit_delta")),
                     "target_piece_prob_delta": _finite_or_none(replay.get("target_piece_prob_delta")),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -20490,7 +20991,11 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_hit_delta": int(target_top20_hit_delta),
                         "target_piece": replay.get("target_piece"),
                         "target_piece_token_id": replay.get("target_piece_token_id"),
+                        "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                        "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                         "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                        "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                        "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                         "target_piece_logit_delta": _finite_or_none(replay.get("target_piece_logit_delta")),
                         "target_piece_prob_delta": _finite_or_none(replay.get("target_piece_prob_delta")),
                         "target_rank_after": replay.get("target_rank_after"),
@@ -20941,7 +21446,11 @@ class HookedTransformerWorkerRuntime:
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
                     "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                    "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                     "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                    "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                    "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -21354,7 +21863,11 @@ class HookedTransformerWorkerRuntime:
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
                     "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                    "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                     "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                    "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                    "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),
@@ -21921,7 +22434,11 @@ class HookedTransformerWorkerRuntime:
                         "target_top20_hit_delta": int(target_top20_hit_delta),
                         "target_piece": replay.get("target_piece"),
                         "target_piece_token_id": replay.get("target_piece_token_id"),
+                        "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                        "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                         "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                        "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                        "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                         "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                         "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                         "target_rank_after": replay.get("target_rank_after"),
@@ -21955,6 +22472,494 @@ class HookedTransformerWorkerRuntime:
                     }
                 )
         return rows
+
+    def _activation_patch_target_piece_binding_seed_matrix(
+        self,
+        seed_rows: Sequence[Mapping[str, Any]],
+        *,
+        objective_bundle_key: str,
+        objective_term: str,
+        max_seed_sources: int = 2,
+        matched_doses: bool = False,
+    ) -> dict[str, Any]:
+        """Factor target-piece observability from activation-patch seed provenance."""
+
+        if matched_doses:
+            return matched_response_probe(self, seed_rows, objective_bundle_key=objective_bundle_key,
+                                          objective_term=objective_term)
+
+        objective_key = str(objective_bundle_key or "")
+        term = str(objective_term or "").strip()
+        base_report: dict[str, Any] = {
+            "status": "unavailable",
+            "objective_bundle_key": objective_key or None,
+            "objective_term": term or None,
+            "operator_axis": "target_piece_binding_seed_matrix",
+            "diagnostic_only": True,
+            "production_apply_allowed": False,
+            "certified_for_apply": False,
+            "policy_candidate_ready": False,
+            "rows": [],
+            "row_count": 0,
+        }
+        if not objective_key or not term:
+            base_report["unavailable_reason"] = "missing_objective_identity"
+            return base_report
+
+        def _finite_float(value: Any, default: float = 0.0) -> float:
+            try:
+                if value is None or isinstance(value, bool):
+                    return default
+                number = float(value)
+            except Exception:
+                return default
+            return number if math.isfinite(number) else default
+
+        def _finite_int(value: Any, default: int = 0) -> int:
+            try:
+                if value is None or isinstance(value, bool):
+                    return default
+                return int(value)
+            except Exception:
+                return default
+
+        def _seed_source(row: Mapping[str, Any]) -> str:
+            raw_source = str(
+                row.get("activation_patch_seed_source")
+                or row.get("seed_source")
+                or ""
+            )
+            if raw_source == "observed_gap_carrier":
+                return raw_source
+            if raw_source in {"direct_candidate", "forced_canonical_seed_discovery"}:
+                return raw_source
+            operator_axis = str(row.get("operator_axis") or "")
+            if operator_axis == "activation_patch_blueprint_materialization":
+                return "direct_candidate"
+            if operator_axis in {
+                "activation_patch_local_step_size_sweep",
+                "activation_patch_cap_release_response_curve",
+            }:
+                return "observed_gap_carrier"
+            return raw_source or "legacy_activation_patch_seed"
+
+        def _seed_rank(row: Mapping[str, Any]) -> tuple[float, ...]:
+            unsafe = str(row.get("actual_delta_class") or row.get("actuator_class") or "") in {
+                "collapse_sharpener",
+                "collapse_isomorphic",
+                "harmful",
+            }
+            return (
+                -2.0 if unsafe else 1.0,
+                1.0 if str(row.get("status") or "") in {"supportive", "certified"} else 0.0,
+                1.0 if str(row.get("attribution_reliability_status") or "") == "reliable" else 0.0,
+                -_finite_float(row.get("target_top20_threshold_gap_delta"), 0.0),
+                _finite_float(row.get("focus_rank_delta"), 0.0),
+                _finite_float(row.get("self_delta"), 0.0),
+            )
+
+        grouped_seeds: dict[str, list[dict[str, Any]]] = {}
+        for raw_row in seed_rows:
+            if not isinstance(raw_row, Mapping):
+                continue
+            row = dict(raw_row)
+            if str(row.get("objective_bundle_key") or row.get("bundle_key") or "") != objective_key:
+                continue
+            if str(row.get("operator_axis") or "") == "target_piece_binding_seed_matrix":
+                continue
+            if not row.get("activation_patch_site") or row.get("activation_patch_layer") is None:
+                continue
+            source = _seed_source(row)
+            grouped_seeds.setdefault(source, []).append(row)
+        if not grouped_seeds:
+            base_report["unavailable_reason"] = "no_materializable_activation_patch_seed"
+            return base_report
+
+        source_priority = {
+            "direct_candidate": 0,
+            "observed_gap_carrier": 1,
+            "forced_canonical_seed_discovery": 2,
+            "legacy_activation_patch_seed": 3,
+        }
+        selected_seeds = [
+            (
+                source,
+                max(rows, key=_seed_rank),
+            )
+            for source, rows in sorted(
+                grouped_seeds.items(),
+                key=lambda item: (source_priority.get(item[0], 9), item[0]),
+            )[: max(1, int(max_seed_sources))]
+        ]
+
+        baseline = self._simulate_decode(
+            max_new_tokens=1,
+            top_k=6,
+            score_candidate_text=False,
+            score_observer_check=False,
+        )
+        if not isinstance(baseline, Mapping) or not isinstance(baseline.get("first_logits"), torch.Tensor):
+            base_report["unavailable_reason"] = "baseline_target_piece_binding_failed"
+            return base_report
+        canonical_binding = self._resolve_target_piece_binding(
+            baseline["first_logits"],
+            focus_terms=(term,),
+            preferred_term=term,
+        )
+        if not isinstance(canonical_binding, Mapping):
+            base_report["unavailable_reason"] = "no_target_piece_binding"
+            return base_report
+
+        candidate_piece_rows = [
+            dict(row)
+            for row in canonical_binding.get("candidate_target_piece_rows", ())
+            if isinstance(row, Mapping)
+        ]
+        canonical_token_id = _finite_int(canonical_binding.get("chosen_target_token_id"), -1)
+        alternate_piece_row = min(
+            (
+                row
+                for row in candidate_piece_rows
+                if _finite_int(row.get("token_id"), -1) != canonical_token_id
+            ),
+            key=lambda row: (
+                _finite_int(row.get("baseline_rank"), 10**9),
+                _finite_int(row.get("token_id"), 10**9),
+            ),
+            default=None,
+        )
+        if alternate_piece_row is None:
+            base_report.update(
+                {
+                    "status": "single_binding_only",
+                    "unavailable_reason": "no_alternate_target_piece",
+                    "canonical_binding": dict(canonical_binding),
+                    "seed_sources": [source for source, _row in selected_seeds],
+                }
+            )
+            return base_report
+        alternate_binding = self._resolve_target_piece_binding(
+            baseline["first_logits"],
+            focus_terms=(term,),
+            preferred_term=term,
+            requested_binding={
+                "objective_term": term,
+                "chosen_target_token_id": _finite_int(alternate_piece_row.get("token_id"), -1),
+            },
+        )
+        if not isinstance(alternate_binding, Mapping):
+            base_report["unavailable_reason"] = "alternate_target_piece_binding_failed"
+            return base_report
+
+        matrix_identity_parts = [
+            objective_key,
+            str(canonical_binding.get("binding_id") or ""),
+            str(alternate_binding.get("binding_id") or ""),
+        ]
+        matrix_identity_parts.extend(
+            (
+                f"{source}:"
+                f"{row.get('operator_recipe_id') or row.get('recipe_name') or 'unknown'}"
+            )
+            for source, row in selected_seeds
+        )
+        matrix_id = (
+            "tpbsm:"
+            + hashlib.sha256("|".join(matrix_identity_parts).encode("utf-8")).hexdigest()[:20]
+        )
+        binding_variants = (
+            ("canonical", dict(canonical_binding)),
+            ("alternate", dict(alternate_binding)),
+        )
+        matrix_rows: list[dict[str, Any]] = []
+        for seed_source, seed in selected_seeds:
+            alpha = _finite_float(seed.get("activation_patch_alpha"), 0.05) or 0.05
+            step_size = _finite_float(seed.get("activation_patch_step_size"), alpha) or alpha
+            site = str(seed.get("activation_patch_site") or "resid_pre")
+            layer = _finite_int(seed.get("activation_patch_layer"), 0)
+            source_localization = str(
+                seed.get("activation_patch_source_localization") or "source_term_token"
+            )
+            seed_recipe_name = str(seed.get("recipe_name") or f"activation_patch_{seed_source}")
+            seed_recipe_id = str(seed.get("operator_recipe_id") or seed_recipe_name)
+            candidate = {
+                "objective_bundle_key": objective_key,
+                "actuator_bundle_key": objective_key,
+                "bundle_key": objective_key,
+                "objective_term": term,
+                "layer": layer,
+                "site": site,
+                "alpha": alpha,
+                "step_size": step_size,
+                "source_localization": source_localization,
+                "patch_mode": str(seed.get("activation_patch_patch_mode") or "blend"),
+                "contrast_mode": seed.get("activation_patch_contrast_mode"),
+                "contrast_scale": seed.get("activation_patch_contrast_scale"),
+                "stealer_term": seed.get("activation_patch_stealer_term"),
+                "stealer_bundle_key": seed.get("activation_patch_stealer_bundle_key"),
+                "recipe_name": seed_recipe_name,
+                "operator_recipe_id": seed_recipe_id,
+                "promotion_reason": "target_piece_binding_seed_matrix",
+            }
+            trial_contract = {
+                "max_alpha": max(0.08, alpha),
+                "norm_clip": 1.0,
+                "trial_budget_class": "diagnostic_only",
+                "production_trial_followup_allowed": False,
+                "allow_step_size_cap_release": True,
+                "max_step_size": min(max(step_size, 0.08), 0.25),
+                "promotion_reason": "target_piece_binding_seed_matrix",
+            }
+            edit = self._activation_patch_trial_edit_from_candidate(
+                candidate,
+                trial_contract=trial_contract,
+            )
+            if edit is None:
+                continue
+            edit["bundle_key"] = objective_key
+            edit["focus_feature"] = term
+            edit["phase_objective"] = "readout_escape"
+            edit["bundle_family"] = "activation_patch"
+            edit["provenance_class"] = "source_body"
+            edit["recipe_localization"] = source_localization
+            edit["recipe_pooling"] = "blend"
+            edit["recipe_alpha"] = alpha
+            edit["bad_attractor_terms"] = list(_DEFAULT_BAD_ATTRACTOR_TERMS)
+
+            for binding_variant, binding in binding_variants:
+                try:
+                    replay = self.replay_candidate_edits_actual_delta(
+                        [edit],
+                        max_new_tokens=1,
+                        top_k=6,
+                        max_edits_per_step_override=1,
+                        score_candidate_text=False,
+                        label=(
+                            f"target_piece_binding_seed_matrix:{objective_key}:"
+                            f"{seed_source}:{binding_variant}"
+                        ),
+                        ownership_terms=(term,),
+                        intended_bundle_key=objective_key,
+                        intended_term=term,
+                        target_piece_binding=binding,
+                    )
+                except Exception as exc:
+                    replay = {
+                        "status": "error",
+                        "error": f"{type(exc).__name__}:{exc}",
+                        "actual_delta_class": "replay_error",
+                    }
+                replay_binding = (
+                    dict(replay.get("target_piece_binding_manifest"))
+                    if isinstance(replay.get("target_piece_binding_manifest"), Mapping)
+                    else dict(binding)
+                )
+                replay_binding_report = (
+                    dict(replay.get("target_piece_binding_report"))
+                    if isinstance(replay.get("target_piece_binding_report"), Mapping)
+                    else {}
+                )
+                matrix_rows.append(
+                    {
+                        "bundle_key": objective_key,
+                        "objective_bundle_key": objective_key,
+                        "actuator_bundle_key": objective_key,
+                        "intended_bundle_key": objective_key,
+                        "intended_term": term,
+                        "evidence_kind": "target_piece_binding_replay",
+                        "diagnostic_family": "activation_patch",
+                        "operator_axis": "target_piece_binding_seed_matrix",
+                        "operator_recipe_expansion_mode": "target_piece_binding_seed_matrix",
+                        "target_piece_binding_seed_matrix_id": matrix_id,
+                        "status": str(replay.get("status") or "unknown"),
+                        "actual_delta_class": replay.get("actual_delta_class"),
+                        "recipe_name": seed_recipe_name,
+                        "operator_recipe_id": seed_recipe_id,
+                        "recipe_family": str(seed.get("recipe_family") or "activation_patch"),
+                        "activation_patch_site": site,
+                        "activation_patch_layer": layer,
+                        "activation_patch_alpha": round(float(alpha), 6),
+                        "activation_patch_step_size": round(float(step_size), 6),
+                        "activation_patch_source_localization": source_localization,
+                        "activation_patch_patch_mode": "blend",
+                        "activation_patch_seed_source": seed_source,
+                        "seed_source": seed_source,
+                        "seed_recipe_name": seed_recipe_name,
+                        "target_piece_binding_variant": binding_variant,
+                        "target_piece_binding_id": replay_binding.get("binding_id"),
+                        "target_piece_binding_manifest": replay_binding,
+                        "target_piece_binding_report": replay_binding_report or None,
+                        "target_piece_binding_requested_honored": bool(
+                            replay_binding.get("requested_binding_honored", False)
+                            or replay_binding.get("binding_id") == binding.get("binding_id")
+                        ),
+                        "target_piece": replay.get("target_piece"),
+                        "target_piece_token_id": replay.get("target_piece_token_id"),
+                        "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
+                        "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
+                        "target_rank_delta": replay.get("target_rank_delta"),
+                        "target_rank_after": replay.get("target_rank_after"),
+                        "target_mass_delta": replay.get("target_mass_delta"),
+                        "target_top20_hit_delta": replay.get("target_top20_hit_delta"),
+                        "target_top20_threshold_gap_delta": replay.get(
+                            "target_top20_threshold_gap_delta"
+                        ),
+                        "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                        "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
+                        "post_edit_matches_binding": replay_binding_report.get(
+                            "post_edit_matches_binding"
+                        ),
+                        "focus_rank_delta": replay.get("focus_rank_delta"),
+                        "entropy_delta": replay.get("entropy_delta"),
+                        "top1_margin_delta": replay.get("top1_margin_delta"),
+                        "repeat_delta": max(
+                            _finite_float(replay.get("repeat_flag_delta"), 0.0),
+                            _finite_float(replay.get("repetition_score_delta"), 0.0),
+                        ),
+                        "candidate_fingerprint": replay.get("candidate_fingerprint"),
+                        "eval_context_fingerprint": replay.get("eval_context_fingerprint"),
+                        "replay_error": replay.get("error"),
+                        "diagnostic_only": True,
+                        "production_apply_allowed": False,
+                        "certified_for_apply": False,
+                        "policy_candidate_ready": False,
+                    }
+                )
+
+        if not matrix_rows:
+            base_report.update(
+                {
+                    "status": "materialization_failed",
+                    "unavailable_reason": "no_seed_materialized",
+                    "canonical_binding": dict(canonical_binding),
+                    "alternate_binding": dict(alternate_binding),
+                    "seed_sources": [source for source, _row in selected_seeds],
+                }
+            )
+            return base_report
+
+        def _mean(rows: Sequence[Mapping[str, Any]], key: str) -> float | None:
+            values = [
+                _finite_float(row.get(key), float("nan"))
+                for row in rows
+                if row.get(key) is not None
+            ]
+            values = [value for value in values if math.isfinite(value)]
+            return sum(values) / len(values) if values else None
+
+        seed_sources = [source for source, _row in selected_seeds]
+        effect_metrics: dict[str, dict[str, Any]] = {}
+        for metric, lower_is_better in (
+            ("target_piece_logit_delta", False),
+            ("target_piece_prob_delta", False),
+            ("target_top20_threshold_gap_delta", True),
+            ("target_rank_delta", False),
+            ("target_mass_delta", False),
+        ):
+            canonical_rows = [
+                row for row in matrix_rows if row.get("target_piece_binding_variant") == "canonical"
+            ]
+            alternate_rows = [
+                row for row in matrix_rows if row.get("target_piece_binding_variant") == "alternate"
+            ]
+            canonical_mean = _mean(canonical_rows, metric)
+            alternate_mean = _mean(alternate_rows, metric)
+            metric_report: dict[str, Any] = {
+                "canonical_mean": canonical_mean,
+                "alternate_mean": alternate_mean,
+                "alternate_minus_canonical": (
+                    None
+                    if canonical_mean is None or alternate_mean is None
+                    else round(float(alternate_mean - canonical_mean), 8)
+                ),
+                "lower_is_better": lower_is_better,
+            }
+            if len(seed_sources) >= 2:
+                first_source, second_source = seed_sources[:2]
+                first_rows = [row for row in matrix_rows if row.get("seed_source") == first_source]
+                second_rows = [row for row in matrix_rows if row.get("seed_source") == second_source]
+                first_mean = _mean(first_rows, metric)
+                second_mean = _mean(second_rows, metric)
+                first_canonical = _mean(
+                    [row for row in first_rows if row.get("target_piece_binding_variant") == "canonical"],
+                    metric,
+                )
+                first_alternate = _mean(
+                    [row for row in first_rows if row.get("target_piece_binding_variant") == "alternate"],
+                    metric,
+                )
+                second_canonical = _mean(
+                    [row for row in second_rows if row.get("target_piece_binding_variant") == "canonical"],
+                    metric,
+                )
+                second_alternate = _mean(
+                    [row for row in second_rows if row.get("target_piece_binding_variant") == "alternate"],
+                    metric,
+                )
+                interaction = None
+                if None not in (
+                    first_canonical,
+                    first_alternate,
+                    second_canonical,
+                    second_alternate,
+                ):
+                    interaction = (
+                        float(second_alternate) - float(second_canonical)
+                        - float(first_alternate)
+                        + float(first_canonical)
+                    )
+                metric_report.update(
+                    {
+                        "seed_contrast": f"{second_source}_minus_{first_source}",
+                        "seed_contrast_delta": (
+                            None
+                            if first_mean is None or second_mean is None
+                            else round(float(second_mean - first_mean), 8)
+                        ),
+                        "binding_x_seed_interaction": (
+                            None if interaction is None else round(float(interaction), 8)
+                        ),
+                    }
+                )
+            effect_metrics[metric] = metric_report
+
+        post_edit_divergence_count = sum(
+            1 for row in matrix_rows if row.get("post_edit_matches_binding") is False
+        )
+        honored_count = sum(
+            1 for row in matrix_rows if bool(row.get("target_piece_binding_requested_honored", False))
+        )
+        full_factorial = len(seed_sources) >= 2 and len(matrix_rows) >= 4
+        logit_effect = effect_metrics.get("target_piece_logit_delta", {})
+        axis_magnitudes = {
+            "binding": abs(_finite_float(logit_effect.get("alternate_minus_canonical"), 0.0)),
+            "seed": abs(_finite_float(logit_effect.get("seed_contrast_delta"), 0.0)),
+            "interaction": abs(_finite_float(logit_effect.get("binding_x_seed_interaction"), 0.0)),
+        }
+        dominant_axis = max(axis_magnitudes, key=axis_magnitudes.get) if any(axis_magnitudes.values()) else "flat"
+        base_report.update(
+            {
+                "status": "factorized_2x2_complete" if full_factorial else "binding_pair_complete",
+                "unavailable_reason": None,
+                "target_piece_binding_seed_matrix_id": matrix_id,
+                "canonical_binding": dict(canonical_binding),
+                "alternate_binding": dict(alternate_binding),
+                "binding_variants": ["canonical", "alternate"],
+                "seed_sources": seed_sources,
+                "seed_source_count": len(seed_sources),
+                "row_count": len(matrix_rows),
+                "rows": matrix_rows,
+                "effect_metrics": effect_metrics,
+                "dominant_logit_response_axis": dominant_axis,
+                "requested_binding_honored_count": honored_count,
+                "post_edit_binding_divergence_count": post_edit_divergence_count,
+                "term_mass_is_binding_invariant_by_definition": True,
+                "interpretation_boundary": (
+                    "binding effects describe the frozen readout observable; seed effects describe the operator recipe"
+                ),
+            }
+        )
+        return base_report
 
     def _carrier_composed_conversion_rows(
         self,
@@ -22433,7 +23438,11 @@ class HookedTransformerWorkerRuntime:
                     "target_top20_hit_delta": int(target_top20_hit_delta),
                     "target_piece": replay.get("target_piece"),
                     "target_piece_token_id": replay.get("target_piece_token_id"),
+                    "target_piece_binding_id": replay.get("target_piece_binding_id"),
+                    "target_piece_binding_manifest": replay.get("target_piece_binding_manifest"),
                     "target_piece_binding_report": replay.get("target_piece_binding_report"),
+                    "post_edit_best_piece": replay.get("post_edit_best_piece"),
+                    "post_edit_best_token_id": replay.get("post_edit_best_token_id"),
                     "target_piece_logit_delta": replay.get("target_piece_logit_delta"),
                     "target_piece_prob_delta": replay.get("target_piece_prob_delta"),
                     "target_rank_after": replay.get("target_rank_after"),

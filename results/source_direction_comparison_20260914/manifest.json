@@ -1,0 +1,71 @@
+{
+  "source_log_decompressed_sha256": "cdf22094fb565d26cfb875b79faa9ea38b9d03df8030bb8f6862559b01b2f4ae",
+  "files": {
+    "audit.json": {
+      "sha256": "5721843d615f7a07e7ad25aac7769dedc26294b290eb1eec9cc1bfaa00d06bd9",
+      "bytes": 6879
+    },
+    "build_audit.py": {
+      "sha256": "47fde8e92008929b470bda1e07845b135785c6b7b1bb5aa8f1636c75bbdaca28",
+      "bytes": 7272
+    },
+    "preceding_seed_audit.json": {
+      "sha256": "e03b227d0bac91f795a221106203b77ed6e20aceefc08fa1a30a71d981688f75",
+      "bytes": 12100
+    },
+    "preceding_seed_remeasurement.json": {
+      "sha256": "64e6bceb64048419a680f06f17393de03abdf56e4505e02562bcb54e82128b3e",
+      "bytes": 80891
+    },
+    "replay.json": {
+      "sha256": "3e75eb806a3fd66a6076be6932503596d1e22c8145ad17d06d231102e92e54f8",
+      "bytes": 244365
+    },
+    "source_episode.jsonl.gz": {
+      "sha256": "f51ff9131986b85178bcb9246606b93ed5fdc712c2a649276ac9af3fb3c728e6",
+      "bytes": 118282
+    },
+    "source_episode_debrief.md": {
+      "sha256": "246f383243d4fd1bfbcd3159080c089a92b813170aa2ec62f18ff06acea85642",
+      "bytes": 2667
+    },
+    "source_episode_debrief_input.json": {
+      "sha256": "8bec5b1673ee72bb40205dbd19d6f22eb09a0817ab9df0905275069fe6b2e4c6",
+      "bytes": 28139
+    }
+  },
+  "worker_model_files": {
+    "config.json": {
+      "sha256": "0daed7749b4f02b8f76240d5444551d7b08712dab4d0adb8239c56ba823bb7b4",
+      "bytes": 665
+    },
+    "generation_config.json": {
+      "sha256": "ed0b32ac72c0f5f44a719abb2d7786ea5146c871f83717b7f2018065954de02b",
+      "bytes": 124
+    },
+    "merges.txt": {
+      "sha256": "1ce1664773c50f3e0cc8842619a93edc4624525b728b188a9e0be33b7726adc5",
+      "bytes": 456318
+    },
+    "model.safetensors": {
+      "sha256": "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707",
+      "bytes": 548105171
+    },
+    "tokenizer_config.json": {
+      "sha256": "5e04eb606e3a1583530a42e36c2a6b6615c86f34fe77e44d9ddeb43ff940931f",
+      "bytes": 26
+    },
+    "vocab.json": {
+      "sha256": "196139668be63f3b5d6574427317ae82f612a97c5d1cdaf36ed2256dbf636783",
+      "bytes": 1042301
+    }
+  },
+  "code_hashes_at_packaging_not_original_live_snapshot": {
+    "SpiralInterventionLab/runtime/response_probe.py": "d7d608e3a44acf25709b47a33db9bd072736a682b0b492109ace06545e605fee",
+    "SpiralInterventionLab/runtime/response_promotion.py": "98119496c9c2cf1906f9a53705c6319677b06413f884a62ee981425fc9031861",
+    "SpiralInterventionLab/runtime/worker.py": "bfab4cc667ee713f487ff7bc7d11bb1cdbe03c6e498ea7625b7e5c5d5e60f86a",
+    "SpiralInterventionLab/runtime/adapter.py": "32fd6673702aef2ffb1f7c1a2007fbe01c45ca03054b9029ac6fec84c4607cc3",
+    "SpiralInterventionLab/examples/replay_matched_response_probe.py": "f2483f4d3ac85631c2cc94c4eaffe130cdf36c224c9d782685a30eac40c2efb6"
+  },
+  "interview_scope": "earlier_episode_qualitative_only_not_a_new_call_or_certification"
+}

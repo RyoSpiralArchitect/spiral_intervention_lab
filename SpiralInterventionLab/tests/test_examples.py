@@ -1360,6 +1360,7 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
 
     def test_diagnostic_batch_passes_entity_probe_to_review_and_blueprints_to_replay(self):
         runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._evidence_inspection_count = 0
         runtime.max_diagnostic_calls_per_run = 8
         runtime._diagnostic_results = []
         runtime._latest_diagnostic_results = []
@@ -2342,6 +2343,62 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertEqual(future_row["activation_patch_proxy_selector_permission"], "candidate_hint_only")
         self.assertFalse(future_row["production_apply_allowed"])
 
+    def test_activation_patch_proxy_reliability_scope_includes_binding_and_seed(self):
+        base_row = {
+            "objective_bundle_key": "entity_insert:mira:source_body:72:73",
+            "intended_term": "Mira",
+            "activation_patch_site": "mlp_out",
+            "activation_patch_layer": 11,
+            "activation_patch_source_localization": "source_term_token",
+            "target_piece_binding_id": "mira-leading-space",
+            "activation_patch_seed_source": "direct_candidate",
+            "production_apply_allowed": False,
+        }
+        direct_key = HookedTransformerWorkerRuntime._activation_patch_proxy_reliability_key_for_row(
+            base_row
+        )
+        alternate_binding_key = (
+            HookedTransformerWorkerRuntime._activation_patch_proxy_reliability_key_for_row(
+                dict(base_row, target_piece_binding_id="mira-initial-subpiece")
+            )
+        )
+        observed_seed_key = (
+            HookedTransformerWorkerRuntime._activation_patch_proxy_reliability_key_for_row(
+                dict(base_row, activation_patch_seed_source="observed_gap_carrier")
+            )
+        )
+
+        self.assertNotEqual(direct_key, alternate_binding_key)
+        self.assertNotEqual(direct_key, observed_seed_key)
+        unreliable_keys = {direct_key}
+        direct_row = HookedTransformerWorkerRuntime._apply_activation_patch_proxy_calibration(
+            base_row,
+            unreliable_keys=unreliable_keys,
+        )
+        alternate_binding_row = (
+            HookedTransformerWorkerRuntime._apply_activation_patch_proxy_calibration(
+                dict(base_row, target_piece_binding_id="mira-initial-subpiece"),
+                unreliable_keys=unreliable_keys,
+            )
+        )
+        observed_seed_row = HookedTransformerWorkerRuntime._apply_activation_patch_proxy_calibration(
+            dict(base_row, activation_patch_seed_source="observed_gap_carrier"),
+            unreliable_keys=unreliable_keys,
+        )
+
+        self.assertEqual(
+            direct_row["activation_patch_proxy_calibration_status"],
+            "candidate_hint_only_unreliable",
+        )
+        self.assertEqual(
+            alternate_binding_row["activation_patch_proxy_calibration_status"],
+            "candidate_hint_only_observe",
+        )
+        self.assertEqual(
+            observed_seed_row["activation_patch_proxy_calibration_status"],
+            "candidate_hint_only_observe",
+        )
+
     def test_controller_selection_report_surfaces_activation_patch_preemption_and_reliability(self):
         objective_key = "entity_insert:mira:source_body:72:73"
         packet = {
@@ -2520,6 +2577,118 @@ class TestExamples(unittest.TestCase):
         self.assertAlmostEqual(resid_post_row["max_blend_delta_norm"], 0.0015)
         mlp_row = next(row for row in summary["matrix"] if row["site"] == "mlp_out")
         self.assertEqual(mlp_row["max_step_size"], 0.08)
+
+    def test_activation_patch_jsonl_summary_preserves_binding_seed_matrix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "c1.jsonl"
+            matrix_id = "tpbsm:test"
+            rows = []
+            for seed_source in ("direct_candidate", "observed_gap_carrier"):
+                for binding_variant, token_id, piece in (
+                    ("canonical", 43000, " Mira"),
+                    ("alternate", 44, "M"),
+                ):
+                    rows.append(
+                        {
+                            "diagnostic_family": "activation_patch",
+                            "evidence_kind": "target_piece_binding_replay",
+                            "operator_axis": "target_piece_binding_seed_matrix",
+                            "objective_bundle_key": "entity_insert:mira:source_body:near_reachable",
+                            "intended_term": "Mira",
+                            "activation_patch_site": "mlp_out",
+                            "activation_patch_layer": 11,
+                            "activation_patch_source_localization": "source_term_token",
+                            "activation_patch_seed_source": seed_source,
+                            "seed_recipe_name": f"{seed_source}_seed",
+                            "target_piece_binding_seed_matrix_id": matrix_id,
+                            "target_piece_binding_variant": binding_variant,
+                            "target_piece_binding_id": f"tpb:{token_id}",
+                            "target_piece_binding_requested_honored": True,
+                            "target_piece": piece,
+                            "target_piece_token_id": token_id,
+                            "target_piece_logit_delta": 0.2 if binding_variant == "alternate" else 0.1,
+                            "target_piece_prob_delta": 0.000002,
+                            "target_rank_delta": 2,
+                            "target_mass_delta": 0.000001,
+                            "target_top20_hit_delta": 0,
+                            "target_top20_threshold_gap_delta": -0.001,
+                            "post_edit_best_piece": piece,
+                            "post_edit_matches_binding": True,
+                            "actual_delta_class": "rank_carrier",
+                            "recipe_name": f"{seed_source}_seed",
+                        }
+                    )
+            event = {
+                "event": "controller_diagnostic_result",
+                "target_piece_binding_seed_matrix_rows": rows,
+                "target_piece_binding_seed_matrix_summary": {
+                    "operator_axis": "target_piece_binding_seed_matrix",
+                    "target_piece_binding_seed_matrix_id": matrix_id,
+                    "status": "factorized_2x2_complete",
+                    "row_count": 4,
+                },
+            }
+            log_path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+
+            summary = summarize_activation_patch_jsonl([log_path])
+
+        self.assertEqual(summary["target_piece_binding_seed_matrix_row_count"], 4)
+        self.assertEqual(summary["by_target_piece_binding_variant"], {"alternate": 2, "canonical": 2})
+        matrix = summary["target_piece_binding_seed_matrices"][0]
+        self.assertEqual(matrix["target_piece_binding_seed_matrix_id"], matrix_id)
+        self.assertTrue(matrix["factorial_complete"])
+        self.assertEqual(matrix["requested_binding_honored_count"], 4)
+        self.assertEqual(matrix["post_edit_binding_divergence_count"], 0)
+        self.assertEqual(len(matrix["cells"]), 4)
+
+    def test_activation_patch_jsonl_summary_separates_matrix_ids_for_same_objective(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "c1.jsonl"
+            objective_key = "entity_insert:mira:source_body:near_reachable"
+            rows = [
+                {
+                    "diagnostic_family": "activation_patch",
+                    "evidence_kind": "target_piece_binding_replay",
+                    "operator_axis": "target_piece_binding_seed_matrix",
+                    "objective_bundle_key": objective_key,
+                    "activation_patch_site": "mlp_out",
+                    "activation_patch_layer": 11,
+                    "activation_patch_source_localization": "source_term_token",
+                    "activation_patch_seed_source": "direct_candidate",
+                    "target_piece_binding_seed_matrix_id": matrix_id,
+                    "target_piece_binding_variant": "canonical",
+                    "target_piece_binding_id": f"tpb:{matrix_id}",
+                    "target_piece": " Mira",
+                    "target_piece_token_id": 43000,
+                    "target_mass_delta": 0.000001,
+                    "target_top20_hit_delta": 0,
+                    "target_top20_threshold_gap_delta": -0.001,
+                    "actual_delta_class": "rank_carrier",
+                    "recipe_name": "direct_seed",
+                }
+                for matrix_id in ("tpbsm:first", "tpbsm:second")
+            ]
+            log_path.write_text(
+                json.dumps(
+                    {
+                        "event": "controller_diagnostic_result",
+                        "target_piece_binding_seed_matrix_rows": rows,
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            summary = summarize_activation_patch_jsonl([log_path])
+
+        self.assertEqual(summary["target_piece_binding_seed_matrix_row_count"], 2)
+        self.assertEqual(
+            {
+                matrix["target_piece_binding_seed_matrix_id"]
+                for matrix in summary["target_piece_binding_seed_matrices"]
+            },
+            {"tpbsm:first", "tpbsm:second"},
+        )
 
     def test_activation_patch_jsonl_compare_pairs_shared_recipe_keys(self):
         def write_run(path: Path, *, model: str, actual_delta_class: str, target_mass: float, subspace: bool):

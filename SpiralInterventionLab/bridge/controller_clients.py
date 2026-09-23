@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from time import perf_counter
@@ -201,6 +202,8 @@ def _compact_trace_bank(items: Any, *, limit: int = 6) -> list[dict[str, Any]]:
 
 
 _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
+    "evidence_inspection_catalog",
+    "evidence_inspection_calls_left",
     "selected_bundle_key",
     "controller_focus_term",
     "controller_focus_source",
@@ -888,6 +891,23 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
     summary: dict[str, Any] = {}
+    if value.get("diagnostic") == "inspect_evidence":
+        return {key: _bounded_json(value[key], max_depth=4, max_items=40, max_string=260)
+                for key in ("diagnostic", "status", "rows", "evidence_scope", "budget_before", "budget_after",
+                            "new_measurement_count", "physical_replay_count", "cached_measurement_count",
+                            "newly_visible_row_count", "new_gate_fact_count", "retry_preconditions",
+                            "gate_context", "gate_context_changed", "gate_fact_scope", "executable_diagnostic_ids",
+                            "missing_evidence", "production_apply_allowed") if key in value}
+    matrix = value.get("target_piece_binding_seed_matrix_summary")
+    if isinstance(matrix, Mapping):
+        summary["target_piece_binding_seed_matrix_summary"] = {
+            key: matrix[key] for key in ("status", "measurement_mode", "row_count", "dose_grid",
+                "measurement_context_id", "new_measurement_count", "physical_replay_count",
+                "observable_count", "state_restored", "unavailable_reason", "no_edit_max_abs_logit_delta",
+                "comparison_axis", "source_direction_comparisons") if key in matrix}
+    for key in ("response_promotion_readiness", "confirmation", "confirmation_scope", "blocked_reasons", "evidence_id"):
+        if key in value:
+            summary[key] = _bounded_json(value[key], max_depth=3, max_items=24, max_string=160)
     for key in (
         "diagnostic",
         "status",
@@ -901,6 +921,7 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
         "feature_supported",
         "certified_for_apply",
         "production_apply_allowed",
+        "production_trial_allowed",
         "feature_backend",
         "top20_reachable_count",
         "near_reachable_count",
@@ -917,6 +938,17 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     ):
         if value.get(key) not in (None, "", []):
             summary[key] = value.get(key)
+    if value.get("production_trial_allowed") is True:
+        trial_candidate = value.get("production_trial_candidate")
+        if isinstance(trial_candidate, Mapping) and isinstance(trial_candidate.get("trial_edit"), Mapping):
+            summary["production_trial_candidate"] = {
+                key: deepcopy(trial_candidate[key])
+                for key in ("kind", "apply_kind", "operator_recipe_id", "objective_bundle_key", "trial_edit")
+                if key in trial_candidate
+            }
+            trial_contract = value.get("production_trial_contract")
+            if isinstance(trial_contract, Mapping):
+                summary["production_trial_contract"] = deepcopy(trial_contract)
     focus_terms = value.get("focus_terms")
     if isinstance(focus_terms, Sequence) and not isinstance(focus_terms, (str, bytes, bytearray)):
         compact_terms = [str(item) for item in focus_terms[:6] if str(item)]

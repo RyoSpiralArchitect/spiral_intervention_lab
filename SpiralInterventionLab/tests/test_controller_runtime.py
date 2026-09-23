@@ -6216,6 +6216,244 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertEqual(result["eval_context_fingerprint"]["decode_step"], 0)
         self.assertEqual(result["eval_context_fingerprint"]["max_edits_per_step"], 2)
 
+    def test_target_piece_binding_is_frozen_before_edited_rank_movement(self):
+        codec = CharacterCodec("pab ")
+        worker_runtime = self._make_worker_runtime(codec=codec)
+        worker_runtime.reset("p")
+        baseline_logits = torch.tensor([0.0, -2.0, -3.0, 2.0], dtype=torch.float32)
+        edited_logits = torch.tensor([0.0, 6.0, 5.0, 2.0], dtype=torch.float32)
+        sequences = [
+            _TargetTokenSequence(term="a", token_ids=(1,), variant="a"),
+            _TargetTokenSequence(term="a", token_ids=(3, 1), variant=" a"),
+            _TargetTokenSequence(term="b", token_ids=(2,), variant="b"),
+        ]
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_target_token_sequences",
+            return_value=sequences,
+        ):
+            metrics = worker_runtime._first_token_target_readout_metrics(
+                baseline_logits,
+                edited_logits,
+                focus_terms=("a", "b"),
+                preferred_term="A",
+            )
+
+        self.assertEqual(metrics["target_piece_token_id"], 3)
+        self.assertEqual(metrics["target_piece"], " ")
+        self.assertEqual(metrics["post_edit_best_token_id"], 1)
+        self.assertFalse(metrics["post_edit_matches_binding"])
+        self.assertFalse(metrics["target_piece_binding_report"]["post_edit_matches_binding"])
+        self.assertEqual(
+            metrics["target_piece_binding_report"]["binding_selection_time"],
+            "pre_edit",
+        )
+        self.assertEqual(metrics["target_piece_binding_report"]["objective_term"], "a")
+        baseline_probs = torch.softmax(baseline_logits, dim=-1)
+        edited_probs = torch.softmax(edited_logits, dim=-1)
+        expected_mass_delta = float(
+            edited_probs[[1, 3]].sum().item() - baseline_probs[[1, 3]].sum().item()
+        )
+        self.assertAlmostEqual(metrics["target_mass_delta"], round(expected_mass_delta, 6))
+
+    def test_target_piece_binding_rejects_fully_masked_objective_pieces(self):
+        codec = CharacterCodec("pab ")
+        worker_runtime = self._make_worker_runtime(codec=codec)
+        worker_runtime.reset("p")
+        baseline_logits = torch.tensor(
+            [0.0, float("-inf"), float("-inf"), 2.0],
+            dtype=torch.float32,
+        )
+
+        with patch.object(
+            HookedTransformerWorkerRuntime,
+            "_target_token_sequences",
+            return_value=[
+                _TargetTokenSequence(term="a", token_ids=(1,), variant="a"),
+                _TargetTokenSequence(term="a", token_ids=(2,), variant=" a"),
+            ],
+        ):
+            binding = worker_runtime._resolve_target_piece_binding(
+                baseline_logits,
+                focus_terms=("a",),
+                preferred_term="a",
+            )
+
+        self.assertIsNone(binding)
+
+    def test_diagnostic_evidence_identity_preserves_binding_seed_axes(self):
+        base_row = {
+            "bundle_key": "entity_insert:mira:source_body:weak_reachable",
+            "operator_recipe_id": "activation_patch_seed",
+            "recipe_name": "activation_patch_seed",
+            "diagnostic_family": "activation_patch",
+            "evidence_kind": "activation_patch_certification",
+            "operator_axis": "activation_patch_candidate_review",
+        }
+        matrix_row = {
+            **base_row,
+            "evidence_kind": "target_piece_binding_replay",
+            "operator_axis": "target_piece_binding_seed_matrix",
+            "target_piece_binding_seed_matrix_id": "tpbsm:test",
+            "target_piece_binding_id": "tpb:canonical",
+            "target_piece_binding_variant": "canonical",
+            "activation_patch_seed_source": "direct_candidate",
+        }
+        alternate_row = {
+            **matrix_row,
+            "target_piece_binding_id": "tpb:alternate",
+            "target_piece_binding_variant": "alternate",
+        }
+
+        base_identity = (
+            HookedTransformerWorkerRuntime._diagnostic_evidence_row_identity(base_row)
+        )
+        matrix_identity = (
+            HookedTransformerWorkerRuntime._diagnostic_evidence_row_identity(matrix_row)
+        )
+        alternate_identity = (
+            HookedTransformerWorkerRuntime._diagnostic_evidence_row_identity(alternate_row)
+        )
+
+        self.assertNotEqual(base_identity, matrix_identity)
+        self.assertNotEqual(matrix_identity, alternate_identity)
+
+    def test_activation_patch_target_piece_binding_seed_matrix_factorizes_axes(self):
+        codec = CharacterCodec("pab ")
+        worker_runtime = self._make_worker_runtime(codec=codec)
+        worker_runtime.reset("p")
+        objective_key = "entity_insert:a:source_body:near_reachable"
+        baseline_logits = torch.tensor([0.0, -2.0, -3.0, 2.0], dtype=torch.float32)
+        seed_rows = [
+            {
+                "objective_bundle_key": objective_key,
+                "intended_term": "a",
+                "diagnostic_family": "activation_patch",
+                "operator_axis": "activation_patch_blueprint_materialization",
+                "recipe_family": "activation_patch|resid_pre|source_term_token",
+                "recipe_name": "direct_seed",
+                "operator_recipe_id": "direct_seed_id",
+                "activation_patch_site": "resid_pre",
+                "activation_patch_layer": 3,
+                "activation_patch_alpha": 0.05,
+                "activation_patch_step_size": 0.05,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_seed_source": "direct_candidate",
+                "status": "supportive",
+                "actual_delta_class": "rank_carrier",
+                "focus_rank_delta": 2,
+            },
+            {
+                "objective_bundle_key": objective_key,
+                "intended_term": "a",
+                "diagnostic_family": "activation_patch",
+                "operator_axis": "activation_patch_local_step_size_sweep",
+                "recipe_family": "activation_patch|resid_pre|source_term_token",
+                "recipe_name": "observed_seed",
+                "operator_recipe_id": "observed_seed_id",
+                "activation_patch_site": "resid_pre",
+                "activation_patch_layer": 3,
+                "activation_patch_alpha": 0.05,
+                "activation_patch_step_size": 0.08,
+                "activation_patch_source_localization": "source_term_token",
+                "activation_patch_seed_source": "observed_gap_carrier",
+                "status": "supportive",
+                "actual_delta_class": "rank_carrier",
+                "target_top20_threshold_gap_delta": -0.002,
+                "focus_rank_delta": 4,
+            },
+        ]
+
+        def fake_materialize(candidate, *, trial_contract):
+            return {
+                "target": {"surface_id": "s_resid_pre_l3_last"},
+                "source": {"dtype": "vector", "expr": {"fn": "cache"}},
+                "op": {"kind": "activation_patch", "alpha": candidate["alpha"], "mode": "blend"},
+                "budget": {"ttl_steps": 1, "step_size": candidate["step_size"], "revertible": True},
+                "operator_recipe_id": candidate["operator_recipe_id"],
+            }
+
+        def fake_replay(_candidate_edits, **kwargs):
+            binding = dict(kwargs["target_piece_binding"])
+            label = str(kwargs.get("label") or "")
+            observed = "observed_gap_carrier" in label
+            canonical = label.endswith(":canonical")
+            logit_delta = (
+                0.4 if observed and canonical else 0.8 if observed else 0.1 if canonical else 0.2
+            )
+            target_token_id = int(binding["chosen_target_token_id"])
+            return {
+                "status": "ok",
+                "actual_delta_class": "rank_carrier",
+                "target_piece_binding_id": binding["binding_id"],
+                "target_piece_binding_manifest": binding,
+                "target_piece_binding_report": {
+                    **binding,
+                    "post_edit_matches_binding": canonical,
+                },
+                "target_piece": codec.decode([target_token_id]),
+                "target_piece_token_id": target_token_id,
+                "target_piece_logit_delta": logit_delta,
+                "target_piece_prob_delta": logit_delta / 100.0,
+                "target_rank_delta": int(logit_delta * 10),
+                "target_rank_after": 100 - int(logit_delta * 10),
+                "target_mass_delta": 0.000002 if observed else 0.000001,
+                "target_top20_hit_delta": 0,
+                "target_top20_threshold_gap_delta": -logit_delta,
+                "post_edit_best_piece": "a" if canonical else codec.decode([target_token_id]),
+                "post_edit_best_token_id": 1 if canonical else target_token_id,
+                "focus_rank_delta": int(logit_delta * 10),
+                "repeat_flag_delta": 0,
+                "repetition_score_delta": 0.0,
+            }
+
+        with patch.object(
+            worker_runtime,
+            "_simulate_decode",
+            return_value={"first_logits": baseline_logits},
+        ), patch.object(
+            worker_runtime,
+            "_target_token_sequences",
+            return_value=[
+                _TargetTokenSequence(term="a", token_ids=(1,), variant="a"),
+                _TargetTokenSequence(term="a", token_ids=(3, 1), variant=" a"),
+            ],
+        ), patch.object(
+            worker_runtime,
+            "_activation_patch_trial_edit_from_candidate",
+            side_effect=fake_materialize,
+        ), patch.object(
+            worker_runtime,
+            "replay_candidate_edits_actual_delta",
+            side_effect=fake_replay,
+        ):
+            report = worker_runtime._activation_patch_target_piece_binding_seed_matrix(
+                seed_rows,
+                objective_bundle_key=objective_key,
+                objective_term="a",
+            )
+
+        self.assertEqual(report["status"], "factorized_2x2_complete")
+        self.assertEqual(report["row_count"], 4)
+        self.assertEqual(report["seed_sources"], ["direct_candidate", "observed_gap_carrier"])
+        self.assertEqual(
+            {row["target_piece_binding_variant"] for row in report["rows"]},
+            {"canonical", "alternate"},
+        )
+        self.assertEqual(len({row["target_piece_binding_id"] for row in report["rows"]}), 2)
+        self.assertTrue(str(report["target_piece_binding_seed_matrix_id"]).startswith("tpbsm:"))
+        self.assertEqual(
+            {row["target_piece_binding_seed_matrix_id"] for row in report["rows"]},
+            {report["target_piece_binding_seed_matrix_id"]},
+        )
+        self.assertTrue(all(row["diagnostic_only"] for row in report["rows"]))
+        self.assertTrue(all(not row["production_apply_allowed"] for row in report["rows"]))
+        logit_effect = report["effect_metrics"]["target_piece_logit_delta"]
+        self.assertAlmostEqual(logit_effect["alternate_minus_canonical"], 0.25)
+        self.assertAlmostEqual(logit_effect["binding_x_seed_interaction"], 0.3)
+        self.assertTrue(report["term_mass_is_binding_invariant_by_definition"])
+
     def test_worker_runtime_classify_actual_delta_result_marks_collapse_isomorphic(self):
         worker_runtime = self._make_worker_runtime()
 
