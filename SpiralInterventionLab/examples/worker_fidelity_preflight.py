@@ -22,6 +22,25 @@ def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def checkpoint_file_hashes(checkpoint: Path) -> dict[str, str]:
+    metadata = {
+        "config.json", "tokenizer.json", "tokenizer_config.json",
+        "model.safetensors.index.json", "pytorch_model.bin.index.json",
+    }
+    files = sorted(
+        path for path in checkpoint.iterdir()
+        if path.is_file() and (path.name in metadata or path.suffix in {".safetensors", ".bin"})
+    )
+    hashes = {}
+    for path in files:
+        sha = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(4 * 1024 * 1024), b""):
+                sha.update(chunk)
+        hashes[path.name] = sha.hexdigest()
+    return hashes
+
+
 def compare_logits(reference: torch.Tensor, actual: torch.Tensor) -> dict:
     reference, actual = reference.float().cpu(), actual.float().cpu()
     if reference.shape != actual.shape or not torch.isfinite(reference).all() or not torch.isfinite(actual).all():
@@ -59,11 +78,15 @@ def main() -> None:
         parser.error("--max-new-tokens must be positive")
     if args.backend == "tlens" and args.reference_dir is None:
         parser.error("tlens requires --reference-dir from a completed HF preflight")
+    output_dir = args.output_dir.expanduser().resolve()
+    reference_dir = args.reference_dir.expanduser().resolve() if args.reference_dir else None
+    if reference_dir == output_dir:
+        parser.error("--output-dir must differ from --reference-dir")
     torch.set_default_device("cpu")
     torch.set_grad_enabled(False)
     torch.manual_seed(args.seed)
     started = time.monotonic()
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = args.worker_model_path.expanduser().resolve()
     config = AutoConfig.from_pretrained(checkpoint, local_files_only=True)
     tokenizer = AutoTokenizer.from_pretrained(checkpoint, local_files_only=True)
@@ -82,15 +105,11 @@ def main() -> None:
         "kv_heads": getattr(config, "num_key_value_heads", config.num_attention_heads),
         "vocab_size": config.vocab_size, "dtype": args.dtype, "device": args.device,
         "seed": args.seed, "task": env.task_id, "max_new_tokens": args.max_new_tokens,
-        "checkpoint_files": {},
+        "checkpoint_files": checkpoint_file_hashes(checkpoint),
     }
-    for name in ("config.json", "tokenizer.json", "tokenizer_config.json", "model.safetensors.index.json"):
-        path = checkpoint / name
-        if path.exists():
-            identity["checkpoint_files"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
     reference = None
-    if args.reference_dir:
-        reference = json.loads((args.reference_dir / "report.json").read_text())
+    if reference_dir:
+        reference = json.loads((reference_dir / "report.json").read_text())
         if reference["identity"] != identity:
             raise ValueError("Reference checkpoint/dtype/device/seed/budget mismatch")
     print(json.dumps({"event": "loading", "backend": args.backend, "identity": identity}), flush=True)
@@ -128,12 +147,12 @@ def main() -> None:
         result = {"prompt": prompt, "prompt_hash": digest(prompt), "input_token_ids": ids,
                   "output": text, "output_token_ids": output_ids, "score": env.score(text),
                   "task_done": env.done(text), "task_feedback": env.task_feedback(text), "steps": rows}
-        torch.save(torch.stack(tensors), args.output_dir / f"{fmt}_logits.pt")
+        torch.save(torch.stack(tensors), output_dir / f"{fmt}_logits.pt")
         if reference is not None:
             ref = reference["conditions"][fmt]
             if ref["input_token_ids"] != ids or ref["prompt_hash"] != digest(prompt):
                 raise ValueError("Reference prompt/token identity mismatch")
-            ref_logits = torch.load(args.reference_dir / f"{fmt}_logits.pt", weights_only=True, map_location="cpu")
+            ref_logits = torch.load(reference_dir / f"{fmt}_logits.pt", weights_only=True, map_location="cpu")
             comparisons = []
             # Teacher-forced HF prefixes prevent generated trajectory drift from
             # masquerading as adapter error at later positions.
@@ -148,7 +167,7 @@ def main() -> None:
                   "provider_calls": 0, "production_apply_allowed": False,
                   "checkpoint_path": str(checkpoint), "seconds": time.monotonic() - started,
                   "fidelity_thresholds": {"kl_max": 0.01, "centered_logit_rmse_max": 0.1, "top1_match_required": True}}
-        (args.output_dir / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+        (output_dir / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
         print(json.dumps({"event": "condition_complete", "format": fmt,
                           "output": text, "score": result["score"], "task_done": result["task_done"],
                           "fidelity": result.get("fidelity")}), flush=True)

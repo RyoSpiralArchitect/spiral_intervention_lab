@@ -1,10 +1,11 @@
+import sys
 from unittest.mock import patch
 from types import SimpleNamespace
 
 import pytest
 import torch
 
-from SpiralInterventionLab.examples.worker_fidelity_preflight import compare_logits
+from SpiralInterventionLab.examples.worker_fidelity_preflight import checkpoint_file_hashes, compare_logits, main
 from SpiralInterventionLab.runtime.worker import HookedTransformerWorkerRuntime
 
 
@@ -14,6 +15,33 @@ def test_fidelity_accepts_only_distribution_invariant_offset():
     assert not compare_logits(logits, logits.flip(0))["passed"]
     assert not compare_logits(logits, logits * float("nan"))["passed"]
     assert not compare_logits(logits, logits[:2])["passed"]
+
+
+def test_fidelity_rejects_same_reference_and_output_before_writing(tmp_path, monkeypatch):
+    output = tmp_path / "reference"
+    monkeypatch.setattr(sys, "argv", [
+        "worker_fidelity_preflight", "--backend", "tlens", "--worker-model-path", str(tmp_path),
+        "--reference-dir", str(output), "--output-dir", str(output / ".." / "reference"),
+    ])
+    with patch("SpiralInterventionLab.examples.worker_fidelity_preflight.AutoConfig.from_pretrained") as load:
+        with pytest.raises(SystemExit):
+            main()
+    load.assert_not_called()
+    assert not output.exists()
+
+
+def test_checkpoint_identity_changes_when_shard_bytes_change(tmp_path):
+    (tmp_path / "config.json").write_text("{}")
+    (tmp_path / "model.safetensors.index.json").write_text("{}")
+    shard = tmp_path / "model-00001-of-00001.safetensors"
+    shard.write_bytes(b"weights-a")
+    first = checkpoint_file_hashes(tmp_path)
+    shard.write_bytes(b"weights-b")
+    second = checkpoint_file_hashes(tmp_path)
+    assert first["model.safetensors.index.json"] == second["model.safetensors.index.json"]
+    assert first[shard.name] != second[shard.name]
+    (tmp_path / "pytorch_model.bin").write_bytes(b"other-weights")
+    assert "pytorch_model.bin" in checkpoint_file_hashes(tmp_path)
 
 
 @pytest.mark.parametrize("device", ["cpu", "mps"])
