@@ -15,7 +15,7 @@ from .edit_budget import (
     PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
 )
 from .policy import PolicyViolation, budget_violation_reason, command_budget_usage
-from . import prefix_control
+from . import candidate_handoff, prefix_control
 
 
 class TaskEnv(Protocol):
@@ -1595,12 +1595,17 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
     handoff_defer_reason = None
     handoff_defer_reason_source = None
     if handoff_state == "measurable":
-        offered = {str(item.get("objective_bundle_key")) for item in handoff.get("measurement_offers", ())
-                   if isinstance(item, Mapping)}
+        offered = [item for item in handoff.get("measurement_offers", ()) if isinstance(item, Mapping)]
         requests = _extract_diagnostic_requests(command, packet)
         measured = any(str(item.get("diagnostic") or "") == "matched_response_probe"
-                       and str(item.get("objective_bundle_key") or "") in offered for item in requests)
+                       and candidate_handoff.matches_offered_request(item, offer)
+                       for item in requests for offer in offered)
+        different_measurement = any(str(item.get("diagnostic") or "") == "matched_response_probe"
+                                    and str(item.get("objective_bundle_key") or "") ==
+                                    str(offer.get("objective_bundle_key") or "")
+                                    for item in requests for offer in offered)
         handoff_choice = ("measurement_requested" if measured else
+                          "different_measurement_requested" if different_measurement else
                           "deferred_for_other_diagnostic" if requests else "no_measurement_requested")
         if not measured:
             explicit_reason = _optional_meta_text(meta, "handoff_defer_reason")

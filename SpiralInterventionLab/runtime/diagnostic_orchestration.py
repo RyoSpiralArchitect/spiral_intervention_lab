@@ -4,6 +4,77 @@ from collections.abc import Callable, Mapping, Sequence as SequenceABC
 from typing import Any
 
 
+_EXPANSION_COUNT_FIELDS = {
+    "readout_steering_deepening": "readout_steering_deepening_followup_count",
+    "readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_variant_count",
+    "carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_variant_count",
+    "non_kv_variant_or_two_stage_design": "non_kv_variant_or_two_stage_rows",
+    "anti_attractor_suppression_calibration_sweep": "anti_attractor_suppression_calibration_row_count",
+}
+_EXPANSION_ROW_FIELDS = (
+    "operator_recipe_expansion_matrix", "non_kv_variant_or_two_stage_rows",
+    "inline_anti_attractor_suppression_calibration_rows",
+    "inline_suppress_then_target_after_calibration_rows",
+)
+
+
+def expansion_key(mode: Any, objective: Any) -> tuple[str, str] | None:
+    normalized = {
+        "two_stage_suppress_then_target_review": "non_kv_variant_or_two_stage_design",
+        "readout_gap_confirmation_variant_sweep": "readout_gap_confirmation_or_variant_sweep",
+    }.get(str(mode or ""), str(mode or ""))
+    objective_key = str(objective or "")
+    if not objective_key or normalized not in _EXPANSION_COUNT_FIELDS:
+        return None
+    return objective_key, normalized
+
+
+def completed_expansion_keys(result: Mapping[str, Any]) -> set[tuple[str, str]]:
+    """Keep execution identities without retaining unbounded diagnostic payloads."""
+    if result.get("status") in {"invalid_request", "already_replayed", "no_new_measurement"}:
+        return set()
+    keys: set[tuple[str, str]] = set()
+    mode = str(result.get("operator_recipe_expansion_mode") or "")
+    objective = result.get("objective_bundle_key") or result.get("bundle_key")
+    if not objective:
+        for field in ("readout_deepening_review_summary", "operator_recipe_expansion_summary"):
+            summary = result.get(field)
+            if isinstance(summary, Mapping):
+                objective = summary.get("objective_bundle_key") or summary.get("bundle_key")
+                if objective:
+                    break
+    key = expansion_key(mode, objective)
+    if key is not None:
+        count = result.get(_EXPANSION_COUNT_FIELDS[key[1]])
+        if key[1] == "non_kv_variant_or_two_stage_design" and not count:
+            summary = result.get("non_kv_variant_or_two_stage_summary")
+            count = summary.get("non_kv_variant_or_two_stage_rows") if isinstance(summary, Mapping) else 0
+        has_rows = (len(count) > 0 if isinstance(count, SequenceABC) and not isinstance(count, (str, bytes, bytearray))
+                    else isinstance(count, int) and not isinstance(count, bool) and count > 0)
+        if has_rows:
+            keys.add(key)
+    for field in _EXPANSION_ROW_FIELDS:
+        rows = result.get(field)
+        if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
+            continue
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            row_objective = row.get("objective_bundle_key") or row.get("bundle_key")
+            row_key = expansion_key(row.get("operator_axis") or row.get("operator_recipe_expansion_mode"), row_objective)
+            if row_key is not None:
+                keys.add(row_key)
+    return keys
+
+
+def expansion_already_replayed(request: Mapping[str, Any], completed: set[tuple[str, str]],
+                               recent_results: SequenceABC[Any]) -> bool:
+    key = expansion_key(request.get("operator_recipe_expansion_mode"),
+                        request.get("objective_bundle_key") or request.get("bundle_key"))
+    return key is not None and (key in completed or any(
+        key in completed_expansion_keys(result) for result in recent_results if isinstance(result, Mapping)))
+
+
 def _as_float(value: Any, default: float = 0.0) -> float:
     try:
         if isinstance(value, bool):

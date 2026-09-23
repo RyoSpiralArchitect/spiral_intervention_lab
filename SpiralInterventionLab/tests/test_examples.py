@@ -41,7 +41,9 @@ from SpiralInterventionLab.examples.summarize_activation_patch_jsonl import summ
 from SpiralInterventionLab.examples.compare_activation_patch_jsonl import compare_activation_patch_runs
 from SpiralInterventionLab.runtime.codecs import CharacterCodec, ModelTokenizerCodec
 from SpiralInterventionLab.runtime.diagnostic_orchestration import (
+    completed_expansion_keys,
     confirmed_gap_only_objective_rows,
+    expansion_already_replayed,
     operator_family_shift_canonical_request,
     readout_gap_confirmation_seen_for_objective,
 )
@@ -1487,6 +1489,48 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertFalse(rows[0]["diagnostic_budget_charged"])
         self.assertEqual(runtime._diagnostic_calls_used, 9)
 
+    def test_completed_expansion_survives_bounded_result_window(self):
+        objective = "entity_insert:send:source_body:near_reachable"
+        request = {"diagnostic": "carrier_to_actuator_conversion_sweep",
+                   "objective_bundle_key": objective,
+                   "operator_recipe_expansion_mode": "carrier_to_actuator_conversion_sweep"}
+        runtime = object.__new__(HookedTransformerWorkerRuntime)
+        runtime._steps = 3
+        runtime.max_diagnostic_calls_per_run = 12
+        runtime.diagnostic_result_window = 1
+        runtime._diagnostic_calls_used = 0
+        runtime._diagnostic_results = []
+        runtime._pending_diagnostic_events = []
+        runtime._evidence_inspection_count = 0
+        runtime._last_packet = {"strategy_hints": {}}
+        def execute_diagnostic(selected, **kwargs):
+            if selected["diagnostic"] != "carrier_to_actuator_conversion_sweep":
+                return {"diagnostic": selected["diagnostic"], "status": "ok"}
+            return {**request, "carrier_to_actuator_conversion_variant_count": 4,
+                    "operator_recipe_expansion_matrix": [{
+                        "objective_bundle_key": objective,
+                        "operator_axis": "carrier_to_actuator_conversion_sweep",
+                    }]}
+        runtime._execute_controller_diagnostic_request = execute_diagnostic
+        runtime.request_controller_diagnostics(request, packet={"strategy_hints": {}})
+        assert expansion_already_replayed(request, runtime._completed_expansion_keys, ())
+        assert not expansion_already_replayed(
+            {**request, "objective_bundle_key": "entity_insert:mira:source_body:near_reachable"},
+            runtime._completed_expansion_keys, ())
+        runtime.request_controller_diagnostics(
+            {"diagnostic": "target_entity_insertion_probe"}, packet={"strategy_hints": {}})
+        self.assertEqual(len(runtime._diagnostic_results), 1)
+        self.assertEqual(runtime._diagnostic_results[0]["diagnostic"], "target_entity_insertion_probe")
+        runtime._execute_controller_diagnostic_request = (
+            HookedTransformerWorkerRuntime._execute_controller_diagnostic_request.__get__(runtime))
+        repeated = runtime._execute_controller_diagnostic_request(
+            request, source="unit_test", packet={"strategy_hints": {}})
+        self.assertEqual(repeated["status"], "already_replayed")
+        self.assertEqual(repeated["diagnostic_call_cost"], 0)
+        self.assertEqual(repeated["physical_replay_count"], 0)
+        self.assertFalse(repeated["production_apply_allowed"])
+        self.assertEqual(completed_expansion_keys(repeated), set())
+
     def test_extract_diagnostic_requests_substitutes_blocked_attention_probe(self):
         objective = "entity_insert:send:source_body:weak_reachable"
         command = {
@@ -1962,6 +2006,17 @@ class TestObserverAndEntityProbeContracts(unittest.TestCase):
         self.assertNotIn(
             "carrier_to_actuator_conversion_sweep",
             [row["diagnostic"] for row in consumed_hints.get("available_next_diagnostics", [])],
+        )
+        runtime._completed_expansion_keys = completed_expansion_keys(runtime._diagnostic_results[-1])
+        runtime._diagnostic_results.pop()
+        evicted_hints = runtime._strategy_hints(
+            control_phase_hint="readout_escape",
+            answer_readout_canary={},
+            readout_sidecar_hints={},
+        )
+        self.assertNotIn(
+            "carrier_to_actuator_conversion_sweep",
+            [row["diagnostic"] for row in evicted_hints.get("available_next_diagnostics", [])],
         )
 
     def test_strategy_hints_request_non_kv_shift_after_carrier_conversion_fails(self):

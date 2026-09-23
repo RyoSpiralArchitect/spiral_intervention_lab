@@ -117,13 +117,6 @@ def test_invalid_or_different_probe_does_not_consume_the_offered_measurement():
     assert invalid["candidate_handoff_choice"] == "measurement_not_executed"
     assert candidate_handoff.report(worker)["state"] == "measurable"
 
-    unavailable = {"status": "no_cached_evidence", "physical_replay_count": 0,
-                   "new_measurement_count": 0}
-    candidate_handoff.record_diagnostic(worker, handoff, request, unavailable,
-        cost=0, source="controller")
-    assert unavailable["candidate_handoff_choice"] == "measurement_not_executed"
-    assert candidate_handoff.report(worker)["state"] == "measurable"
-
     different = {"physical_replay_count": 4, "new_measurement_count": 2}
     candidate_handoff.record_diagnostic(worker, handoff,
         {**request, "candidate_ids": ["different-recipe"]}, different,
@@ -137,6 +130,22 @@ def test_invalid_or_different_probe_does_not_consume_the_offered_measurement():
     assert measured["candidate_handoff_choice"] == "measurement_attempted"
     assert candidate_handoff.report(worker)["unavailable_reasons"][OBJECTIVE] == (
         "measurement_attempt_consumed_at_this_prefix")
+
+
+def test_exact_offered_probe_without_replay_is_unavailable_only_at_this_prefix():
+    worker = worker_with_pool()
+    handoff = candidate_handoff.report(worker)
+    unavailable = {"status": "no_cached_evidence", "physical_replay_count": 0,
+                   "new_measurement_count": 0}
+    candidate_handoff.record_diagnostic(worker, handoff,
+        handoff["measurement_offers"][0]["request"], unavailable,
+        cost=0, source="controller")
+    assert unavailable["candidate_handoff_choice"] == "measurement_unavailable_at_this_prefix"
+    report = candidate_handoff.report(worker)
+    assert report["state"] == "unmeasurable"
+    assert report["blocked_reason"] == "offered_measurement_no_physical_replay_at_this_prefix"
+    worker._segments = [SimpleNamespace(kind="output", token_ids=[12])]
+    assert candidate_handoff.report(worker)["state"] == "measurable"
 
 
 def test_controller_logs_explicit_handoff_deferral_without_overriding_choice():
@@ -160,6 +169,10 @@ def test_controller_logs_explicit_handoff_deferral_without_overriding_choice():
     command["meta"]["next_action"] = "request_objective_rotation_pipeline"
     assert _extract_diagnostic_requests(command, packet) == [handoff["measurement_offers"][0]["request"]]
     assert _build_controller_selection_report(packet, command)["candidate_handoff_choice"] == "measurement_requested"
+    command["meta"]["diagnostic_request"] = {
+        **handoff["measurement_offers"][0]["request"], "dose_grid": [0.16]}
+    assert _build_controller_selection_report(packet, command)["candidate_handoff_choice"] == (
+        "different_measurement_requested")
 
 
 def test_iteration_pair_mode_is_cli_only_and_preserves_diagnostic_budget():

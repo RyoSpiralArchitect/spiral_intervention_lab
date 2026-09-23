@@ -16,11 +16,21 @@ SAFETY_DIAGNOSTICS = frozenset({
     "activation_patch_production_shadow_replay",
     "activation_patch_production_trial_gate_review",
 })
+OFFER_REQUEST_FIELDS = (
+    "diagnostic", "objective_bundle_key", "focus_term", "comparison_axis", "dose_grid", "candidate_ids",
+)
+
+
+def matches_offered_request(request: Mapping[str, Any], offer: Mapping[str, Any]) -> bool:
+    expected = offer.get("request")
+    return isinstance(expected, Mapping) and all(
+        request.get(key) == expected.get(key) for key in OFFER_REQUEST_FIELDS)
 
 
 def reset(worker: Any) -> None:
     worker._candidate_handoff_deferred = {}
     worker._candidate_handoff_attempted = set()
+    worker._candidate_handoff_unavailable = set()
 
 
 def report(worker: Any) -> dict[str, Any]:
@@ -44,6 +54,7 @@ def report(worker: Any) -> dict[str, Any]:
     unavailable: dict[str, str] = {}
     prefix_id = identity("handoff-prefix:", [worker._steps, measurement_positions.output_tokens(worker)])
     attempted = getattr(worker, "_candidate_handoff_attempted", set()) or set()
+    failed = getattr(worker, "_candidate_handoff_unavailable", set()) or set()
     if blocked is None:
         for objective in objectives:
             if objective in carded:
@@ -64,6 +75,9 @@ def report(worker: Any) -> dict[str, Any]:
             recipe_id = str(anchor.get("seed_operator_recipe_id") or anchor.get("operator_recipe_id") or "")
             if (prefix_id, objective, recipe_id) in attempted:
                 unavailable[objective] = "measurement_attempt_consumed_at_this_prefix"
+                continue
+            if (prefix_id, objective, recipe_id) in failed:
+                unavailable[objective] = "offered_measurement_no_physical_replay_at_this_prefix"
                 continue
             request = {"diagnostic": "matched_response_probe", "objective_bundle_key": objective,
                 "focus_term": term, "comparison_axis": "source_localization", "dose_grid": [0.04]}
@@ -106,21 +120,21 @@ def record_diagnostic(worker: Any, handoff: Mapping[str, Any], request: Mapping[
                for offer in handoff.get("measurement_offers", ()) if isinstance(offer, Mapping)}
     objective = str(request.get("objective_bundle_key") or "")
     if diagnostic == "matched_response_probe" and objective in offered:
-        offered_request = offered[objective].get("request") or {}
-        same_measurement = all(request.get(key) == offered_request.get(key) for key in (
-            "diagnostic", "objective_bundle_key", "focus_term", "comparison_axis", "dose_grid", "candidate_ids"))
+        same_measurement = matches_offered_request(request, offered[objective])
         replayed = (int(result.get("physical_replay_count") or 0) > 0
                     or int(result.get("new_measurement_count") or 0) > 0)
-        if same_measurement and replayed:
+        if same_measurement:
             attempt = (str(handoff.get("prefix_id") or ""), objective,
                        str(offered[objective].get("seed_recipe_id") or ""))
             if attempt[0]:
-                attempts = getattr(worker, "_candidate_handoff_attempted", None)
-                if not isinstance(attempts, set):
-                    attempts = set()
-                    worker._candidate_handoff_attempted = attempts
-                attempts.add(attempt)
-            result["candidate_handoff_choice"] = "measurement_attempted"
+                attribute = "_candidate_handoff_attempted" if replayed else "_candidate_handoff_unavailable"
+                history = getattr(worker, attribute, None)
+                if not isinstance(history, set):
+                    history = set()
+                    setattr(worker, attribute, history)
+                history.add(attempt)
+            result["candidate_handoff_choice"] = (
+                "measurement_attempted" if replayed else "measurement_unavailable_at_this_prefix")
         else:
             result["candidate_handoff_choice"] = (
                 "measurement_not_executed" if not replayed else "different_measurement_executed")

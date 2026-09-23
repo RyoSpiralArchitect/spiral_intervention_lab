@@ -742,6 +742,7 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_results: list[dict[str, Any]] = []
         self._diagnostic_calls_used = 0
         self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
+        self._completed_expansion_keys: set[tuple[str, str]] = set()
         candidate_actions.reset(self)
         candidate_handoff.reset(self)
         self._evidence_inspection_count = 0
@@ -1574,6 +1575,9 @@ class HookedTransformerWorkerRuntime:
             result["diagnostic_budget_charged"] = cost > 0
             candidate_handoff.record_diagnostic(
                 self, hints.get("candidate_handoff") or {}, request, result, cost=cost, source=source)
+            if not hasattr(self, "_completed_expansion_keys"):
+                self._completed_expansion_keys = set()
+            self._completed_expansion_keys.update(diag_orch.completed_expansion_keys(result))
             results.append(result)
             if diag_reuse.closed_review(result):
                 key = diag_reuse.review_key(request, hints, [*self._diagnostic_results, *results])
@@ -1772,6 +1776,7 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_results = []
         self._diagnostic_calls_used = 0
         self._diagnostic_review_cache = {}
+        self._completed_expansion_keys = set()
         candidate_actions.reset(self)
         candidate_handoff.reset(self)
         self._evidence_inspection_count = 0
@@ -6491,57 +6496,8 @@ class HookedTransformerWorkerRuntime:
                 del blocked[8:]
 
         def _expansion_already_replayed(request: Mapping[str, Any]) -> bool:
-            mode = str(request.get("operator_recipe_expansion_mode") or "")
-            objective = str(request.get("objective_bundle_key") or request.get("bundle_key") or "")
-            if not mode or not objective:
-                return False
-            matching_axes = {
-                "non_kv_variant_or_two_stage_design": {
-                    "non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review",
-                },
-                "two_stage_suppress_then_target_review": {
-                    "non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review",
-                },
-            }.get(mode, {mode})
-            count_key = {
-                "readout_steering_deepening": "readout_steering_deepening_followup_count",
-                "readout_gap_confirmation_or_variant_sweep": "readout_gap_confirmation_variant_count",
-                "carrier_to_actuator_conversion_sweep": "carrier_to_actuator_conversion_variant_count",
-                "non_kv_variant_or_two_stage_design": "non_kv_variant_or_two_stage_rows",
-                "two_stage_suppress_then_target_review": "non_kv_variant_or_two_stage_rows",
-                "anti_attractor_suppression_calibration_sweep": "anti_attractor_suppression_calibration_row_count",
-            }.get(mode)
-            if not count_key:
-                return False
-            for previous in self._diagnostic_results:
-                if not isinstance(previous, Mapping):
-                    continue
-                for field in (
-                    "operator_recipe_expansion_matrix",
-                    "non_kv_variant_or_two_stage_rows",
-                    "inline_anti_attractor_suppression_calibration_rows",
-                    "inline_suppress_then_target_after_calibration_rows",
-                ):
-                    rows = previous.get(field)
-                    if not isinstance(rows, SequenceABC) or isinstance(rows, (str, bytes, bytearray)):
-                        continue
-                    for row in rows:
-                        if not isinstance(row, Mapping):
-                            continue
-                        row_objective = str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
-                        row_mode = str(row.get("operator_axis") or row.get("operator_recipe_expansion_mode") or "")
-                        if row_objective == objective and row_mode in matching_axes:
-                            return True
-                if str(previous.get("operator_recipe_expansion_mode") or "") != mode:
-                    continue
-                if str(previous.get("objective_bundle_key") or previous.get("bundle_key") or "") != objective:
-                    continue
-                count = previous.get(count_key)
-                if mode in {"non_kv_variant_or_two_stage_design", "two_stage_suppress_then_target_review"}:
-                    count = (previous.get("non_kv_variant_or_two_stage_summary") or {}).get(count_key, 0)
-                if isinstance(count, int) and not isinstance(count, bool) and count > 0:
-                    return True
-            return False
+            return diag_orch.expansion_already_replayed(
+                request, getattr(self, "_completed_expansion_keys", set()), self._diagnostic_results)
 
         def _add_available_next_diagnostic(request: Mapping[str, Any], *, reason: str, priority: int = 10) -> None:
             diagnostic = str(request.get("diagnostic") or "")
@@ -12497,6 +12453,23 @@ class HookedTransformerWorkerRuntime:
         if expected_mode and not mode:
             request = {**request, "operator_recipe_expansion_mode": expected_mode}
             mode = expected_mode
+        if diag_orch.expansion_already_replayed(
+            request, getattr(self, "_completed_expansion_keys", set()), ()):
+            return {
+                "diagnostic": diagnostic_name,
+                "operator_recipe_expansion_mode": mode,
+                "objective_bundle_key": request.get("objective_bundle_key") or request.get("bundle_key"),
+                "status": "already_replayed",
+                "blocked_reason": "already_replayed_no_new_measurement",
+                "recorded_step": int(self._steps),
+                "new_measurement_count": 0,
+                "physical_replay_count": 0,
+                "diagnostic_call_cost": 0,
+                "next_evidence_needed": "choose_unreplayed_diagnostic",
+                "diagnostic_only": True,
+                "production_apply_allowed": False,
+                "policy_candidate_ready": False,
+            }
         packet_context = packet if isinstance(packet, Mapping) else {}
         strategy_hints = packet_context.get("strategy_hints") if isinstance(packet_context.get("strategy_hints"), Mapping) else {}
         if diagnostic_name == "inspect_evidence":

@@ -333,8 +333,14 @@ slot, so repeated optional deferral and its reason can be observed live.
 Review follow-up: an invalid or different matched-response request does not
 consume the offered measurement. The offer is marked attempted only after
 physical replay or new measurement of the exact offered seed, dose and
-comparison axis. Local JSONL and audit directories are not committed PR
-artifacts; the compact outcomes above are the reviewable evidence summary.
+comparison axis. If that exact request cannot replay, the same-prefix offer
+becomes explicitly unavailable rather than being presented again while the
+loop's duplicate guard blocks it. Selection logs use this same full-request
+match, so a different dose is not recorded as selecting the offered probe.
+Completed expansion identities are kept for the episode independently of the
+bounded result display window; evicting an old result cannot re-offer and
+recharge the same objective/mode. Local JSONL and audit directories are not
+committed PR artifacts; the compact outcomes above are the reviewable summary.
 
-Final validation: `480 passed, 15 warnings, 2 subtests passed` and
+Final validation: `482 passed, 15 warnings, 2 subtests passed` and
 `git diff --check` passed.
