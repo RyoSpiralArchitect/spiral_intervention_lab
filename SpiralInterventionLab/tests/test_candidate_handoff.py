@@ -94,7 +94,7 @@ def test_handoff_penalty_only_counts_charged_non_safety_diagnostic_at_same_prefi
     after = candidate_handoff.report(worker)
     assert after["deferred_diagnostic_count"] == 2
     assert after["soft_opportunity_cost"] == 1
-    measurement = {}
+    measurement = {"physical_replay_count": 4, "new_measurement_count": 2}
     candidate_handoff.record_diagnostic(worker, after, handoff["measurement_offers"][0]["request"],
         measurement, cost=1, source="controller")
     assert measurement["candidate_handoff_choice"] == "measurement_attempted"
@@ -104,6 +104,39 @@ def test_handoff_penalty_only_counts_charged_non_safety_diagnostic_at_same_prefi
     worker._segments = [SimpleNamespace(kind="output", token_ids=[12])]
     assert candidate_handoff.report(worker)["deferred_diagnostic_count"] == 0
     assert candidate_handoff.report(worker)["state"] == "measurable"
+
+
+def test_invalid_or_different_probe_does_not_consume_the_offered_measurement():
+    worker = worker_with_pool()
+    handoff = candidate_handoff.report(worker)
+    request = handoff["measurement_offers"][0]["request"]
+    invalid = {"status": "invalid_request", "physical_replay_count": 0,
+               "new_measurement_count": 0}
+    candidate_handoff.record_diagnostic(worker, handoff,
+        {**request, "dose_grid": [99.0]}, invalid, cost=0, source="controller")
+    assert invalid["candidate_handoff_choice"] == "measurement_not_executed"
+    assert candidate_handoff.report(worker)["state"] == "measurable"
+
+    unavailable = {"status": "no_cached_evidence", "physical_replay_count": 0,
+                   "new_measurement_count": 0}
+    candidate_handoff.record_diagnostic(worker, handoff, request, unavailable,
+        cost=0, source="controller")
+    assert unavailable["candidate_handoff_choice"] == "measurement_not_executed"
+    assert candidate_handoff.report(worker)["state"] == "measurable"
+
+    different = {"physical_replay_count": 4, "new_measurement_count": 2}
+    candidate_handoff.record_diagnostic(worker, handoff,
+        {**request, "candidate_ids": ["different-recipe"]}, different,
+        cost=1, source="controller")
+    assert different["candidate_handoff_choice"] == "different_measurement_executed"
+    assert candidate_handoff.report(worker)["state"] == "measurable"
+
+    measured = {"physical_replay_count": 4, "new_measurement_count": 2}
+    candidate_handoff.record_diagnostic(worker, handoff, request, measured,
+        cost=1, source="controller")
+    assert measured["candidate_handoff_choice"] == "measurement_attempted"
+    assert candidate_handoff.report(worker)["unavailable_reasons"][OBJECTIVE] == (
+        "measurement_attempt_consumed_at_this_prefix")
 
 
 def test_controller_logs_explicit_handoff_deferral_without_overriding_choice():

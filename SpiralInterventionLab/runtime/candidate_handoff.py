@@ -106,15 +106,24 @@ def record_diagnostic(worker: Any, handoff: Mapping[str, Any], request: Mapping[
                for offer in handoff.get("measurement_offers", ()) if isinstance(offer, Mapping)}
     objective = str(request.get("objective_bundle_key") or "")
     if diagnostic == "matched_response_probe" and objective in offered:
-        attempt = (str(handoff.get("prefix_id") or ""), objective,
-                   str(offered[objective].get("seed_recipe_id") or ""))
-        if attempt[0]:
-            attempts = getattr(worker, "_candidate_handoff_attempted", None)
-            if not isinstance(attempts, set):
-                attempts = set()
-                worker._candidate_handoff_attempted = attempts
-            attempts.add(attempt)
-        result["candidate_handoff_choice"] = "measurement_attempted"
+        offered_request = offered[objective].get("request") or {}
+        same_measurement = all(request.get(key) == offered_request.get(key) for key in (
+            "diagnostic", "objective_bundle_key", "focus_term", "comparison_axis", "dose_grid", "candidate_ids"))
+        replayed = (int(result.get("physical_replay_count") or 0) > 0
+                    or int(result.get("new_measurement_count") or 0) > 0)
+        if same_measurement and replayed:
+            attempt = (str(handoff.get("prefix_id") or ""), objective,
+                       str(offered[objective].get("seed_recipe_id") or ""))
+            if attempt[0]:
+                attempts = getattr(worker, "_candidate_handoff_attempted", None)
+                if not isinstance(attempts, set):
+                    attempts = set()
+                    worker._candidate_handoff_attempted = attempts
+                attempts.add(attempt)
+            result["candidate_handoff_choice"] = "measurement_attempted"
+        else:
+            result["candidate_handoff_choice"] = (
+                "measurement_not_executed" if not replayed else "different_measurement_executed")
         return
     if cost <= 0:
         return

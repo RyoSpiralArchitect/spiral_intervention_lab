@@ -301,8 +301,9 @@ prefix. Safety checks and zero-cost diagnostics are exempt. Measurement is
 never forced, and production apply gates are unchanged. The mode defaults to
 `off`.
 
-The local [GPT-2 off pair](../results/candidate_handoff_off_gpt2_20260923/)
-and [GPT-2 soft pair](../results/candidate_handoff_soft_gpt2_r2_20260923/)
+The local-only GPT-2 off pair
+(`results/candidate_handoff_off_gpt2_20260923/`) and soft pair
+(`results/candidate_handoff_soft_gpt2_r2_20260923/`)
 used the same task, checkpoint, seed, Luna controller, baseline reference and
 12 diagnostic slots. Their 11 generated prefixes and final score (`0.5875`)
 matched. The off pair produced no measured card. The soft pair reached a
@@ -317,10 +318,10 @@ An initial Llama soft smoke recorded cards for `sample`, a required term
 already present in the generated prefix. Those cards were valid measurements
 but not progress toward the missing term, so the preflight now excludes such
 terms from progress offers. In the corrected
-[Llama soft pair](../results/candidate_handoff_soft_llama_r2_20260923/),
+Llama soft pair (`results/candidate_handoff_soft_llama_r2_20260923/`),
 no recorded activation-patch seed became measurable before the diagnostic
 budget was spent, and no card was produced. Its 18 generated prefixes matched
-the [Llama reference](../results/diagnostic_route_fix_llama_r3_20260923/);
+the local Llama reference (`results/diagnostic_route_fix_llama_r3_20260923/`);
 the output and score (`0.938889`) were unchanged. This run did not isolate
 the already-present-term guard in live behavior; that guard is covered by a
 focused synthetic test. Both reported pairs preserve the production
@@ -329,5 +330,11 @@ operator-efficacy or task-success result. The next useful comparison is a
 prefix where a missing-term seed is available *before* the final diagnostic
 slot, so repeated optional deferral and its reason can be observed live.
 
-Final validation: `479 passed, 15 warnings, 2 subtests passed` and
+Review follow-up: an invalid or different matched-response request does not
+consume the offered measurement. The offer is marked attempted only after
+physical replay or new measurement of the exact offered seed, dose and
+comparison axis. Local JSONL and audit directories are not committed PR
+artifacts; the compact outcomes above are the reviewable evidence summary.
+
+Final validation: `480 passed, 15 warnings, 2 subtests passed` and
 `git diff --check` passed.
