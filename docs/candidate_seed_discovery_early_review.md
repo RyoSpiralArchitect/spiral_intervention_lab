@@ -102,6 +102,24 @@ The source soft run is
 The full JSONL files remain local; this note records their comparison rather
 than treating it as a controlled multi-seed estimate.
 
+To repeat the corrected live condition with a locally supplied checkpoint,
+set `MODEL_PATH` to the GPT-2 model directory and choose a fresh `LOG_DIR`:
+
+```sh
+python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
+  --provider openai --controller-model gpt-5.6-luna \
+  --worker-model gpt2 --worker-model-path "$MODEL_PATH" --worker-hf-offline \
+  --worker-device mps --worker-dtype float32 --worker-mps-mode conservative \
+  --task constrained_rewrite --seed 7 --no-b1 \
+  --controller-prompt-profile compact --controller-packet-view compact \
+  --readout-analyzer sae_scaffold --readout-analyzer-rerank-mode apply \
+  --activation-surface-profile activation_patch_expanded \
+  --max-diagnostic-calls-per-run 12 --diagnostic-result-window 12 \
+  --candidate-handoff-rounds 2 --candidate-handoff-mode soft \
+  --post-run-debrief controller --post-run-debrief-max-output-tokens 1200 \
+  --log-dir "$LOG_DIR"
+```
+
 Next question: why does the controller defer an executable but expensive
 activation-patch review until late despite early visibility? A fixed-prefix
 off/soft choice comparison should isolate the offer's effect before changing
