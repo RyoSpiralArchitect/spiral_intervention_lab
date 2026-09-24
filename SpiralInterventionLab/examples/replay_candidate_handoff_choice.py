@@ -59,18 +59,22 @@ def _assert_handoff_only_diff(off: Mapping[str, Any], soft: Mapping[str, Any],
 
 def _load_recorded_seed(path: Path, recipe_id: str, prefix: str) -> tuple[str, dict[str, Any]]:
     prompt: str | None = None
+    episode_count = 0
     matches: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as stream:
         for line in stream:
             event = json.loads(line)
             if event.get("event") == "episode_start":
+                episode_count += 1
+                if episode_count > 1:
+                    raise ValueError("source JSONL must contain one episode")
                 prompt = str(event["prompt"])
             if event.get("event") != "controller_diagnostic_result":
                 continue
             for row in event.get("evidence_rows", ()):
                 if isinstance(row, Mapping) and row.get("operator_recipe_id") == recipe_id:
                     matches.append(dict(row))
-    if prompt is None or len(matches) != 1:
+    if episode_count != 1 or prompt is None or len(matches) != 1:
         raise ValueError(f"expected one episode prompt and one recorded seed, got {len(matches)} seeds")
     row = matches[0]
     binding = row.get("target_piece_binding_manifest")

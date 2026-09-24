@@ -279,6 +279,10 @@ def test_fixed_prefix_shadow_requires_recorded_binding_and_single_seed(tmp_path)
         _load_recorded_seed(path, row["operator_recipe_id"], " another prefix")
     with raises(ValueError, match="one episode prompt and one recorded seed"):
         _load_recorded_seed(path, "missing recipe", " In the case of")
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "episode_start", "prompt": "fixture"}) + "\n")
+    with raises(ValueError, match="one episode"):
+        _load_recorded_seed(path, row["operator_recipe_id"], " In the case of")
 
 
 def test_fixed_prefix_shadow_rejects_non_handoff_packet_drift():

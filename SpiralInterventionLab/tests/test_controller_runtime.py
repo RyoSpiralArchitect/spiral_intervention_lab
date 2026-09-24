@@ -2809,6 +2809,25 @@ class TestWorkerRuntimeAndBaselines(unittest.TestCase):
         self.assertTrue(result["activation_patch_compile_preview_created"])
         self.assertFalse(result["activation_patch_candidate_review"]["compile_preview"]["production_apply_allowed"])
 
+    def test_activation_patch_review_retries_after_unhooked_cached_row(self):
+        objective = "entity_insert:a:source_body:near_reachable"
+        request = {"diagnostic": "activation_patch_candidate_review", "bundle_key": objective,
+                   "objective_bundle_key": objective}
+        for hook_count, expected_calls in ((0, 1), (1, 0)):
+            with self.subTest(hook_count=hook_count):
+                worker_runtime = self._make_worker_runtime()
+                packet = {"strategy_hints": {"diagnostic_evidence_ledger": [{
+                    "bundle_key": objective, "objective_bundle_key": objective,
+                    "evidence_kind": "activation_patch_certification",
+                    "activation_patch_hook_call_count": hook_count,
+                }]}}
+                with patch.object(worker_runtime, "_activation_patch_rows_from_entity_blueprints",
+                                  return_value=[]) as materialize:
+                    result = worker_runtime._execute_controller_diagnostic_request(
+                        request, source="unit_test", packet=packet)
+                self.assertIsNotNone(result)
+                self.assertEqual(materialize.call_count, expected_calls)
+
     def test_activation_patch_dedicated_diagnostics_reject_cross_mode_without_replay(self):
         worker_runtime = self._make_worker_runtime()
         diagnostics = (

@@ -13135,9 +13135,20 @@ class HookedTransformerWorkerRuntime:
         attention_guided_supportive = sum(
             1 for row in attention_guided_rows if str(row.get("status", "") or "") in {"supportive", "certified"}
         )
+        def _has_hooked_activation_patch_evidence(row: Mapping[str, Any]) -> bool:
+            if str(row.get("evidence_kind", "") or "") != "activation_patch_certification":
+                return False
+            for key in ("activation_patch_hook_call_count", "activation_hook_call_count"):
+                try:
+                    if int(row.get(key) or 0) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+            return False
+
         activation_patch_blueprint_materialized_rows: list[dict[str, Any]] = []
         if activation_patch_review_requested and not any(
-            str(row.get("evidence_kind", "") or "") == "activation_patch_certification"
+            _has_hooked_activation_patch_evidence(row)
             for row in matching_rows
             if isinstance(row, Mapping)
         ):
