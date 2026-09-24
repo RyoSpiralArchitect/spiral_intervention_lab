@@ -62,6 +62,7 @@ def fixture(monkeypatch):
     monkeypatch.setattr("SpiralInterventionLab.runtime.prefix_probe.state_identity", context)
     monkeypatch.setattr("SpiralInterventionLab.runtime.candidate_trial.state_identity", context)
     row = {"objective_bundle_key": "objective:a", "intended_term": "a", "operator_recipe_id": "r1",
+           "seed_operator_recipe_id": "seed-r1",
            "recipe_name": "r1", "activation_patch_site": "resid_pre", "activation_patch_layer": 1,
            "activation_patch_alpha": 0.04, "activation_patch_step_size": 0.16,
            "activation_patch_source_localization": "source_term_token", "source_tensor_identity": tensor_identity(raw_source),
@@ -86,6 +87,7 @@ def request(worker, action):
 def test_frozen_source_is_a_clone_and_choices_survive_compaction(fixture):
     worker, calls, result, source = fixture
     frozen = next(iter(worker._frozen_diagnostic_candidates.values()))["frozen"]
+    assert frozen.descriptor["seed_operator_recipe_id"] == "seed-r1"
     source[0] = 99
     assert frozen.source_tensor[0] == 1
     hints = actions.action_hints(worker)

@@ -4,6 +4,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from SpiralInterventionLab.bridge.controller_clients import _compact_controller_payload
+from SpiralInterventionLab.examples.replay_candidate_handoff_choice import (
+    _assert_handoff_only_diff,
+    _load_recorded_seed,
+)
+from SpiralInterventionLab.examples.replay_candidate_seed_discovery import (
+    load_early_reviews,
+    select_frozen_remeasurement,
+    summarize_discovery,
+)
 from SpiralInterventionLab.examples.run_iteration_pair import build_argv
 from SpiralInterventionLab.runtime import candidate_handoff
 from SpiralInterventionLab.runtime.loop import _build_controller_selection_report, _extract_diagnostic_requests
@@ -61,6 +70,55 @@ def test_handoff_unmeasurable_and_carded_are_not_offered_for_measurement():
     assert exhausted["blocked_reason"] == "diagnostic_budget_exhausted"
     worker._frozen_diagnostic_candidates = {"card": {"frozen": SimpleNamespace(objective=OBJECTIVE)}}
     assert candidate_handoff.report(worker)["state"] == "carded"
+
+
+def test_source_body_blueprint_is_only_an_executable_discovery_option():
+    worker = worker_with_pool()
+    worker._diagnostic_results = [{"diagnostic": "entity_insertion_operator_candidate_review",
+        "candidate_blueprints": [{"kind": "entity_insertion_candidate_blueprint",
+            "candidate_key": OBJECTIVE, "objective_term": "Mira", "source_provenance": "source_body",
+            "source_span": {"start": 10, "end": 12, "provenance_class": "source_body",
+                            "span_kind": "exact_prompt_span"}}]}]
+    worker.surface_catalog = [SimpleNamespace(allow_ops=("activation_patch",),
+        target=SimpleNamespace(kind="activation", site="resid_pre", token=SimpleNamespace(mode="last")))]
+    worker._last_task_feedback = {"required_terms_present": []}
+    discovery = candidate_handoff.seed_discovery_report(worker)
+    assert discovery["status"] == "available" and discovery["blueprint_count"] == 1
+    assert discovery["options"][0]["request"] == {
+        "diagnostic": "activation_patch_candidate_review", "bundle_key": OBJECTIVE,
+        "objective_bundle_key": OBJECTIVE,
+        "operator_recipe_expansion_mode": "activation_patch_candidate_review"}
+    assert discovery["options"][0]["seed_status"] == "unmeasured_blueprint"
+    assert discovery["production_apply_allowed"] is False
+    assert candidate_handoff.report(worker)["state"] == "unmeasurable"
+
+    worker._diagnostic_calls_used = worker.max_diagnostic_calls_per_run
+    assert candidate_handoff.seed_discovery_report(worker)["status"] == "diagnostic_budget_exhausted"
+    worker._diagnostic_calls_used = 1
+    worker.surface_catalog = []
+    assert candidate_handoff.seed_discovery_report(worker)["status"] == "no_live_activation_patch_surface"
+    worker.surface_catalog = [SimpleNamespace(allow_ops=("activation_patch",),
+        target=SimpleNamespace(kind="activation", site="resid_pre", token=SimpleNamespace(mode="last")))]
+    worker._last_task_feedback = {"required_terms_present": ["Mira"]}
+    assert candidate_handoff.seed_discovery_report(worker)["options"] == []
+    worker._last_task_feedback = {"required_terms_present": []}
+    worker._diagnostic_results.append({"diagnostic": "activation_patch_candidate_review",
+                                       "objective_bundle_key": OBJECTIVE, "status": "ok"})
+    assert candidate_handoff.seed_discovery_report(worker)["options"] == []
+
+
+def test_activation_patch_review_next_action_alias_spends_only_one_diagnostic():
+    command = {"decision": "noop", "meta": {
+        "diagnostic_request": {"diagnostic": "activation_patch_candidate_review",
+                               "bundle_key": OBJECTIVE, "objective_bundle_key": OBJECTIVE,
+                               "operator_recipe_expansion_mode": "activation_patch_candidate_review"},
+        "next_action": "request_activation_patch_candidate_review",
+        "next_evidence_needed": "activation_patch_candidate_review",
+        "objective_bundle_key": OBJECTIVE,
+    }}
+    requests = _extract_diagnostic_requests(command, {"strategy_hints": {}})
+    assert len(requests) == 1
+    assert requests[0]["operator_recipe_expansion_mode"] == "activation_patch_candidate_review"
 
 
 def test_materializable_seed_survives_result_display_window_eviction():
@@ -201,3 +259,115 @@ def test_iteration_pair_mode_is_cli_only_and_preserves_diagnostic_budget():
                       device="mps", controller="gpt-5.6-luna", candidate_handoff_mode="soft")
     assert argv[argv.index("--candidate-handoff-mode") + 1] == "soft"
     assert argv[argv.index("--max-diagnostic-calls-per-run") + 1] == "12"
+
+
+def test_fixed_prefix_shadow_requires_recorded_binding_and_single_seed(tmp_path):
+    import json
+
+    path = tmp_path / "source.jsonl"
+    row = seed_row()
+    row["target_piece_binding_manifest"] = {"answer_prefix_tail": " In the case of"}
+    path.write_text("\n".join(json.dumps(event) for event in (
+        {"event": "episode_start", "prompt": "fixture"},
+        {"event": "controller_diagnostic_result", "evidence_rows": [row]},
+    )) + "\n")
+    prompt, loaded = _load_recorded_seed(path, row["operator_recipe_id"], " In the case of")
+    assert prompt == "fixture" and loaded == row
+    from pytest import raises
+
+    with raises(ValueError, match="different answer prefix"):
+        _load_recorded_seed(path, row["operator_recipe_id"], " another prefix")
+    with raises(ValueError, match="one episode prompt and one recorded seed"):
+        _load_recorded_seed(path, "missing recipe", " In the case of")
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "episode_start", "prompt": "fixture"}) + "\n")
+    with raises(ValueError, match="one episode"):
+        _load_recorded_seed(path, row["operator_recipe_id"], " In the case of")
+
+
+def test_fixed_prefix_shadow_rejects_non_handoff_packet_drift():
+    from pytest import raises
+
+    off = {"telemetry": {"target_mass": 0.1}, "strategy_hints": {"available_next_diagnostics": []}}
+    soft = {"telemetry": {"target_mass": 0.1}, "strategy_hints": {
+        "candidate_handoff": {"state": "measurable"},
+        "available_next_diagnostics": [{"diagnostic": "matched_response_probe"}]}}
+    assert _assert_handoff_only_diff(off, soft, compact=False) == [
+        "strategy_hints.available_next_diagnostics", "strategy_hints.candidate_handoff"]
+    soft["telemetry"]["target_mass"] = 0.2
+    with raises(ValueError, match="packet drift outside handoff"):
+        _assert_handoff_only_diff(off, soft, compact=False)
+
+
+def test_early_seed_discovery_requires_recorded_prefix_and_source_body_blueprint(tmp_path):
+    import json
+    from pytest import raises
+
+    path = tmp_path / "source.jsonl"
+    events = [
+        {"event": "episode_start", "prompt": "fixture"},
+        {"event": "controller_observation", "generated_tail": " In"},
+        {"event": "controller_diagnostic_result", "diagnostic": "target_entity_insertion_probe"},
+        {"event": "controller_diagnostic_result", "diagnostic": "entity_insertion_operator_candidate_review",
+         "candidate_blueprints": [{"candidate_key": OBJECTIVE, "source_provenance": "source_body"}]},
+    ]
+    path.write_text("\n".join(json.dumps(event) for event in events) + "\n")
+    prompt, reviews = load_early_reviews(path, prefix=" In", objective=OBJECTIVE)
+    assert prompt == "fixture" and len(reviews) == 2
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps({"event": "controller_observation", "generated_tail": " In the"}) + "\n")
+    with raises(ValueError, match="early prefix"):
+        load_early_reviews(path, prefix=" In the", objective=OBJECTIVE)
+    with raises(ValueError, match="early prefix"):
+        load_early_reviews(path, prefix=" In the case", objective=OBJECTIVE)
+    with raises(ValueError, match="source-body blueprint"):
+        load_early_reviews(path, prefix=" In", objective="entity_insert:other")
+
+    late_path = tmp_path / "late.jsonl"
+    late_path.write_text("\n".join(json.dumps(event) for event in (
+        {"event": "episode_start", "prompt": "fixture"},
+        {"event": "controller_observation", "generated_tail": " In"},
+        {"event": "controller_observation", "generated_tail": " In the"},
+        events[2], events[3],
+    )) + "\n")
+    with raises(ValueError, match="early prefix"):
+        load_early_reviews(late_path, prefix=" In", objective=OBJECTIVE)
+
+
+def test_early_seed_discovery_keeps_measured_rows_distinct_from_permission():
+    result = {"diagnostic": "activation_patch_candidate_review", "status": "ok",
+              "diagnostic_call_cost": 1, "diagnostic_budget_charged": True,
+              "activation_patch_blueprint_materialization_count": 2,
+              "evidence_rows": [
+                  {"objective_bundle_key": OBJECTIVE, "diagnostic_family": "activation_patch",
+                   "activation_hook_call_count": 1, "actual_delta_class": "rank_carrier",
+                   "target_mass_delta": 0.000001, "production_apply_allowed": False},
+                  {"objective_bundle_key": OBJECTIVE, "diagnostic_family": "activation_patch",
+                   "activation_hook_call_count": 0, "actual_delta_class": "materialization_failed"},
+              ]}
+    handoff = {"state": "measurable", "measurement_offers": [
+        {"objective_bundle_key": OBJECTIVE, "seed_recipe_id": "recipe"}]}
+    summary = summarize_discovery(result, handoff, objective=OBJECTIVE)
+    assert summary["activation_patch_evidence_row_count"] == 2
+    assert summary["activation_patch_hooked_row_count"] == 1
+    assert summary["handoff_offer_recipe_ids"] == ["recipe"]
+    assert summary["production_apply_allowed"] is False
+
+
+def test_frozen_remeasurement_selects_exact_recipe_and_available_action():
+    from pytest import raises
+
+    worker = SimpleNamespace(_frozen_diagnostic_candidates={"card": {
+        "frozen": SimpleNamespace(descriptor={"operator_recipe_id": "matched-a",
+                                              "seed_operator_recipe_id": "recipe-a"})}})
+    packet = {"strategy_hints": {"candidate_diagnostic_choices": {"cards": [{
+        "candidate_id": "card", "objective_bundle_key": OBJECTIVE, "target_piece": " Mir",
+        "actions": [{"action": "review_existing", "action_id": "review", "available": True},
+                    {"action": "remeasure_current_prefix", "action_id": "measure", "available": True}],
+    }]}}}
+    assert select_frozen_remeasurement(worker, packet, objective=OBJECTIVE, recipe_id="recipe-a",
+                                       target_piece=" Mir") == {
+        "diagnostic": "candidate_action", "action_id": "measure"}
+    with raises(ValueError, match="found 0"):
+        select_frozen_remeasurement(worker, packet, objective=OBJECTIVE, recipe_id="recipe-b",
+                                    target_piece=" Mir")

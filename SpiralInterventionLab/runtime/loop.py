@@ -841,6 +841,8 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
             "carrier_to_actuator_conversion_sweep",
         } and row.get("operator_recipe_expansion_mode") in (None, ""):
             row["operator_recipe_expansion_mode"] = name_text
+        if name_text == "activation_patch_candidate_review" and row.get("operator_recipe_expansion_mode") in (None, ""):
+            row["operator_recipe_expansion_mode"] = name_text
         blocked = _blocked_diagnostic_row(row, strategy_hints=strategy_hints)
         if blocked is not None:
             alternate = str(blocked.get("suggested_alternate_diagnostic") or "")

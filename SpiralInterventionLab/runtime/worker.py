@@ -8379,6 +8379,14 @@ class HookedTransformerWorkerRuntime:
                 _add_available_next_diagnostic(
                     offer["request"], reason="recorded_seed_preflight_ready_for_same_prefix_measurement",
                     priority=2)
+            discovery = candidate_handoff.seed_discovery_report(self)
+            hints["candidate_seed_discovery_status"] = discovery["status"]
+            hints["candidate_seed_discovery_blueprint_count"] = discovery["blueprint_count"]
+            for option in discovery["options"]:
+                _add_available_next_diagnostic(
+                    option["request"],
+                    reason="source_body_blueprint_available_for_diagnostic_activation_patch_review",
+                    priority=20)
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -13127,9 +13135,20 @@ class HookedTransformerWorkerRuntime:
         attention_guided_supportive = sum(
             1 for row in attention_guided_rows if str(row.get("status", "") or "") in {"supportive", "certified"}
         )
+        def _has_hooked_activation_patch_evidence(row: Mapping[str, Any]) -> bool:
+            if str(row.get("evidence_kind", "") or "") != "activation_patch_certification":
+                return False
+            for key in ("activation_patch_hook_call_count", "activation_hook_call_count"):
+                try:
+                    if int(row.get(key) or 0) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    continue
+            return False
+
         activation_patch_blueprint_materialized_rows: list[dict[str, Any]] = []
         if activation_patch_review_requested and not any(
-            str(row.get("evidence_kind", "") or "") == "activation_patch_certification"
+            _has_hooked_activation_patch_evidence(row)
             for row in matching_rows
             if isinstance(row, Mapping)
         ):
@@ -16617,6 +16636,7 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_seed_source",
                         "seed_source",
                         "seed_recipe_name",
+                        "seed_operator_recipe_id",
                         "target_piece_binding_variant",
                         "target_piece_binding_id",
                         "target_piece_binding_manifest",

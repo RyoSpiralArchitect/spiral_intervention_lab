@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from . import diagnostic_budget, measurement_positions
+from . import candidate_actions, diagnostic_budget, measurement_positions
 from .evidence_inspection import evidence_catalog
 from .response_probe import identity, select_probe_seeds
 
@@ -46,6 +46,89 @@ def seed_catalog(worker: Any) -> list[dict[str, Any]]:
             rows.append(dict(retained))
             seen.add(key)
     return rows
+
+
+def seed_discovery_report(worker: Any) -> dict[str, Any]:
+    """Offer executable review of source-body blueprints, never an unmeasured seed."""
+    results = getattr(worker, "_diagnostic_results", ())
+    review = next((row for row in reversed(results)
+                   if isinstance(row, Mapping)
+                   and row.get("diagnostic") == "entity_insertion_operator_candidate_review"), None)
+    blueprints = review.get("candidate_blueprints", ()) if isinstance(review, Mapping) else ()
+    base = {"status": "no_source_body_blueprint", "blueprint_count": 0, "options": [],
+            "evidence_scope": "unmeasured_blueprint_review_option",
+            "production_apply_allowed": False}
+    if not isinstance(blueprints, (list, tuple)):
+        return base
+    valid = []
+    for row in blueprints:
+        if not isinstance(row, Mapping) or row.get("kind") != "entity_insertion_candidate_blueprint":
+            continue
+        span = row.get("source_span") or {}
+        if (row.get("source_provenance") != "source_body" or not isinstance(span, Mapping)
+                or span.get("provenance_class") != "source_body"
+                or span.get("span_kind") != "exact_prompt_span"):
+            continue
+        start, end = span.get("start"), span.get("end")
+        if (not isinstance(start, int) or isinstance(start, bool) or not isinstance(end, int)
+                or isinstance(end, bool) or start < 0 or end <= start):
+            continue
+        objective = str(row.get("candidate_key") or "")
+        term = str(row.get("objective_term") or "")
+        if objective and term:
+            valid.append((objective, term))
+    base["blueprint_count"] = len(valid)
+    if not valid:
+        return base
+    if diagnostic_budget.left(worker) <= 0:
+        return {**base, "status": "diagnostic_budget_exhausted"}
+    if worker.done():
+        return {**base, "status": "terminal_prefix"}
+    if worker._collect_active_edits():
+        return {**base, "status": "active_edits_not_supported"}
+    surfaces = getattr(worker, "surface_catalog", ())
+    if not any(
+        "activation_patch" in getattr(surface, "allow_ops", ())
+        and getattr(getattr(surface, "target", None), "kind", None) == "activation"
+        and getattr(getattr(surface, "target", None), "site", None) in {"resid_pre", "resid_post", "mlp_out"}
+        and getattr(getattr(getattr(surface, "target", None), "token", None), "mode", None) == "last"
+        for surface in surfaces
+    ):
+        return {**base, "status": "no_live_activation_patch_surface"}
+    registry = getattr(worker, "_frozen_diagnostic_candidates", {}) or {}
+    if len(registry) >= candidate_actions.MAX_CANDIDATES:
+        return {**base, "status": "episode_candidate_capacity_reached"}
+    carded = {str(entry["frozen"].objective) for entry in registry.values()
+              if isinstance(entry, Mapping) and entry.get("frozen") is not None}
+    reviewed = {str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+                for row in results if isinstance(row, Mapping)
+                and row.get("diagnostic") in {
+                    "activation_patch_candidate_review", "activation_patch_runtime_support_probe",
+                    "activation_patch_production_trial_gate_review"}
+                and row.get("status") not in {"invalid_request", "blocked"}}
+    measured = {str(row.get("objective_bundle_key") or row.get("bundle_key") or "")
+                for row in seed_catalog(worker)
+                if row.get("activation_patch_site") in {"resid_pre", "resid_post", "mlp_out"}
+                and int(row.get("activation_patch_hook_call_count") or 0) > 0}
+    feedback = getattr(worker, "_last_task_feedback", {}) or {}
+    present_terms = {str(term).casefold() for term in feedback.get("required_terms_present", ())}
+    seen = set()
+    options = []
+    for objective, term in valid:
+        if (objective in seen or objective in carded or objective in reviewed or objective in measured
+                or term.casefold() in present_terms):
+            continue
+        seen.add(objective)
+        options.append({"objective_bundle_key": objective, "focus_term": term,
+                        "source_provenance": "source_body", "seed_status": "unmeasured_blueprint",
+                        "request": {"diagnostic": "activation_patch_candidate_review",
+                                    "bundle_key": objective, "objective_bundle_key": objective,
+                                    "operator_recipe_expansion_mode": "activation_patch_candidate_review"},
+                        "production_apply_allowed": False})
+        if len(options) == 2:
+            break
+    return {**base, "status": "available" if options else "reviewed_measured_or_objective_present",
+            "options": options}
 
 
 def capture_seed_rows(worker: Any, result: Mapping[str, Any]) -> None:
