@@ -8379,6 +8379,14 @@ class HookedTransformerWorkerRuntime:
                 _add_available_next_diagnostic(
                     offer["request"], reason="recorded_seed_preflight_ready_for_same_prefix_measurement",
                     priority=2)
+            discovery = candidate_handoff.seed_discovery_report(self)
+            hints["candidate_seed_discovery_status"] = discovery["status"]
+            hints["candidate_seed_discovery_blueprint_count"] = discovery["blueprint_count"]
+            for option in discovery["options"]:
+                _add_available_next_diagnostic(
+                    option["request"],
+                    reason="source_body_blueprint_available_for_diagnostic_activation_patch_review",
+                    priority=20)
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -16617,6 +16625,7 @@ class HookedTransformerWorkerRuntime:
                         "activation_patch_seed_source",
                         "seed_source",
                         "seed_recipe_name",
+                        "seed_operator_recipe_id",
                         "target_piece_binding_variant",
                         "target_piece_binding_id",
                         "target_piece_binding_manifest",

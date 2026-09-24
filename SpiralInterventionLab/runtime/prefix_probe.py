@@ -74,6 +74,7 @@ def freeze_candidate(worker: Any, row: Mapping[str, Any]) -> FrozenCandidate:
         "alpha": row["activation_patch_alpha"], "step_size": row["activation_patch_step_size"],
         "source_localization": row["activation_patch_source_localization"], "patch_mode": "blend",
         "recipe_name": row["recipe_name"], "operator_recipe_id": row["operator_recipe_id"],
+        "seed_operator_recipe_id": row.get("seed_operator_recipe_id"),
         "contrast_mode": row.get("activation_patch_contrast_mode"),
         "contrast_scale": row.get("activation_patch_contrast_scale"),
         "stealer_term": row.get("activation_patch_stealer_term"),
