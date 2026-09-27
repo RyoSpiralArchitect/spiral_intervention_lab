@@ -108,6 +108,9 @@ request handling, bounded fallback, no inspection-time apply, mutually exclusive
 commit/diagnostic requests, one-token TTL, failed restoration, prefix mutation,
 parser repair, exhausted menus and unchanged legacy behavior. A synthetic valid
 edit verifies the clock/TTL path; it does not certify a live operator.
+The final local suite passed 526 tests and nine subtests (15 dependency warnings).
+Initial-prefill tests check cache/readout availability, no generation or budget
+charge, per-episode reset and unsupported-backend rejection before mutation.
 
 ## First pass before initial prefill, 2026-09-28
 
@@ -164,6 +167,9 @@ lift and binding constraints. Treat that as a qualitative lead, not evidence tha
 relaxing a gate would help. The next controlled question is which valid
 current-prefix action was offered after a card appeared, and what the controller
 actually selected. Do not conflate an absent trial offer with refusal to use one.
+The recorded handoff rows themselves report `bound_target_lift` blockers and,
+for alternate bindings, `canonical_binding`; this part is log evidence rather
+than only interview interpretation.
 
 The [first prefill-corrected Llama attempt](../results/explicit_clock_llama_prefill_20260928/receipt.json)
 stopped after five committed tokens: the provider mistyped a packet-bound
@@ -172,3 +178,43 @@ no fallback execution and no completed C1 score. This failed attempt is retained
 not hidden by the later retry. ID-error feedback now repeats available current
 IDs in existing menu order (up to 32), with the option to decline. It neither
 autocorrects IDs nor adds a retry, operation, diagnostic allowance or preference.
+
+The [Llama retry receipt](../results/explicit_clock_llama_prefill_retry_20260928/receipt.json)
+completed with 33 first-attempt valid commands, 15 inspection rounds, 18 explicit
+commits and no fallback. All twelve diagnostic slots were spent. No frozen
+measured card, trial offer or rollout edit appeared. B0/C1 again shared the same
+output and score 0.938889, with task completion false. No ID repair was needed in
+this retry, so it cannot quantify the new retry note's effectiveness.
+
+At token counts 5, 6 and 7, `entity_insertion_operator_candidate_review` returned
+`no_candidate_blueprints` and charged one diagnostic slot each. These were
+different prefixes, not established duplicate executions at one prefix; the
+rows do not report a physical replay count. This is a concrete next audit target
+for offer availability, objective lifetime and accounting, not proof that all
+three charges were invalid. Input usage was 587,152 tokens, including 196,638
+cached tokens; the interview is excluded. Its heavily truncated view is not
+used to reconstruct the complete event sequence.
+
+## Reading and next experiment
+
+| Corrected run | First measured card | Inspection / commit | Trial / rollout edits | B0 / C1 score |
+| --- | --- | --- | --- | --- |
+| GPT-2 | token 1, four diagnostic slots | 12 / 11 | 0 / 0 | 0.5875 / 0.5875 |
+| Llama L1 retry | none | 15 / 18 | 0 / 0 | 0.938889 / 0.938889 |
+
+The time contract is exercised in both models: inspect without advancing, then
+explicitly commit. It does not establish general handoff improvement: GPT-2
+exposed a card earlier while the completed Llama retry did not expose one at all.
+The score scales belong to different tasks and are not compared across models.
+The GPT-2 receipt predates the unsupported-backend/ID-repair follow-up; it used a
+prefill-capable worker and had no failed provider replies. The Llama retry uses
+the final code. Raw traces and sealed manifests remain local; committed receipts
+carry their checksums rather than embedding checkpoint paths or large payloads.
+
+Next, audit no-blueprint review offers at a fixed prefix, then compare current
+measurement versus historical review on the same offered candidate and budget.
+Measure physical work, first card, trial offer, controller choice and committed
+effect separately. Do not add operators or loosen certification just to make
+the applied-edit counter nonzero. A later legacy/explicit timing ablation should
+hold the interface and prefix fixed rather than attributing these combined runs
+to one change.

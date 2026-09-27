@@ -45,7 +45,10 @@ Key current notes:
   Opt-in `inspect_prefix` / `commit_token` actions separate bounded investigation
   from one-token generation, including before the first answer token. Failed
   diagnostics can be read at the same prefix; edit permission and budgets stay
-  separate. The legacy clock remains the default.
+  separate. Initial readout is prepared without emitting a token; unsupported
+  backends fail closed in explicit mode. The legacy clock remains the default.
+  GPT-2 and Llama paired runs exercise the new clock but show no task-score uplift
+  or rollout edits; receipts retain the failed attempt and differing card arrival.
 
 - [`docs/controller_operation_cards.md`](docs/controller_operation_cards.md)
   Opt-in common operation cards expose diagnostic purpose, prerequisites, cost,
