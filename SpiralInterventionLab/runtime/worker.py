@@ -721,6 +721,7 @@ class HookedTransformerWorkerRuntime:
         self.prompt = ""
         self._segments: list[_TokenSegment] = []
         self._steps = 0
+        self._initial_observation_prepared = False
         self._last_metrics: dict[str, float] = {
             "entropy": 0.0,
             "top1_margin": 0.0,
@@ -788,6 +789,32 @@ class HookedTransformerWorkerRuntime:
         if not prompt_tokens:
             raise ValueError("prompt must encode to at least one token")
         self._segments = [_TokenSegment(kind="prompt", token_ids=prompt_tokens)]
+
+    def prepare_initial_observation(self) -> dict[str, Any]:
+        """Prefill the initial readout without emitting a token or ticking TTL."""
+        if self._steps != 0:
+            raise ValueError("initial_observation_requires_zero_generated_tokens")
+        receipt = {
+            "status": "already_prepared",
+            "generated_token_count": 0,
+            "model_forward_count": 0,
+            "diagnostic_call_cost": 0,
+            "ttl_ticks": 0,
+        }
+        if self._initial_observation_prepared:
+            return receipt
+        if hasattr(self.runtime_state, "set_trace_alignment"):
+            self.runtime_state.set_trace_alignment(0)
+        logits, _cache = self.runtime_state.run_with_cache(self._current_token_tensor(), return_type="logits")
+        if not isinstance(logits, torch.Tensor) or logits.ndim != 3:
+            raise ValueError("initial observation requires logits shaped [batch, pos, vocab]")
+        self._last_task_feedback = self._compute_task_feedback()
+        next_logits = self._apply_token_constraints(logits[0, -1].detach())
+        next_logits, self._last_decoder_control = self._apply_decoder_control(next_logits)
+        self._last_metrics = self._compute_metrics(next_logits)
+        self._last_packet = None
+        self._initial_observation_prepared = True
+        return receipt | {"status": "prepared", "model_forward_count": 1}
 
     def step(self) -> None:
         previous_metrics = dict(self._last_metrics)
@@ -1760,6 +1787,7 @@ class HookedTransformerWorkerRuntime:
                 self.runtime_state.remove_edit(edit_id)
         self._segments = []
         self._steps = 0
+        self._initial_observation_prepared = False
         self._last_metrics = {"entropy": 0.0, "top1_margin": 0.0, "repetition_score": 0.0}
         self._last_task_feedback = {"done": False, "progress_label": "progressing"}
         self._last_status = "thinking"

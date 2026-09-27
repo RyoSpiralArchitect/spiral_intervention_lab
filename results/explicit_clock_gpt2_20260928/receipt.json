@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "kind": "explicit_generation_clock_pair_receipt",
+  "status": "complete",
+  "profile": "gpt2_control",
+  "controller_model": "gpt-5.6-luna",
+  "device": "mps",
+  "controller_action_view": "cards",
+  "generation_clock_mode": "explicit",
+  "seed": 7,
+  "max_diagnostic_calls": 12,
+  "max_inspection_rounds_per_prefix": 2,
+  "checkpoint_weights_sha256": "248dfc3911869ec493c76e65bf2fcf7f615828b0254c12b473182f0f81d3a707",
+  "outcomes": {
+    "b0": {"output": " In the case of a rewrite, the budget draft.", "score": 0.5875, "steps": 11, "task_done": false},
+    "c1": {"output": " In the case of a rewrite, the budget draft.", "score": 0.5875, "steps": 11, "task_done": false}
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "controller_commands": 23,
+  "first_attempt_parse_successes": 23,
+  "clock_inspection_rounds": 12,
+  "generation_commits": 11,
+  "clock_fallback_commits": 0,
+  "diagnostic_slots_charged": 12,
+  "first_measured_card": {"generated_token_count": 4, "diagnostics_used": 8},
+  "candidate_action_counts": {"measure_normal_cap_current_prefix": 1, "remeasure_current_prefix": 1},
+  "action_measurement_count": 2,
+  "action_physical_replay_count": 8,
+  "visible_trial_offer_count": 0,
+  "compiled_rollout_edit_count": 0,
+  "controller_usage_excluding_debrief": {"input_tokens": 442881, "output_tokens": 3207, "cached_input_tokens": 0},
+  "artifact_sha256": {
+    "audit.json": "4d51635ba1f7094a81dd9497d15294f62992606135ab4b77a0cbd4274f718761",
+    "manifest.json": "e759b79642c2643bf038a20f4105b57308bacd22a5e096c660b1f1c9bd2f8035",
+    "live/b0.jsonl": "5c7576b2a3f45e11f0e7b09dd8b257c30070647e325bc3b90c15260e498b2acf",
+    "live/c1.jsonl": "f3a40dffec1c77fd6d28959860d716d1472491dc91dfc7c71898dcf87450bede",
+    "live/post_run_debrief.json": "8bfbc50d98b0149fb529bef0072c2f4a708de40c5d366300b793ee841c25b87c"
+  },
+  "limits": [
+    "One model-local B0/C1 trajectory, not a causal comparison against the legacy clock.",
+    "Clock and operation-card interface enabled together; no attribution to either alone.",
+    "No positive task-score or apply-efficacy claim.",
+    "MPS/TransformerLens compatibility warning remains unresolved.",
+    "Post-run debrief is qualitative, not scoring evidence or future controller input."
+  ]
+}

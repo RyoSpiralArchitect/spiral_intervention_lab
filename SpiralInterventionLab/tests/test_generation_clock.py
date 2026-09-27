@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 import json
 
 import pytest
@@ -9,6 +10,7 @@ from SpiralInterventionLab.runtime import operation_cards, prefix_control
 from SpiralInterventionLab.runtime.compiler import StepContext
 from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_episode
 from SpiralInterventionLab.runtime.policy import PolicyViolation
+from SpiralInterventionLab.tests import test_controller_runtime as runtime_fixtures
 from SpiralInterventionLab.tests.test_controller_runtime import (
     _ToyTaskEnv, _ToyWorkerRuntime, FakeRuntimeState, FakeAdapter, _resid_command,
 )
@@ -84,6 +86,63 @@ def test_noop_without_time_action_is_not_a_silent_commit():
     assert positions == [0, 0, 0, 1, 1, 1]
     assert all(e["blocked_reason"] == "explicit_generation_action_required"
                for e in events if e["event"] == "controller_clock_decision")
+    assert all(e["controller_generation_action"] == "unspecified"
+               for e in events if e["event"] == "controller_selection")
+
+
+def test_initial_prefill_populates_readout_without_generation_budget_or_ttl():
+    worker = runtime_fixtures.TestWorkerRuntimeAndBaselines()._make_worker_runtime(task_feedback_fn=lambda text: {
+        "missing_required_terms": ["a"], "required_term_recall": 0.0})
+    worker.reset("p")
+    with patch.object(worker.runtime_state, "run_with_cache", wraps=worker.runtime_state.run_with_cache) as forward:
+        receipt = worker.prepare_initial_observation()
+        assert receipt["model_forward_count"] == 1
+        assert receipt["diagnostic_call_cost"] == receipt["ttl_ticks"] == 0
+        assert worker.prepare_initial_observation()["model_forward_count"] == 0
+        assert forward.call_count == 1
+        assert worker._steps == 0 and worker.final_text() == ""
+        assert worker._no_progress_steps == worker._diagnostic_calls_used == 0
+        assert worker._last_status == "thinking"
+        assert worker._spent_budget_alpha == worker._spent_budget_cost == {}
+        assert worker._pending_effects == worker._observer_checks == []
+        assert worker.runtime_state.trace_sequences == {}
+        assert worker.runtime_state.last_cache and worker.runtime_state.last_logits is not None
+        assert worker._effect_metrics()["top1_margin"] > 0
+        assert worker._effect_metrics()["required_term_recall"] == 0
+        assert worker._last_task_feedback["missing_required_terms"] == ["a"]
+        worker.reset("pp")
+        worker.prepare_initial_observation()
+        assert forward.call_count == 2
+        assert worker.runtime_state.last_tokens.shape[1] == 2
+    worker.step()
+    assert worker.final_text() == "a"
+    with pytest.raises(ValueError, match="zero_generated_tokens"):
+        worker.prepare_initial_observation()
+
+
+@pytest.mark.parametrize("clock_mode", ["legacy", "explicit"])
+def test_only_explicit_clock_prefills_before_first_controller_packet(clock_mode):
+    worker = runtime_fixtures.TestWorkerRuntimeAndBaselines()._make_worker_runtime(task_feedback_fn=lambda text: {
+        "missing_required_terms": ["a"], "required_term_recall": 0.0})
+    positions = []
+    def decide(packet):
+        positions.append(worker._steps)
+        assert worker.runtime_state.last_cache
+        assert packet["worker_view"]["answer_readout_canary"] is not None
+        assert worker._last_metrics["top1_margin"] > 0
+        return command("commit_token")
+    env = SimpleNamespace(reset=lambda seed: "p", score=lambda output: 0.0, done=lambda output: False)
+    logger = InMemoryStructuredLogger()
+    with patch.object(worker, "prepare_initial_observation", wraps=worker.prepare_initial_observation) as prepare:
+        result = run_episode(env, worker, SimpleNamespace(invoke=decide),
+            StepContext(packet={}, runtime_state=worker.runtime_state, adapter=worker.adapter, traces={}, stats={}),
+            logger=logger, generation_clock_mode=clock_mode)
+        assert prepare.call_count == int(clock_mode == "explicit")
+    assert positions == ([0, 1, 2] if clock_mode == "explicit" else [1, 2, 3])
+    assert result.output == "aaa"
+    if clock_mode == "explicit":
+        names = [event["event"] for event in logger.events]
+        assert names.index("initial_observation_prepared") < names.index("controller_command")
 
 
 def test_inspection_cannot_apply_and_commit_does_not_run_diagnostics():

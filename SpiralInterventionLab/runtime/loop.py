@@ -1729,7 +1729,9 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         "controller_selected_bundle_key": controller_selected_bundle_key,
         "candidate_diagnostic_choices": strategy_hints.get("candidate_diagnostic_choices"),
         "generation_control": strategy_hints.get("generation_control"),
-        "controller_generation_action": meta.get("generation_action", "advance"),
+        "controller_generation_action": meta.get(
+            "generation_action", "unspecified"
+            if (strategy_hints.get("generation_control") or {}).get("clock_mode") == "explicit" else "advance"),
         **operation_cards.selection_report(packet, command),
         "candidate_trial_handoffs": strategy_hints.get("candidate_trial_handoffs"),
         "candidate_trial_offer": strategy_hints.get("candidate_trial_offer"),
@@ -1827,6 +1829,15 @@ def run_episode(
     if logger is not None:
         logger.log({"event": "episode_start", "seed": ctx.runtime_state.seed, "prompt": prompt,
                     "generation_clock_mode": generation_clock_mode})
+
+    prepare = getattr(worker_runtime, "prepare_initial_observation", None)
+    if explicit_clock and callable(prepare):
+        initial_prefix = worker_runtime.final_text()
+        receipt = prepare()
+        if worker_runtime.final_text() != initial_prefix:
+            raise PolicyViolation("initial_observation_changed_generated_prefix")
+        if logger is not None:
+            logger.log({"event": "initial_observation_prepared", **receipt})
 
     step_count = 0
     pending_trial_expiry = []

@@ -15,6 +15,10 @@ This is not a new operator or a grant of production apply permission.
 ## Contract
 
 The controller observes the initial answer boundary before the first token.
+The hooked worker performs one initial prefill to populate activation cache,
+readout metrics and task feedback without sampling or emitting a token. This is
+observation work, not a new diagnostic or edit allowance. It is idempotent within
+the initial boundary, has no TTL/status-progress tick, and resets per episode.
 Every command includes a `meta.generation_action`:
 
 - `inspect_prefix` requires edit decision `noop`. Diagnostics and existing tools
@@ -48,6 +52,8 @@ No rollback, resampling, beam search or decoder masking is introduced.
 
 - `generation_control` includes the generated token count, controller round,
   remaining inspection rounds and the last time-action report.
+- `initial_observation_prepared` records the initial forward separately from
+  generated-token, diagnostic and edit accounting.
 - `controller_clock_decision` records requested versus effective phase and any
   rejected action, independently of edit selection.
 - `prefix_inspection_complete` records results, zero generated tokens, and the
@@ -99,3 +105,37 @@ request handling, bounded fallback, no inspection-time apply, mutually exclusive
 commit/diagnostic requests, one-token TTL, failed restoration, prefix mutation,
 parser repair, exhausted menus and unchanged legacy behavior. A synthetic valid
 edit verifies the clock/TTL path; it does not certify a live operator.
+
+## First pass before initial prefill, 2026-09-28
+
+The first [GPT-2 paired receipt](../results/explicit_clock_gpt2_20260928/receipt.json)
+records 23 controller commands: 12 inspection rounds and 11 explicit token
+commits, with no fallback commits or parser retries. The first decision saw
+zero generated tokens and chose to commit. Follow-up inspection found that this
+initial packet had cold readout/task feedback: scheduling a decision before the
+first token did not by itself make the boundary observable. This pass is retained
+as evidence for that implementation gap, not an informed first-boundary choice.
+
+A frozen measured card appeared at generated-token count 4 after eight diagnostic
+slots. Luna subsequently selected one `measure_normal_cap_current_prefix` and
+one `remeasure_current_prefix`, each executing four physical replays. All twelve
+diagnostic slots were used. There were no trial offers or applied rollout edits.
+B0 and C1 both produced ` In the case of a rewrite, the budget draft.` with score
+0.5875 and task completion false. Unedited output identity is a useful integrity
+check here, not proof that all diagnostic side effects are impossible.
+
+The post-run interview described weak bound-target lift, rank-only movement and
+insufficient current-context evidence. This is a qualitative pointer for later
+work, not an independent finding or permission to relax certification. The new
+clock is exercised; improved task performance is not demonstrated. Earlier
+GPT-2 runs used different recorded contexts, so their scores are not a matched
+before/after control for this architecture change.
+
+The corresponding Llama L1 first pass likewise emitted no rollout edits or trial
+offers. Its first measured card arrived after six diagnostic requests at token
+count 3; two current-prefix remeasurements ran eight physical replays total.
+B0/C1 both scored 0.938889 and emitted ` Nora will take the sample to Ivo before
+sending the report to Yara before dusk.` The task still failed. Ten inspection
+rounds and eighteen explicit commits completed, without fallback. The runs below
+must recheck the clock after initial prefill, rather than pooling these cold
+boundary observations as corrected-run evidence.

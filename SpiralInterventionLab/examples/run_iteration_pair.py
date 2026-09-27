@@ -151,6 +151,12 @@ def audit(root: Path, manifest: dict) -> dict:
             usage["cached_input_tokens"] += int((u.get("input_tokens_details") or {}).get("cached_tokens") or 0)
     assert charges["diagnostic_calls_left"] <= 12
     if manifest.get("generation_clock_mode") == "explicit":
+        if manifest.get("initial_observation_preparation"):
+            prepared = [r for r in rows if r.get("event") == "initial_observation_prepared"]
+            assert len(prepared) == 1 and prepared[0]["status"] == "prepared"
+            assert prepared[0]["generated_token_count"] == prepared[0]["ttl_ticks"] == 0
+            assert prepared[0]["model_forward_count"] == 1
+            assert rows.index(prepared[0]) < next(i for i, r in enumerate(rows) if r.get("event") == "controller_command")
         commits = [r for r in rows if r.get("event") == "generation_commit"]
         tokens = [r for r in rows if r.get("event") == "generation_token_committed"]
         assert len(commits) == len(tokens) == outcomes["c1"]["steps"]
@@ -251,6 +257,7 @@ def main(argv: list[str] | None = None) -> int:
         "candidate_handoff_mode": args.candidate_handoff_mode,
         "controller_action_view": args.controller_action_view,
         "generation_clock_mode": args.generation_clock_mode,
+        "initial_observation_preparation": args.generation_clock_mode == "explicit",
         "policy_change_scope": "exact_context_not_frontier_preference_no_looser_caps",
         "normal_cap_variants": "new_identity_explicit_measurement_no_inherited_evidence",
         "prefix_hold_budget_pool": "shared_candidate_handoff_rounds",
