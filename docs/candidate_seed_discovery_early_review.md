@@ -121,8 +121,10 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
 ```
 
 The fixed-prefix off/soft controller-choice comparison is recorded in
-`docs/candidate_seed_discovery_fixed_prefix_choice.md`. In the tested GPT-2
-and Llama states, the early offer remained visible but did not change the
-controller's next diagnostic choice. This does not justify changing priorities
-or apply authority without a separate bounded test. The MPS warning above
-still applies.
+`docs/candidate_seed_discovery_fixed_prefix_choice.md`. A hash-blind Llama
+rerun kept the same next diagnostic choice despite the early offer. The earlier
+GPT-2 choice comparison also kept the same choice, but its controller input
+contained a condition-dependent packet hash and is only a historical
+observation until rerun. This does not justify changing priorities or apply
+authority without a separate bounded test. The MPS warning above still
+applies.

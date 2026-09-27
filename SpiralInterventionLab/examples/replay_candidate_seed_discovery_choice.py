@@ -70,6 +70,13 @@ def assert_existing_diagnostics_unchanged(off: Mapping[str, Any], soft: Mapping[
         raise ValueError("off/soft comparison changed an existing diagnostic option")
 
 
+def hash_blind_controller_input(compact_packet: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep the compact controller view while removing its condition-bound digest."""
+    if compact_packet.get("packet_view") != "compact_v1" or "source_packet_sha256" not in compact_packet:
+        raise ValueError("expected a compact packet with a source digest")
+    return {key: value for key, value in compact_packet.items() if key != "source_packet_sha256"}
+
+
 def classify_choice(choice: Mapping[str, Any], *, offered_objectives: set[str],
                     canonical_request: Mapping[str, Any] | None) -> str:
     requests = choice.get("diagnostic_requests") or ()
@@ -148,8 +155,12 @@ def main(argv: list[str] | None = None) -> int:
     off_compact = _compact_controller_payload(off_packet)
     soft_compact = _compact_controller_payload(soft_packet)
     compact_diff = assert_early_offer_only_diff(off_compact, soft_compact, compact=True)
+    off_input = hash_blind_controller_input(off_compact)
+    soft_input = hash_blind_controller_input(soft_compact)
+    controller_input_diff = assert_early_offer_only_diff(off_input, soft_input, compact=True)
     assert_existing_diagnostics_unchanged(off_packet, soft_packet)
     assert_existing_diagnostics_unchanged(off_compact, soft_compact)
+    assert_existing_diagnostics_unchanged(off_input, soft_input)
     offers = offered_reviews(soft_compact)
     if not offers or args.objective not in {
         offer["request"].get("objective_bundle_key") for offer in offers
@@ -188,7 +199,12 @@ def main(argv: list[str] | None = None) -> int:
         "canonical_frontier_request": canonical,
         "soft_offered_reviews": offers,
         "packet_identity": {"off_sha256": _sha(off_compact), "soft_sha256": _sha(soft_compact),
-                            "raw_diff_paths": raw_diff, "compact_diff_paths": compact_diff},
+                            "raw_diff_paths": raw_diff, "compact_diff_paths": compact_diff,
+                            "controller_input_off_sha256": _sha(off_input),
+                            "controller_input_soft_sha256": _sha(soft_input),
+                            "controller_input_diff_paths": controller_input_diff,
+                            "controller_input_source_hash_omitted": True},
+        "controller_input_mode": "precompacted_compact_v1_without_source_packet_sha256",
         "comparison_scope": "controller_choice_only_no_diagnostic_dispatch_no_apply_no_continuation",
         "production_apply_allowed_by_offer": False,
         "controller_call_orders": [["off", "soft"], ["soft", "off"]],
@@ -199,16 +215,19 @@ def main(argv: list[str] | None = None) -> int:
     output.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str) + "\n", encoding="utf-8")
     if not args.dry_run:
         provider = create_controller_provider("openai", model=args.controller_model)
+        # The input is already compact; re-compacting would recreate the divergent hash.
         controller = ProviderControllerClient(provider, prompt_asset="controller_v01_compact.txt",
-                                              packet_view="compact", max_attempts=2)
+                                              packet_view="full", max_attempts=2)
         packets = {"off": off_packet, "soft": soft_packet}
+        controller_inputs = {"off": off_input, "soft": soft_input}
         offered_objectives = {str(offer["request"]["objective_bundle_key"]) for offer in offers}
         for order in report["controller_call_orders"]:
             cycle: dict[str, Any] = {"order": order, "conditions": {}}
             report["cycles"].append(cycle)
             for label in order:
-                command = controller.invoke(packets[label])
+                command = controller.invoke(controller_inputs[label])
                 choice = _choice(command, packets[label], controller.latest_trace() or {})
+                choice["controller_input_sha256"] = _sha(controller_inputs[label])
                 choice["choice_class"] = classify_choice(
                     choice, offered_objectives=offered_objectives, canonical_request=canonical)
                 cycle["conditions"][label] = choice
@@ -220,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({"output": str(output), "status": report["status"],
                       "prefix": args.prefix, "offers": len(offers),
                       "raw_diff_paths": raw_diff, "compact_diff_paths": compact_diff,
+                      "controller_input_diff_paths": controller_input_diff,
                       "cycles": [{label: choice["choice_class"] for label, choice in cycle["conditions"].items()}
                                  for cycle in report["cycles"]]}, ensure_ascii=False))
     return 0

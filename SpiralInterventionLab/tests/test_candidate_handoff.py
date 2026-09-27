@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from SpiralInterventionLab.bridge.controller_clients import _compact_controller_payload
+from SpiralInterventionLab.bridge.controller_clients import _compact_controller_payload, _payload_for_provider
 from SpiralInterventionLab.examples.replay_candidate_handoff_choice import (
     _assert_handoff_only_diff,
     _load_recorded_seed,
@@ -17,6 +17,7 @@ from SpiralInterventionLab.examples.replay_candidate_seed_discovery_choice impor
     assert_early_offer_only_diff,
     assert_existing_diagnostics_unchanged,
     classify_choice,
+    hash_blind_controller_input,
     offered_reviews,
 )
 from SpiralInterventionLab.examples.run_iteration_pair import build_argv
@@ -78,6 +79,24 @@ def test_early_choice_classification_uses_extracted_request_not_offer_visibility
                            canonical_request=canonical) == "no_diagnostic_request"
     assert classify_choice(choice, offered_objectives={"different_objective"},
                            canonical_request=canonical) == "other_diagnostic"
+
+
+def test_fixed_prefix_controller_input_omits_condition_bound_packet_hash():
+    off = {"packet_view": "compact_v1", "source_packet_sha256": "off_hash",
+           "strategy_hints": {"available_next_diagnostics": []}}
+    soft = {"packet_view": "compact_v1", "source_packet_sha256": "soft_hash",
+            "strategy_hints": {"available_next_diagnostics": [],
+                               "candidate_seed_discovery_status": "available"}}
+    off_input = hash_blind_controller_input(off)
+    soft_input = hash_blind_controller_input(soft)
+    assert "source_packet_sha256" not in off_input
+    assert "source_packet_sha256" not in soft_input
+    assert off["source_packet_sha256"] == "off_hash"
+    assert soft["source_packet_sha256"] == "soft_hash"
+    assert _payload_for_provider(off_input, packet_view="full") == off_input
+    assert _payload_for_provider(soft_input, packet_view="full") == soft_input
+    assert assert_early_offer_only_diff(off_input, soft_input, compact=True) == [
+        "strategy_hints.candidate_seed_discovery_status"]
 
 
 def seed_row(*, objective: str = OBJECTIVE, effect: str = "rank_carrier") -> dict:
