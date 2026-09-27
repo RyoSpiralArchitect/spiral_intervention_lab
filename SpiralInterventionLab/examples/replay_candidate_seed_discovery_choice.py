@@ -77,6 +77,20 @@ def hash_blind_controller_input(compact_packet: Mapping[str, Any]) -> dict[str, 
     return {key: value for key, value in compact_packet.items() if key != "source_packet_sha256"}
 
 
+def offer_only_controller_inputs(off_compact: Mapping[str, Any],
+                                 soft_compact: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Use the off packet as a common baseline; expose only soft's new offers."""
+    assert_existing_diagnostics_unchanged(off_compact, soft_compact)
+    off_input = hash_blind_controller_input(off_compact)
+    soft_input = {**off_input, "strategy_hints": {
+        **off_input["strategy_hints"],
+        "available_next_diagnostics": list(soft_compact["strategy_hints"]["available_next_diagnostics"]),
+    }}
+    if _diff_paths(off_input, soft_input) != ["strategy_hints.available_next_diagnostics"]:
+        raise ValueError("controller input drift outside early review offers")
+    return off_input, soft_input
+
+
 def classify_choice(choice: Mapping[str, Any], *, offered_objectives: set[str],
                     canonical_request: Mapping[str, Any] | None) -> str:
     requests = choice.get("diagnostic_requests") or ()
@@ -155,12 +169,10 @@ def main(argv: list[str] | None = None) -> int:
     off_compact = _compact_controller_payload(off_packet)
     soft_compact = _compact_controller_payload(soft_packet)
     compact_diff = assert_early_offer_only_diff(off_compact, soft_compact, compact=True)
-    off_input = hash_blind_controller_input(off_compact)
-    soft_input = hash_blind_controller_input(soft_compact)
-    controller_input_diff = assert_early_offer_only_diff(off_input, soft_input, compact=True)
     assert_existing_diagnostics_unchanged(off_packet, soft_packet)
     assert_existing_diagnostics_unchanged(off_compact, soft_compact)
-    assert_existing_diagnostics_unchanged(off_input, soft_input)
+    off_input, soft_input = offer_only_controller_inputs(off_compact, soft_compact)
+    controller_input_diff = _diff_paths(off_input, soft_input)
     offers = offered_reviews(soft_compact)
     if not offers or args.objective not in {
         offer["request"].get("objective_bundle_key") for offer in offers
@@ -204,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
                             "controller_input_soft_sha256": _sha(soft_input),
                             "controller_input_diff_paths": controller_input_diff,
                             "controller_input_source_hash_omitted": True},
-        "controller_input_mode": "precompacted_compact_v1_without_source_packet_sha256",
+        "controller_input_mode": "precompacted_compact_v1_offer_only",
         "comparison_scope": "controller_choice_only_no_diagnostic_dispatch_no_apply_no_continuation",
         "production_apply_allowed_by_offer": False,
         "controller_call_orders": [["off", "soft"], ["soft", "off"]],

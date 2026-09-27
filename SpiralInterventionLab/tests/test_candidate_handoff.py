@@ -18,6 +18,7 @@ from SpiralInterventionLab.examples.replay_candidate_seed_discovery_choice impor
     assert_existing_diagnostics_unchanged,
     classify_choice,
     hash_blind_controller_input,
+    offer_only_controller_inputs,
     offered_reviews,
 )
 from SpiralInterventionLab.examples.run_iteration_pair import build_argv
@@ -97,6 +98,30 @@ def test_fixed_prefix_controller_input_omits_condition_bound_packet_hash():
     assert _payload_for_provider(soft_input, packet_view="full") == soft_input
     assert assert_early_offer_only_diff(off_input, soft_input, compact=True) == [
         "strategy_hints.candidate_seed_discovery_status"]
+
+
+def test_fixed_prefix_controller_input_changes_only_the_early_offer_list():
+    canonical = {"diagnostic": "operator_diagnostic_replay", "priority": 10,
+                 "request": {"diagnostic": "operator_diagnostic_replay"}}
+    review = {"diagnostic": "activation_patch_candidate_review", "priority": 20,
+              "request": {"diagnostic": "activation_patch_candidate_review",
+                          "objective_bundle_key": OBJECTIVE,
+                          "operator_recipe_expansion_mode": "activation_patch_candidate_review"}}
+    off = {"packet_view": "compact_v1", "source_packet_sha256": "off_hash",
+           "strategy_hints": {"available_next_diagnostics": [canonical]}}
+    soft = {"packet_view": "compact_v1", "source_packet_sha256": "soft_hash",
+            "strategy_hints": {"available_next_diagnostics": [canonical, review],
+                               "candidate_handoff": {"state": "unmeasurable"},
+                               "candidate_seed_discovery_status": "available"}}
+    off_input, soft_input = offer_only_controller_inputs(off, soft)
+    assert off_input["strategy_hints"]["available_next_diagnostics"] == [canonical]
+    assert soft_input["strategy_hints"]["available_next_diagnostics"] == [canonical, review]
+    assert "candidate_handoff" not in soft_input["strategy_hints"]
+    assert "candidate_seed_discovery_status" not in soft_input["strategy_hints"]
+    assert "source_packet_sha256" not in soft_input
+    assert {**soft_input, "strategy_hints": {
+        **soft_input["strategy_hints"], "available_next_diagnostics": [canonical]}} == off_input
+    assert soft["strategy_hints"]["candidate_handoff"]["state"] == "unmeasurable"
 
 
 def seed_row(*, objective: str = OBJECTIVE, effect: str = "rank_carrier") -> dict:

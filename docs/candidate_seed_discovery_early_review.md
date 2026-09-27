@@ -121,7 +121,7 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
 ```
 
 The fixed-prefix off/soft controller-choice comparison is recorded in
-`docs/candidate_seed_discovery_fixed_prefix_choice.md`. A hash-blind Llama
+`docs/candidate_seed_discovery_fixed_prefix_choice.md`. An offer-only Llama
 rerun kept the same next diagnostic choice despite the early offer. The earlier
 GPT-2 choice comparison also kept the same choice, but its controller input
 contained a condition-dependent packet hash and is only a historical
