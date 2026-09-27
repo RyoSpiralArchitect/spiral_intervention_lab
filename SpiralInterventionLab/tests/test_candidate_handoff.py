@@ -13,6 +13,11 @@ from SpiralInterventionLab.examples.replay_candidate_seed_discovery import (
     select_frozen_remeasurement,
     summarize_discovery,
 )
+from SpiralInterventionLab.examples.replay_candidate_seed_discovery_choice import (
+    assert_early_offer_only_diff,
+    classify_choice,
+    offered_reviews,
+)
 from SpiralInterventionLab.examples.run_iteration_pair import build_argv
 from SpiralInterventionLab.runtime import candidate_handoff
 from SpiralInterventionLab.runtime.loop import _build_controller_selection_report, _extract_diagnostic_requests
@@ -20,6 +25,47 @@ from SpiralInterventionLab.runtime.response_probe import select_probe_seeds
 
 
 OBJECTIVE = "entity_insert:mira:source_body:weak_reachable"
+
+
+def test_early_choice_comparison_requires_only_offer_fields_to_change():
+    request = {"diagnostic": "activation_patch_candidate_review",
+               "objective_bundle_key": OBJECTIVE,
+               "operator_recipe_expansion_mode": "activation_patch_candidate_review"}
+    off = {"strategy_hints": {"available_next_diagnostics": [],
+                              "diagnostic_frontier_request": "operator_diagnostic_replay"}}
+    soft = {"strategy_hints": {"available_next_diagnostics": [{"request": request}],
+                               "diagnostic_frontier_request": "operator_diagnostic_replay",
+                               "candidate_seed_discovery_status": "available",
+                               "candidate_seed_discovery_blueprint_count": 1,
+                               "candidate_handoff": {"state": "unmeasurable"}}}
+    assert assert_early_offer_only_diff(off, soft, compact=False)
+    assert offered_reviews(soft)[0]["request"] == request
+    assert offered_reviews(off) == []
+    changed_frontier = {"strategy_hints": {**soft["strategy_hints"],
+                                          "diagnostic_frontier_request": "other"}}
+    try:
+        assert_early_offer_only_diff(off, changed_frontier, compact=False)
+    except ValueError as exc:
+        assert "outside early offer" in str(exc)
+    else:
+        raise AssertionError("canonical frontier drift must fail closed")
+
+
+def test_early_choice_classification_uses_extracted_request_not_offer_visibility():
+    canonical = {"diagnostic": "operator_diagnostic_replay",
+                 "objective_bundle_key": OBJECTIVE}
+    choice = {"diagnostic_requests": [{"diagnostic": "activation_patch_candidate_review",
+                                       "objective_bundle_key": OBJECTIVE}]}
+    assert classify_choice(choice, offered_objectives={OBJECTIVE},
+                           canonical_request=canonical) == "early_activation_patch_review"
+    assert classify_choice({"diagnostic_requests": [canonical]}, offered_objectives={OBJECTIVE},
+                           canonical_request=canonical) == "canonical_frontier"
+    assert classify_choice({"diagnostic_requests": [canonical]}, offered_objectives={OBJECTIVE},
+                           canonical_request={"diagnostic": "operator_diagnostic_replay"}) == "canonical_frontier"
+    assert classify_choice({"diagnostic_requests": []}, offered_objectives={OBJECTIVE},
+                           canonical_request=canonical) == "no_diagnostic_request"
+    assert classify_choice(choice, offered_objectives={"different_objective"},
+                           canonical_request=canonical) == "other_diagnostic"
 
 
 def seed_row(*, objective: str = OBJECTIVE, effect: str = "rank_carrier") -> dict:
