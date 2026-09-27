@@ -15,6 +15,7 @@ from SpiralInterventionLab.examples.replay_candidate_seed_discovery import (
 )
 from SpiralInterventionLab.examples.replay_candidate_seed_discovery_choice import (
     assert_early_offer_only_diff,
+    assert_existing_diagnostics_unchanged,
     classify_choice,
     offered_reviews,
 )
@@ -31,14 +32,17 @@ def test_early_choice_comparison_requires_only_offer_fields_to_change():
     request = {"diagnostic": "activation_patch_candidate_review",
                "objective_bundle_key": OBJECTIVE,
                "operator_recipe_expansion_mode": "activation_patch_candidate_review"}
-    off = {"strategy_hints": {"available_next_diagnostics": [],
+    canonical_item = {"diagnostic": "operator_diagnostic_replay", "priority": 10,
+                      "request": {"diagnostic": "operator_diagnostic_replay"}}
+    off = {"strategy_hints": {"available_next_diagnostics": [canonical_item],
                               "diagnostic_frontier_request": "operator_diagnostic_replay"}}
-    soft = {"strategy_hints": {"available_next_diagnostics": [{"request": request}],
+    soft = {"strategy_hints": {"available_next_diagnostics": [canonical_item, {"request": request}],
                                "diagnostic_frontier_request": "operator_diagnostic_replay",
                                "candidate_seed_discovery_status": "available",
                                "candidate_seed_discovery_blueprint_count": 1,
                                "candidate_handoff": {"state": "unmeasurable"}}}
     assert assert_early_offer_only_diff(off, soft, compact=False)
+    assert_existing_diagnostics_unchanged(off, soft)
     assert offered_reviews(soft)[0]["request"] == request
     assert offered_reviews(off) == []
     changed_frontier = {"strategy_hints": {**soft["strategy_hints"],
@@ -49,6 +53,14 @@ def test_early_choice_comparison_requires_only_offer_fields_to_change():
         assert "outside early offer" in str(exc)
     else:
         raise AssertionError("canonical frontier drift must fail closed")
+    changed_priority = {"strategy_hints": {**soft["strategy_hints"],
+        "available_next_diagnostics": [{**canonical_item, "priority": 5}, {"request": request}]}}
+    try:
+        assert_existing_diagnostics_unchanged(off, changed_priority)
+    except ValueError as exc:
+        assert "existing diagnostic option" in str(exc)
+    else:
+        raise AssertionError("existing diagnostic priority drift must fail closed")
 
 
 def test_early_choice_classification_uses_extracted_request_not_offer_visibility():

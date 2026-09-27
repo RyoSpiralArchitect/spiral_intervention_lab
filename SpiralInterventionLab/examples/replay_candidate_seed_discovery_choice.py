@@ -60,6 +60,16 @@ def offered_reviews(packet: Mapping[str, Any]) -> list[dict[str, Any]]:
             and item["request"].get("operator_recipe_expansion_mode") == EARLY_DIAGNOSTIC]
 
 
+def assert_existing_diagnostics_unchanged(off: Mapping[str, Any], soft: Mapping[str, Any]) -> None:
+    off_items = (off.get("strategy_hints") or {}).get("available_next_diagnostics") or []
+    soft_items = (soft.get("strategy_hints") or {}).get("available_next_diagnostics") or []
+    if not isinstance(off_items, list) or not isinstance(soft_items, list):
+        raise ValueError("available diagnostics must be lists")
+    offered = offered_reviews(soft)
+    if not offered or [item for item in soft_items if item not in offered] != off_items:
+        raise ValueError("off/soft comparison changed an existing diagnostic option")
+
+
 def classify_choice(choice: Mapping[str, Any], *, offered_objectives: set[str],
                     canonical_request: Mapping[str, Any] | None) -> str:
     requests = choice.get("diagnostic_requests") or ()
@@ -138,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
     off_compact = _compact_controller_payload(off_packet)
     soft_compact = _compact_controller_payload(soft_packet)
     compact_diff = assert_early_offer_only_diff(off_compact, soft_compact, compact=True)
+    assert_existing_diagnostics_unchanged(off_packet, soft_packet)
+    assert_existing_diagnostics_unchanged(off_compact, soft_compact)
     offers = offered_reviews(soft_compact)
     if not offers or args.objective not in {
         offer["request"].get("objective_bundle_key") for offer in offers
@@ -155,6 +167,8 @@ def main(argv: list[str] | None = None) -> int:
         off_canonical = {"diagnostic": off_hints["diagnostic_frontier_request"]}
     if canonical != off_canonical:
         raise ValueError("canonical diagnostic frontier changed across conditions")
+    if not canonical:
+        raise ValueError("fixed-prefix comparison requires a canonical diagnostic frontier")
 
     report: dict[str, Any] = {
         "kind": "early_blueprint_fixed_prefix_controller_choice_shadow",
