@@ -1824,14 +1824,16 @@ def run_episode(
     if generation_clock_mode not in {"legacy", "explicit"}:
         raise ValueError("generation_clock_mode must be legacy or explicit")
     explicit_clock = generation_clock_mode == "explicit"
+    prepare = getattr(worker_runtime, "prepare_initial_observation", None)
+    if explicit_clock and not callable(prepare):
+        raise ValueError("explicit_clock_requires_initial_observation_support")
     prompt = task_env.reset(seed=ctx.runtime_state.seed)
     worker_runtime.reset(prompt)
     if logger is not None:
         logger.log({"event": "episode_start", "seed": ctx.runtime_state.seed, "prompt": prompt,
                     "generation_clock_mode": generation_clock_mode})
 
-    prepare = getattr(worker_runtime, "prepare_initial_observation", None)
-    if explicit_clock and callable(prepare):
+    if explicit_clock:
         initial_prefix = worker_runtime.final_text()
         receipt = prepare()
         if worker_runtime.final_text() != initial_prefix:

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "kind": "explicit_generation_clock_pair_receipt",
+  "status": "complete",
+  "profile": "llama_l1",
+  "controller_model": "gpt-5.6-luna",
+  "device": "mps",
+  "controller_action_view": "cards",
+  "generation_clock_mode": "explicit",
+  "initial_observation_prepared": false,
+  "implementation_stage": "cold_initial_boundary_first_pass",
+  "seed": 0,
+  "max_diagnostic_calls": 12,
+  "max_inspection_rounds_per_prefix": 2,
+  "outcomes": {
+    "b0": {"output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.", "score": 0.938889, "steps": 18, "task_done": false},
+    "c1": {"output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.", "score": 0.938889, "steps": 18, "task_done": false}
+  },
+  "output_identical": true,
+  "score_delta": 0.0,
+  "controller_commands": 28,
+  "first_attempt_parse_successes": 28,
+  "clock_inspection_rounds": 10,
+  "generation_commits": 18,
+  "clock_fallback_commits": 0,
+  "diagnostic_slots_charged": 9,
+  "first_measured_card": {"generated_token_count": 3, "diagnostics_used": 6},
+  "candidate_action_counts": {"remeasure_current_prefix": 2, "review_existing": 1},
+  "action_measurement_count": 2,
+  "action_physical_replay_count": 8,
+  "visible_trial_offer_count": 0,
+  "compiled_rollout_edit_count": 0,
+  "controller_usage_excluding_debrief": {"input_tokens": 605479, "output_tokens": 3706, "cached_input_tokens": 0},
+  "artifact_sha256": {
+    "audit.json": "e1241400a6385f9c0207168a50ecf582e1920e7d5ccbf9caa824d081b8444f5b",
+    "manifest.json": "eed8877c4451312d7256842cb80b63cd08e2b9dcfb6634b5b5bb75f6de836070",
+    "live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "live/c1.jsonl": "d5928a60695022e19b445529de3408ad65c8e08d78edb902ceb7a34cc1c81ec5",
+    "live/post_run_debrief.json": "4ecd43523de3221d74c620d3a244b6ea71c03955ddbf779ba2fa4488c82f424c"
+  },
+  "limits": [
+    "Initial scheduling preceded generation, but initial readout/task feedback was still cold; superseded by the prefill run.",
+    "One model-local B0/C1 trajectory, not a causal comparison against the legacy clock.",
+    "Clock and operation-card interface enabled together; no attribution to either alone.",
+    "No positive task-score or apply-efficacy claim.",
+    "MPS/TransformerLens compatibility warning remains unresolved.",
+    "Post-run debrief is qualitative, not scoring evidence or future controller input."
+  ]
+}

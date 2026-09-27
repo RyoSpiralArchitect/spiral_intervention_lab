@@ -1862,6 +1862,16 @@ class ProviderControllerClient:
                 self._last_trace = trace
                 last_error = exc
                 retry_note = f"Previous reply was invalid. Return only one compact JSON object matching ControllerCommand. Error: {exc}"
+                if self.action_view == "cards" and str(exc) == "unknown_or_stale_operation_id":
+                    available = [
+                        {key: card.get(key) for key in ("operation_id", "diagnostic", "action")}
+                        for card in payload["operation_menu"]["cards"] if card.get("available")
+                    ]
+                    retry_note += (
+                        " Copy an operation_id exactly from the unchanged current menu, or choose no diagnostic."
+                        " IDs are not corrected or substituted automatically. Available IDs (first 32, original order): "
+                        + json.dumps(available[:32], separators=(",", ":"))
+                    )
         trace["error"] = str(last_error) if last_error is not None else "unknown provider error"
         self._last_trace = trace
         raise ValueError(f"provider '{self.provider.provider_name}' failed to return valid ControllerCommand JSON") from last_error

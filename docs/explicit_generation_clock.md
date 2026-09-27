@@ -19,6 +19,9 @@ The hooked worker performs one initial prefill to populate activation cache,
 readout metrics and task feedback without sampling or emitting a token. This is
 observation work, not a new diagnostic or edit allowance. It is idempotent within
 the initial boundary, has no TTL/status-progress tick, and resets per episode.
+Explicit mode rejects runtimes without this preparation capability before reset;
+the legacy clock remains usable for those backends. No cold-packet fallback is
+allowed.
 Every command includes a `meta.generation_action`:
 
 - `inspect_prefix` requires edit decision `noop`. Diagnostics and existing tools
@@ -131,7 +134,7 @@ clock is exercised; improved task performance is not demonstrated. Earlier
 GPT-2 runs used different recorded contexts, so their scores are not a matched
 before/after control for this architecture change.
 
-The corresponding Llama L1 first pass likewise emitted no rollout edits or trial
+The corresponding [Llama L1 first pass](../results/explicit_clock_llama_20260928/receipt.json) likewise emitted no rollout edits or trial
 offers. Its first measured card arrived after six diagnostic requests at token
 count 3; two current-prefix remeasurements ran eight physical replays total.
 B0/C1 both scored 0.938889 and emitted ` Nora will take the sample to Ivo before
@@ -139,3 +142,33 @@ sending the report to Yara before dusk.` The task still failed. Ten inspection
 rounds and eighteen explicit commits completed, without fallback. The runs below
 must recheck the clock after initial prefill, rather than pooling these cold
 boundary observations as corrected-run evidence.
+
+## Prefill-corrected observation, 2026-09-28
+
+The [corrected GPT-2 receipt](../results/explicit_clock_gpt2_prefill_20260928/receipt.json)
+records a real initial prefill, followed by two inspections at generated-token
+count zero and an explicit commit. A frozen measured card appeared at token
+count 1 after four diagnostic slots. This is earlier than the first pass
+(count 4 / eight slots), but these are two controller trajectories, not a
+controlled estimate of the prefill change's average effect.
+
+There were still no trial offers or rollout edits, and B0/C1 output and score
+remained identical (0.5875, task incomplete). The controller used all twelve
+diagnostic slots but selected no candidate-action remeasurement; the earlier
+first pass selected two. Thus earlier visibility did **not** establish better
+choice or actuation. Input usage was 520,944 tokens across 23 decisions, excluding
+the debrief, versus 442,881 in the first pass. This is not a prompt-cost win.
+
+The model's post-run account points to small local responses, missing bound-target
+lift and binding constraints. Treat that as a qualitative lead, not evidence that
+relaxing a gate would help. The next controlled question is which valid
+current-prefix action was offered after a card appeared, and what the controller
+actually selected. Do not conflate an absent trial offer with refusal to use one.
+
+The [first prefill-corrected Llama attempt](../results/explicit_clock_llama_prefill_20260928/receipt.json)
+stopped after five committed tokens: the provider mistyped a packet-bound
+operation ID on three attempts. Exact resolution rejected all three; there was
+no fallback execution and no completed C1 score. This failed attempt is retained,
+not hidden by the later retry. ID-error feedback now repeats available current
+IDs in existing menu order (up to 32), with the option to decline. It neither
+autocorrects IDs nor adds a retry, operation, diagnostic allowance or preference.

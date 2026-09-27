@@ -144,6 +144,35 @@ def test_provider_ids_resolve_against_full_packet_and_are_logged():
         seen[0].payload["operation_menu"]["cards"])
 
 
+@pytest.mark.parametrize("repair", [True, False])
+def test_id_retry_repeats_current_choices_without_autocorrecting_or_ranking(repair):
+    raw = packet()
+    raw["strategy_hints"]["available_next_diagnostics"].append({
+        "request": {"diagnostic": "blocked_probe"}, "available": False})
+    calls = []
+    def complete(request):
+        calls.append(request)
+        cards = request.payload["operation_menu"]["cards"]
+        if len(calls) > 1:
+            note = request.retry_note.split("original order): ")[1]
+            assert json.loads(note) == [
+                {key: card.get(key) for key in ("operation_id", "diagnostic", "action")}
+                for card in cards if card["available"]]
+            assert request.payload == calls[0].payload
+        card = cards[1] if repair and len(calls) > 1 else {"operation_id": "operation:mistyped"}
+        return ControllerProviderResponse(json.dumps(choose(card)), "fake", "fake")
+    provider = SimpleNamespace(provider_name="fake", model_name="fake", complete=complete)
+    client = ProviderControllerClient(provider, action_view="cards", max_attempts=2)
+    if repair:
+        resolved = operation_cards.resolve(raw, client.invoke(raw))
+        assert resolved == raw["strategy_hints"]["available_next_diagnostics"][1]["request"]
+    else:
+        with pytest.raises(ValueError, match="failed to return valid"):
+            client.invoke(raw)
+    assert len(calls) == 2
+    assert client.latest_trace()["attempts"][0]["parse_error"] == "unknown_or_stale_operation_id"
+
+
 def test_diagnostic_operation_is_not_an_apply_grant():
     raw = packet()
     command = choose(operation_cards.build_menu(raw)[0]["cards"][0])

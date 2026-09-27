@@ -5,6 +5,7 @@ import json
 import pytest
 
 from SpiralInterventionLab.bridge.controller_clients import ProviderControllerClient
+from SpiralInterventionLab.backends.base import LocalBackendWorkerRuntime
 from SpiralInterventionLab.controllers.base import ControllerProviderResponse
 from SpiralInterventionLab.runtime import operation_cards, prefix_control
 from SpiralInterventionLab.runtime.compiler import StepContext
@@ -12,8 +13,13 @@ from SpiralInterventionLab.runtime.loop import InMemoryStructuredLogger, run_epi
 from SpiralInterventionLab.runtime.policy import PolicyViolation
 from SpiralInterventionLab.tests import test_controller_runtime as runtime_fixtures
 from SpiralInterventionLab.tests.test_controller_runtime import (
-    _ToyTaskEnv, _ToyWorkerRuntime, FakeRuntimeState, FakeAdapter, _resid_command,
+    _ToyTaskEnv, _ToyWorkerRuntime as _LegacyToyWorkerRuntime, FakeRuntimeState, FakeAdapter, _resid_command,
 )
+
+
+class _ToyWorkerRuntime(_LegacyToyWorkerRuntime):
+    def prepare_initial_observation(self):
+        return {"status": "prepared", "generated_token_count": 0, "model_forward_count": 0}
 
 
 def command(action, *, diagnostic=None):
@@ -88,6 +94,17 @@ def test_noop_without_time_action_is_not_a_silent_commit():
                for e in events if e["event"] == "controller_clock_decision")
     assert all(e["controller_generation_action"] == "unspecified"
                for e in events if e["event"] == "controller_selection")
+
+
+def test_explicit_clock_rejects_unprepared_backend_before_reset_or_generation():
+    worker = LocalBackendWorkerRuntime(backend=SimpleNamespace())
+    with patch.object(worker, "reset") as reset, patch.object(worker, "step") as step:
+        with pytest.raises(ValueError, match="explicit_clock_requires_initial_observation_support"):
+            run_episode(_ToyTaskEnv(), worker, SimpleNamespace(),
+                StepContext(packet={}, runtime_state=FakeRuntimeState(), adapter=FakeAdapter(), traces={}, stats={}),
+                generation_clock_mode="explicit")
+        reset.assert_not_called()
+        step.assert_not_called()
 
 
 def test_initial_prefill_populates_readout_without_generation_budget_or_ttl():
