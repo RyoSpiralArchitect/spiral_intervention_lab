@@ -5322,6 +5322,8 @@ def run_digit_transform_experiment(
     include_prompt_baseline: bool = True,
     controller_prompt_asset: str = "controller_v01.txt",
     controller_packet_view: str = "full",
+    controller_action_view: str = "legacy",
+    generation_clock_mode: str = "legacy",
     hint_prompt_asset: str = "prompt_hint_v01.txt",
     task_view_mode: str = "redacted",
     log_dir: str | Path | None = None,
@@ -5372,6 +5374,7 @@ def run_digit_transform_experiment(
         provider,
         prompt_asset=controller_prompt_asset,
         packet_view=controller_packet_view,
+        action_view=controller_action_view,
         max_attempts=3,
     )
     b1_controller = (
@@ -5409,6 +5412,7 @@ def run_digit_transform_experiment(
         b1_controller=b1_controller,
         logger_factory=_logger_factory(log_dir),
         max_candidate_handoff_rounds=max_candidate_handoff_rounds,
+        generation_clock_mode=generation_clock_mode,
     )
 
     worker = make_worker_runtime()
@@ -5448,6 +5452,8 @@ def run_digit_transform_c1_only_experiment(
     task_env: ExperimentTaskEnv | None = None,
     controller_prompt_asset: str = "controller_v01.txt",
     controller_packet_view: str = "full",
+    controller_action_view: str = "legacy",
+    generation_clock_mode: str = "legacy",
     task_view_mode: str = "redacted",
     log_dir: str | Path | None = None,
     codec: Any | None = None,
@@ -5497,6 +5503,7 @@ def run_digit_transform_c1_only_experiment(
         provider,
         prompt_asset=controller_prompt_asset,
         packet_view=controller_packet_view,
+        action_view=controller_action_view,
         max_attempts=3,
     )
     worker = build_hooked_transformer_worker_runtime(
@@ -5526,6 +5533,7 @@ def run_digit_transform_c1_only_experiment(
         c1_controller,
         logger=None if logger_factory is None else logger_factory("c1"),
         max_candidate_handoff_rounds=max_candidate_handoff_rounds,
+        generation_clock_mode=generation_clock_mode,
     )
     surface_ids = tuple(surface["surface_id"] for surface in worker._surface_catalog_raw)
     result = DigitTransformC1OnlyExperimentResult(
@@ -9267,6 +9275,8 @@ def run_digit_transform_sweep(
     include_prompt_baseline: bool = True,
     controller_prompt_asset: str = "controller_v01.txt",
     controller_packet_view: str = "full",
+    controller_action_view: str = "legacy",
+    generation_clock_mode: str = "legacy",
     hint_prompt_asset: str = "prompt_hint_v01.txt",
     task_view_mode: str = "redacted",
     log_dir: str | Path | None = None,
@@ -9329,6 +9339,8 @@ def run_digit_transform_sweep(
                 include_prompt_baseline=include_prompt_baseline,
                 controller_prompt_asset=controller_prompt_asset,
                 controller_packet_view=controller_packet_view,
+                controller_action_view=controller_action_view,
+                generation_clock_mode=generation_clock_mode,
                 hint_prompt_asset=hint_prompt_asset,
                 task_view_mode=task_view_mode,
                 log_dir=seed_log_dir,
@@ -9386,6 +9398,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Observation packet sent to the controller. compact preserves raw JSONL logs while sending bounded summaries.",
     )
     parser.add_argument("--worker-model", default="gpt2-small", help="HookedTransformer worker model name or alias")
+    parser.add_argument("--controller-action-view", choices=("legacy", "cards"), default="legacy",
+                        help="cards uses the operation-card prompt and exact diagnostic IDs; legacy preserves the old interface.")
+    parser.add_argument("--generation-clock-mode", choices=("legacy", "explicit"), default="legacy",
+                        help="explicit separates bounded prefix inspection from one-token commits, including before the first token.")
     parser.add_argument(
         "--task",
         default="digit_transform",
@@ -9599,6 +9615,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             task_env=create_task_env(args.task, semantic_critic=semantic_critic),
             controller_prompt_asset=controller_prompt_asset,
             controller_packet_view=args.controller_packet_view,
+            controller_action_view=args.controller_action_view,
+            generation_clock_mode=args.generation_clock_mode,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,
@@ -9637,6 +9655,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_prompt_baseline=not args.no_b1,
             controller_prompt_asset=controller_prompt_asset,
             controller_packet_view=args.controller_packet_view,
+            controller_action_view=args.controller_action_view,
+            generation_clock_mode=args.generation_clock_mode,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,
@@ -9675,6 +9695,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             include_prompt_baseline=not args.no_b1,
             controller_prompt_asset=controller_prompt_asset,
             controller_packet_view=args.controller_packet_view,
+            controller_action_view=args.controller_action_view,
+            generation_clock_mode=args.generation_clock_mode,
             task_view_mode=args.task_view_mode,
             log_dir=args.log_dir,
             worker_model_path=args.worker_model_path,

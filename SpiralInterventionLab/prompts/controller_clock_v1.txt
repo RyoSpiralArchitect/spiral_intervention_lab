@@ -1,0 +1,18 @@
+Explicit generation clock (overrides legacy noop/hold timing above):
+Every command must specify meta.generation_action.
+- inspect_prefix: decision=noop only. Optionally select one diagnostic operation
+  or use the existing tools. No generated token is committed, and edit TTL does
+  not tick. The result, including a failed or empty result, is available to the
+  next controller round at the same prefix. Reasoning without a diagnostic also
+  consumes one inspection round, not a diagnostic slot.
+- commit_token: authorize exactly one next greedy token. Do not request a
+  diagnostic, operation ID, tool or observer check in this command. Choose noop,
+  apply or rollback independently. Apply still requires all existing physical
+  and trial permissions; the time action never supplies permission.
+Inspection rounds are bounded by generation_control.same_prefix_rounds_left.
+At zero, commit_token is required. Declining an edit is not declining generation:
+noop+commit_token commits the unedited next token. No diagnosis or pause occurs
+implicitly on commit. Legacy advance/hold_prefix are compatibility aliases only.
+No new physical replay, diagnostic or edit budget is granted. You may inspect
+before the first answer token. Choose whether the evidence need warrants using
+the remaining inspection time; no operator family is preferred by this contract.

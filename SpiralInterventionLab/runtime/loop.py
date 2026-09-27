@@ -15,7 +15,7 @@ from .edit_budget import (
     PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
 )
 from .policy import PolicyViolation, budget_violation_reason, command_budget_usage
-from . import candidate_handoff, prefix_control
+from . import candidate_handoff, operation_cards, prefix_control
 
 
 class TaskEnv(Protocol):
@@ -131,6 +131,7 @@ def _log_controller_trace(
         "provider",
         "model",
         "packet_view",
+        "action_view",
         "raw_payload_char_count",
         "provider_payload_char_count",
         "payload_reduction_ratio",
@@ -144,6 +145,9 @@ def _log_controller_trace(
     telemetry = {key: trace.get(key) for key in telemetry_keys if trace.get(key) is not None}
     if telemetry:
         logger.log({"event": "controller_prompt_telemetry", "step": step, **telemetry})
+    if isinstance(trace.get("operation_menu"), Mapping):
+        logger.log({"event": "controller_operation_menu", "step": step,
+                    **dict(trace["operation_menu"])})
 
     observation = trace.get("observation")
     if isinstance(observation, Mapping):
@@ -473,6 +477,8 @@ def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
     meta = _command_meta(command)
     if not isinstance(meta, Mapping):
         return None
+    if "operation_id" in meta:
+        return None
     request = meta.get("observer_check_request")
     if request is True:
         return {"kind": "semantic_progress"}
@@ -490,6 +496,8 @@ def _extract_observer_check_request(command: Any) -> Mapping[str, Any] | None:
 def _extract_tool_requests(command: Any) -> list[dict[str, Any]]:
     meta = _command_meta(command)
     if not isinstance(meta, Mapping):
+        return []
+    if "operation_id" in meta:
         return []
     requests = meta.get("tool_requests")
     if isinstance(requests, Mapping):
@@ -705,6 +713,11 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
     meta = _command_meta(command)
     if not isinstance(meta, Mapping):
         meta = {}
+    if "operation_id" in meta:
+        try:
+            return [operation_cards.resolve(packet, command)]
+        except ValueError:
+            return []
     strategy_hints = _packet_strategy_hints(packet)
     canonical_request = _strategy_canonical_diagnostic_request(strategy_hints)
     raw_requests: list[Any] = []
@@ -1717,6 +1730,7 @@ def _build_controller_selection_report(packet: Mapping[str, Any], command: Any) 
         "candidate_diagnostic_choices": strategy_hints.get("candidate_diagnostic_choices"),
         "generation_control": strategy_hints.get("generation_control"),
         "controller_generation_action": meta.get("generation_action", "advance"),
+        **operation_cards.selection_report(packet, command),
         "candidate_trial_handoffs": strategy_hints.get("candidate_trial_handoffs"),
         "candidate_trial_offer": strategy_hints.get("candidate_trial_offer"),
         "controller_rejected_signals": controller_rejected_signals,
@@ -1803,16 +1817,22 @@ def run_episode(
     policy: Any | None = None,
     max_controller_diagnostic_rethink_rounds: int = 0,
     max_candidate_handoff_rounds: int = 0,
+    generation_clock_mode: str = "legacy",
 ) -> EpisodeResult:
+    if generation_clock_mode not in {"legacy", "explicit"}:
+        raise ValueError("generation_clock_mode must be legacy or explicit")
+    explicit_clock = generation_clock_mode == "explicit"
     prompt = task_env.reset(seed=ctx.runtime_state.seed)
     worker_runtime.reset(prompt)
     if logger is not None:
-        logger.log({"event": "episode_start", "seed": ctx.runtime_state.seed, "prompt": prompt})
+        logger.log({"event": "episode_start", "seed": ctx.runtime_state.seed, "prompt": prompt,
+                    "generation_clock_mode": generation_clock_mode})
 
     step_count = 0
     pending_trial_expiry = []
     max_handoff_rounds = min(2, max(0, int(max_candidate_handoff_rounds)))
-    while not worker_runtime.done():
+    def commit_generation() -> None:
+        nonlocal pending_trial_expiry
         worker_runtime.step()
         # TTL counts generated tokens, not controller/diagnostic rounds. Observe
         # the generated effect before expiring hooks and building the next packet.
@@ -1837,8 +1857,31 @@ def run_episode(
                     logger.log({"event": "runtime_edit_expired", "step": step_count,
                                 "edit_id": edit_id, "reason": "generated_token_ttl_elapsed"})
         _log_pending_observer_check_events(logger, step=step_count, worker_runtime=worker_runtime)
+        if explicit_clock and logger is not None:
+            logger.log({"event": "generation_token_committed", "step": step_count,
+                        "generated_token_count": step_count + 1, "ttl_ticks": 1})
+
+    while not worker_runtime.done():
+        if not explicit_clock:
+            commit_generation()
+        prefix_snapshot = worker_runtime.final_text()
         packet = prefix_control.annotate(worker_runtime.build_controller_packet(),
-            rounds_left=max_handoff_rounds, terminal=worker_runtime.done())
+            rounds_left=max_handoff_rounds, terminal=worker_runtime.done(),
+            clock_mode=generation_clock_mode, token_count=step_count)
+        clock_report = None
+        def guard_clock(command: Any, controller_round: int) -> Any:
+            nonlocal clock_report
+            if not explicit_clock:
+                return command
+            clock_report = prefix_control.clock_decision(command,
+                rounds_left=max_handoff_rounds - controller_round)
+            if logger is not None:
+                logger.log({"event": "controller_clock_decision", "step": step_count,
+                            "generated_token_count": step_count, "controller_round": controller_round,
+                            **clock_report})
+            if not clock_report["command_valid"]:
+                return _guarded_noop_command(command, noop_reason=clock_report["blocked_reason"])
+            return command
         try:
             command = controller_client.invoke(packet)
         except Exception as exc:
@@ -1849,6 +1892,7 @@ def run_episode(
 
         command, guard_event = _guard_exhausted_apply_command(command, packet)
         command, budget_guard_event = _guard_budget_violating_apply_command(command, packet, policy=policy)
+        command = guard_clock(command, 0)
         _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
         if logger is not None:
@@ -1860,10 +1904,13 @@ def run_episode(
             logger.log({"event": "controller_command", "step": step_count, "command": command, **selection_report})
             logger.log({"event": "controller_selection", "step": step_count, **selection_report})
         _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
-        auxiliary_requests, auxiliary_results = _dispatch_controller_observer_and_tools(
-            worker_runtime, command, logger=logger, step=step_count)
+        auxiliary_requests, auxiliary_results = ([], [])
+        if not explicit_clock or clock_report["diagnostics_allowed"]:
+            auxiliary_requests, auxiliary_results = _dispatch_controller_observer_and_tools(
+                worker_runtime, command, logger=logger, step=step_count)
 
-        diagnostic_requests = _extract_diagnostic_requests(command, packet)
+        diagnostic_requests = (_extract_diagnostic_requests(command, packet)
+            if not explicit_clock or clock_report["diagnostics_allowed"] else [])
         diagnostic_results: list[Any] = []
         seen_diagnostic_signatures: set[str] = set()
         diagnostic_next_evidence_before = (
@@ -1895,6 +1942,22 @@ def run_episode(
         def handoff_available() -> bool:
             return bool(callable(followup_reader) and followup_reader(diagnostic_results))
         def explicit_hold_available() -> bool:
+            if explicit_clock:
+                results = [*diagnostic_results, *auxiliary_results]
+                if worker_runtime.final_text() != prefix_snapshot:
+                    raise PolicyViolation("inspection_changed_generated_prefix")
+                if any(isinstance(r, Mapping) and (r.get("state_restored") is False
+                       or (isinstance(r.get("evidence"), Mapping)
+                           and r["evidence"].get("state_restored") is False)) for r in results):
+                    raise PolicyViolation("diagnostic_state_restoration_failed")
+                if clock_report["continue_research"] and logger is not None:
+                    logger.log({"event": "prefix_inspection_complete", "step": step_count,
+                                "controller_round": rethink_round,
+                                "generated_token_count": step_count,
+                                "generated_tokens_during_inspection": 0,
+                                "result_count": len(results),
+                                "same_prefix_rounds_left": clock_report["same_prefix_rounds_left"]})
+                return bool(clock_report["continue_research"])
             report = prefix_control.evaluate(command,
                 [*diagnostic_requests, *auxiliary_requests],
                 [*diagnostic_results, *auxiliary_results],
@@ -1930,20 +1993,22 @@ def run_episode(
             )
         while (
             not worker_runtime.done()
-            and (diagnostic_requests or auxiliary_requests)
-            and (diagnostic_results or auxiliary_results)
+            and (explicit_clock or diagnostic_requests or auxiliary_requests)
+            and (explicit_clock or diagnostic_results or auxiliary_results)
             and _command_decision(command) == "noop"
-            and ((legacy_rethink_round < max_rethink_rounds and readout_escape_rethink_enabled and diagnostic_transition_open)
-                 or (candidate_handoff_round < max_handoff_rounds and handoff_available())
+            and ((not explicit_clock and legacy_rethink_round < max_rethink_rounds and readout_escape_rethink_enabled and diagnostic_transition_open)
+                 or (not explicit_clock and candidate_handoff_round < max_handoff_rounds and handoff_available())
                  or hold_available)
         ):
             rethink_round += 1
             candidate_round = not hold_available and candidate_handoff_round < max_handoff_rounds and handoff_available()
-            round_kind = "controller_prefix_hold" if hold_available else "candidate_trial_handoff" if candidate_round else "diagnostic_rethink"
+            round_kind = "prefix_inspection" if explicit_clock else "controller_prefix_hold" if hold_available else "candidate_trial_handoff" if candidate_round else "diagnostic_rethink"
             candidate_handoff_round += int(candidate_round or hold_available)
             legacy_rethink_round += int(not (candidate_round or hold_available))
             packet = prefix_control.annotate(worker_runtime.build_controller_packet(),
-                rounds_left=max_handoff_rounds - candidate_handoff_round, terminal=worker_runtime.done())
+                rounds_left=max_handoff_rounds - candidate_handoff_round, terminal=worker_runtime.done(),
+                clock_mode=generation_clock_mode, token_count=step_count,
+                controller_round=rethink_round, last_clock_report=clock_report)
             try:
                 command = controller_client.invoke(packet)
             except Exception as exc:
@@ -1962,6 +2027,7 @@ def run_episode(
 
             command, guard_event = _guard_exhausted_apply_command(command, packet)
             command, budget_guard_event = _guard_budget_violating_apply_command(command, packet, policy=policy)
+            command = guard_clock(command, rethink_round)
             _log_controller_trace(logger, step=step_count, trace=_latest_controller_trace(controller_client))
 
             if logger is not None:
@@ -2005,11 +2071,14 @@ def run_episode(
                 )
             _record_controller_memory(worker_runtime, command, step=step_count, logger=logger)
 
-            auxiliary_requests, auxiliary_results = _dispatch_controller_observer_and_tools(
-                worker_runtime, command, logger=logger, step=step_count,
-                controller_round=rethink_round)
+            auxiliary_requests, auxiliary_results = ([], [])
+            if not explicit_clock or clock_report["diagnostics_allowed"]:
+                auxiliary_requests, auxiliary_results = _dispatch_controller_observer_and_tools(
+                    worker_runtime, command, logger=logger, step=step_count,
+                    controller_round=rethink_round)
 
-            diagnostic_requests = _extract_diagnostic_requests(command, packet)
+            diagnostic_requests = (_extract_diagnostic_requests(command, packet)
+                if not explicit_clock or clock_report["diagnostics_allowed"] else [])
             diagnostic_requests, repeated_diagnostic_requests = _filter_repeated_diagnostic_requests(
                 diagnostic_requests,
                 seen_diagnostic_signatures,
@@ -2133,8 +2202,9 @@ def run_episode(
             consume_trial = getattr(worker_runtime, "consume_controller_trial", None)
             if callable(consume_trial):
                 consume_trial(command)
-        worker_runtime.observe_recent_effects()
-        _log_effect_trace(logger, step=step_count, worker_runtime=worker_runtime)
+        if not explicit_clock or compiled_edits:
+            worker_runtime.observe_recent_effects()
+            _log_effect_trace(logger, step=step_count, worker_runtime=worker_runtime)
         production_trial_apply_executed = (
             _command_decision(command) == "apply"
             and _optional_meta_text(_command_meta(command) or {}, "apply_kind") == "production_trial"
@@ -2150,6 +2220,15 @@ def run_episode(
                         "reason": "trial edit must survive one generated token before ttl tick",
                     }
                 )
+        if explicit_clock:
+            if logger is not None:
+                logger.log({"event": "generation_commit", "step": step_count,
+                            "generated_token_count_before": step_count,
+                            "commit_source": clock_report["commit_source"],
+                            "controller_rounds": rethink_round + 1,
+                            "final_edit_decision": _command_decision(command),
+                            "compiled_edit_count": len(compiled_edits)})
+            commit_generation()
         step_count += 1
 
     output = worker_runtime.final_text()

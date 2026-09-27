@@ -108,6 +108,48 @@ def classify_choice(choice: Mapping[str, Any], *, offered_objectives: set[str],
     return "no_diagnostic_request"
 
 
+def reconstruct_early_worker(*, source_path: Path, model_path: Path, profile: str,
+                             prefix: str, prefix_steps: int, objective: str,
+                             device: str) -> tuple[Any, str, list[dict[str, Any]]]:
+    source_prompt, early_reviews = load_early_reviews(source_path, prefix=prefix, objective=objective)
+    spec = PROFILES[profile]
+    import torch
+
+    torch.set_default_device("cpu")
+    torch.set_grad_enabled(False)
+    if device == "mps":
+        torch.mps.set_per_process_memory_fraction(0.7)
+    task = create_task_env(spec["task"])
+    prompt = task.reset(spec["seed"])
+    if prompt != source_prompt:
+        raise ValueError("task fixture differs from the recorded episode")
+    model = load_worker_model(spec["worker_model"], model_path=model_path, device=device,
+                              dtype=spec["dtype"], hf_offline=True, mps_mode="conservative")
+    worker = build_hooked_transformer_worker_runtime(
+        model, task, seed=spec["seed"], activation_surface_profile="activation_patch_expanded",
+        max_diagnostic_calls_per_run=12, diagnostic_result_window=12,
+        candidate_handoff_mode="off", readout_sidecar_analyzer=create_readout_analyzer("sae_scaffold"),
+        readout_analyzer_rerank_mode="apply")
+    restore_early_context(worker, prompt=prompt, prefix=prefix, prefix_steps=prefix_steps,
+                          early_reviews=early_reviews)
+    return worker, prompt, early_reviews
+
+
+def restore_early_context(worker: Any, *, prompt: str, prefix: str, prefix_steps: int,
+                          early_reviews: list[dict[str, Any]]) -> None:
+    from copy import deepcopy
+    worker.reset(prompt)
+    for _ in range(prefix_steps):
+        worker.step()
+    if worker.final_text() != prefix:
+        raise ValueError(f"generated prefix drifted: {worker.final_text()!r}")
+    worker._diagnostic_results = deepcopy(early_reviews)
+    worker._diagnostic_calls_used = sum(int(row.get("diagnostic_budget_charged") is True)
+                                        for row in early_reviews)
+    if worker._diagnostic_calls_used != 2:
+        raise ValueError("expected exactly two charged predecessor diagnostics")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=PROFILES, required=True)
@@ -130,37 +172,10 @@ def main(argv: list[str] | None = None) -> int:
         raise FileExistsError(output)
     source_path = args.source_jsonl.expanduser().resolve(strict=True)
     model_path = args.worker_model_path.expanduser().resolve(strict=True)
-    source_prompt, early_reviews = load_early_reviews(
-        source_path, prefix=args.prefix, objective=args.objective)
     spec = PROFILES[args.profile]
-
-    import torch
-
-    torch.set_default_device("cpu")
-    torch.set_grad_enabled(False)
-    if args.device == "mps":
-        torch.mps.set_per_process_memory_fraction(0.7)
-    task = create_task_env(spec["task"])
-    prompt = task.reset(spec["seed"])
-    if prompt != source_prompt:
-        raise ValueError("task fixture differs from the recorded episode")
-    model = load_worker_model(spec["worker_model"], model_path=model_path, device=args.device,
-                              dtype=spec["dtype"], hf_offline=True, mps_mode="conservative")
-    worker = build_hooked_transformer_worker_runtime(
-        model, task, seed=spec["seed"], activation_surface_profile="activation_patch_expanded",
-        max_diagnostic_calls_per_run=12, diagnostic_result_window=12,
-        candidate_handoff_mode="off", readout_sidecar_analyzer=create_readout_analyzer("sae_scaffold"),
-        readout_analyzer_rerank_mode="apply")
-    worker.reset(prompt)
-    for _ in range(args.prefix_steps):
-        worker.step()
-    if worker.final_text() != args.prefix:
-        raise ValueError(f"generated prefix drifted: {worker.final_text()!r}")
-    worker._diagnostic_results = [dict(row) for row in early_reviews]
-    worker._diagnostic_calls_used = sum(int(row.get("diagnostic_budget_charged") is True)
-                                        for row in early_reviews)
-    if worker._diagnostic_calls_used != 2:
-        raise ValueError("expected exactly two charged predecessor diagnostics")
+    worker, prompt, early_reviews = reconstruct_early_worker(
+        source_path=source_path, model_path=model_path, profile=args.profile, prefix=args.prefix,
+        prefix_steps=args.prefix_steps, objective=args.objective, device=args.device)
 
     off_packet = worker.build_controller_packet()
     worker.candidate_handoff_mode = "soft"

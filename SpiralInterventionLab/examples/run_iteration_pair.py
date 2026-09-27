@@ -29,13 +29,15 @@ PROFILES = {
 
 
 def build_argv(profile: str, checkpoint: Path, root: Path, *, device: str, controller: str,
-               candidate_handoff_mode: str = "off") -> list[str]:
+               candidate_handoff_mode: str = "off", controller_action_view: str = "legacy",
+               generation_clock_mode: str = "legacy") -> list[str]:
     spec = PROFILES[profile]
     return ["--provider", "openai", "--controller-model", controller,
         "--worker-model", spec["worker_model"], "--worker-model-path", str(checkpoint),
         "--worker-hf-offline", "--worker-device", device, "--worker-dtype", spec["dtype"],
         "--worker-mps-mode", "conservative", "--task", spec["task"], "--seed", str(spec["seed"]), "--no-b1",
         "--controller-prompt-profile", "compact", "--controller-packet-view", "compact",
+        "--controller-action-view", controller_action_view, "--generation-clock-mode", generation_clock_mode,
         "--readout-analyzer", "sae_scaffold", "--readout-analyzer-rerank-mode", "apply",
         "--activation-surface-profile", "activation_patch_expanded",
         "--max-diagnostic-calls-per-run", "12", "--diagnostic-result-window", "12",
@@ -148,6 +150,22 @@ def audit(root: Path, manifest: dict) -> dict:
                 usage[key] += int(u.get(key) or 0)
             usage["cached_input_tokens"] += int((u.get("input_tokens_details") or {}).get("cached_tokens") or 0)
     assert charges["diagnostic_calls_left"] <= 12
+    if manifest.get("generation_clock_mode") == "explicit":
+        commits = [r for r in rows if r.get("event") == "generation_commit"]
+        tokens = [r for r in rows if r.get("event") == "generation_token_committed"]
+        assert len(commits) == len(tokens) == outcomes["c1"]["steps"]
+        assert [r["generated_token_count_before"] for r in commits] == list(range(len(tokens)))
+        assert [r["generated_token_count"] for r in tokens] == list(range(1, len(tokens) + 1))
+        assert all(r["controller_rounds"] <= 3 for r in commits)
+        token_clock = 0
+        for row in rows:
+            if row.get("event") == "controller_clock_decision":
+                assert row["generated_token_count"] == token_clock
+            if row.get("event") == "generation_token_committed":
+                token_clock += 1
+            if row.get("event") == "prefix_inspection_complete":
+                assert row["generated_tokens_during_inspection"] == 0
+        assert next(r for r in rows if r.get("event") == "controller_clock_decision")["generated_token_count"] == 0
     return {"profile": manifest["profile_name"], "outcomes": outcomes,
         "output_identical": outcomes["b0"]["output"] == outcomes["c1"]["output"],
         "score_delta": outcomes["c1"]["score"] - outcomes["b0"]["score"],
@@ -173,6 +191,10 @@ def audit(root: Path, manifest: dict) -> dict:
         "physical_policy_caps_changed": False, "candidate_handoff_rounds": 2,
         "prefix_hold_requests": sum(row.get("event") == "controller_prefix_hold" for row in rows),
         "prefix_holds_accepted": sum(row.get("event") == "controller_prefix_hold" and row.get("accepted") is True for row in rows),
+        "generation_clock_mode": manifest.get("generation_clock_mode", "legacy"),
+        "clock_inspection_rounds": sum(row.get("event") == "controller_clock_decision" and row.get("effective_phase") == "inspect" for row in rows),
+        "generation_commits": sum(row.get("event") == "generation_commit" for row in rows),
+        "clock_fallback_commits": sum(row.get("event") == "generation_commit" and row.get("commit_source") == "research_budget_fallback" for row in rows),
         "scope": "one model-local paired trajectory, not cross-model efficacy or a causal prompt ablation"}
 
 
@@ -184,6 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--controller-model", default="gpt-5.6-luna")
     parser.add_argument("--device", choices=("cpu", "mps"), default="mps")
     parser.add_argument("--candidate-handoff-mode", choices=("off", "soft"), default="off")
+    parser.add_argument("--controller-action-view", choices=("legacy", "cards"), default="legacy")
+    parser.add_argument("--generation-clock-mode", choices=("legacy", "explicit"), default="legacy")
     parser.add_argument("--baseline-reference", type=Path, help="Optional previous experiment_summary.json; stop if B0 changed")
     args = parser.parse_args(argv)
     if not os.environ.get("OPENAI_API_KEY"):
@@ -200,7 +224,9 @@ def main(argv: list[str] | None = None) -> int:
     root.mkdir(parents=True, exist_ok=False)
     repo = Path(__file__).resolve().parents[2]
     call = build_argv(args.profile, checkpoint, root, device=args.device, controller=args.controller_model,
-                      candidate_handoff_mode=args.candidate_handoff_mode)
+                      candidate_handoff_mode=args.candidate_handoff_mode,
+                      controller_action_view=args.controller_action_view,
+                      generation_clock_mode=args.generation_clock_mode)
     import torch
     from SpiralInterventionLab.examples.digit_transform_e2e import create_task_env, main as run_pair
     from SpiralInterventionLab.runtime import baselines
@@ -223,6 +249,8 @@ def main(argv: list[str] | None = None) -> int:
         "production_policy_changed": True, "physical_policy_caps_changed": False,
         "controller_handoff_changed": True, "candidate_handoff_rounds": 2,
         "candidate_handoff_mode": args.candidate_handoff_mode,
+        "controller_action_view": args.controller_action_view,
+        "generation_clock_mode": args.generation_clock_mode,
         "policy_change_scope": "exact_context_not_frontier_preference_no_looser_caps",
         "normal_cap_variants": "new_identity_explicit_measurement_no_inherited_evidence",
         "prefix_hold_budget_pool": "shared_candidate_handoff_rounds",
