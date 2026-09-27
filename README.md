@@ -41,6 +41,21 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/explicit_generation_clock.md`](docs/explicit_generation_clock.md)
+  Opt-in `inspect_prefix` / `commit_token` actions separate bounded investigation
+  from one-token generation, including before the first answer token. Failed
+  diagnostics can be read at the same prefix; edit permission and budgets stay
+  separate. Initial readout is prepared without emitting a token; unsupported
+  backends fail closed in explicit mode. The legacy clock remains the default.
+  GPT-2 and Llama paired runs exercise the new clock but show no task-score uplift
+  or rollout edits; receipts retain the failed attempt and differing card arrival.
+
+- [`docs/controller_operation_cards.md`](docs/controller_operation_cards.md)
+  Opt-in common operation cards expose diagnostic purpose, prerequisites, cost,
+  possible evidence and prefix timing. Exact IDs resolve existing requests;
+  the fixed-prefix interface comparison preserves the underlying operations
+  and records selected diagnostics separately from execution and task outcomes.
+
 - [`docs/controller_transaction_design_audit.md`](docs/controller_transaction_design_audit.md)
   Design audit separates zero trial offers from refused offers. Its synthetic failures
   motivated a shared round dispatcher and a bounded normal-cap investigation that can

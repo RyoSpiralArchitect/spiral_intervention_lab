@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "kind": "explicit_generation_clock_pair_receipt",
+  "status": "failed",
+  "profile": "llama_l1",
+  "controller_model": "gpt-5.6-luna",
+  "device": "mps",
+  "controller_action_view": "cards",
+  "generation_clock_mode": "explicit",
+  "initial_observation_prepared": true,
+  "seed": 0,
+  "generated_tokens_before_failure": 5,
+  "failure_kind": "unknown_or_stale_operation_id",
+  "failed_provider_attempts_at_last_decision": 3,
+  "available_operation_id": "operation:9f309a1dfdc6ead0c86c47a3",
+  "rejected_operation_ids": ["operation:9f393a1dfdc6ead0c86c47a3", "operation:9f393b9a1dfdc6ead0c86c47a3"],
+  "outcomes": {
+    "b0": {"output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.", "score": 0.938889, "steps": 18},
+    "c1": null
+  },
+  "compiled_rollout_edit_count": 0,
+  "completed_pair": false,
+  "artifact_sha256": {
+    "manifest.json": "8c0f650284731667e3b05faea8e5015c04c93fcb45c845e9fc7c906b65b148e8",
+    "live/c1.jsonl": "d78798b8c16fa4e31f2c4fe5a7b143e87f888777cbb0bf578937cf47c517471d",
+    "run_status.json": "aa2cb83bda9205b50dfb9201a8da4e4f96536b89c8b21aa21560075499839809"
+  },
+  "limits": [
+    "Incomplete C1 is not a completed task outcome or score comparison.",
+    "Subsequent retry must not erase this failed attempt.",
+    "No unknown operation was substituted or executed.",
+    "MPS/TransformerLens compatibility warning remains unresolved."
+  ]
+}

@@ -102,6 +102,7 @@ def run_c1(
     logger: StructuredLogger | None = None,
     policy: HarnessPolicy | None = None,
     max_candidate_handoff_rounds: int = 0,
+    generation_clock_mode: str = "legacy",
 ) -> EpisodeResult:
     resolved_ctx = ctx or _infer_step_context(worker_runtime)
     return run_episode(
@@ -112,6 +113,7 @@ def run_c1(
         logger=logger,
         policy=policy or activation_only_policy(),
         max_candidate_handoff_rounds=max_candidate_handoff_rounds,
+        generation_clock_mode=generation_clock_mode,
     )
 
 
@@ -125,6 +127,7 @@ def run_minimal_baseline_suite(
     paired_trace_id: str = "paired_baseline",
     c1_policy: HarnessPolicy | None = None,
     max_candidate_handoff_rounds: int = 0,
+    generation_clock_mode: str = "legacy",
 ) -> BaselineSuiteResult:
     b0_worker = make_worker_runtime()
     b0 = run_b0(task_env, b0_worker, logger=_make_logger(logger_factory, "b0"), trace_snapshot_id=paired_trace_id)
@@ -148,6 +151,7 @@ def run_minimal_baseline_suite(
         logger=_make_logger(logger_factory, "c1"),
         policy=c1_policy,
         max_candidate_handoff_rounds=max_candidate_handoff_rounds,
+        generation_clock_mode=generation_clock_mode,
     )
     return BaselineSuiteResult(b0=b0, b1=b1, c1=c1, paired_trace_id=paired_trace_id)
 

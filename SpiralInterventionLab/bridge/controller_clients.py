@@ -12,6 +12,7 @@ from typing import Sequence
 from ..controllers.base import ControllerProvider, ControllerProviderRequest
 from ..runtime.edit_budget import estimate_edit_cost
 from ..runtime.schema import ControllerCommand, parse_controller_command
+from ..runtime import operation_cards, prefix_control
 
 
 def load_prompt_asset(asset_name: str) -> str:
@@ -1731,12 +1732,18 @@ class ProviderControllerClient:
         system_prompt: str | None = None,
         prompt_asset: str = "controller_v01.txt",
         packet_view: str = "full",
+        action_view: str = "legacy",
         max_output_tokens: int = 800,
         temperature: float = 0.0,
         max_attempts: int = 2,
     ) -> None:
         self.provider = provider
-        self.system_prompt = system_prompt or load_prompt_asset(prompt_asset)
+        if action_view not in {"legacy", "cards"}:
+            raise ValueError("action_view must be 'legacy' or 'cards'")
+        self.action_view = action_view
+        self.system_prompt = system_prompt or load_prompt_asset(
+            "controller_operations_v1.txt" if action_view == "cards"
+            and prompt_asset in {"controller_v01.txt", "controller_v01_compact.txt"} else prompt_asset)
         normalized_packet_view = str(packet_view or "full").strip().lower().replace("-", "_")
         if normalized_packet_view not in _COMPACT_PACKET_VIEWS:
             raise ValueError("packet_view must be 'full' or 'compact'")
@@ -1752,9 +1759,14 @@ class ProviderControllerClient:
     def invoke(self, packet: Any) -> ControllerCommand:
         raw_payload = _payload_for_provider(packet, packet_view="full")
         payload = _payload_for_provider(packet, packet_view=self.packet_view)
+        if self.action_view == "cards":
+            payload = operation_cards.project_payload(payload, raw_payload)
+        system_prompt = self.system_prompt
+        if ((raw_payload.get("strategy_hints") or {}).get("generation_control") or {}).get("clock_mode") == "explicit":
+            system_prompt += "\n\n" + load_prompt_asset("controller_clock_v1.txt")
         raw_payload_chars = _serialized_char_count(raw_payload)
         provider_payload_chars = _serialized_char_count(payload)
-        system_prompt_chars = len(self.system_prompt)
+        system_prompt_chars = len(system_prompt)
         effective_max_output_tokens = max(
             _controller_output_token_budget(payload, self.max_output_tokens),
             _controller_model_output_token_floor(self.provider.model_name),
@@ -1765,6 +1777,8 @@ class ProviderControllerClient:
             "max_attempts": self.max_attempts,
             "effective_max_output_tokens": effective_max_output_tokens,
             "packet_view": self.packet_view,
+            "action_view": self.action_view,
+            "operation_menu": payload.get("operation_menu") if isinstance(payload, Mapping) else None,
             "raw_payload_char_count": raw_payload_chars,
             "provider_payload_char_count": provider_payload_chars,
             "payload_reduction_ratio": round(provider_payload_chars / raw_payload_chars, 6)
@@ -1774,7 +1788,7 @@ class ProviderControllerClient:
             "rough_input_token_estimate": _rough_token_estimate_from_chars(
                 system_prompt_chars + provider_payload_chars
             ),
-            "system_prompt_sha256": _stable_hash(self.system_prompt),
+            "system_prompt_sha256": _stable_hash(system_prompt),
             "observation": _observation_summary(payload),
             "attempts": [],
             "decision": None,
@@ -1785,7 +1799,7 @@ class ProviderControllerClient:
         last_error: Exception | None = None
         for attempt_index in range(1, self.max_attempts + 1):
             request = ControllerProviderRequest(
-                system_prompt=self.system_prompt,
+                system_prompt=system_prompt,
                 payload=payload,
                 max_output_tokens=effective_max_output_tokens,
                 temperature=self.temperature,
@@ -1829,6 +1843,11 @@ class ProviderControllerClient:
                 attempt_trace["normalized_payload"] = _json_ready(parsed)
                 attempt_trace["normalization_delta"] = _json_ready(_normalization_delta(raw_json_object, parsed))
                 command = parse_controller_command(parsed)
+                prefix_control.validate_clock_command(raw_payload, parsed)
+                if self.action_view == "cards":
+                    operation_cards.validate_card_command(raw_payload, parsed)
+                elif "operation_id" in (parsed.get("meta") or {}):
+                    operation_cards.resolve(raw_payload, command)
                 attempt_trace["parse_ok"] = True
                 trace["attempts"].append(attempt_trace)
                 trace["decision"] = _decision_summary(command)
@@ -1843,6 +1862,16 @@ class ProviderControllerClient:
                 self._last_trace = trace
                 last_error = exc
                 retry_note = f"Previous reply was invalid. Return only one compact JSON object matching ControllerCommand. Error: {exc}"
+                if self.action_view == "cards" and str(exc) == "unknown_or_stale_operation_id":
+                    available = [
+                        {key: card.get(key) for key in ("operation_id", "diagnostic", "action")}
+                        for card in payload["operation_menu"]["cards"] if card.get("available")
+                    ]
+                    retry_note += (
+                        " Copy an operation_id exactly from the unchanged current menu, or choose no diagnostic."
+                        " IDs are not corrected or substituted automatically. Available IDs (first 32, original order): "
+                        + json.dumps(available[:32], separators=(",", ":"))
+                    )
         trace["error"] = str(last_error) if last_error is not None else "unknown provider error"
         self._last_trace = trace
         raise ValueError(f"provider '{self.provider.provider_name}' failed to return valid ControllerCommand JSON") from last_error
