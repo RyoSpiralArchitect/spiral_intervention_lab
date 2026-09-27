@@ -120,7 +120,11 @@ python3 -m SpiralInterventionLab.examples.digit_transform_e2e \
   --log-dir "$LOG_DIR"
 ```
 
-Next question: why does the controller defer an executable but expensive
-activation-patch review until late despite early visibility? A fixed-prefix
-off/soft choice comparison should isolate the offer's effect before changing
-priorities or apply authority. The MPS warning above also still applies.
+The fixed-prefix off/soft controller-choice comparison is recorded in
+`docs/candidate_seed_discovery_fixed_prefix_choice.md`. An offer-only Llama
+rerun kept the same next diagnostic choice despite the early offer. The earlier
+GPT-2 choice comparison also kept the same choice, but its controller input
+contained a condition-dependent packet hash and is only a historical
+observation until rerun. This does not justify changing priorities or apply
+authority without a separate bounded test. The MPS warning above still
+applies.

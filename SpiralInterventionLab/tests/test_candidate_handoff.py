@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from SpiralInterventionLab.bridge.controller_clients import _compact_controller_payload
+from SpiralInterventionLab.bridge.controller_clients import _compact_controller_payload, _payload_for_provider
 from SpiralInterventionLab.examples.replay_candidate_handoff_choice import (
     _assert_handoff_only_diff,
     _load_recorded_seed,
@@ -13,6 +13,14 @@ from SpiralInterventionLab.examples.replay_candidate_seed_discovery import (
     select_frozen_remeasurement,
     summarize_discovery,
 )
+from SpiralInterventionLab.examples.replay_candidate_seed_discovery_choice import (
+    assert_early_offer_only_diff,
+    assert_existing_diagnostics_unchanged,
+    classify_choice,
+    hash_blind_controller_input,
+    offer_only_controller_inputs,
+    offered_reviews,
+)
 from SpiralInterventionLab.examples.run_iteration_pair import build_argv
 from SpiralInterventionLab.runtime import candidate_handoff
 from SpiralInterventionLab.runtime.loop import _build_controller_selection_report, _extract_diagnostic_requests
@@ -20,6 +28,100 @@ from SpiralInterventionLab.runtime.response_probe import select_probe_seeds
 
 
 OBJECTIVE = "entity_insert:mira:source_body:weak_reachable"
+
+
+def test_early_choice_comparison_requires_only_offer_fields_to_change():
+    request = {"diagnostic": "activation_patch_candidate_review",
+               "objective_bundle_key": OBJECTIVE,
+               "operator_recipe_expansion_mode": "activation_patch_candidate_review"}
+    canonical_item = {"diagnostic": "operator_diagnostic_replay", "priority": 10,
+                      "request": {"diagnostic": "operator_diagnostic_replay"}}
+    off = {"strategy_hints": {"available_next_diagnostics": [canonical_item],
+                              "diagnostic_frontier_request": "operator_diagnostic_replay"}}
+    soft = {"strategy_hints": {"available_next_diagnostics": [canonical_item, {"request": request}],
+                               "diagnostic_frontier_request": "operator_diagnostic_replay",
+                               "candidate_seed_discovery_status": "available",
+                               "candidate_seed_discovery_blueprint_count": 1,
+                               "candidate_handoff": {"state": "unmeasurable"}}}
+    assert assert_early_offer_only_diff(off, soft, compact=False)
+    assert_existing_diagnostics_unchanged(off, soft)
+    assert offered_reviews(soft)[0]["request"] == request
+    assert offered_reviews(off) == []
+    changed_frontier = {"strategy_hints": {**soft["strategy_hints"],
+                                          "diagnostic_frontier_request": "other"}}
+    try:
+        assert_early_offer_only_diff(off, changed_frontier, compact=False)
+    except ValueError as exc:
+        assert "outside early offer" in str(exc)
+    else:
+        raise AssertionError("canonical frontier drift must fail closed")
+    changed_priority = {"strategy_hints": {**soft["strategy_hints"],
+        "available_next_diagnostics": [{**canonical_item, "priority": 5}, {"request": request}]}}
+    try:
+        assert_existing_diagnostics_unchanged(off, changed_priority)
+    except ValueError as exc:
+        assert "existing diagnostic option" in str(exc)
+    else:
+        raise AssertionError("existing diagnostic priority drift must fail closed")
+
+
+def test_early_choice_classification_uses_extracted_request_not_offer_visibility():
+    canonical = {"diagnostic": "operator_diagnostic_replay",
+                 "objective_bundle_key": OBJECTIVE}
+    choice = {"diagnostic_requests": [{"diagnostic": "activation_patch_candidate_review",
+                                       "objective_bundle_key": OBJECTIVE}]}
+    assert classify_choice(choice, offered_objectives={OBJECTIVE},
+                           canonical_request=canonical) == "early_activation_patch_review"
+    assert classify_choice({"diagnostic_requests": [canonical]}, offered_objectives={OBJECTIVE},
+                           canonical_request=canonical) == "canonical_frontier"
+    assert classify_choice({"diagnostic_requests": [canonical]}, offered_objectives={OBJECTIVE},
+                           canonical_request={"diagnostic": "operator_diagnostic_replay"}) == "canonical_frontier"
+    assert classify_choice({"diagnostic_requests": []}, offered_objectives={OBJECTIVE},
+                           canonical_request=canonical) == "no_diagnostic_request"
+    assert classify_choice(choice, offered_objectives={"different_objective"},
+                           canonical_request=canonical) == "other_diagnostic"
+
+
+def test_fixed_prefix_controller_input_omits_condition_bound_packet_hash():
+    off = {"packet_view": "compact_v1", "source_packet_sha256": "off_hash",
+           "strategy_hints": {"available_next_diagnostics": []}}
+    soft = {"packet_view": "compact_v1", "source_packet_sha256": "soft_hash",
+            "strategy_hints": {"available_next_diagnostics": [],
+                               "candidate_seed_discovery_status": "available"}}
+    off_input = hash_blind_controller_input(off)
+    soft_input = hash_blind_controller_input(soft)
+    assert "source_packet_sha256" not in off_input
+    assert "source_packet_sha256" not in soft_input
+    assert off["source_packet_sha256"] == "off_hash"
+    assert soft["source_packet_sha256"] == "soft_hash"
+    assert _payload_for_provider(off_input, packet_view="full") == off_input
+    assert _payload_for_provider(soft_input, packet_view="full") == soft_input
+    assert assert_early_offer_only_diff(off_input, soft_input, compact=True) == [
+        "strategy_hints.candidate_seed_discovery_status"]
+
+
+def test_fixed_prefix_controller_input_changes_only_the_early_offer_list():
+    canonical = {"diagnostic": "operator_diagnostic_replay", "priority": 10,
+                 "request": {"diagnostic": "operator_diagnostic_replay"}}
+    review = {"diagnostic": "activation_patch_candidate_review", "priority": 20,
+              "request": {"diagnostic": "activation_patch_candidate_review",
+                          "objective_bundle_key": OBJECTIVE,
+                          "operator_recipe_expansion_mode": "activation_patch_candidate_review"}}
+    off = {"packet_view": "compact_v1", "source_packet_sha256": "off_hash",
+           "strategy_hints": {"available_next_diagnostics": [canonical]}}
+    soft = {"packet_view": "compact_v1", "source_packet_sha256": "soft_hash",
+            "strategy_hints": {"available_next_diagnostics": [canonical, review],
+                               "candidate_handoff": {"state": "unmeasurable"},
+                               "candidate_seed_discovery_status": "available"}}
+    off_input, soft_input = offer_only_controller_inputs(off, soft)
+    assert off_input["strategy_hints"]["available_next_diagnostics"] == [canonical]
+    assert soft_input["strategy_hints"]["available_next_diagnostics"] == [canonical, review]
+    assert "candidate_handoff" not in soft_input["strategy_hints"]
+    assert "candidate_seed_discovery_status" not in soft_input["strategy_hints"]
+    assert "source_packet_sha256" not in soft_input
+    assert {**soft_input, "strategy_hints": {
+        **soft_input["strategy_hints"], "available_next_diagnostics": [canonical]}} == off_input
+    assert soft["strategy_hints"]["candidate_handoff"]["state"] == "unmeasurable"
 
 
 def seed_row(*, objective: str = OBJECTIVE, effect: str = "rank_carrier") -> dict:

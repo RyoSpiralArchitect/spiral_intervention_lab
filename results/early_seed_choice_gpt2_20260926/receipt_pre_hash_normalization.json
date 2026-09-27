@@ -1,0 +1,140 @@
+{
+  "kind": "fixed_prefix_controller_choice_receipt_pre_hash_normalization",
+  "schema_version": 1,
+  "interpretation_status": "historical_hash_confounded_not_controlled_offer_effect",
+  "source_report_sha256": "34cccba082c451cd56d76c0fbc0292e85e6d413eb1ad15905bf3be875b7ef94c",
+  "status": "complete",
+  "profile": "gpt2_control",
+  "prefix": " In",
+  "prefix_steps": 1,
+  "controller_model": "gpt-5.6-luna",
+  "source_jsonl_sha256": "46736ff36dcf23aab5d302586e2b31ad0faf2337105fc2764e941ec8e753f6f1",
+  "model_config_sha256": "0daed7749b4f02b8f76240d5444551d7b08712dab4d0adb8239c56ba823bb7b4",
+  "prompt_sha256": "ea715912aa495cf8875a9288fb6244079425ff3831305f72d23e23d4e5c7549f",
+  "predecessor_result_sha256": [
+    "f51e9b95a6e565ff0dccae43bfb76222d046c621679ad81b248e01649a38aec7",
+    "78591d4381a8aaea28aee687d2b23b821f57ce02aa291cf753280a5304990b94"
+  ],
+  "diagnostics_used": 2,
+  "diagnostic_budget_left": 10,
+  "canonical_frontier_request": {
+    "diagnostic": "operator_diagnostic_replay"
+  },
+  "soft_offered_reviews": [
+    {
+      "priority": 20,
+      "request": {
+        "diagnostic": "activation_patch_candidate_review",
+        "bundle_key": "entity_insert:mira:source_body:weak_reachable",
+        "objective_bundle_key": "entity_insert:mira:source_body:weak_reachable",
+        "operator_recipe_expansion_mode": "activation_patch_candidate_review"
+      }
+    },
+    {
+      "priority": 20,
+      "request": {
+        "diagnostic": "activation_patch_candidate_review",
+        "bundle_key": "entity_insert:omar:source_body:weak_reachable",
+        "objective_bundle_key": "entity_insert:omar:source_body:weak_reachable",
+        "operator_recipe_expansion_mode": "activation_patch_candidate_review"
+      }
+    }
+  ],
+  "packet_identity": {
+    "off_sha256": "d10dee9baf4a364944a6ebb1b40afc393c20b753f087b6e933adcd48a6d9a703",
+    "soft_sha256": "1c4754ed6af510d859f424cc0c2c32706976c31668fd02becab37c6c939b80c2",
+    "raw_diff_paths": [
+      "strategy_hints.available_next_diagnostics",
+      "strategy_hints.candidate_handoff",
+      "strategy_hints.candidate_seed_discovery_blueprint_count",
+      "strategy_hints.candidate_seed_discovery_status"
+    ],
+    "compact_diff_paths": [
+      "source_packet_sha256",
+      "strategy_hints.available_next_diagnostics",
+      "strategy_hints.candidate_handoff",
+      "strategy_hints.candidate_seed_discovery_blueprint_count",
+      "strategy_hints.candidate_seed_discovery_status"
+    ]
+  },
+  "comparison_scope": "controller_choice_only_no_diagnostic_dispatch_no_apply_no_continuation",
+  "production_apply_allowed_by_offer": false,
+  "cycles": [
+    {
+      "order": [
+        "off",
+        "soft"
+      ],
+      "conditions": {
+        "off": {
+          "choice_class": "canonical_frontier",
+          "decision": "noop",
+          "requested_diagnostics": [
+            "operator_diagnostic_replay"
+          ],
+          "raw_diagnostic_request": {
+            "diagnostic": "operator_diagnostic_replay",
+            "materialize_entity_insertion_candidates": true,
+            "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates"
+          },
+          "provider_attempt_count": 1,
+          "provider_response_sha256": [
+            "16e194ba7552634beff69b8a8c812caca47c95b9d958da755ce705ae16fde893"
+          ]
+        },
+        "soft": {
+          "choice_class": "canonical_frontier",
+          "decision": "noop",
+          "requested_diagnostics": [
+            "operator_diagnostic_replay"
+          ],
+          "raw_diagnostic_request": "operator_diagnostic_replay",
+          "provider_attempt_count": 1,
+          "provider_response_sha256": [
+            "bde93256846c9c431bda8b495c86f27d3d1eb1dce1fb3348e25073dba9c27951"
+          ]
+        }
+      }
+    },
+    {
+      "order": [
+        "soft",
+        "off"
+      ],
+      "conditions": {
+        "soft": {
+          "choice_class": "canonical_frontier",
+          "decision": "noop",
+          "requested_diagnostics": [
+            "operator_diagnostic_replay"
+          ],
+          "raw_diagnostic_request": {
+            "diagnostic": "operator_diagnostic_replay",
+            "materialize_entity_insertion_candidates": true,
+            "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates"
+          },
+          "provider_attempt_count": 1,
+          "provider_response_sha256": [
+            "4fdc6b3af70640eff9e5a60752db5bb1a651c4b800bce9d56edc95ea755ab86b"
+          ]
+        },
+        "off": {
+          "choice_class": "canonical_frontier",
+          "decision": "noop",
+          "requested_diagnostics": [
+            "operator_diagnostic_replay"
+          ],
+          "raw_diagnostic_request": {
+            "diagnostic": "operator_diagnostic_replay",
+            "materialize_entity_insertion_candidates": true,
+            "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates"
+          },
+          "provider_attempt_count": 1,
+          "provider_response_sha256": [
+            "6cfb2b379d0fdbec20d793293675e99393d6909cb2b49a4cfdeb59339cc1f9d9"
+          ]
+        }
+      }
+    }
+  ]
+}
