@@ -40,6 +40,22 @@ def test_role_violations_from_recorded_and_forced_outputs(output, expected):
     assert report["role_violations"] == expected
 
 
+def test_theme_and_recipient_are_not_borrowed_from_a_later_clause():
+    report = check_role_frames(
+        "Nora will take a break before Selim sends the sample to Ivo and the report to Yara.", REVIEW)
+
+    assert not report["role_binding_ok"]
+    assert report["frames"][0]["status"] == "partially_bound"
+    assert report["frames"][0]["theme_in_action_clause"] is False
+    assert report["frames"][1]["status"] == "bound"
+
+
+def test_recipient_after_to_does_not_close_the_clause():
+    report = check_role_frames("Nora will take the sample to Selim, who will send the report to Yara.", REVIEW)
+
+    assert report["role_violations"] == ["sample: recipient selim, expected ivo"]
+
+
 def test_missing_action_is_unbound_not_a_violation():
     report = check_role_frames("Nora will take the sample to Ivo before dusk.", REVIEW)
 

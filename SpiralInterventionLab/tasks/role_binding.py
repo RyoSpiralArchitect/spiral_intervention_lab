@@ -35,12 +35,29 @@ def _words(text: str) -> list[tuple[str, bool]]:
     return words
 
 
+def _clause_end(words: list[tuple[str, bool]], start: int, *, agents: set[str], other_actions: set[str]) -> int:
+    """First index after ``start`` that opens another clause: a new subject or another frame's action.
+
+    A name right after ``to`` is a recipient and a possessive owns an object, so
+    neither opens a clause.
+    """
+    for i in range(start + 1, len(words)):
+        word, possessive = words[i]
+        if word in other_actions:
+            return i
+        if word in agents and not possessive and words[i - 1][0] != "to":
+            return i
+    return len(words)
+
+
 def check_role_frames(output: str, frames: Sequence[Sequence[str]]) -> dict[str, Any]:
     words = _words(output)
     agents = {str(frame[0]).casefold() for frame in frames}
     names = agents | {str(frame[3]).casefold() for frame in frames}
     reports, violations = [], []
     for agent, action, theme, recipient in frames:
+        other_actions = set().union(*(action_forms(str(frame[1])) for frame in frames
+                                      if str(frame[1]).casefold() != action.casefold()))
         agent_key, theme_key, recipient_key = agent.casefold(), theme.casefold(), recipient.casefold()
         report: dict[str, Any] = {"agent": agent, "action": action, "theme": theme, "recipient": recipient,
                                   "bound_agent": None, "bound_recipient": None}
@@ -52,15 +69,16 @@ def check_role_frames(output: str, frames: Sequence[Sequence[str]]) -> dict[str,
             continue
         bound_agent = next((word for word, possessive in reversed(words[:action_index])
                             if word in agents and not possessive), None)
-        theme_index = next((i for i in range(action_index + 1, len(words)) if words[i][0] == theme_key), None)
+        clause_end = _clause_end(words, action_index, agents=agents, other_actions=other_actions)
+        theme_index = next((i for i in range(action_index + 1, clause_end) if words[i][0] == theme_key), None)
         bound_recipient = None
         if theme_index is not None:
-            for i in range(theme_index + 1, len(words) - 1):
+            for i in range(theme_index + 1, min(clause_end, len(words) - 1)):
                 if words[i][0] == "to" and words[i + 1][0] in names:
                     bound_recipient = words[i + 1][0]
                     break
         report.update(bound_agent=bound_agent, bound_recipient=bound_recipient,
-                      theme_follows_action=theme_index is not None)
+                      theme_in_action_clause=theme_index is not None)
         problems = []
         if bound_agent is not None and bound_agent != agent_key:
             problems.append(f"{action}: agent {bound_agent}, expected {agent_key}")
