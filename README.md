@@ -41,6 +41,13 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/clause_structure_survey.md`](docs/clause_structure_survey.md)
+  Across the nine rewrite-ladder cases, three of six failures turn on the same
+  choice after the first clause's recipient (` before` vs a separator ranked
+  2-8); forcing the separator lets the worker write the missing clause itself.
+  L2 failures are compression, not structure. Source-anchored activation
+  patches can flip the L1 review decision, but only at L25-L27 with large edits.
+
 - [`docs/operator_dose_response.md`](docs/operator_dose_response.md)
   Dose response on the L1 `Selim` case. Readout steering writes the name only at
   12-24% of the residual norm, where it is equivalent to forcing the token;
