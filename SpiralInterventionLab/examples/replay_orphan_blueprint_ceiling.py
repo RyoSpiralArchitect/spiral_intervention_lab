@@ -105,6 +105,33 @@ def load_source(path: Path) -> dict[str, Any]:
     }
 
 
+def verify_checkpoint(model_path: Path, recorded: Mapping[str, str]) -> dict[str, str]:
+    """Refuse a checkpoint whose files differ from the source run's recorded hashes."""
+    if not recorded:
+        raise ValueError("source manifest records no checkpoint_sha256 map")
+    verified: dict[str, str] = {}
+    for name, expected in sorted(recorded.items()):
+        path = model_path / name
+        if not path.is_file():
+            raise ValueError(f"checkpoint file missing: {name}")
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1 << 24), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected:
+            raise ValueError(f"checkpoint file differs from source manifest: {name}")
+        verified[name] = expected
+    return verified
+
+
+def first_piece_won(row: Mapping[str, Any], first_piece_id: int) -> bool:
+    """Gate on the replay's own target rank; the top-k diff table is truncated by probability delta."""
+    rank = row.get("target_rank_after")
+    if isinstance(rank, int) and not isinstance(rank, bool):
+        return rank == 1
+    return (row.get("edited_top1") or {}).get("token_id") == first_piece_id
+
+
 def _edited_top1(replay: Mapping[str, Any]) -> dict[str, Any] | None:
     rows = [row for row in replay.get("topk_token_diff", ()) if isinstance(row, Mapping)]
     if not rows:
@@ -236,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     source = load_source(source_path)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     profile = manifest["profile"]
+    verified_checkpoint = verify_checkpoint(model_path, manifest.get("checkpoint_sha256") or {})
 
     import torch
 
@@ -279,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
         "source_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         "worker_model": profile["worker_model"], "worker_model_path": str(model_path),
         "model_config_sha256": hashlib.sha256((model_path / "config.json").read_bytes()).hexdigest(),
+        "checkpoint_sha256_verified": verified_checkpoint,
         "device": args.device, "dtype": profile.get("dtype"), "seed": profile["seed"], "task": profile["task"],
         "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
         "recorded_final_output": source["final_output"],
@@ -349,8 +378,7 @@ def main(argv: list[str] | None = None) -> int:
                     score_candidate_text=False, label=f"ceiling:{recipe_id}", ownership_terms=(term,),
                     intended_bundle_key=bundle_key, intended_term=term)
                 row = {"operator_recipe_id": recipe_id, **_replay_summary(replay)}
-                top1 = row.get("edited_top1") or {}
-                if top1.get("token_id") == first_piece_ids[0]:
+                if first_piece_won(row, first_piece_ids[0]):
                     full = worker.replay_candidate_edits_actual_delta(
                         [candidate], max_new_tokens=horizon, top_k=5, max_edits_per_step_override=1,
                         score_candidate_text=False, label=f"ceiling_full:{recipe_id}", ownership_terms=(term,),

@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from SpiralInterventionLab.examples.replay_orphan_blueprint_ceiling import _edited_top1, load_source
+import hashlib
+
+from SpiralInterventionLab.examples.replay_orphan_blueprint_ceiling import (
+    _edited_top1,
+    first_piece_won,
+    load_source,
+    verify_checkpoint,
+)
 
 
 def _write(path: Path, events: list[dict]) -> Path:
@@ -70,3 +77,25 @@ def test_edited_top1_uses_edited_logit_not_listing_order() -> None:
 
     assert _edited_top1(replay) == {"piece": " Sel", "token_id": 2, "edited_prob": 0.5}
     assert _edited_top1({}) is None
+
+
+def test_first_piece_win_uses_recorded_rank_not_truncated_diff() -> None:
+    truncated_leader = {"target_rank_after": 1, "edited_top1": {"token_id": 99}}
+    listed_but_not_first = {"target_rank_after": 2, "edited_top1": {"token_id": 7}}
+
+    assert first_piece_won(truncated_leader, 7)
+    assert not first_piece_won(listed_but_not_first, 7)
+    assert first_piece_won({"edited_top1": {"token_id": 7}}, 7)
+
+
+def test_verify_checkpoint_rejects_missing_or_different_files(tmp_path: Path) -> None:
+    (tmp_path / "config.json").write_bytes(b"{}")
+    recorded = {"config.json": hashlib.sha256(b"{}").hexdigest()}
+
+    assert verify_checkpoint(tmp_path, recorded) == recorded
+    with pytest.raises(ValueError, match="differs"):
+        verify_checkpoint(tmp_path, {"config.json": "0" * 64})
+    with pytest.raises(ValueError, match="missing"):
+        verify_checkpoint(tmp_path, {**recorded, "model.safetensors": "0" * 64})
+    with pytest.raises(ValueError, match="no checkpoint"):
+        verify_checkpoint(tmp_path, {})

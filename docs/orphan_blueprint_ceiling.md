@@ -25,6 +25,10 @@ materialization paths with an unconstrained diagnostic budget. Everything is a
 quarantined replay with state restored: no controller call, rollout edit,
 production trial or apply permission. All 12 recorded prefixes were rebuilt
 without drift, and the unforced branch reproduces the recorded output and score.
+The checkpoint was verified after the fact against all eight recorded
+`checkpoint_sha256` entries of the source manifest; the tool now checks them
+before loading. No sweep row reached `target_rank_after == 1` (minimum 2), the
+criterion the tool now uses to decide a first-token win.
 
 ## Result
 
