@@ -92,6 +92,21 @@ class EpisodeResult:
     steps: int
 
 
+def _episode_task_feedback(task_env: TaskEnv, output: str) -> dict[str, Any]:
+    """Expose the existing task evaluator, without invoking a model or changing decisions."""
+    feedback = getattr(task_env, "task_feedback", None)
+    if not callable(feedback):
+        return {"task_feedback_status": "unavailable"}
+    try:
+        value = feedback(output)
+    except Exception as exc:
+        return {"task_feedback_status": "error", "task_feedback_error_type": type(exc).__name__}
+    if not isinstance(value, Mapping):
+        return {"task_feedback_status": "unavailable"}
+    return {"task_feedback_status": "ok", "task_feedback": dict(value),
+            "task_feedback_scope": "final_output_task_feedback"}
+
+
 def _coerce_jsonable(value: Any) -> Any:
     if is_dataclass(value):
         return _coerce_jsonable(asdict(value))
@@ -914,7 +929,7 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
         if isinstance(candidate, Mapping)
         else request.get("operator_recipe_id")
     )
-    return "|".join(
+    signature = "|".join(
         str(request.get(key, "") or "")
         for key in (
             "diagnostic",
@@ -925,6 +940,9 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
             "execution_id", "evidence_id", "action_id", "dose_grid", "candidate_ids", "limit", "comparison_axis",
         )
     ) + "|" + str(candidate_recipe_id or "")
+    if "probe_refresh_id" in request:
+        signature += "|" + str(request["probe_refresh_id"]) + "|" + str(request.get("terms"))
+    return signature
 
 
 def _diagnostic_requests_next_evidence(requests: Sequence[Mapping[str, Any]]) -> str | None:
@@ -2254,6 +2272,7 @@ def run_episode(
                 "output": output,
                 "score": score,
                 "task_done": task_env.done(output),
+                **_episode_task_feedback(task_env, output),
             }
         )
     return EpisodeResult(prompt=prompt, output=output, score=score, steps=step_count)

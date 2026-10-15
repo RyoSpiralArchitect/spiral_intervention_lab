@@ -17,7 +17,7 @@ DIAGNOSTICS = {
     "target_entity_insertion_probe": (
         "Inspect missing-term source spans and token reachability", "source_and_binding_evidence"),
     "entity_insertion_operator_candidate_review": (
-        "Resolve entity evidence into candidate blueprints", "unmeasured_candidate_blueprints"),
+        "Review recorded entity evidence into blueprints; no current-prefix measurement", "unmeasured_candidate_blueprints"),
     "operator_diagnostic_replay": (
         "Measure the offered operator candidates", "operator_effect_evidence"),
     "activation_patch_candidate_review": (
@@ -87,6 +87,7 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
                 or (candidate or {}).get("objective_bundle_key"),
             "candidate_id": (candidate or {}).get("candidate_id"),
             "target_piece": (candidate or {}).get("target_piece"),
+            **({"probe_terms": request["terms"]} if request.get("probe_refresh_id") else {}),
             "purpose": purpose, "prerequisites": prerequisites,
             "available": available, "blocked_reason": blocked,
             "cost": {"diagnostic_slots_upper_bound": slots,
@@ -109,11 +110,13 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
         name = str(request.get("diagnostic") or "")
         purpose, output = DIAGNOSTICS.get(name, (
             "Execute the offered diagnostic and report its evidence", "diagnostic_evidence"))
+        if name == "target_entity_insertion_probe" and request.get("probe_refresh_id"):
+            purpose = "Inspect currently missing terms not covered by recorded entity probes"
         add(request, purpose=purpose, output=output,
             prerequisites=["offered_by_runtime", "current_request_preflight_at_dispatch"],
             available=item.get("available") is not False and not item.get("blocked_reason"),
             blocked=item.get("blocked_reason"), slots=0 if name == "inspect_evidence" else 1,
-            replays=0 if name == "inspect_evidence" else None)
+            replays=0 if name in {"inspect_evidence", "entity_insertion_operator_candidate_review"} else None)
 
     choices = hints.get("candidate_diagnostic_choices") or {}
     for candidate in _rows(choices.get("cards")):

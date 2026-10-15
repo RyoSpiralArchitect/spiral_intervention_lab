@@ -1,0 +1,89 @@
+{
+  "scope": "offline fixed evidence/request audit; not a new controller rollout",
+  "source": "results/explicit_clock_llama_prefill_retry_20260928/live/c1.jsonl",
+  "source_sha256": "c6040d3282c8ee37ecfcc2117117498e98f7d182389f9f31597a96531e523d07",
+  "manifest_sha256": "8935b9f81ae5abe6edc5421640d268c9304a88093188e9cbc867342b3ee3117d",
+  "diagnostic_result_window": 12,
+  "max_diagnostic_calls_per_run": 12,
+  "other_diagnostics": "historical receipts retained; neither reexecuted nor rescored",
+  "budget_comparison": "each review begins at its historical remaining budget",
+  "comparisons": [
+    {
+      "step": 0,
+      "old_status": "candidate_blueprints_ready",
+      "new_status": "candidate_blueprints_ready",
+      "old_charge": 1,
+      "new_charge": 1,
+      "same_blueprints": true,
+      "same_review_matrix": true,
+      "source_probe_step": 0,
+      "offered": true,
+      "reason": "new_candidate_blueprints",
+      "physical_replay_count": 0,
+      "production_apply_allowed": false
+    },
+    {
+      "step": 4,
+      "old_status": "candidate_blueprints_ready",
+      "new_status": "candidate_blueprints_ready",
+      "old_charge": 1,
+      "new_charge": 1,
+      "same_blueprints": true,
+      "same_review_matrix": true,
+      "source_probe_step": 0,
+      "offered": true,
+      "reason": "new_candidate_blueprints",
+      "physical_replay_count": 0,
+      "production_apply_allowed": false
+    },
+    {
+      "step": 5,
+      "old_status": "no_candidate_blueprints",
+      "new_status": "no_candidate_blueprints",
+      "old_charge": 1,
+      "new_charge": 0,
+      "same_blueprints": true,
+      "same_review_matrix": true,
+      "source_probe_step": 0,
+      "offered": false,
+      "reason": "no_candidate_blueprints",
+      "physical_replay_count": 0,
+      "production_apply_allowed": false
+    },
+    {
+      "step": 6,
+      "old_status": "no_candidate_blueprints",
+      "new_status": "no_candidate_blueprints",
+      "old_charge": 1,
+      "new_charge": 0,
+      "same_blueprints": true,
+      "same_review_matrix": true,
+      "source_probe_step": 0,
+      "offered": false,
+      "reason": "unchanged_review_inputs",
+      "physical_replay_count": 0,
+      "production_apply_allowed": false
+    },
+    {
+      "step": 7,
+      "old_status": "no_candidate_blueprints",
+      "new_status": "no_candidate_blueprints",
+      "old_charge": 1,
+      "new_charge": 0,
+      "same_blueprints": true,
+      "same_review_matrix": true,
+      "source_probe_step": 0,
+      "offered": false,
+      "reason": "unchanged_review_inputs",
+      "physical_replay_count": 0,
+      "production_apply_allowed": false
+    }
+  ],
+  "implementation_sha256": {
+    "SpiralInterventionLab/runtime/worker.py": "6ba2960060153959777a9e1ebf35c8e5e2602e5825b2bbf14b1b161f2dfe6d91",
+    "SpiralInterventionLab/runtime/entity_candidate_review.py": "0d3e996e9a8804b81b6af62a1b2384fb7667b80e09224a19afc8322fc5bac025",
+    "SpiralInterventionLab/runtime/diagnostic_budget.py": "22556ad6363ad6d0a88cd6da1c970f9f30c674101edb58456ea5abdc229dff23",
+    "SpiralInterventionLab/runtime/operation_cards.py": "f0317abc830ebbd5ce12481e31e6ce20c7cec2bade76ab87bd5d1f493b1550b5",
+    "SpiralInterventionLab/bridge/controller_clients.py": "2af71a733d5f23c17161efa5514a6abf43a1ce879df10526dafc87f70fc204db"
+  }
+}

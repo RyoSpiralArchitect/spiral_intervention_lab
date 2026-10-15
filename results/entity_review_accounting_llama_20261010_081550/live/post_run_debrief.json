@@ -1,0 +1,89 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run ended after 18 steps with the same coherent output, but `task_done` was false (`c1.jsonl:L306`).\n- The controller issued diagnostics and no interventions; one current-prefix remeasurement was executed (`c1.jsonl:L46`, `c1.jsonl:L146`).\n- Candidate production trials remained blocked (`c1.jsonl:L122`, `c1.jsonl:L146`).\n\n## What made the run difficult?\n- Historical candidate evidence was explicitly not revalidated (`c1.jsonl:L49`).\n- Matched probes showed target lift only within repeat variation (`c1.jsonl:L122`).\n- The current-prefix measurement slightly reduced target-piece logit while rank stayed first (`c1.jsonl:L146`).\n\n## Most likely failure factors\n- Candidate effects were too small or inconsistent for the trial gates (`c1.jsonl:L122`).\n- One candidate lacked canonical binding and both failed bound-target-lift checks (`c1.jsonl:L122`).\n- The observed completion did not satisfy the task condition despite a high score (`c1.jsonl:L306`).\n\n## Evidence supporting this reading\n- The matched-response matrix reported restored state and six physical replays (`c1.jsonl:L122`).\n- Both handoffs were marked `production_trial_allowed: false` (`c1.jsonl:L122`).\n- The final output remained unchanged across the recorded runs (`c1.jsonl:L306`).\n\n## What I would try next\n- Compare more current-prefix measurements against the matched controls before interpreting candidate value.\n- Preserve explicit separation between diagnostic evidence and any later intervention decision.\n- Inspect task-completion criteria alongside output quality rather than using score alone.\n\n## What would have made this easier?\n- shown_but_ambiguous | `c1.jsonl:L146` | word completion and position quality: the measurement exposes “open_text” and unknown lookahead, limiting interpretation -> suggested_field: explicit completion boundary and position-quality status.\n- shown_but_ambiguous | `c1.jsonl:L122` | response-above-variation basis: the gate is reported, but its uncertainty summary is not shown -> suggested_field: replicate-level effect distribution and variation threshold.\n- missing_at_runtime | `c1.jsonl:L306` | task-completion rationale: `task_done` is false without a visible reason -> suggested_field: structured completion-condition failures.\n\n## What should not be concluded\n- The run does not establish that any intervention would have improved the task.\n- The blocked candidates should not be treated as unsafe or ineffective beyond the supplied diagnostic gates.\n- The high score should not be treated as task success.\n\n## Controller-perspective note\n- I would describe a coherent output that still lacked task completion.\n- I kept seeing diagnostic evidence fail the trial gates.\n- I lacked evidence that the candidate response exceeded repeat variation.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_0360169af569565b006ac977973ccc87d2a1826f4726a7315a",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L119",
+        "c1.jsonl:L120",
+        "c1.jsonl:L121",
+        "c1.jsonl:L122",
+        "c1.jsonl:L143",
+        "c1.jsonl:L144",
+        "c1.jsonl:L145",
+        "c1.jsonl:L146",
+        "c1.jsonl:L306",
+        "c1.jsonl:L46",
+        "c1.jsonl:L47",
+        "c1.jsonl:L48",
+        "c1.jsonl:L49"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 294,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 308
+    },
+    "event_counts": {
+      "controller_clock_decision": 26,
+      "controller_command": 26,
+      "controller_decision": 26,
+      "controller_diagnostic_request": 8,
+      "controller_diagnostic_result": 8,
+      "controller_effect_summary": 18,
+      "controller_loop_patience": 13,
+      "controller_observation": 26,
+      "controller_operation_menu": 26,
+      "controller_prompt_telemetry": 26,
+      "controller_provider_attempt": 26,
+      "controller_selection": 26,
+      "episode_end": 2,
+      "episode_start": 2,
+      "generation_commit": 18,
+      "generation_token_committed": 18,
+      "initial_observation_prepared": 1,
+      "observer_check": 4,
+      "prefix_inspection_complete": 8
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L122",
+      "c1.jsonl:L146",
+      "c1.jsonl:L306",
+      "c1.jsonl:L46",
+      "c1.jsonl:L49"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 5741,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=5738)",
+    "output_tokens": 720,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=126)",
+    "total_tokens": 6461
+  }
+}

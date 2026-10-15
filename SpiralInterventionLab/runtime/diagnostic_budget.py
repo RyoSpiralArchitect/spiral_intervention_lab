@@ -3,8 +3,12 @@ from typing import Any
 
 
 def used(worker: Any) -> int:
+    retained_cost = sum(
+        int(row.get("diagnostic_call_cost", bool(row.get("diagnostic_budget_charged", True))))
+        for row in getattr(worker, "_diagnostic_results", ())
+    )
     return max(int(getattr(worker, "_diagnostic_calls_used", 0)),
-               len(getattr(worker, "_diagnostic_results", ())))
+               retained_cost)
 
 
 def left(worker: Any) -> int:

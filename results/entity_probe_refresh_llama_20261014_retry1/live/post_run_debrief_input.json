@@ -1,0 +1,727 @@
+{
+  "artifact_kind": "post_run_controller_debrief_packet",
+  "do_not_autofeed_into_next_run": true,
+  "interpretation_boundary": "The debrief may summarize controller trajectory evidence, but it is not a metric, not a success label, and not an authorization signal for future apply decisions.",
+  "log_digest": {
+    "candidate_action_summary": {
+      "cached_measurement_count": 0,
+      "diagnostic_budget_charged": 1,
+      "executed_actions": {
+        "remeasure_current_prefix": 1
+      },
+      "new_measurement_count": 1,
+      "physical_replay_count": 4,
+      "scope": "public_diagnostic_results_not_rollout_apply_or_intervention_success",
+      "statuses": {
+        "measured": 1
+      }
+    },
+    "controller_step_views_tail": [],
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L119",
+        "c1.jsonl:L120",
+        "c1.jsonl:L121",
+        "c1.jsonl:L122",
+        "c1.jsonl:L143",
+        "c1.jsonl:L144",
+        "c1.jsonl:L145",
+        "c1.jsonl:L146",
+        "c1.jsonl:L356",
+        "c1.jsonl:L46",
+        "c1.jsonl:L47",
+        "c1.jsonl:L48",
+        "c1.jsonl:L49"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 344,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 358
+    },
+    "event_anchors": [
+      {
+        "anchor_kind": "first_event",
+        "anchor_kinds": [
+          "first_event"
+        ],
+        "event": "episode_start",
+        "event_id": "b0.jsonl:L1",
+        "related_events": [],
+        "visible_fields": [
+          "event_id",
+          "event"
+        ]
+      },
+      {
+        "anchor_kind": "termination",
+        "anchor_kinds": [
+          "termination"
+        ],
+        "event": "episode_end",
+        "event_id": "c1.jsonl:L356",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "related_events": [],
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "steps",
+          "output",
+          "score",
+          "task_done"
+        ]
+      },
+      {
+        "anchor_kind": "first_materialization",
+        "anchor_kinds": [
+          "first_materialization"
+        ],
+        "budget_after": {
+          "diagnostic_calls_left": 9,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "actual_delta_class": "readout_gap_movement",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:245c15c89ae51534ae0f6ea2",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+            "target_mass_delta": 5e-06,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.085938,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.085938
+          },
+          {
+            "actual_delta_class": "readout_gap_movement",
+            "actuator_class": "self_actuator",
+            "evidence_id": "evidence:6c65f0cce1c195774201ed27",
+            "evidence_scope": "historical_context_not_revalidated",
+            "operator_recipe_id": "readout_escape|readout_steering|readout_direction|entity_target_readout|readout_unembed|target_readout_minus_attractor@0.050|a0.0400",
+            "target_mass_delta": 5e-06,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.085938,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": -0.085938
+          }
+        ],
+        "candidate_rows_omitted": 0,
+        "diagnostic": "operator_diagnostic_replay",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L49",
+        "matrix": {
+          "measurement_context_id": null,
+          "measurement_mode": null,
+          "new_measurement_count": null,
+          "no_edit_max_abs_logit_delta": null,
+          "physical_replay_count": null,
+          "row_count": 0,
+          "state_restored": null,
+          "status": "not_requested",
+          "unavailable_reason": null
+        },
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "generation_action": "inspect_prefix",
+                "micro_rationale": "Measure the offered operator candidate before considering any intervention."
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L46",
+            "step": 1,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L47",
+            "step": 1,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "diagnostic": "operator_diagnostic_replay",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L48",
+            "step": 1,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic"
+            ]
+          }
+        ],
+        "status": "ok",
+        "step": 1,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      },
+      {
+        "anchor_kind": "first_actual_matrix",
+        "anchor_kinds": [
+          "first_actual_matrix",
+          "first_negative_outcome"
+        ],
+        "blocked_reason": null,
+        "budget_after": {
+          "diagnostic_calls_left": 5,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 6,
+          "inspection_calls_left": 4
+        },
+        "candidate_rows": [
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "target_lift",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "actuator_class": "cross_bound",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:cd724427d33ee490fa07a77c",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:bf802ec52606f59d2189ae0e",
+            "operator_recipe_id": "matched_recipe:8507384ff0ad1d098425d703",
+            "seed_source": "direct_candidate",
+            "target_mass_delta": 2.3e-05,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "dead_actuator",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "actuator_class": "bridge_actuator",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:68b233c0bce45d2e6c38c09f",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:84de5c4aa694d30756666590",
+            "operator_recipe_id": "matched_recipe:a383f20bbb8ba45b4e56f0f7",
+            "seed_source": "direct_candidate",
+            "target_mass_delta": -1e-06,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "dead_actuator",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "actuator_class": "bridge_actuator",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:db491b163861e8067ad2b5bf",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:84de5c4aa694d30756666590",
+            "operator_recipe_id": "matched_recipe:a383f20bbb8ba45b4e56f0f7",
+            "seed_source": "direct_candidate",
+            "target_mass_delta": -1e-06,
+            "target_piece": " Sample",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "target_lift",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "actuator_class": "cross_bound",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_id": "obs:10e5419521f9f76ac36fcdba",
+            "evidence_scope": "frozen_prefix_diagnostic",
+            "execution_id": "exec:bf802ec52606f59d2189ae0e",
+            "operator_recipe_id": "matched_recipe:8507384ff0ad1d098425d703",
+            "seed_source": "direct_candidate",
+            "target_mass_delta": 2.3e-05,
+            "target_piece": " Sample",
+            "target_piece_logit_delta": 0.0,
+            "target_top20_hit_delta": 0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          }
+        ],
+        "candidate_rows_omitted": 0,
+        "candidate_trial_handoffs": [
+          {
+            "blocked_reasons": [
+              "bound_target_lift",
+              "response_above_variation"
+            ],
+            "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+            "checks": {
+              "bound_target_lift": false,
+              "canonical_binding": true,
+              "complete_restored_measurement": true,
+              "concrete_execution": true,
+              "finite_controls_and_readout": true,
+              "hook_executed": true,
+              "no_observed_harm": true,
+              "response_above_variation": false,
+              "same_context": true
+            },
+            "evidence_id": "obs:8be4955e8e8371fe69eeb84f",
+            "production_trial_allowed": false,
+            "status": "blocked"
+          },
+          {
+            "blocked_reasons": [
+              "canonical_binding",
+              "bound_target_lift",
+              "response_above_variation"
+            ],
+            "candidate_id": "frozen_candidate:f39f73eed2aebd6222ac5d34",
+            "checks": {
+              "bound_target_lift": false,
+              "canonical_binding": false,
+              "complete_restored_measurement": true,
+              "concrete_execution": true,
+              "finite_controls_and_readout": true,
+              "hook_executed": true,
+              "no_observed_harm": true,
+              "response_above_variation": false,
+              "same_context": true
+            },
+            "evidence_id": "obs:57085117ad918aaa0694df63",
+            "production_trial_allowed": false,
+            "status": "blocked"
+          }
+        ],
+        "diagnostic": "matched_response_probe",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L122",
+        "matrix": {
+          "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+          "measurement_mode": "matched_response_probe",
+          "new_measurement_count": 2,
+          "no_edit_max_abs_logit_delta": 0.0,
+          "physical_replay_count": 6,
+          "row_count": 4,
+          "state_restored": true,
+          "status": "dose_matched_response_complete",
+          "unavailable_reason": null
+        },
+        "new_measurement_count": 2,
+        "physical_replay_count": 6,
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "generation_action": "inspect_prefix",
+                "micro_rationale": "Matched-control measurements are needed to validate the promising gap-closing signal before any intervention."
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L119",
+            "step": 3,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L120",
+            "step": 3,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "diagnostic": "matched_response_probe",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L121",
+            "step": 3,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic"
+            ]
+          }
+        ],
+        "status": "dose_matched_response_complete",
+        "step": 3,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "new_measurement_count",
+          "physical_replay_count",
+          "blocked_reason",
+          "candidate_trial_handoffs",
+          "matrix",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      },
+      {
+        "anchor_kind": "first_candidate_action",
+        "anchor_kinds": [
+          "first_candidate_action",
+          "first_current_prefix_measurement",
+          "last_current_prefix_measurement"
+        ],
+        "blocked_reason": null,
+        "budget_after": {
+          "diagnostic_calls_left": 4,
+          "inspection_calls_left": 4
+        },
+        "budget_before": {
+          "diagnostic_calls_left": 5,
+          "inspection_calls_left": 4
+        },
+        "candidate_action": {
+          "action_id": "action:3f27a5153480def7a6513333",
+          "blocked_reason": null,
+          "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+          "current_context_id": "context:042f2cb77aba705f521c2fbd",
+          "diagnostic_budget_charged": true,
+          "evidence": {
+            "continuation_identical": true,
+            "measurement_context_id": "context:042f2cb77aba705f521c2fbd",
+            "measurement_position": {
+              "generated_token_count": 4,
+              "last_token_piece": " the",
+              "prefix_tail": " Nora will take the",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 4
+            },
+            "metrics": {
+              "bound_token_top20_hit_delta": 0,
+              "target_piece_logit_delta": -0.015625,
+              "target_piece_prob_delta": -0.00013083955248971435,
+              "target_rank_after": 1,
+              "target_rank_before": 1,
+              "target_top20_threshold_gap_delta": 0.015625
+            },
+            "no_edit_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "repeat_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "state_restored": true,
+            "target_piece": " sample",
+            "target_piece_token_id": 6205
+          },
+          "evidence_scope": "frozen_candidate_current_prefix_measurement",
+          "executed_action": "remeasure_current_prefix",
+          "measurement_context_id": "context:042f2cb77aba705f521c2fbd",
+          "production_apply_allowed": false,
+          "requested_action": "remeasure_current_prefix",
+          "requested_position": {
+            "generated_token_count": 4,
+            "last_token_piece": " the",
+            "prefix_tail": " Nora will take the",
+            "scope": "observed_prefix_only_not_position_quality",
+            "trailing_surface": "open_text",
+            "word_completion": "unknown_without_lookahead",
+            "worker_step": 4
+          }
+        },
+        "candidate_rows": [
+          {
+            "activation_patch_step_size": 0.04,
+            "actual_delta_class": "unassessed",
+            "actuator_class": "unknown",
+            "evidence_id": "obs:6d1079a6b8bce2194aec4fad",
+            "evidence_scope": "current_prefix_readout_only_not_trial_certification",
+            "execution_id": "exec:b4ff1aeae39e5af3dfaa6ce6",
+            "operator_recipe_id": "matched_recipe:a383f20bbb8ba45b4e56f0f7",
+            "target_piece": " sample",
+            "target_piece_logit_delta": -0.015625,
+            "target_top20_threshold_gap_delta": 0.015625,
+            "threshold20_logit_delta": 0.0
+          }
+        ],
+        "candidate_rows_omitted": 0,
+        "candidate_trial_handoffs": [
+          {
+            "blocked_reasons": [
+              "bound_target_lift",
+              "response_above_variation"
+            ],
+            "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+            "checks": {
+              "bound_target_lift": false,
+              "canonical_binding": true,
+              "complete_restored_measurement": true,
+              "concrete_execution": true,
+              "finite_controls_and_readout": true,
+              "hook_executed": true,
+              "no_observed_harm": true,
+              "response_above_variation": false,
+              "same_context": true
+            },
+            "evidence_id": "obs:6d1079a6b8bce2194aec4fad",
+            "production_trial_allowed": false,
+            "status": "blocked"
+          }
+        ],
+        "diagnostic": "candidate_action",
+        "event": "controller_diagnostic_result",
+        "event_id": "c1.jsonl:L146",
+        "new_measurement_count": 1,
+        "physical_replay_count": 4,
+        "related_events": [
+          {
+            "command": {
+              "decision": "noop",
+              "edit_count": 0,
+              "meta": {
+                "generation_action": "inspect_prefix",
+                "micro_rationale": "Current-prefix measurement is needed because prior candidate evidence is stale and target lift remains uncertified."
+              }
+            },
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_command",
+            "event_id": "c1.jsonl:L143",
+            "step": 4,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals",
+              "command"
+            ]
+          },
+          {
+            "controller_rejected_signals": [],
+            "controller_selected_bundle_key": null,
+            "controller_selection_source": "controller_noop",
+            "event": "controller_selection",
+            "event_id": "c1.jsonl:L144",
+            "step": 4,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "controller_selection_source",
+              "controller_selected_bundle_key",
+              "controller_rejected_signals"
+            ]
+          },
+          {
+            "candidate_action": {
+              "action_id": "action:3f27a5153480def7a6513333"
+            },
+            "diagnostic": "candidate_action",
+            "event": "controller_diagnostic_request",
+            "event_id": "c1.jsonl:L145",
+            "step": 4,
+            "visible_fields": [
+              "event_id",
+              "event",
+              "step",
+              "diagnostic",
+              "candidate_action"
+            ]
+          }
+        ],
+        "requested_action": "remeasure_current_prefix",
+        "status": "measured",
+        "step": 4,
+        "visible_fields": [
+          "event_id",
+          "event",
+          "step",
+          "diagnostic",
+          "status",
+          "budget_before",
+          "budget_after",
+          "new_measurement_count",
+          "physical_replay_count",
+          "requested_action",
+          "blocked_reason",
+          "candidate_trial_handoffs",
+          "candidate_action",
+          "candidate_rows",
+          "candidate_rows_omitted"
+        ]
+      }
+    ],
+    "event_counts": {
+      "controller_clock_decision": 30,
+      "controller_command": 30,
+      "controller_decision": 30,
+      "controller_diagnostic_request": 12,
+      "controller_diagnostic_result": 12,
+      "controller_effect_summary": 18,
+      "controller_loop_patience": 19,
+      "controller_observation": 30,
+      "controller_operation_menu": 30,
+      "controller_prompt_telemetry": 30,
+      "controller_provider_attempt": 30,
+      "controller_selection": 30,
+      "episode_end": 2,
+      "episode_start": 2,
+      "generation_commit": 18,
+      "generation_token_committed": 18,
+      "initial_observation_prepared": 1,
+      "observer_check": 4,
+      "prefix_inspection_complete": 12
+    },
+    "jsonl_file_count": 2,
+    "log_dir": "/Users/ryospiralarchitect/spiral_intervention_lab/results/entity_probe_refresh_llama_20261014_retry1/live",
+    "log_files": [
+      {
+        "event_counts": {
+          "episode_end": 1,
+          "episode_start": 1
+        },
+        "path": "b0.jsonl",
+        "sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e"
+      },
+      {
+        "event_counts": {
+          "controller_clock_decision": 30,
+          "controller_command": 30,
+          "controller_decision": 30,
+          "controller_diagnostic_request": 12,
+          "controller_diagnostic_result": 12,
+          "controller_effect_summary": 18,
+          "controller_loop_patience": 19,
+          "controller_observation": 30,
+          "controller_operation_menu": 30,
+          "controller_prompt_telemetry": 30,
+          "controller_provider_attempt": 30,
+          "controller_selection": 30,
+          "episode_end": 1,
+          "episode_start": 1,
+          "generation_commit": 18,
+          "generation_token_committed": 18,
+          "initial_observation_prepared": 1,
+          "observer_check": 4,
+          "prefix_inspection_complete": 12
+        },
+        "path": "c1.jsonl",
+        "sha256": "0626b1e17fecb74040ad59a43485a11b1406892bc0170a13b04689f43e83b317"
+      }
+    ]
+  },
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "output_diet_contract": {
+    "max_bullets_per_section": 3,
+    "qualitative_affordances_only": true,
+    "what_would_have_helped_schema": "missing_signal: why_it_would_help -> suggested_field"
+  },
+  "qualitative_only": true,
+  "required_output_sections": [
+    "What happened?",
+    "What made the run difficult?",
+    "Most likely failure factors",
+    "Evidence supporting this reading",
+    "What I would try next",
+    "What would have made this easier?",
+    "What should not be concluded",
+    "Controller-perspective note"
+  ],
+  "run_result_digest": {
+    "b0": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "b1": null,
+    "c1": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "controller_model_name": "gpt-5.6-luna",
+    "controller_provider": "openai",
+    "controller_reflection_mode": "off",
+    "seed": 0,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1",
+    "worker_decoder_control_mode": "off",
+    "worker_loop_rescue_edits_per_run": 0,
+    "worker_model_name": "meta-llama/Llama-3.2-3B-Instruct"
+  }
+}

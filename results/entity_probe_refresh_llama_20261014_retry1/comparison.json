@@ -1,0 +1,648 @@
+{
+  "schema_version": "entity_probe_refresh_comparison.v1",
+  "analysis_date_jst": "2026-10-14",
+  "checks": {
+    "profile": true,
+    "fixture": true,
+    "checkpoint_sha256": true,
+    "versions": true,
+    "candidate_handoff_mode": true,
+    "controller_action_view": true,
+    "generation_clock_mode": true,
+    "mps_memory_fraction": true,
+    "argv_except_output": true,
+    "fresh_baseline_reference_match": true,
+    "all_18_precommit_prefixes_match": true,
+    "source_unchanged_during_run": true
+  },
+  "changed_source_files": [
+    "SpiralInterventionLab/bridge/controller_clients.py",
+    "SpiralInterventionLab/runtime/entity_probe_refresh.py",
+    "SpiralInterventionLab/runtime/loop.py",
+    "SpiralInterventionLab/runtime/operation_cards.py",
+    "SpiralInterventionLab/runtime/worker.py",
+    "SpiralInterventionLab/tests/test_entity_probe_refresh.py"
+  ],
+  "before": {
+    "run": "results/entity_review_accounting_llama_20261010_081550",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "task_done": false,
+    "last_missing_terms": [
+      "Selim"
+    ],
+    "diagnostic_slots_used": 8,
+    "refresh_count": 0,
+    "first_measured_card": {
+      "step": 3,
+      "diagnostics_used": 7
+    },
+    "distinct_frozen_card_count": 2,
+    "new_term_blueprint_count": 0,
+    "visible_trial_offers": 0,
+    "committed_edits": 0,
+    "inspection_rounds": 8,
+    "generation_commits": 18,
+    "fallback_commits": 0,
+    "provider_parse_results": {
+      "True": 26
+    },
+    "usage_excluding_debrief": {
+      "input_tokens": 545223,
+      "output_tokens": 3373,
+      "cached_input_tokens": 0
+    },
+    "diagnostic_timeline": [
+      {
+        "step": 0,
+        "diagnostic": "target_entity_insertion_probe",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": "",
+        "charged_slots": 1,
+        "slots_left": 11
+      },
+      {
+        "step": 0,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": [
+          "sample"
+        ],
+        "candidate_blueprint_count": 1,
+        "source_probe_recorded_step": 0,
+        "source_probe_is_current_prefix": true,
+        "entity_candidate_review_input_id": "entity-review:c18ee86b29e5d07046de2442",
+        "new_candidate_blueprint_count": 1,
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "prefix": "",
+        "charged_slots": 1,
+        "slots_left": 10
+      },
+      {
+        "step": 1,
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora",
+        "charged_slots": 1,
+        "slots_left": 9,
+        "materialized_terms": [
+          "sample"
+        ]
+      },
+      {
+        "step": 1,
+        "diagnostic": "compare_extra_operator_diagnostics",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora",
+        "charged_slots": 1,
+        "slots_left": 8
+      },
+      {
+        "step": 2,
+        "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora will",
+        "charged_slots": 1,
+        "slots_left": 7
+      },
+      {
+        "step": 2,
+        "diagnostic": "activation_patch_candidate_review",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora will",
+        "charged_slots": 1,
+        "slots_left": 6
+      },
+      {
+        "step": 3,
+        "diagnostic": "matched_response_probe",
+        "status": "dose_matched_response_complete",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": 2,
+        "physical_replay_count": 6,
+        "prefix": " Nora will take",
+        "charged_slots": 1,
+        "slots_left": 5
+      },
+      {
+        "step": 4,
+        "diagnostic": "candidate_action",
+        "status": "measured",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": 1,
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the",
+        "charged_slots": 1,
+        "slots_left": 4
+      }
+    ]
+  },
+  "after": {
+    "run": "results/entity_probe_refresh_llama_20261014_retry1",
+    "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "task_done": false,
+    "last_missing_terms": [
+      "Selim"
+    ],
+    "diagnostic_slots_used": 12,
+    "refresh_count": 1,
+    "first_measured_card": {
+      "step": 3,
+      "diagnostics_used": 7
+    },
+    "distinct_frozen_card_count": 2,
+    "new_term_blueprint_count": 3,
+    "visible_trial_offers": 0,
+    "committed_edits": 0,
+    "inspection_rounds": 12,
+    "generation_commits": 18,
+    "fallback_commits": 0,
+    "provider_parse_results": {
+      "True": 30
+    },
+    "usage_excluding_debrief": {
+      "input_tokens": 621478,
+      "output_tokens": 3960,
+      "cached_input_tokens": 0
+    },
+    "diagnostic_timeline": [
+      {
+        "step": 0,
+        "diagnostic": "target_entity_insertion_probe",
+        "status": "ok",
+        "probe_kind": "entity_readout",
+        "requested_terms": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo"
+        ],
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": 1,
+        "physical_replay_count": 0,
+        "prefix": "",
+        "charged_slots": 1,
+        "slots_left": 11
+      },
+      {
+        "step": 0,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": [
+          "sample"
+        ],
+        "candidate_blueprint_count": 1,
+        "source_probe_recorded_step": 0,
+        "source_probe_is_current_prefix": true,
+        "entity_candidate_review_input_id": "entity-review:c18ee86b29e5d07046de2442",
+        "new_candidate_blueprint_count": 1,
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "prefix": "",
+        "charged_slots": 1,
+        "slots_left": 10
+      },
+      {
+        "step": 1,
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora",
+        "charged_slots": 1,
+        "slots_left": 9,
+        "materialized_terms": [
+          "sample"
+        ]
+      },
+      {
+        "step": 1,
+        "diagnostic": "compare_extra_operator_diagnostics",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora",
+        "charged_slots": 1,
+        "slots_left": 8
+      },
+      {
+        "step": 2,
+        "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora will",
+        "charged_slots": 1,
+        "slots_left": 7
+      },
+      {
+        "step": 2,
+        "diagnostic": "activation_patch_candidate_review",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora will",
+        "charged_slots": 1,
+        "slots_left": 6
+      },
+      {
+        "step": 3,
+        "diagnostic": "matched_response_probe",
+        "status": "dose_matched_response_complete",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": 2,
+        "physical_replay_count": 6,
+        "prefix": " Nora will take",
+        "charged_slots": 1,
+        "slots_left": 5
+      },
+      {
+        "step": 4,
+        "diagnostic": "candidate_action",
+        "status": "measured",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": 1,
+        "physical_replay_count": 4,
+        "prefix": " Nora will take the",
+        "charged_slots": 1,
+        "slots_left": 4
+      },
+      {
+        "step": 4,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": [
+          "sample"
+        ],
+        "candidate_blueprint_count": 1,
+        "source_probe_recorded_step": 0,
+        "source_probe_is_current_prefix": false,
+        "entity_candidate_review_input_id": "entity-review:67eec57275ca4c02ff2de95e",
+        "new_candidate_blueprint_count": 1,
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "prefix": " Nora will take the",
+        "charged_slots": 1,
+        "slots_left": 3
+      },
+      {
+        "step": 5,
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": null,
+        "physical_replay_count": null,
+        "prefix": " Nora will take the sample",
+        "charged_slots": 1,
+        "slots_left": 2,
+        "materialized_terms": [
+          "sample"
+        ]
+      },
+      {
+        "step": 5,
+        "diagnostic": "target_entity_insertion_probe",
+        "status": "ok",
+        "probe_kind": "missing_term_refresh",
+        "requested_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara"
+        ],
+        "candidate_terms": null,
+        "candidate_blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "source_probe_is_current_prefix": null,
+        "entity_candidate_review_input_id": null,
+        "new_candidate_blueprint_count": null,
+        "new_measurement_count": 1,
+        "physical_replay_count": 0,
+        "prefix": " Nora will take the sample",
+        "charged_slots": 1,
+        "slots_left": 1
+      },
+      {
+        "step": 6,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "probe_kind": null,
+        "requested_terms": null,
+        "candidate_terms": [
+          "report",
+          "send",
+          "Selim"
+        ],
+        "candidate_blueprint_count": 3,
+        "source_probe_recorded_step": 5,
+        "source_probe_is_current_prefix": false,
+        "entity_candidate_review_input_id": "entity-review:2472fe7bc2a02c30311659d1",
+        "new_candidate_blueprint_count": 3,
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "prefix": " Nora will take the sample to",
+        "charged_slots": 1,
+        "slots_left": 0
+      }
+    ]
+  },
+  "refresh_chain": {
+    "probe_step": 5,
+    "probe_refresh_id": "entity-probe-refresh:b46a679e6b6041f10c80254c",
+    "terms": [
+      "Selim",
+      "send",
+      "report",
+      "Yara"
+    ],
+    "term_readout_rows": [
+      {
+        "first_piece": " Y",
+        "first_token_id": 816,
+        "logit": 14.195312,
+        "prob": 0.00013776,
+        "rank": 19,
+        "readout_status": "top20_reachable",
+        "source_provenance": "source_body",
+        "source_span": {
+          "end": 96,
+          "length": 2,
+          "pieces": [
+            " Y",
+            "ara"
+          ],
+          "provenance_class": "source_body",
+          "segment_kind": "prompt",
+          "span_kind": "exact_prompt_span",
+          "start": 94,
+          "text": " Yara"
+        },
+        "span_progress": 0.0,
+        "term": "Yara",
+        "top20_hit": true,
+        "variant": " Yara"
+      },
+      {
+        "first_piece": " report",
+        "first_token_id": 1934,
+        "logit": 12.757812,
+        "prob": 3.272e-05,
+        "rank": 41,
+        "readout_status": "near_reachable",
+        "source_provenance": "source_body",
+        "source_span": {
+          "end": 93,
+          "length": 1,
+          "pieces": [
+            " report"
+          ],
+          "provenance_class": "source_body",
+          "segment_kind": "prompt",
+          "span_kind": "exact_prompt_span",
+          "start": 92,
+          "text": " report"
+        },
+        "span_progress": 0.0,
+        "term": "report",
+        "top20_hit": false,
+        "variant": " report"
+      },
+      {
+        "first_piece": " send",
+        "first_token_id": 3708,
+        "logit": 12.101562,
+        "prob": 1.697e-05,
+        "rank": 64,
+        "readout_status": "near_reachable",
+        "source_provenance": "source_body",
+        "source_span": {
+          "end": 91,
+          "length": 1,
+          "pieces": [
+            " send"
+          ],
+          "provenance_class": "source_body",
+          "segment_kind": "prompt",
+          "span_kind": "exact_prompt_span",
+          "start": 90,
+          "text": " send"
+        },
+        "span_progress": 0.0,
+        "term": "send",
+        "top20_hit": false,
+        "variant": " send"
+      },
+      {
+        "first_piece": " Sel",
+        "first_token_id": 24082,
+        "logit": 10.640625,
+        "prob": 3.94e-06,
+        "rank": 119,
+        "readout_status": "near_reachable",
+        "source_provenance": "source_body",
+        "source_span": {
+          "end": 89,
+          "length": 2,
+          "pieces": [
+            " Sel",
+            "im"
+          ],
+          "provenance_class": "source_body",
+          "segment_kind": "prompt",
+          "span_kind": "exact_prompt_span",
+          "start": 87,
+          "text": " Selim"
+        },
+        "span_progress": 0.0,
+        "term": "Selim",
+        "top20_hit": false,
+        "variant": " Selim"
+      }
+    ],
+    "new_readout_measurements": 1,
+    "edited_physical_replays": 0,
+    "readout_cache_restored": true,
+    "candidate_review_step": 6,
+    "source_probe_recorded_step": 5,
+    "source_probe_is_current_prefix": false,
+    "candidate_terms": [
+      "report",
+      "send",
+      "Selim"
+    ],
+    "candidate_blueprint_count": 3,
+    "candidate_review_new_measurements": 0,
+    "slots_left_after_review": 0,
+    "post_refresh_operator_replay_count": 0,
+    "production_apply_allowed": false,
+    "certified_for_apply": false
+  },
+  "identical_blueprint_rereview": {
+    "steps": [
+      0,
+      4
+    ],
+    "input_ids": [
+      "entity-review:c18ee86b29e5d07046de2442",
+      "entity-review:67eec57275ca4c02ff2de95e"
+    ],
+    "candidate_blueprints_equal": true,
+    "second_review_charged_slots": 1,
+    "old_sample_replay_step": 5,
+    "old_sample_replay_before_refresh": true,
+    "interpretation": "review-input novelty did not imply candidate novelty; the later replay ran at a different prefix and is not itself an identical-measurement duplicate"
+  },
+  "interrupted_attempt": {
+    "run": "results/entity_probe_refresh_llama_20261014_170447",
+    "excluded_from_completed_outcome_comparison": true,
+    "note_sha256": "9e201d3dbd9042bc44e362a08ab2bb19bd6b9c76aa35d18644df6dc255786aef"
+  },
+  "limitations": [
+    "One completed controller trajectory per revision, not a causal efficacy estimate.",
+    "New term readout and unmeasured blueprints are not target-owned lift, frozen measured cards or apply permission.",
+    "Candidate review at step 6 reused step-5 readout; it was not a fresh step-6 measurement.",
+    "Same blueprint equality supports a review-accounting finding, not a claim that an unrun intervention would succeed.",
+    "The post-run interview omitted 344 trace lines; do not infer missing runtime evidence from that excerpt.",
+    "MPS numerics were not independently qualified against CPU."
+  ],
+  "artifact_hashes": {
+    "results/entity_review_accounting_llama_20261010_081550/manifest.json": "45c18983dcf56126e2da4d95ae1d1d18f3bbf2916ea617fc360255a572808d6d",
+    "results/entity_review_accounting_llama_20261010_081550/audit.json": "c22e1ec296e11dd1eeee6049b8f536e32955d70e5ef99884e9594057f681c995",
+    "results/entity_review_accounting_llama_20261010_081550/live/c1.jsonl": "df7c7368eeb490776c228001f9917a2b5e05cd90098b9b189524bf7d1392bce8",
+    "results/entity_review_accounting_llama_20261010_081550/live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "results/entity_probe_refresh_llama_20261014_retry1/manifest.json": "8dae8ce36368dfccf0a326a3ca331be4864a9828f72ff255b33dc7894511a4ef",
+    "results/entity_probe_refresh_llama_20261014_retry1/audit.json": "f7b97c654c02a47cf6b3c22c49f19b1dacf03ad682a598c8675952086a23c5d9",
+    "results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl": "0626b1e17fecb74040ad59a43485a11b1406892bc0170a13b04689f43e83b317",
+    "results/entity_probe_refresh_llama_20261014_retry1/live/b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e"
+  }
+}
