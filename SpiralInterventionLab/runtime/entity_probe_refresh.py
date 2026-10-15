@@ -11,6 +11,12 @@ from .response_probe import identity
 
 NAME = "target_entity_insertion_probe"
 MAX_TERMS = 4
+UNMEASURED_STATUSES = frozenset({"stale_refresh_request", "error"})
+
+
+def is_recorded_probe(row: Any) -> bool:
+    """A probe receipt that measured readout rows; rejected or failed refreshes are not evidence."""
+    return isinstance(row, Mapping) and row.get("diagnostic") == NAME and row.get("status") not in UNMEASURED_STATUSES
 
 
 def terms(value: Any) -> list[str]:

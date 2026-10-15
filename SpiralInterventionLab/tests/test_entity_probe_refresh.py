@@ -130,6 +130,22 @@ def test_existing_blueprints_and_exhausted_budget_do_not_offer_refresh():
     assert worker.request_controller_diagnostics(refresh_request(worker)) == []
 
 
+@pytest.mark.parametrize("failure", ["stale", "error"])
+def test_unmeasured_refresh_receipts_do_not_replace_the_recorded_probe(failure):
+    worker = worker_with_probe()
+    recorded = worker._diagnostic_results[0]
+    unmeasured = {"diagnostic": entity_probe_refresh.NAME, "recorded_step": 3,
+                  "status": "stale_refresh_request" if failure == "stale" else "error"}
+    worker._latest_diagnostic_results = [unmeasured]
+    worker._diagnostic_results.append(dict(unmeasured))
+    assert not entity_probe_refresh.is_recorded_probe(unmeasured)
+    assert entity_probe_refresh.is_recorded_probe(recorded)
+    review = worker.request_controller_diagnostics({"diagnostic": NAME})[0]
+    assert review["status"] == "candidate_blueprints_ready"
+    assert review["source_probe_recorded_step"] == recorded["recorded_step"]
+    assert worker._entity_probe_refresh_report()["pending_blueprint_count"] == 0
+
+
 def test_reviewed_blueprints_no_longer_block_refresh_for_unprobed_terms():
     worker = worker_with_probe()
     worker._last_task_feedback = {"missing_required_terms": ["sample", "Ivo", "Selim", "Yara"]}

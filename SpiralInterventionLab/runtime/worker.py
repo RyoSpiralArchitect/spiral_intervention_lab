@@ -1558,8 +1558,7 @@ class HookedTransformerWorkerRuntime:
                     (
                         result
                         for result in reversed(results)
-                        if isinstance(result, Mapping)
-                        and str(result.get("diagnostic") or "") == "target_entity_insertion_probe"
+                        if entity_refresh.is_recorded_probe(result)
                     ),
                     None,
                 )
@@ -6749,7 +6748,7 @@ class HookedTransformerWorkerRuntime:
             (
                 result
                 for result in reversed(self._diagnostic_results)
-                if str(result.get("diagnostic") or "") == "target_entity_insertion_probe"
+                if entity_refresh.is_recorded_probe(result)
             ),
             None,
         )
@@ -19249,8 +19248,7 @@ class HookedTransformerWorkerRuntime:
 
     def _entity_probe_refresh_report(self) -> dict[str, Any]:
         history = getattr(self, "_diagnostic_results", ())
-        latest_probe = next((row for row in reversed(history)
-                             if row.get("diagnostic") == entity_refresh.NAME), None)
+        latest_probe = next((row for row in reversed(history) if entity_refresh.is_recorded_probe(row)), None)
         preview = self._entity_insertion_operator_candidate_review_diagnostic(
             {"diagnostic": entity_review.NAME, "target_entity_insertion_probe": latest_probe},
             source="refresh_availability_preflight", strategy_hints={},
@@ -19453,8 +19451,7 @@ class HookedTransformerWorkerRuntime:
                 (
                     result
                     for result in reversed(all_results)
-                    if isinstance(result, Mapping)
-                    and str(result.get("diagnostic") or "") == "target_entity_insertion_probe"
+                    if entity_refresh.is_recorded_probe(result)
                 ),
                 None,
             )
