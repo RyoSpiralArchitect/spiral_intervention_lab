@@ -38,25 +38,37 @@ without drift, and the unforced branch reproduces the recorded output and score.
 | 13 | `report to` | 2 | 4.44 | +0.141 | `report to Selim before dusk.` | 0.938889 |
 
 Positions 7, 12 and 14-17 put ` Sel` beyond rank 160 (gaps 12.6-27.6) and are
-in the [receipts](../results/orphan_blueprint_ceiling_20261015/). Unforced, every
-prefix ends at 0.938889 with `Selim` missing.
+in the [receipts](../results/orphan_blueprint_ceiling_20261015/). Forcing there
+scores 0.938889, except 14 (`to Y Selim.`, 0.877778) and 17 (`before dusk
+Selim.`, 1.0). Unforced, every prefix ends at 0.938889 with `Selim` missing.
 
 - **No bounded operator wins anywhere.** 0 of 1,116 first-token replays made
-  ` Sel` the greedy token. The largest lift was +0.141 logit; the smallest gap
-  at a useful prefix is 3.37. The current operator set is short by roughly 25x,
-  not by routing or budget. Best post-edit ranks equal the unedited ranks
-  wherever ` Sel` is already near the top.
+  ` Sel` the greedy token. At the four prefixes where ` Sel` is within rank 5,
+  the best lift at that prefix is 31-41x smaller than its gap (e.g. 0.094
+  against 3.90 at the role-correct prefix 9). This is a shortfall of operator
+  strength, not of routing or budget. Best post-edit ranks equal the unedited
+  ranks there. Target-logit lift is reported, not gap closure; competitors can
+  move too.
+- **The activation-patch dose never varied.** All 1,080 activation-patch rows
+  are `activation_patch_step_size_clip_saturated`: the step-size cap, not alpha,
+  bounds the edit, so the 0.04/0.08 alpha arms applied the same movement. The
+  strongest rows are readout steering at alpha 0.08.
 - **The orphan blueprints would not have changed the outcome.** Readout replays
   report `target_lift` (`send`, `Selim`) and `readout_gap_movement` (`report`)
   without rank change. Of 24 activation-patch rows, 23 are dead or neutral; one
   `report` row is labeled `rank_carrier`, also without a rank change.
 - **Blueprint ranks were stale when issued.** The blueprints carry ` Sel`
   rank 119 from the token-5 probe; at the token-6 review prefix it is rank 3.
-- **The evaluator rewards the wrong insertions.** Its three 1.0 sentences are
+- **The evaluator rewards the wrong insertions.** Its four 1.0 sentences are
   missing a comma (8), reassign the report from Selim to Nora (10), or are
-  ungrammatical (11). The only role-correct insertion (9: `before Selim sends
-  the report to Yara`) drops `before dusk` and scores 0.938889. A 1.0 score from
-  this task is not, by itself, evidence of a correct rewrite.
+  ungrammatical (11, 17). The only role-correct insertion (9: `before Selim
+  sends the report to Yara`) drops `before dusk` and scores 0.938889. A 1.0
+  score from this task is not, by itself, evidence of a correct rewrite.
+- **The budget premise depends on the code revision.** The retry ran an
+  intermediate accounting revision that charged the token-4 review of an
+  unchanged `sample` blueprint. The merged novelty rule would not, leaving one
+  slot after the token-6 review. Per the results above, one replay of any of
+  the three blueprints would not have changed the outcome.
 
 ## Interview comparison
 
@@ -69,9 +81,10 @@ blueprints because its sampled view omitted those lines.
 
 ## Narrowed improvement candidates
 
-1. **Dose gap first.** A diagnostic-only, cap-released dose response at tokens
-   9, 10 and 13 would show whether any dose flips ` Sel` before the text
-   degrades. If none does, intervention within this operator family cannot
+1. **Dose gap first.** A diagnostic-only dose response at tokens 9, 10 and 13
+   would show whether any dose flips ` Sel` before the text degrades. Release
+   the step-size cap for activation patches (alpha alone does not move them)
+   and raise alpha for readout steering. If none does, intervention within this operator family cannot
    solve L1, and the next step is a different family (e.g. multi-token or
    attention-route source copy), not more accounting.
 2. **Position-aware value as an offer.** The forced-first-piece branch costs one

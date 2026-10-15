@@ -305,6 +305,7 @@ def main(argv: list[str] | None = None) -> int:
         worker._diagnostic_calls_used = 0
         packet = worker.build_controller_packet()
         orphan = {"prefix": worker.final_text(), "results": []}
+        orphan_keys = {term.casefold() for term in source["orphan_terms"]}
         requests = [{"diagnostic": "operator_diagnostic_replay",
                      "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
                      "materialize_entity_insertion_candidates": True}]
@@ -317,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
             results = worker.request_controller_diagnostics(request, source="forced_diagnostic_shadow", packet=packet)
             for result in results:
                 rows = [row for row in result.get("evidence_rows", ()) if isinstance(row, Mapping)
-                        and str(row.get("intended_term") or "") in source["orphan_terms"]]
+                        and str(row.get("intended_term") or "").casefold() in orphan_keys]
                 orphan["results"].append({
                     "diagnostic": result.get("diagnostic"), "status": result.get("status"),
                     "objective_bundle_key": request.get("objective_bundle_key"),
