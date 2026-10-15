@@ -1,0 +1,165 @@
+{
+  "artifact_kind": "offline_debrief_input_comparison",
+  "provider_calls": 0,
+  "worker_runs": 0,
+  "source_log_dir": "/Users/ryospiralarchitect/spiral_intervention_lab/results/entity_probe_refresh_llama_20261014_retry1/live",
+  "source_jsonl_sha256": {
+    "b0.jsonl": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+    "c1.jsonl": "0626b1e17fecb74040ad59a43485a11b1406892bc0170a13b04689f43e83b317"
+  },
+  "old_digest_characters": 17078,
+  "new_digest_characters": 19470,
+  "character_budget": 20000,
+  "added_event_ids": [
+    "c1.jsonl:L158",
+    "c1.jsonl:L183",
+    "c1.jsonl:L195",
+    "c1.jsonl:L219",
+    "c1.jsonl:L24",
+    "c1.jsonl:L348"
+  ],
+  "removed_event_ids": [
+    "c1.jsonl:L119",
+    "c1.jsonl:L120",
+    "c1.jsonl:L121",
+    "c1.jsonl:L143",
+    "c1.jsonl:L144",
+    "c1.jsonl:L145",
+    "c1.jsonl:L46",
+    "c1.jsonl:L47",
+    "c1.jsonl:L48"
+  ],
+  "event_anchor_kinds": {
+    "b0.jsonl:L1": [
+      "first_event"
+    ],
+    "c1.jsonl:L24": [
+      "first_entity_candidate_review"
+    ],
+    "c1.jsonl:L49": [
+      "first_materialization"
+    ],
+    "c1.jsonl:L122": [
+      "first_actual_matrix",
+      "first_negative_outcome"
+    ],
+    "c1.jsonl:L146": [
+      "first_candidate_action",
+      "first_current_prefix_measurement",
+      "last_current_prefix_measurement"
+    ],
+    "c1.jsonl:L158": [
+      "first_review_without_new_blueprints"
+    ],
+    "c1.jsonl:L183": [
+      "last_operator_replay"
+    ],
+    "c1.jsonl:L195": [
+      "first_missing_term_refresh",
+      "last_missing_term_refresh"
+    ],
+    "c1.jsonl:L219": [
+      "last_entity_candidate_review",
+      "diagnostic_budget_exhaustion"
+    ],
+    "c1.jsonl:L348": [
+      "last_task_feedback"
+    ],
+    "c1.jsonl:L356": [
+      "termination"
+    ]
+  },
+  "diagnostic_accounting_summary": {
+    "by_diagnostic": [
+      {
+        "diagnostic": "activation_patch_candidate_review",
+        "result_count": 1,
+        "charged_calls": 1
+      },
+      {
+        "diagnostic": "candidate_action",
+        "result_count": 1,
+        "charged_calls": 1,
+        "physical_replay_count": 4,
+        "new_measurement_count": 1
+      },
+      {
+        "diagnostic": "compare_extra_operator_diagnostics",
+        "result_count": 1,
+        "charged_calls": 1
+      },
+      {
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "result_count": 3,
+        "charged_calls": 3,
+        "physical_replay_count": 0,
+        "new_measurement_count": 0
+      },
+      {
+        "diagnostic": "matched_response_probe",
+        "result_count": 1,
+        "charged_calls": 1,
+        "physical_replay_count": 6,
+        "new_measurement_count": 2
+      },
+      {
+        "diagnostic": "operator_diagnostic_replay",
+        "result_count": 2,
+        "charged_calls": 2
+      },
+      {
+        "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+        "result_count": 1,
+        "charged_calls": 1
+      },
+      {
+        "diagnostic": "target_entity_insertion_probe",
+        "result_count": 2,
+        "charged_calls": 2,
+        "physical_replay_count": 0,
+        "new_measurement_count": 2
+      }
+    ],
+    "blueprint_reviews": {
+      "structurally_new_blueprint_count": 4,
+      "reused_blueprint_count": 1,
+      "charged_calls_without_new_blueprints": 1
+    },
+    "scope": "recorded_spend_and_structural_novelty_not_counterfactual_task_improvement"
+  },
+  "final_constraint_report": {
+    "event_id": "c1.jsonl:L348",
+    "observed_at_step": 17,
+    "scope": "last_observed_prefix_not_recomputed_at_termination",
+    "task_feedback": {
+      "done": false,
+      "partial_score": 0.938889,
+      "constraint_violations": [
+        "missing_required_terms"
+      ],
+      "missing_required_terms": [
+        "Selim"
+      ],
+      "required_terms_present": [
+        "Nora",
+        "take",
+        "sample",
+        "Ivo",
+        "send",
+        "report",
+        "Yara",
+        "before dusk"
+      ],
+      "entity_recall_terms": [
+        "Selim"
+      ],
+      "forbidden_terms_present": [],
+      "budget_ok": true,
+      "word_budget_score": 1.0,
+      "required_term_recall": 0.8888888888888888
+    }
+  },
+  "source_input_unchanged": true,
+  "source_logs_unchanged": true,
+  "interpretation": "No counterfactual rollout or interview response was generated; recorded spend is not refunded."
+}

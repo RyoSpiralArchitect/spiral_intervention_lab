@@ -1,0 +1,835 @@
+{
+  "artifact_kind": "post_run_controller_debrief_packet",
+  "do_not_autofeed_into_next_run": true,
+  "interpretation_boundary": "The debrief may summarize controller trajectory evidence, but it is not a metric, not a success label, and not an authorization signal for future apply decisions.",
+  "log_digest": {
+    "log_dir": "results/entity_probe_refresh_llama_20261014_retry1/live",
+    "jsonl_file_count": 2,
+    "event_counts": {
+      "episode_start": 2,
+      "episode_end": 2,
+      "initial_observation_prepared": 1,
+      "controller_clock_decision": 30,
+      "controller_prompt_telemetry": 30,
+      "controller_operation_menu": 30,
+      "controller_observation": 30,
+      "controller_provider_attempt": 30,
+      "controller_decision": 30,
+      "controller_command": 30,
+      "controller_selection": 30,
+      "controller_diagnostic_request": 12,
+      "controller_diagnostic_result": 12,
+      "prefix_inspection_complete": 12,
+      "controller_loop_patience": 19,
+      "generation_commit": 18,
+      "controller_effect_summary": 18,
+      "observer_check": 4,
+      "generation_token_committed": 18
+    },
+    "log_files": [
+      {
+        "path": "b0.jsonl",
+        "sha256": "116a6de451fe29aa5491fa63c726a5d124d7a5523ce7fe418091525cac4f941e",
+        "event_counts": {
+          "episode_start": 1,
+          "episode_end": 1
+        }
+      }
+    ],
+    "controller_step_views_tail": [],
+    "candidate_action_summary": {
+      "executed_actions": {
+        "remeasure_current_prefix": 1
+      },
+      "statuses": {
+        "measured": 1
+      },
+      "new_measurement_count": 1,
+      "cached_measurement_count": 0,
+      "physical_replay_count": 4,
+      "diagnostic_budget_charged": 1,
+      "scope": "public_diagnostic_results_not_rollout_apply_or_intervention_success"
+    },
+    "diagnostic_accounting_summary": {
+      "by_diagnostic": [
+        {
+          "diagnostic": "activation_patch_candidate_review",
+          "result_count": 1,
+          "charged_calls": 1
+        },
+        {
+          "diagnostic": "candidate_action",
+          "result_count": 1,
+          "charged_calls": 1,
+          "physical_replay_count": 4,
+          "new_measurement_count": 1
+        },
+        {
+          "diagnostic": "compare_extra_operator_diagnostics",
+          "result_count": 1,
+          "charged_calls": 1
+        },
+        {
+          "diagnostic": "entity_insertion_operator_candidate_review",
+          "result_count": 3,
+          "charged_calls": 3,
+          "physical_replay_count": 0,
+          "new_measurement_count": 0
+        },
+        {
+          "diagnostic": "matched_response_probe",
+          "result_count": 1,
+          "charged_calls": 1,
+          "physical_replay_count": 6,
+          "new_measurement_count": 2
+        },
+        {
+          "diagnostic": "operator_diagnostic_replay",
+          "result_count": 2,
+          "charged_calls": 2
+        },
+        {
+          "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+          "result_count": 1,
+          "charged_calls": 1
+        },
+        {
+          "diagnostic": "target_entity_insertion_probe",
+          "result_count": 2,
+          "charged_calls": 2,
+          "physical_replay_count": 0,
+          "new_measurement_count": 2
+        }
+      ],
+      "blueprint_reviews": {
+        "structurally_new_blueprint_count": 4,
+        "reused_blueprint_count": 1,
+        "charged_calls_without_new_blueprints": 1
+      },
+      "scope": "recorded_spend_and_structural_novelty_not_counterfactual_task_improvement"
+    },
+    "event_anchors": [
+      {
+        "event_id": "b0.jsonl:L1",
+        "event": "episode_start",
+        "anchor_kind": "first_event",
+        "anchor_kinds": [
+          "first_event"
+        ],
+        "related_events": []
+      },
+      {
+        "event_id": "c1.jsonl:L24",
+        "event": "controller_diagnostic_result",
+        "step": 0,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "budget_before": {
+          "diagnostic_calls_left": 11,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "entity_discovery": {
+          "focus_terms": [
+            "Nora",
+            "take",
+            "Ivo",
+            "sample"
+          ],
+          "candidate_terms": [
+            "sample"
+          ],
+          "source_probe_id": "entity-probe:1b02bbb27bce8671c4afd651",
+          "source_probe_recorded_step": 0,
+          "source_probe_is_current_prefix": true,
+          "entity_candidate_review_input_id": "entity-review:c18ee86b29e5d07046de2442",
+          "candidate_blueprint_count": 1,
+          "new_candidate_blueprint_count": 1,
+          "review_reused": false,
+          "diagnostic_call_cost": 1,
+          "diagnostic_budget_charge_reason": "new_candidate_blueprints",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+          "production_apply_allowed": false,
+          "blueprint_novelty_audit": {
+            "structurally_new_count": 1,
+            "reused_count": 0,
+            "recorded_new_count": 1,
+            "recorded_diagnostic_cost": 1,
+            "scope": "retrospective_structure_comparison_not_measurement_or_budget_refund"
+          },
+          "blueprints": [
+            {
+              "candidate_key": "entity_insert:sample:source_body:near_reachable",
+              "objective_term": "sample",
+              "first_piece": " Sample",
+              "first_token_id": 19690,
+              "source_provenance": "source_body",
+              "rank": 89
+            }
+          ],
+          "blueprint_families_omitted": true
+        },
+        "anchor_kind": "first_entity_candidate_review",
+        "anchor_kinds": [
+          "first_entity_candidate_review"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L49",
+        "event": "controller_diagnostic_result",
+        "step": 1,
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "budget_before": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 9,
+          "inspection_calls_left": 4
+        },
+        "matrix": {
+          "status": "not_requested",
+          "measurement_mode": null,
+          "measurement_context_id": null,
+          "row_count": 0,
+          "new_measurement_count": null,
+          "physical_replay_count": null,
+          "state_restored": null,
+          "no_edit_max_abs_logit_delta": null,
+          "unavailable_reason": null
+        },
+        "candidate_rows": [],
+        "candidate_rows_omitted": 2,
+        "anchor_kind": "first_materialization",
+        "anchor_kinds": [
+          "first_materialization"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L122",
+        "event": "controller_diagnostic_result",
+        "step": 3,
+        "diagnostic": "matched_response_probe",
+        "status": "dose_matched_response_complete",
+        "budget_before": {
+          "diagnostic_calls_left": 6,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 5,
+          "inspection_calls_left": 4
+        },
+        "new_measurement_count": 2,
+        "physical_replay_count": 6,
+        "blocked_reason": null,
+        "candidate_trial_handoffs": [
+          {
+            "evidence_id": "obs:8be4955e8e8371fe69eeb84f",
+            "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+            "status": "blocked",
+            "checks": {
+              "bound_target_lift": false,
+              "canonical_binding": true,
+              "complete_restored_measurement": true,
+              "concrete_execution": true,
+              "finite_controls_and_readout": true,
+              "hook_executed": true,
+              "no_observed_harm": true,
+              "response_above_variation": false,
+              "same_context": true
+            },
+            "blocked_reasons": [
+              "bound_target_lift",
+              "response_above_variation"
+            ],
+            "production_trial_allowed": false
+          },
+          {
+            "evidence_id": "obs:57085117ad918aaa0694df63",
+            "candidate_id": "frozen_candidate:f39f73eed2aebd6222ac5d34",
+            "status": "blocked",
+            "checks": {
+              "bound_target_lift": false,
+              "canonical_binding": false,
+              "complete_restored_measurement": true,
+              "concrete_execution": true,
+              "finite_controls_and_readout": true,
+              "hook_executed": true,
+              "no_observed_harm": true,
+              "response_above_variation": false,
+              "same_context": true
+            },
+            "blocked_reasons": [
+              "canonical_binding",
+              "bound_target_lift",
+              "response_above_variation"
+            ],
+            "production_trial_allowed": false
+          }
+        ],
+        "matrix": {
+          "status": "dose_matched_response_complete",
+          "measurement_mode": "matched_response_probe",
+          "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+          "row_count": 4,
+          "new_measurement_count": 2,
+          "physical_replay_count": 6,
+          "state_restored": true,
+          "no_edit_max_abs_logit_delta": 0.0,
+          "unavailable_reason": null
+        },
+        "candidate_rows": [
+          {
+            "evidence_id": "obs:cd724427d33ee490fa07a77c",
+            "execution_id": "exec:bf802ec52606f59d2189ae0e",
+            "operator_recipe_id": "matched_recipe:8507384ff0ad1d098425d703",
+            "seed_source": "direct_candidate",
+            "activation_patch_step_size": 0.04,
+            "target_piece": " sample",
+            "target_piece_logit_delta": 0.0,
+            "threshold20_logit_delta": 0.0,
+            "target_top20_threshold_gap_delta": 0.0,
+            "target_mass_delta": 2.3e-05,
+            "target_top20_hit_delta": 0,
+            "target_piece_prob_delta": 2.3015733298367702e-05,
+            "bound_token_top20_hit_delta": 0,
+            "no_edit_max_abs_logit_delta": 0.0,
+            "repeat_max_abs_logit_delta": 0.0,
+            "measurement_focus_terms": [
+              "sample"
+            ],
+            "actual_delta_class": "target_lift",
+            "actuator_class": "cross_bound",
+            "actual_delta_class_scope": "execution_canonical_binding_and_term_set",
+            "bound_token_response": "within_repeat_variation",
+            "evidence_scope": "frozen_prefix_diagnostic"
+          }
+        ],
+        "candidate_rows_omitted": 3,
+        "anchor_kind": "first_actual_matrix",
+        "anchor_kinds": [
+          "first_actual_matrix",
+          "first_negative_outcome"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L146",
+        "event": "controller_diagnostic_result",
+        "step": 4,
+        "diagnostic": "candidate_action",
+        "status": "measured",
+        "budget_before": {
+          "diagnostic_calls_left": 5,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 4,
+          "inspection_calls_left": 4
+        },
+        "new_measurement_count": 1,
+        "physical_replay_count": 4,
+        "requested_action": "remeasure_current_prefix",
+        "blocked_reason": null,
+        "candidate_trial_handoffs": [
+          {
+            "evidence_id": "obs:6d1079a6b8bce2194aec4fad",
+            "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+            "status": "blocked",
+            "checks": {
+              "bound_target_lift": false,
+              "canonical_binding": true,
+              "complete_restored_measurement": true,
+              "concrete_execution": true,
+              "finite_controls_and_readout": true,
+              "hook_executed": true,
+              "no_observed_harm": true,
+              "response_above_variation": false,
+              "same_context": true
+            },
+            "blocked_reasons": [
+              "bound_target_lift",
+              "response_above_variation"
+            ],
+            "production_trial_allowed": false
+          }
+        ],
+        "candidate_action": {
+          "action_id": "action:3f27a5153480def7a6513333",
+          "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+          "requested_action": "remeasure_current_prefix",
+          "executed_action": "remeasure_current_prefix",
+          "current_context_id": "context:042f2cb77aba705f521c2fbd",
+          "measurement_context_id": "context:042f2cb77aba705f521c2fbd",
+          "requested_position": {
+            "generated_token_count": 4,
+            "last_token_piece": " the",
+            "prefix_tail": " Nora will take the",
+            "scope": "observed_prefix_only_not_position_quality",
+            "trailing_surface": "open_text",
+            "word_completion": "unknown_without_lookahead",
+            "worker_step": 4
+          },
+          "blocked_reason": null,
+          "evidence_scope": "frozen_candidate_current_prefix_measurement",
+          "diagnostic_budget_charged": true,
+          "production_apply_allowed": false,
+          "evidence": {
+            "measurement_context_id": "context:042f2cb77aba705f521c2fbd",
+            "measurement_position": {
+              "generated_token_count": 4,
+              "last_token_piece": " the",
+              "prefix_tail": " Nora will take the",
+              "scope": "observed_prefix_only_not_position_quality",
+              "trailing_surface": "open_text",
+              "word_completion": "unknown_without_lookahead",
+              "worker_step": 4
+            },
+            "target_piece": " sample",
+            "target_piece_token_id": 6205,
+            "state_restored": true,
+            "no_edit_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "repeat_control": {
+              "finite_token_count": 128252,
+              "mask_identical": true,
+              "masked_token_count": 4,
+              "max_abs_logit_delta": 0.0
+            },
+            "continuation_identical": true,
+            "metrics": {
+              "target_top20_threshold_gap_delta": 0.015625,
+              "target_piece_prob_delta": -0.00013083955248971435,
+              "target_piece_logit_delta": -0.015625,
+              "target_rank_before": 1,
+              "target_rank_after": 1,
+              "bound_token_top20_hit_delta": 0
+            }
+          }
+        },
+        "candidate_rows": [],
+        "candidate_rows_omitted": 1,
+        "anchor_kind": "first_candidate_action",
+        "anchor_kinds": [
+          "first_candidate_action",
+          "first_current_prefix_measurement",
+          "last_current_prefix_measurement"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L158",
+        "event": "controller_diagnostic_result",
+        "step": 4,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "budget_before": {
+          "diagnostic_calls_left": 4,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 3,
+          "inspection_calls_left": 4
+        },
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "entity_discovery": {
+          "focus_terms": [
+            "Nora",
+            "take",
+            "Ivo",
+            "sample"
+          ],
+          "candidate_terms": [
+            "sample"
+          ],
+          "source_probe_id": "entity-probe:1b02bbb27bce8671c4afd651",
+          "source_probe_recorded_step": 0,
+          "source_probe_is_current_prefix": false,
+          "entity_candidate_review_input_id": "entity-review:67eec57275ca4c02ff2de95e",
+          "candidate_blueprint_count": 1,
+          "new_candidate_blueprint_count": 1,
+          "review_reused": false,
+          "diagnostic_call_cost": 1,
+          "diagnostic_budget_charge_reason": "new_candidate_blueprints",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+          "production_apply_allowed": false,
+          "blueprint_novelty_audit": {
+            "structurally_new_count": 0,
+            "reused_count": 1,
+            "recorded_new_count": 1,
+            "recorded_diagnostic_cost": 1,
+            "scope": "retrospective_structure_comparison_not_measurement_or_budget_refund"
+          },
+          "blueprints": [
+            {
+              "candidate_key": "entity_insert:sample:source_body:near_reachable",
+              "objective_term": "sample",
+              "first_piece": " Sample",
+              "first_token_id": 19690,
+              "source_provenance": "source_body",
+              "rank": 89
+            }
+          ],
+          "blueprint_families_omitted": true
+        },
+        "anchor_kind": "first_review_without_new_blueprints",
+        "anchor_kinds": [
+          "first_review_without_new_blueprints"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L183",
+        "event": "controller_diagnostic_result",
+        "step": 5,
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "budget_before": {
+          "diagnostic_calls_left": 3,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 2,
+          "inspection_calls_left": 4
+        },
+        "matrix": {
+          "status": "not_requested",
+          "measurement_mode": null,
+          "measurement_context_id": null,
+          "row_count": 0,
+          "new_measurement_count": null,
+          "physical_replay_count": null,
+          "state_restored": null,
+          "no_edit_max_abs_logit_delta": null,
+          "unavailable_reason": null
+        },
+        "candidate_rows": [],
+        "candidate_rows_omitted": 22,
+        "anchor_kind": "last_operator_replay",
+        "anchor_kinds": [
+          "last_operator_replay"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L195",
+        "event": "controller_diagnostic_result",
+        "step": 5,
+        "diagnostic": "target_entity_insertion_probe",
+        "status": "ok",
+        "budget_before": {
+          "diagnostic_calls_left": 2,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 1,
+          "inspection_calls_left": 4
+        },
+        "new_measurement_count": 1,
+        "physical_replay_count": 0,
+        "entity_discovery": {
+          "probe_kind": "missing_term_refresh",
+          "probe_refresh_id": "entity-probe-refresh:b46a679e6b6041f10c80254c",
+          "requested_terms": [
+            "Selim",
+            "send",
+            "report",
+            "Yara"
+          ],
+          "focus_terms": [
+            "Yara",
+            "report",
+            "send",
+            "Selim"
+          ],
+          "diagnostic_call_cost": 1,
+          "model_forward_count": 1,
+          "evidence_scope": "current_prefix_term_readout_not_operator_effect",
+          "next_evidence_needed": "entity_insertion_operator_candidate_review",
+          "production_apply_allowed": false,
+          "blueprints": []
+        },
+        "anchor_kind": "first_missing_term_refresh",
+        "anchor_kinds": [
+          "first_missing_term_refresh",
+          "last_missing_term_refresh"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L219",
+        "event": "controller_diagnostic_result",
+        "step": 6,
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "budget_before": {
+          "diagnostic_calls_left": 1,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 0,
+          "inspection_calls_left": 4
+        },
+        "new_measurement_count": 0,
+        "physical_replay_count": 0,
+        "entity_discovery": {
+          "focus_terms": [
+            "Yara",
+            "report",
+            "send",
+            "Selim"
+          ],
+          "candidate_terms": [
+            "report",
+            "send",
+            "Selim"
+          ],
+          "source_probe_id": "entity-probe:2beaee292b4bcdcc21738323",
+          "source_probe_recorded_step": 5,
+          "source_probe_is_current_prefix": false,
+          "entity_candidate_review_input_id": "entity-review:2472fe7bc2a02c30311659d1",
+          "candidate_blueprint_count": 3,
+          "new_candidate_blueprint_count": 3,
+          "review_reused": false,
+          "diagnostic_call_cost": 1,
+          "diagnostic_budget_charge_reason": "new_candidate_blueprints",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "next_evidence_needed": "operator_diagnostic_replay_for_entity_candidates",
+          "production_apply_allowed": false,
+          "blueprint_novelty_audit": {
+            "structurally_new_count": 3,
+            "reused_count": 0,
+            "recorded_new_count": 3,
+            "recorded_diagnostic_cost": 1,
+            "scope": "retrospective_structure_comparison_not_measurement_or_budget_refund"
+          },
+          "blueprints": [
+            {
+              "candidate_key": "entity_insert:report:source_body:near_reachable",
+              "objective_term": "report",
+              "first_piece": " report",
+              "first_token_id": 1934,
+              "source_provenance": "source_body",
+              "rank": 41
+            },
+            {
+              "candidate_key": "entity_insert:send:source_body:near_reachable",
+              "objective_term": "send",
+              "first_piece": " send",
+              "first_token_id": 3708,
+              "source_provenance": "source_body",
+              "rank": 64
+            },
+            {
+              "candidate_key": "entity_insert:selim:source_body:near_reachable",
+              "objective_term": "Selim",
+              "first_piece": " Sel",
+              "first_token_id": 24082,
+              "source_provenance": "source_body",
+              "rank": 119
+            }
+          ],
+          "blueprint_families_omitted": true
+        },
+        "anchor_kind": "last_entity_candidate_review",
+        "anchor_kinds": [
+          "last_entity_candidate_review",
+          "diagnostic_budget_exhaustion"
+        ],
+        "related_events": [],
+        "related_event_scope": "nearest_preceding_same_step_context_not_transaction_identity"
+      },
+      {
+        "event_id": "c1.jsonl:L348",
+        "event": "controller_observation",
+        "step": 17,
+        "task_feedback": {
+          "done": false,
+          "partial_score": 0.938889,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "missing_required_terms": [
+            "Selim"
+          ],
+          "required_terms_present": [
+            "Nora",
+            "take",
+            "sample",
+            "Ivo",
+            "send",
+            "report",
+            "Yara",
+            "before dusk"
+          ],
+          "entity_recall_terms": [
+            "Selim"
+          ],
+          "forbidden_terms_present": [],
+          "budget_ok": true,
+          "word_budget_score": 1.0,
+          "required_term_recall": 0.8888888888888888
+        },
+        "task_feedback_scope": "observed_prefix_feedback",
+        "anchor_kind": "last_task_feedback",
+        "anchor_kinds": [
+          "last_task_feedback"
+        ],
+        "related_events": []
+      },
+      {
+        "event_id": "c1.jsonl:L356",
+        "event": "episode_end",
+        "steps": 18,
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "task_done": false,
+        "anchor_kind": "termination",
+        "anchor_kinds": [
+          "termination"
+        ],
+        "related_events": []
+      }
+    ],
+    "coverage_manifest": {
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 358,
+      "anchor_occurrence_counts": {
+        "first_event": 1,
+        "termination": 2,
+        "last_task_feedback": 30,
+        "first_entity_candidate_review": 3,
+        "last_entity_candidate_review": 3,
+        "last_operator_replay": 2,
+        "first_materialization": 3,
+        "first_actual_matrix": 1,
+        "first_negative_outcome": 1,
+        "first_candidate_action": 1,
+        "first_current_prefix_measurement": 1,
+        "last_current_prefix_measurement": 1,
+        "first_review_without_new_blueprints": 1,
+        "first_missing_term_refresh": 1,
+        "last_missing_term_refresh": 1,
+        "diagnostic_budget_exhaustion": 1
+      },
+      "omitted_files": 0,
+      "character_budget": 20000,
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L122",
+        "c1.jsonl:L146",
+        "c1.jsonl:L158",
+        "c1.jsonl:L183",
+        "c1.jsonl:L195",
+        "c1.jsonl:L219",
+        "c1.jsonl:L24",
+        "c1.jsonl:L348",
+        "c1.jsonl:L356",
+        "c1.jsonl:L49"
+      ],
+      "omitted_event_count": 347,
+      "omitted_file_metadata": 1,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded."
+    },
+    "final_constraint_report": {
+      "event_id": "c1.jsonl:L348",
+      "observed_at_step": 17,
+      "scope": "last_observed_prefix_not_recomputed_at_termination",
+      "task_feedback": {
+        "done": false,
+        "partial_score": 0.938889,
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "required_terms_present": [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_recall_terms": [
+          "Selim"
+        ],
+        "forbidden_terms_present": [],
+        "budget_ok": true,
+        "word_budget_score": 1.0,
+        "required_term_recall": 0.8888888888888888
+      }
+    }
+  },
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "output_diet_contract": {
+    "max_bullets_per_section": 3,
+    "qualitative_affordances_only": true,
+    "what_would_have_helped_schema": "missing_signal: why_it_would_help -> suggested_field"
+  },
+  "qualitative_only": true,
+  "required_output_sections": [
+    "What happened?",
+    "What made the run difficult?",
+    "Most likely failure factors",
+    "Evidence supporting this reading",
+    "What I would try next",
+    "What would have made this easier?",
+    "What should not be concluded",
+    "Controller-perspective note"
+  ],
+  "run_result_digest": {
+    "b0": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "b1": null,
+    "c1": {
+      "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+      "score": 0.938889,
+      "steps": 18
+    },
+    "controller_model_name": "gpt-5.6-luna",
+    "controller_provider": "openai",
+    "controller_reflection_mode": "off",
+    "seed": 0,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1",
+    "worker_decoder_control_mode": "off",
+    "worker_loop_rescue_edits_per_run": 0,
+    "worker_model_name": "meta-llama/Llama-3.2-3B-Instruct"
+  },
+  "offline_rebuild": {
+    "source_input_sha256": "f5ef55967f2fedd1caccf8e325b3e5a2065de605191690715461b441767a8bb0",
+    "provider_called": false,
+    "scope": "input_reconstruction_not_a_new_interview_or_run"
+  }
+}

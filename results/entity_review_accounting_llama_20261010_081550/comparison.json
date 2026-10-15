@@ -1,0 +1,1584 @@
+{
+  "schema_version": 1,
+  "comparison_status": "complete",
+  "checks": {
+    "profile": true,
+    "fixture": true,
+    "checkpoint_sha256": true,
+    "versions": true,
+    "candidate_handoff_mode": true,
+    "controller_action_view": true,
+    "generation_clock_mode": true,
+    "mps_memory_fraction": true,
+    "argv_except_output": true,
+    "baseline_reference_match": true,
+    "all_generated_prefixes_match": true
+  },
+  "changed_sources": [
+    "SpiralInterventionLab/bridge/controller_clients.py",
+    "SpiralInterventionLab/runtime/diagnostic_budget.py",
+    "SpiralInterventionLab/runtime/entity_candidate_review.py",
+    "SpiralInterventionLab/runtime/operation_cards.py",
+    "SpiralInterventionLab/runtime/worker.py",
+    "SpiralInterventionLab/tests/test_entity_candidate_review.py"
+  ],
+  "before": {
+    "outcomes": {
+      "b0": {
+        "event": "episode_end",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false
+      },
+      "c1": {
+        "event": "episode_end",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false
+      }
+    },
+    "first_measured_card": null,
+    "candidate_action_counts": {},
+    "visible_trial_offer_count": 0,
+    "compiled_rollout_edit_count": 0,
+    "controller_usage_excluding_debrief": {
+      "input_tokens": 587152,
+      "output_tokens": 4133,
+      "cached_input_tokens": 196638
+    },
+    "clock_inspection_rounds": 15,
+    "generation_commits": 18,
+    "clock_fallback_commits": 0,
+    "provider_parse_results": {
+      "True": 33
+    },
+    "run": "results/explicit_clock_llama_prefill_retry_20260928",
+    "charged_diagnostic_slots": 12,
+    "remaining_diagnostic_slots": 0,
+    "empty_entity_review_count": 3,
+    "empty_entity_review_charges": 3,
+    "distinct_frozen_card_count": 0,
+    "reported_measurement_count": 0,
+    "reported_physical_replay_count": 0,
+    "result_rows_without_explicit_measurement_counters": 11,
+    "measurement_count_scope": "explicit counters only; not a total of all generic diagnostic forwards",
+    "timeline": [
+      {
+        "line": 12,
+        "step": 0,
+        "prefix": "",
+        "diagnostic": "target_entity_insertion_probe",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 1,
+        "budget_left": 11,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 24,
+        "step": 0,
+        "prefix": "",
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 2,
+        "budget_left": 10,
+        "blueprint_count": 1,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 49,
+        "step": 1,
+        "prefix": " Nora",
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 3,
+        "budget_left": 9,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 61,
+        "step": 1,
+        "prefix": " Nora",
+        "diagnostic": "compare_extra_operator_diagnostics",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 4,
+        "budget_left": 8,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 85,
+        "step": 2,
+        "prefix": " Nora will",
+        "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 5,
+        "budget_left": 7,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 97,
+        "step": 2,
+        "prefix": " Nora will",
+        "diagnostic": "activation_patch_candidate_review",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 6,
+        "budget_left": 6,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": 0,
+        "reported_physical_replay_count": 0,
+        "matched_response_status": "unavailable",
+        "matched_response_unavailable_reason": "seed_site_layer_alpha_localization_mismatch",
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 122,
+        "step": 3,
+        "prefix": " Nora will take",
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 7,
+        "budget_left": 5,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 157,
+        "step": 4,
+        "prefix": " Nora will take the",
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 8,
+        "budget_left": 4,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 169,
+        "step": 4,
+        "prefix": " Nora will take the",
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 9,
+        "budget_left": 3,
+        "blueprint_count": 1,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 194,
+        "step": 5,
+        "prefix": " Nora will take the sample",
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "no_candidate_blueprints",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 10,
+        "budget_left": 2,
+        "blueprint_count": 0,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 229,
+        "step": 6,
+        "prefix": " Nora will take the sample to",
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "no_candidate_blueprints",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 11,
+        "budget_left": 1,
+        "blueprint_count": 0,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 265,
+        "step": 7,
+        "prefix": " Nora will take the sample to I",
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "no_candidate_blueprints",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 12,
+        "budget_left": 0,
+        "blueprint_count": 0,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      }
+    ],
+    "late_operation_menus": [
+      {
+        "line": 187,
+        "step": 5,
+        "prefix": " Nora will take the sample",
+        "budget_left_at_prefix_start": 3,
+        "available_diagnostics": [
+          "entity_insertion_operator_candidate_review"
+        ],
+        "available_objectives": [
+          "None"
+        ],
+        "available_actions": [
+          "None"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 199,
+        "step": 5,
+        "prefix": " Nora will take the sample",
+        "budget_left_at_prefix_start": 3,
+        "available_diagnostics": [
+          "entity_insertion_operator_candidate_review"
+        ],
+        "available_objectives": [
+          "None"
+        ],
+        "available_actions": [
+          "None"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 210,
+        "step": 5,
+        "prefix": " Nora will take the sample",
+        "budget_left_at_prefix_start": 3,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 222,
+        "step": 6,
+        "prefix": " Nora will take the sample to",
+        "budget_left_at_prefix_start": 2,
+        "available_diagnostics": [
+          "entity_insertion_operator_candidate_review"
+        ],
+        "available_objectives": [
+          "None"
+        ],
+        "available_actions": [
+          "None"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 234,
+        "step": 6,
+        "prefix": " Nora will take the sample to",
+        "budget_left_at_prefix_start": 2,
+        "available_diagnostics": [
+          "entity_insertion_operator_candidate_review"
+        ],
+        "available_objectives": [
+          "None"
+        ],
+        "available_actions": [
+          "None"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 245,
+        "step": 6,
+        "prefix": " Nora will take the sample to",
+        "budget_left_at_prefix_start": 2,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 258,
+        "step": 7,
+        "prefix": " Nora will take the sample to I",
+        "budget_left_at_prefix_start": 1,
+        "available_diagnostics": [
+          "entity_insertion_operator_candidate_review"
+        ],
+        "available_objectives": [
+          "None"
+        ],
+        "available_actions": [
+          "None"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 270,
+        "step": 7,
+        "prefix": " Nora will take the sample to I",
+        "budget_left_at_prefix_start": 1,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 282,
+        "step": 8,
+        "prefix": " Nora will take the sample to Ivo",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 293,
+        "step": 9,
+        "prefix": " Nora will take the sample to Ivo before",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 304,
+        "step": 10,
+        "prefix": " Nora will take the sample to Ivo before sending",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 315,
+        "step": 11,
+        "prefix": " Nora will take the sample to Ivo before sending the",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 326,
+        "step": 12,
+        "prefix": " Nora will take the sample to Ivo before sending the report",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 337,
+        "step": 13,
+        "prefix": " Nora will take the sample to Ivo before sending the report to",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 348,
+        "step": 14,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Y",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 359,
+        "step": 15,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Yara",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 370,
+        "step": 16,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Yara before",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "entity_review_availability": null
+      },
+      {
+        "line": 381,
+        "step": 17,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Yara before dusk",
+        "budget_left_at_prefix_start": 0,
+        "available_diagnostics": [],
+        "available_objectives": [],
+        "available_actions": [],
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "entity_review_availability": null
+      }
+    ],
+    "prefixes": {
+      "0": "",
+      "1": " Nora",
+      "2": " Nora will",
+      "3": " Nora will take",
+      "4": " Nora will take the",
+      "5": " Nora will take the sample",
+      "6": " Nora will take the sample to",
+      "7": " Nora will take the sample to I",
+      "8": " Nora will take the sample to Ivo",
+      "9": " Nora will take the sample to Ivo before",
+      "10": " Nora will take the sample to Ivo before sending",
+      "11": " Nora will take the sample to Ivo before sending the",
+      "12": " Nora will take the sample to Ivo before sending the report",
+      "13": " Nora will take the sample to Ivo before sending the report to",
+      "14": " Nora will take the sample to Ivo before sending the report to Y",
+      "15": " Nora will take the sample to Ivo before sending the report to Yara",
+      "16": " Nora will take the sample to Ivo before sending the report to Yara before",
+      "17": " Nora will take the sample to Ivo before sending the report to Yara before dusk"
+    },
+    "trace_sha256": "c6040d3282c8ee37ecfcc2117117498e98f7d182389f9f31597a96531e523d07",
+    "manifest_sha256": "8935b9f81ae5abe6edc5421640d268c9304a88093188e9cbc867342b3ee3117d",
+    "audit_sha256": "4b65119eacefce55712c1098eca4685e4920b9d4335a6b5d7b529141bf875146"
+  },
+  "after": {
+    "outcomes": {
+      "b0": {
+        "event": "episode_end",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false
+      },
+      "c1": {
+        "event": "episode_end",
+        "output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "steps": 18,
+        "task_done": false
+      }
+    },
+    "first_measured_card": {
+      "step": 3,
+      "diagnostics_used": 7
+    },
+    "candidate_action_counts": {
+      "remeasure_current_prefix": 1
+    },
+    "visible_trial_offer_count": 0,
+    "compiled_rollout_edit_count": 0,
+    "controller_usage_excluding_debrief": {
+      "input_tokens": 545223,
+      "output_tokens": 3373,
+      "cached_input_tokens": 0
+    },
+    "clock_inspection_rounds": 8,
+    "generation_commits": 18,
+    "clock_fallback_commits": 0,
+    "provider_parse_results": {
+      "True": 26
+    },
+    "run": "results/entity_review_accounting_llama_20261010_081550",
+    "charged_diagnostic_slots": 8,
+    "remaining_diagnostic_slots": 4,
+    "empty_entity_review_count": 0,
+    "empty_entity_review_charges": 0,
+    "distinct_frozen_card_count": 2,
+    "reported_measurement_count": 3,
+    "reported_physical_replay_count": 10,
+    "result_rows_without_explicit_measurement_counters": 4,
+    "measurement_count_scope": "explicit counters only; not a total of all generic diagnostic forwards",
+    "timeline": [
+      {
+        "line": 12,
+        "step": 0,
+        "prefix": "",
+        "diagnostic": "target_entity_insertion_probe",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 1,
+        "budget_left": 11,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 24,
+        "step": 0,
+        "prefix": "",
+        "diagnostic": "entity_insertion_operator_candidate_review",
+        "status": "candidate_blueprints_ready",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 2,
+        "budget_left": 10,
+        "blueprint_count": 1,
+        "source_probe_recorded_step": 0,
+        "review_reused": false,
+        "reported_new_measurement_count": 0,
+        "reported_physical_replay_count": 0,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 49,
+        "step": 1,
+        "prefix": " Nora",
+        "diagnostic": "operator_diagnostic_replay",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 3,
+        "budget_left": 9,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 61,
+        "step": 1,
+        "prefix": " Nora",
+        "diagnostic": "compare_extra_operator_diagnostics",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 4,
+        "budget_left": 8,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 85,
+        "step": 2,
+        "prefix": " Nora will",
+        "diagnostic": "readout_gap_confirmation_or_variant_sweep",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 5,
+        "budget_left": 7,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": null,
+        "reported_physical_replay_count": null,
+        "matched_response_status": "not_requested",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 97,
+        "step": 2,
+        "prefix": " Nora will",
+        "diagnostic": "activation_patch_candidate_review",
+        "status": "ok",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 6,
+        "budget_left": 6,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": 0,
+        "reported_physical_replay_count": 0,
+        "matched_response_status": "unavailable",
+        "matched_response_unavailable_reason": "seed_site_layer_alpha_localization_mismatch",
+        "frozen_candidate_receipts": []
+      },
+      {
+        "line": 122,
+        "step": 3,
+        "prefix": " Nora will take",
+        "diagnostic": "matched_response_probe",
+        "status": "dose_matched_response_complete",
+        "requested_action": null,
+        "charged_slots": 1,
+        "charged_slots_cumulative": 7,
+        "budget_left": 5,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": 2,
+        "reported_physical_replay_count": 6,
+        "matched_response_status": "dose_matched_response_complete",
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": [
+          {
+            "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+            "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+            "observable_id": "obs:68b233c0bce45d2e6c38c09f",
+            "status": "frozen"
+          },
+          {
+            "candidate_id": "frozen_candidate:f39f73eed2aebd6222ac5d34",
+            "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+            "observable_id": "obs:db491b163861e8067ad2b5bf",
+            "status": "frozen"
+          },
+          {
+            "blocked_reason": "v1_requires_recorded_source_term_token_without_contrast",
+            "candidate_id": null,
+            "observable_id": "obs:cd724427d33ee490fa07a77c",
+            "status": "unavailable"
+          },
+          {
+            "blocked_reason": "v1_requires_recorded_source_term_token_without_contrast",
+            "candidate_id": null,
+            "observable_id": "obs:10e5419521f9f76ac36fcdba",
+            "status": "unavailable"
+          }
+        ]
+      },
+      {
+        "line": 146,
+        "step": 4,
+        "prefix": " Nora will take the",
+        "diagnostic": "candidate_action",
+        "status": "measured",
+        "requested_action": "remeasure_current_prefix",
+        "charged_slots": 1,
+        "charged_slots_cumulative": 8,
+        "budget_left": 4,
+        "blueprint_count": null,
+        "source_probe_recorded_step": null,
+        "review_reused": null,
+        "reported_new_measurement_count": 1,
+        "reported_physical_replay_count": 4,
+        "matched_response_status": null,
+        "matched_response_unavailable_reason": null,
+        "frozen_candidate_receipts": []
+      }
+    ],
+    "late_operation_menus": [
+      {
+        "line": 164,
+        "step": 5,
+        "prefix": " Nora will take the sample",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:b55e881ff2d7b4c8c9fd665f",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 175,
+        "step": 6,
+        "prefix": " Nora will take the sample to",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:b55e881ff2d7b4c8c9fd665f",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 187,
+        "step": 7,
+        "prefix": " Nora will take the sample to I",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Ivo",
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:b55e881ff2d7b4c8c9fd665f",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 198,
+        "step": 8,
+        "prefix": " Nora will take the sample to Ivo",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 209,
+        "step": 9,
+        "prefix": " Nora will take the sample to Ivo before",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "send",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 220,
+        "step": 10,
+        "prefix": " Nora will take the sample to Ivo before sending",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 231,
+        "step": 11,
+        "prefix": " Nora will take the sample to Ivo before sending the",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "report",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 242,
+        "step": 12,
+        "prefix": " Nora will take the sample to Ivo before sending the report",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 253,
+        "step": 13,
+        "prefix": " Nora will take the sample to Ivo before sending the report to",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 264,
+        "step": 14,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Y",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 275,
+        "step": 15,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Yara",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 286,
+        "step": 16,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Yara before",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim",
+          "before dusk"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      },
+      {
+        "line": 297,
+        "step": 17,
+        "prefix": " Nora will take the sample to Ivo before sending the report to Yara before dusk",
+        "budget_left_at_prefix_start": 4,
+        "available_diagnostics": [
+          "candidate_action"
+        ],
+        "available_objectives": [
+          "entity_insert:sample:source_body:near_reachable"
+        ],
+        "available_actions": [
+          "hold",
+          "remeasure_current_prefix",
+          "review_existing"
+        ],
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "entity_review_availability": {
+          "__omitted_key_count": 1,
+          "candidate_blueprint_count": 0,
+          "diagnostic_budget_charge_reason": "no_candidate_blueprints",
+          "entity_candidate_review_input_id": "entity-review:024f703d295f264a893df214",
+          "evidence_scope": "recorded_probe_and_current_task_feedback_not_new_measurement",
+          "review_reused": false,
+          "source_probe_is_current_prefix": false,
+          "source_probe_recorded_step": 0,
+          "status": "no_candidate_blueprints"
+        }
+      }
+    ],
+    "prefixes": {
+      "0": "",
+      "1": " Nora",
+      "2": " Nora will",
+      "3": " Nora will take",
+      "4": " Nora will take the",
+      "5": " Nora will take the sample",
+      "6": " Nora will take the sample to",
+      "7": " Nora will take the sample to I",
+      "8": " Nora will take the sample to Ivo",
+      "9": " Nora will take the sample to Ivo before",
+      "10": " Nora will take the sample to Ivo before sending",
+      "11": " Nora will take the sample to Ivo before sending the",
+      "12": " Nora will take the sample to Ivo before sending the report",
+      "13": " Nora will take the sample to Ivo before sending the report to",
+      "14": " Nora will take the sample to Ivo before sending the report to Y",
+      "15": " Nora will take the sample to Ivo before sending the report to Yara",
+      "16": " Nora will take the sample to Ivo before sending the report to Yara before",
+      "17": " Nora will take the sample to Ivo before sending the report to Yara before dusk"
+    },
+    "trace_sha256": "df7c7368eeb490776c228001f9917a2b5e05cd90098b9b189524bf7d1392bce8",
+    "manifest_sha256": "45c18983dcf56126e2da4d95ae1d1d18f3bbf2916ea617fc360255a572808d6d",
+    "audit_sha256": "c22e1ec296e11dd1eeee6049b8f536e32955d70e5ef99884e9594057f681c995"
+  },
+  "first_diagnostic_path_divergence": {
+    "step": 3,
+    "prefix": " Nora will take",
+    "before": "operator_diagnostic_replay",
+    "after": "matched_response_probe/source_localization"
+  },
+  "matched_probe": {
+    "step": 3,
+    "summary": {
+      "aliased_observation_count": 0,
+      "cached_measurement_count": 0,
+      "certified_for_apply": false,
+      "comparison_axis": "source_localization",
+      "diagnostic_only": true,
+      "dominant_logit_response_axis": "not_inferred_from_dose_confounded_aggregate",
+      "dose_grid": [
+        0.04
+      ],
+      "errors": [],
+      "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+      "measurement_mode": "matched_response_probe",
+      "new_measurement_count": 2,
+      "no_edit_control": {
+        "finite_token_count": 128252,
+        "mask_identical": true,
+        "masked_token_count": 4,
+        "max_abs_logit_delta": 0.0
+      },
+      "no_edit_max_abs_logit_delta": 0.0,
+      "objective_bundle_key": "entity_insert:sample:source_body:near_reachable",
+      "objective_term": "sample",
+      "observable_count": 4,
+      "operator_axis": "target_piece_binding_seed_matrix",
+      "physical_replay_count": 6,
+      "policy_candidate_ready": false,
+      "production_apply_allowed": false,
+      "requested_objective_term": "sample",
+      "row_count": 4,
+      "seed_sources": [
+        "direct_candidate"
+      ],
+      "source_direction_comparisons": [
+        {
+          "difference_direction": "centered_minus_term",
+          "dose": 0.04,
+          "executions_distinct": true,
+          "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+          "paired_deltas": {
+            "bound_token_top20_hit_delta": 0,
+            "target_piece_logit_delta": 0.0,
+            "target_piece_prob_delta": 2.4003271129724446e-05,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          "production_apply_allowed": false,
+          "reference_observable_id": "obs:68b233c0bce45d2e6c38c09f",
+          "source_tensors_distinct": true,
+          "target_piece": " sample",
+          "target_piece_binding_variant": "canonical",
+          "variant_observable_id": "obs:cd724427d33ee490fa07a77c"
+        },
+        {
+          "difference_direction": "centered_minus_term",
+          "dose": 0.04,
+          "executions_distinct": true,
+          "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+          "paired_deltas": {
+            "bound_token_top20_hit_delta": 0,
+            "target_piece_logit_delta": 0.0,
+            "target_piece_prob_delta": 4.421527851500035e-08,
+            "target_top20_threshold_gap_delta": 0.0,
+            "threshold20_logit_delta": 0.0
+          },
+          "production_apply_allowed": false,
+          "reference_observable_id": "obs:db491b163861e8067ad2b5bf",
+          "source_tensors_distinct": true,
+          "target_piece": " Sample",
+          "target_piece_binding_variant": "alternate",
+          "variant_observable_id": "obs:10e5419521f9f76ac36fcdba"
+        }
+      ],
+      "state_restored": true,
+      "status": "dose_matched_response_complete",
+      "target_piece_binding_seed_matrix_id": "tpbsm:4fc960916f3714c8bee6044f",
+      "term_mass_is_binding_invariant_by_definition": true
+    },
+    "frozen_candidate_receipts": [
+      {
+        "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+        "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+        "observable_id": "obs:68b233c0bce45d2e6c38c09f",
+        "status": "frozen"
+      },
+      {
+        "candidate_id": "frozen_candidate:f39f73eed2aebd6222ac5d34",
+        "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+        "observable_id": "obs:db491b163861e8067ad2b5bf",
+        "status": "frozen"
+      },
+      {
+        "blocked_reason": "v1_requires_recorded_source_term_token_without_contrast",
+        "candidate_id": null,
+        "observable_id": "obs:cd724427d33ee490fa07a77c",
+        "status": "unavailable"
+      },
+      {
+        "blocked_reason": "v1_requires_recorded_source_term_token_without_contrast",
+        "candidate_id": null,
+        "observable_id": "obs:10e5419521f9f76ac36fcdba",
+        "status": "unavailable"
+      }
+    ],
+    "trial_handoffs": [
+      {
+        "blocked_reasons": [
+          "bound_target_lift",
+          "response_above_variation"
+        ],
+        "candidate_id": "frozen_candidate:7d3932456ca1b8ad01c9ff3d",
+        "canonical_request": null,
+        "checks": {
+          "bound_target_lift": false,
+          "canonical_binding": true,
+          "complete_restored_measurement": true,
+          "concrete_execution": true,
+          "finite_controls_and_readout": true,
+          "hook_executed": true,
+          "no_observed_harm": true,
+          "response_above_variation": false,
+          "same_context": true
+        },
+        "evidence_id": "obs:8be4955e8e8371fe69eeb84f",
+        "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+        "objective_bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "production_apply_allowed": false,
+        "production_trial_allowed": false,
+        "same_prefix_followup_available": false,
+        "status": "blocked"
+      },
+      {
+        "blocked_reasons": [
+          "canonical_binding",
+          "bound_target_lift",
+          "response_above_variation"
+        ],
+        "candidate_id": "frozen_candidate:f39f73eed2aebd6222ac5d34",
+        "canonical_request": null,
+        "checks": {
+          "bound_target_lift": false,
+          "canonical_binding": false,
+          "complete_restored_measurement": true,
+          "concrete_execution": true,
+          "finite_controls_and_readout": true,
+          "hook_executed": true,
+          "no_observed_harm": true,
+          "response_above_variation": false,
+          "same_context": true
+        },
+        "evidence_id": "obs:57085117ad918aaa0694df63",
+        "measurement_context_id": "context:7538a85096b23bc1b5fa0e55",
+        "objective_bundle_key": "entity_insert:sample:source_body:near_reachable",
+        "production_apply_allowed": false,
+        "production_trial_allowed": false,
+        "same_prefix_followup_available": false,
+        "status": "blocked"
+      }
+    ]
+  },
+  "current_prefix_remeasurement": {
+    "step": 4,
+    "prefix": " Nora will take the",
+    "metrics": {
+      "bound_token_top20_hit_delta": 0,
+      "target_piece_logit_after": 25.21875,
+      "target_piece_logit_before": 25.234375,
+      "target_piece_logit_delta": -0.015625,
+      "target_piece_prob_after": 0.9914449904908282,
+      "target_piece_prob_before": 0.991575830043318,
+      "target_piece_prob_delta": -0.00013083955248971435,
+      "target_rank_after": 1,
+      "target_rank_before": 1,
+      "target_rank_delta": 0,
+      "target_top20_threshold_gap_after": -11.828125,
+      "target_top20_threshold_gap_before": -11.84375,
+      "target_top20_threshold_gap_delta": 0.015625,
+      "threshold20_logit_delta": 0.0
+    },
+    "state_restored": true,
+    "continuation_identical": true,
+    "controls": {
+      "no_edit_control": {
+        "finite_token_count": 128252,
+        "mask_identical": true,
+        "masked_token_count": 4,
+        "max_abs_logit_delta": 0.0
+      },
+      "repeat_control": {
+        "finite_token_count": 128252,
+        "mask_identical": true,
+        "masked_token_count": 4,
+        "max_abs_logit_delta": 0.0
+      }
+    },
+    "hook_telemetry": [
+      {
+        "blend_delta_norm": 0.03999397,
+        "edit_id": "prefix_probe",
+        "hook_call_count": 1,
+        "op": "activation_patch",
+        "operator_recipe_id": "matched_recipe:a383f20bbb8ba45b4e56f0f7",
+        "raw_blend_delta_norm": 1.36110902,
+        "selected_token_count": 1,
+        "source_norm": 53.93076324,
+        "source_target_cosine": 0.65711468,
+        "source_target_delta_norm": 45.37054062,
+        "step_size_clip_saturated": true,
+        "surface_id": "s_resid_post_l27_last",
+        "target_norm_after": 55.56812286,
+        "target_norm_before": 55.58520508
+      }
+    ]
+  },
+  "interpretation": {
+    "established": [
+      "baseline and all 18 pre-commit prefixes match",
+      "empty review reoffers and charges at tokens 5-7 disappeared in this trajectory",
+      "fresh controlled measurement produced two piece-bound cards at token 3",
+      "controller explicitly remeasured one card at token 4",
+      "four diagnostic slots remained; no trial or rollout edit occurred"
+    ],
+    "next_bottleneck": "after sample was satisfied, menus at tokens 5-17 offered only sample candidate actions, not fresh missing-term discovery",
+    "code_pointer": "SpiralInterventionLab/runtime/worker.py:6704-6716",
+    "caveats": [
+      "one stochastic-controller trajectory, not a causal estimate of the accounting fix",
+      "new diagnostic choice occurred before historical empty-review steps; cannot attribute card arrival solely to three recovered slots",
+      "two frozen cards share a source construction and differ by target-piece binding; not two independent effective actuators",
+      "explicit measurement counters omit other generic replay work; absent counters are unknown, not zero",
+      "MPS numerics not independently qualified against CPU",
+      "lower total input tokens do not establish lower API cost: previous cached tokens 196638 versus current 0",
+      "free-text debrief is supplementary; zero repeat/no-edit variation and zero or negative logit deltas do not demonstrate noisy repeats",
+      "debrief completion-rationale complaint reflects its supplied view; runtime task_feedback explicitly reports missing Selim"
+    ]
+  }
+}

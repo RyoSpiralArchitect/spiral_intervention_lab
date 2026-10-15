@@ -1,0 +1,89 @@
+{
+  "artifact_kind": "post_run_controller_debrief",
+  "debrief_text": "## What happened?\n- The run produced the same 18-step output in both visible runs, with task completion marked false at termination (c1.jsonl:L356).\n- The controller used diagnostics and one current-prefix remeasurement, but no intervention was applied (c1.jsonl:L46; c1.jsonl:L146).\n- Candidate trial handoffs remained blocked (c1.jsonl:L122; c1.jsonl:L146).\n\n## What made the run difficult?\n- Historical candidate evidence was explicitly stale and not revalidated (c1.jsonl:L49).\n- Matched probes found target lift for one cross-bound candidate but responses stayed within repeat variation (c1.jsonl:L122).\n- The current-prefix measurement showed no top-20 movement and a small negative target-logit change (c1.jsonl:L146).\n\n## Most likely failure factors\n- Candidate efficacy was insufficiently reproducible for trial handoff (c1.jsonl:L122).\n- Some candidate actuators were classified as dead (c1.jsonl:L122).\n- The measured prefix did not provide a strong corrective signal (c1.jsonl:L146).\n\n## Evidence supporting this reading\n- Two candidate handoffs were blocked for bound-target-lift and response-above-variation failures (c1.jsonl:L122).\n- The current candidate remained blocked on the same criteria after remeasurement (c1.jsonl:L146).\n- The final output repeated without task completion despite a high reported score (c1.jsonl:L356).\n\n## What I would try next\n- Recheck candidate response at a comparable prefix before treating historical lift as actionable evidence.\n- Separate actuator binding failures from weak target response in subsequent diagnostics.\n- Review the termination path because the visible output was stable while task completion remained false.\n\n## What would have made this easier?\n- present_but_not_shown | c1.jsonl:L356 | intermediate completion or failure rationale: would clarify why the stable output was not accepted -> suggested_field: termination_reason\n- present_but_not_shown | c1.jsonl:L122 | candidate comparison context: would clarify why one lift signal failed certification -> suggested_field: per_candidate_baseline_and_variation_summary\n- present_but_not_shown | c1.jsonl:L146 | downstream task-quality assessment: would connect prefix movement to task success -> suggested_field: post_generation_task_check\n\n## What should not be concluded\n- The score alone does not establish task success, since task_done was false (c1.jsonl:L356).\n- Diagnostic target lift does not authorize applying an intervention, especially where handoffs were blocked (c1.jsonl:L122).\n- The supplied view cannot establish that omitted runtime fields were absent, because 344 event lines were omitted from coverage (coverage_manifest).\n\n## Controller-perspective note\n- I would describe the run as diagnostic-heavy and intervention-free.\n- I kept seeing candidate evidence fail certification on lift or variation criteria.\n- I lacked evidence that the final stable text satisfied the task.",
+  "do_not_autofeed_into_next_run": true,
+  "metadata": {
+    "response_id": "resp_0f099b0fe30c87b7006acf41e4563c87d09df9c9befe2013f1",
+    "status": "completed"
+  },
+  "model": "gpt-5.6-luna",
+  "not_for_future_context": true,
+  "not_for_scoring": true,
+  "packet_summary": {
+    "coverage_manifest": {
+      "character_budget": 20000,
+      "included_event_ids": [
+        "b0.jsonl:L1",
+        "c1.jsonl:L119",
+        "c1.jsonl:L120",
+        "c1.jsonl:L121",
+        "c1.jsonl:L122",
+        "c1.jsonl:L143",
+        "c1.jsonl:L144",
+        "c1.jsonl:L145",
+        "c1.jsonl:L146",
+        "c1.jsonl:L356",
+        "c1.jsonl:L46",
+        "c1.jsonl:L47",
+        "c1.jsonl:L48",
+        "c1.jsonl:L49"
+      ],
+      "interpretation": "Absent from this view does not imply absent from runtime.",
+      "omitted_event_count": 344,
+      "omitted_fields_policy": "Only explicitly listed event/measurement/decision fields were exposed; raw provider text and hidden reasoning are excluded.",
+      "omitted_file_metadata": 0,
+      "omitted_files": 0,
+      "selection": "deterministic_event_anchors",
+      "total_event_lines": 358
+    },
+    "event_counts": {
+      "controller_clock_decision": 30,
+      "controller_command": 30,
+      "controller_decision": 30,
+      "controller_diagnostic_request": 12,
+      "controller_diagnostic_result": 12,
+      "controller_effect_summary": 18,
+      "controller_loop_patience": 19,
+      "controller_observation": 30,
+      "controller_operation_menu": 30,
+      "controller_prompt_telemetry": 30,
+      "controller_provider_attempt": 30,
+      "controller_selection": 30,
+      "episode_end": 2,
+      "episode_start": 2,
+      "generation_commit": 18,
+      "generation_token_committed": 18,
+      "initial_observation_prepared": 1,
+      "observer_check": 4,
+      "prefix_inspection_complete": 12
+    },
+    "jsonl_file_count": 2,
+    "suite_mode": "minimal_baseline_suite",
+    "task_id": "spiral_constrained_rewrite_l1_v1"
+  },
+  "provider": "openai",
+  "qualitative_only": true,
+  "reference_audit": {
+    "cited_event_ids": [
+      "c1.jsonl:L122",
+      "c1.jsonl:L146",
+      "c1.jsonl:L356",
+      "c1.jsonl:L46",
+      "c1.jsonl:L49"
+    ],
+    "production_apply_allowed": false,
+    "qualitative_only": true,
+    "reference_check_scope": "checks_exposure_not_claim_truth",
+    "uncategorized_wish_count": 0,
+    "uncited_wish_count": 0,
+    "unexposed_event_ids": [],
+    "wish_count": 3
+  },
+  "usage": {
+    "input_tokens": 5717,
+    "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=5714)",
+    "output_tokens": 678,
+    "output_tokens_details": "OutputTokensDetails(reasoning_tokens=66)",
+    "total_tokens": 6395
+  }
+}

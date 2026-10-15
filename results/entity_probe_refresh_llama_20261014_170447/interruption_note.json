@@ -1,0 +1,12 @@
+{
+  "status": "interrupted",
+  "reason": "chat_turn_interrupted_before_episode_completion",
+  "generated_token_count": 15,
+  "episode_end_count": 0,
+  "efficacy_result_available": false,
+  "original_trace_preserved": true,
+  "retry_mode": "fresh_episode_same_code_and_settings_not_prefix_resume",
+  "retry_directory": "results/entity_probe_refresh_llama_20261014_retry1",
+  "verified_source_files_unchanged": 91,
+  "recorded_date_jst": "2026-10-14"
+}
