@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable, Protocol
 
 from .compiler import StepContext
-from .loop import EpisodeResult, StructuredLogger, TaskEnv, WorkerRuntime, run_episode
+from .loop import EpisodeResult, StructuredLogger, TaskEnv, WorkerRuntime, run_episode, _episode_task_feedback
 from .policy import DenyTargetRule, HarnessPolicy
 from .trace_recorder import StepAlignedTrace
 
@@ -202,6 +202,7 @@ def _run_promptless_episode(
                 "output": output,
                 "score": score,
                 "task_done": task_env.done(output),
+                **_episode_task_feedback(task_env, output),
             }
         )
     return EpisodeResult(prompt=prompt, output=output, score=score, steps=step_count)

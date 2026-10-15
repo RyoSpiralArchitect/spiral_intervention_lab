@@ -720,6 +720,21 @@ trying next. The memo also includes a short `Controller-perspective note` sectio
 for first-person trajectory interpretation, but that section is explicitly an
 interpretation layer rather than evidence or hidden chain-of-thought.
 
+The bounded interview view includes missing-term refreshes, blueprint reviews,
+diagnostic-budget exhaustion, signed bound-piece responses and task constraints.
+It distinguishes a final-output task check from older prefix feedback. A failed
+positive-response gate does not, by itself, establish noisy or irreproducible
+measurements. To audit a previous interview's input without another model call:
+
+```bash
+python3 -m SpiralInterventionLab.examples.rebuild_post_run_debrief \
+  --log-dir results/easy_debrief \
+  --output-dir results/easy_debrief_input_audit
+```
+
+The output directory must be new. This writes a rebuilt input and a coverage /
+accounting comparison, not a new interview; original logs and memos remain intact.
+
 For a lighter constrained-rewrite calibration run:
 
 ```bash

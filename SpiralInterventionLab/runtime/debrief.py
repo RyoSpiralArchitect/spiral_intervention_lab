@@ -11,6 +11,34 @@ from pathlib import Path
 from typing import Any
 
 from .evidence_inspection import evidence_catalog
+from .entity_candidate_review import NAME as ENTITY_REVIEW, blueprint_ids
+
+
+def constraint_view(feedback: Any) -> dict[str, Any]:
+    if not isinstance(feedback, Mapping):
+        return {}
+    keys = ("done", "partial_score", "constraint_violations", "missing_required_terms",
+            "required_terms_present", "entity_recall_terms", "missing_keywords", "missing_summary_terms",
+            "forbidden_terms_present", "budget_ok", "word_budget_score", "required_term_recall")
+    return {k: feedback[k][:24] if isinstance(feedback[k], (list, tuple)) else feedback[k]
+            for k in keys if k in feedback}
+
+
+def _remaining(event: Mapping[str, Any], key: str) -> int | None:
+    budget = event.get(key)
+    value = budget.get("diagnostic_calls_left") if isinstance(budget, Mapping) else None
+    return value if type(value) is int and value >= 0 else None
+
+
+def _diagnostic_cost(event: Mapping[str, Any]) -> int | None:
+    before, after = _remaining(event, "budget_before"), _remaining(event, "budget_after")
+    if before is not None and after is not None and before >= after:
+        return before - after
+    cost = event.get("diagnostic_call_cost")
+    if type(cost) is int and cost >= 0:
+        return cost
+    charged = event.get("diagnostic_budget_charged")
+    return int(charged) if isinstance(charged, bool) else None
 
 
 def _matches(value: Any, names: set[str], values: set[Any] | None = None, depth: int = 0) -> bool:
@@ -39,6 +67,26 @@ def _event_view(event: Mapping[str, Any], event_id: str, *, preserve_negative: b
     for key, value in list(view.items()):
         if isinstance(value, str):
             view[key] = value[:350]
+    feedback = constraint_view(event.get("task_feedback"))
+    if feedback:
+        view["task_feedback"] = feedback
+        view["task_feedback_scope"] = event.get("task_feedback_scope", "observed_prefix_feedback")
+    for key in ("task_feedback_status", "task_feedback_error_type"):
+        if key in event:
+            view[key] = event[key]
+    if event.get("diagnostic") in {"target_entity_insertion_probe", ENTITY_REVIEW}:
+        view["entity_discovery"] = {k: event[k] for k in (
+            "probe_kind", "probe_refresh_id", "requested_terms", "focus_terms", "candidate_terms",
+            "source_probe_id", "source_probe_recorded_step", "source_probe_is_current_prefix",
+            "entity_candidate_review_input_id", "candidate_blueprint_count", "new_candidate_blueprint_count",
+            "reused_candidate_blueprint_count", "review_reused", "review_outputs_unchanged",
+            "candidate_novelty_scope", "diagnostic_call_cost", "diagnostic_budget_charge_reason",
+            "model_forward_count", "evidence_scope", "next_evidence_needed", "production_apply_allowed",
+            "blueprint_novelty_audit") if k in event}
+        view["entity_discovery"]["blueprints"] = [{k: row[k] for k in (
+            "candidate_key", "objective_term", "first_piece", "first_token_id",
+            "source_provenance", "rank", "recommended_operator_families") if k in row}
+            for row in (event.get("candidate_blueprints") or ())[:6] if isinstance(row, Mapping)]
     if isinstance(event.get("command"), Mapping):
         command = event["command"]
         meta = command.get("meta") if isinstance(command.get("meta"), Mapping) else {}
@@ -78,7 +126,10 @@ def _event_view(event: Mapping[str, Any], event_id: str, *, preserve_negative: b
             view["matrix"][key] = None
         if invalid:
             view["matrix"]["invalid_numeric_fields"] = invalid
-    rows = evidence_catalog([event])
+    # An observation can repeat old evidence in its ledger. Do not present that
+    # copy as a new measurement attached to the final task-feedback anchor.
+    rows = evidence_catalog([event]) if event.get("event") in {
+        "controller_diagnostic_result", "controller_effect_summary"} else []
     if rows:
         selected = [row for row in rows if row.get("execution_id")][:4]
         negative = next((row for row in rows if any(row.get(k) in {
@@ -94,9 +145,10 @@ def _event_view(event: Mapping[str, Any], event_id: str, *, preserve_negative: b
             "evidence_id", "execution_id", "operator_recipe_id", "seed_source", "activation_patch_step_size",
             "target_piece", "target_piece_logit_delta", "threshold20_logit_delta",
             "target_top20_threshold_gap_delta", "target_mass_delta", "target_top20_hit_delta",
+            "target_piece_prob_delta", "bound_token_top20_hit_delta",
+            "no_edit_max_abs_logit_delta", "repeat_max_abs_logit_delta", "measurement_focus_terms",
             "actual_delta_class", "actuator_class", "verdict", "actual_delta_class_scope", "bound_token_response", "evidence_scope") if k in r} for r in selected]
         view["candidate_rows_omitted"] = max(0, len(rows) - 8)
-    view["visible_fields"] = list(view)
     return view
 
 
@@ -110,10 +162,14 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
     action_counts: Counter[str] = Counter()
     action_statuses: Counter[str] = Counter()
     action_totals: Counter[str] = Counter()
+    spend: dict[str, Counter[str]] = {}
+    review_totals: Counter[str] = Counter()
+    anchor_counts: Counter[str] = Counter()
     for path in paths[:max_files]:
         file_hash = hashlib.sha256()
         relative = str(path.relative_to(base))
         local_counts: Counter[str] = Counter()
+        seen_blueprints: set[str] = set()
         with path.open("rb") as handle:
             for line_number, raw in enumerate(handle, 1):
                 file_hash.update(raw)
@@ -126,10 +182,44 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                 if not isinstance(event, dict):
                     continue
                 name = str(event.get("event", "<missing_event>"))
+                if name == "episode_start":
+                    seen_blueprints.clear()
                 counts[name] += 1
                 local_counts[name] += 1
                 kinds = []
                 if name == "controller_diagnostic_result":
+                    diagnostic = str(event.get("diagnostic") or "unknown")
+                    accounting = spend.setdefault(diagnostic, Counter())
+                    accounting["result_count"] += 1
+                    cost = _diagnostic_cost(event)
+                    accounting["cost_unknown_count" if cost is None else "charged_calls"] += 1 if cost is None else cost
+                    for key in ("physical_replay_count", "new_measurement_count"):
+                        value = event.get(key)
+                        if type(value) is int and value >= 0:
+                            accounting[key] += value
+                    before, after = _remaining(event, "budget_before"), _remaining(event, "budget_after")
+                    if before is not None and before > 0 and after == 0:
+                        kinds.append("diagnostic_budget_exhaustion")
+                    if diagnostic == "target_entity_insertion_probe" and event.get("probe_kind") == "missing_term_refresh":
+                        kinds.extend(("first_missing_term_refresh", "last_missing_term_refresh"))
+                    if diagnostic == ENTITY_REVIEW:
+                        ids = set(blueprint_ids(event))
+                        new_count = len(ids - seen_blueprints)
+                        seen_blueprints.update(ids)
+                        event["blueprint_novelty_audit"] = {
+                            "structurally_new_count": new_count, "reused_count": len(ids) - new_count,
+                            "recorded_new_count": event.get("new_candidate_blueprint_count"),
+                            "recorded_diagnostic_cost": cost,
+                            "scope": "retrospective_structure_comparison_not_measurement_or_budget_refund",
+                        }
+                        review_totals["structurally_new_blueprint_count"] += new_count
+                        review_totals["reused_blueprint_count"] += len(ids) - new_count
+                        if ids and not new_count:
+                            kinds.append("first_review_without_new_blueprints")
+                            review_totals["charged_calls_without_new_blueprints"] += cost or 0
+                        kinds.extend(("first_entity_candidate_review", "last_entity_candidate_review"))
+                    if diagnostic == "operator_diagnostic_replay":
+                        kinds.append("last_operator_replay")
                     if event.get("diagnostic") == "candidate_action":
                         action_counts[str(event.get("executed_action") or "not_executed")] += 1
                         action_statuses[str(event.get("status") or "unknown")] += 1
@@ -153,18 +243,21 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                     kinds.append("first_negative_outcome")
                 if name == "episode_end":
                     kinds.append("termination")
+                if constraint_view(event.get("task_feedback")):
+                    kinds.append("last_task_feedback")
                 if name == "controller_prefix_hold":
                     kinds.append("first_prefix_hold_accepted" if event.get("accepted") else "first_prefix_hold_denied")
                 if not anchors:
                     kinds.append("first_event")
                 for kind in kinds:
-                    if kind not in anchors or kind in {"termination", "last_current_prefix_measurement"}:
+                    anchor_counts[kind] += 1
+                    if kind not in anchors or kind == "termination" or kind.startswith("last_"):
                         anchors[kind] = (relative, line_number, event)
         files.append({"path": relative, "sha256": file_hash.hexdigest(), "event_counts": dict(local_counts)})
     anchor_views = []
     included = set()
     by_event_id: dict[str, dict[str, Any]] = {}
-    for kind, (relative, line_number, event) in anchors.items():
+    for kind, (relative, line_number, event) in sorted(anchors.items(), key=lambda item: item[1][:2]):
         event_id = f"{relative}:L{line_number}"
         if event_id in by_event_id:
             by_event_id[event_id]["anchor_kinds"].append(kind)
@@ -184,24 +277,43 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                         other = json.loads(raw)
                     except ValueError:
                         continue
-                    if not isinstance(other, dict) or other.get("step") != step or n == line_number:
+                    if not isinstance(other, dict) or other.get("step") != step or n >= line_number:
                         continue
                     if other.get("event") not in {"controller_diagnostic_request", "controller_command", "controller_selection"}:
                         continue
-                    if len(view["related_events"]) < 3:
-                        related_id = f"{relative}:L{n}"
-                        included.add(related_id)
-                        view["related_events"].append(_event_view(other, related_id))
+                    related_id = f"{relative}:L{n}"
+                    included.add(related_id)
+                    view["related_events"].append(_event_view(other, related_id))
+                    view["related_events"] = view["related_events"][-3:]
+            if view["related_events"]:
+                view["related_event_scope"] = "nearest_preceding_same_step_context_not_transaction_identity"
         anchor_views.append(view)
     result = {"log_dir": str(base) if base else None, "jsonl_file_count": len(paths),
               "event_counts": dict(counts), "log_files": files, "controller_step_views_tail": [],
               "candidate_action_summary": {"executed_actions": dict(action_counts),
                   "statuses": dict(action_statuses), **dict(action_totals),
                   "scope": "public_diagnostic_results_not_rollout_apply_or_intervention_success"},
+              "diagnostic_accounting_summary": {
+                  "by_diagnostic": [{"diagnostic": name, **dict(values)} for name, values in sorted(spend.items())],
+                  "blueprint_reviews": dict(review_totals),
+                  "scope": "recorded_spend_and_structural_novelty_not_counterfactual_task_improvement"},
               "event_anchors": anchor_views,
               "coverage_manifest": {"selection": "deterministic_event_anchors", "total_event_lines": total,
+                  "anchor_occurrence_counts": dict(anchor_counts),
                   "omitted_files": max(0, len(paths) - max_files), "character_budget": max_chars,
                   "interpretation": "Absent from this view does not imply absent from runtime."}}
+    final_feedback = anchors.get("last_task_feedback")
+    termination = anchors.get("termination")
+    if final_feedback and (not termination or final_feedback[0] == termination[0]):
+        relative, line_number, event = final_feedback
+        result["final_constraint_report"] = {
+            "event_id": f"{relative}:L{line_number}",
+            "observed_at_step": event.get("step", event.get("steps")),
+            "scope": event.get("task_feedback_scope", "last_observed_prefix_not_recomputed_at_termination"),
+            "task_feedback": constraint_view(event.get("task_feedback")),
+        }
+    else:
+        result["final_constraint_report"] = {"status": "not_recorded_in_scanned_events"}
     # Account for the manifest itself. Trim detail, not by positive score.
     while True:
         included = {v["event_id"] for v in anchor_views}
@@ -216,9 +328,17 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
         if removable:
             max(removable, key=lambda v: len(json.dumps(v)))["related_events"].pop()
             continue
-        removable = [v for v in anchor_views if v.get("candidate_rows")]
+        removable = [v for v in anchor_views if any("recommended_operator_families" in row
+            for row in v.get("entity_discovery", {}).get("blueprints", ()))]
         if removable:
-            candidate = max(removable, key=lambda v: len(json.dumps(v)))
+            for row in removable[-1]["entity_discovery"]["blueprints"]:
+                row.pop("recommended_operator_families", None)
+            removable[-1]["entity_discovery"]["blueprint_families_omitted"] = True
+            continue
+        removable = [v for v in anchor_views if len(v.get("candidate_rows", ())) > (
+            1 if {"first_actual_matrix", "first_negative_outcome"}.intersection(v["anchor_kinds"]) else 0)]
+        if removable:
+            candidate = max(removable, key=lambda v: (len(v["candidate_rows"]), len(json.dumps(v))))
             candidate["candidate_rows"].pop()
             candidate["candidate_rows_omitted"] += 1
         elif len(files) > 1:

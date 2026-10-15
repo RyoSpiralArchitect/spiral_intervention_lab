@@ -234,6 +234,8 @@ _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
     "diagnostic_frontier_reason_text",
     "target_entity_insertion_probe_recommended",
     "entity_insertion_operator_candidate_review_recommended",
+    "entity_candidate_review_availability",
+    "entity_probe_refresh",
     "entity_insertion_operator_replay_recommended",
     "entity_insertion_operator_deepening_recommended",
     "bridge_plan_available",
@@ -902,6 +904,23 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
     summary: dict[str, Any] = {}
+    if value.get("diagnostic") == "target_entity_insertion_probe":
+        summary.update({key: _bounded_json(value[key], max_depth=2, max_items=6, max_string=200)
+            for key in ("recorded_step", "requested_terms", "probe_refresh_id", "probe_kind", "refresh_status",
+                "evidence_scope", "diagnostic_call_cost", "diagnostic_budget_charged", "budget_before", "budget_after",
+                "model_forward_count", "new_measurement_count", "physical_replay_count", "readout_cache_restored")
+            if key in value})
+    if value.get("diagnostic") == "entity_insertion_operator_candidate_review":
+        return {key: _bounded_json(value[key], max_depth=4, max_items=8, max_string=260)
+                for key in ("diagnostic", "status", "recorded_step", "focus_terms", "candidate_terms",
+                    "candidate_blueprint_count", "new_candidate_blueprint_count", "review_matrix",
+                    "candidate_blueprint_ids", "new_candidate_blueprint_ids", "reused_candidate_blueprint_count",
+                    "review_outputs_unchanged", "candidate_novelty_scope",
+                    "entity_candidate_review_input_id", "source_probe_id", "source_probe_recorded_step",
+                    "source_probe_is_current_prefix", "evidence_scope", "review_reused",
+                    "diagnostic_call_cost", "diagnostic_budget_charged", "diagnostic_budget_charge_reason",
+                    "budget_before", "budget_after", "physical_replay_count", "new_measurement_count",
+                    "next_evidence_needed", "production_apply_allowed", "certified_for_apply") if key in value}
     if value.get("diagnostic") == "candidate_action":
         compact = {key: _bounded_json(value[key], max_depth=4, max_items=24, max_string=260)
                 for key in ("diagnostic", "status", "action_id", "requested_action", "executed_action",

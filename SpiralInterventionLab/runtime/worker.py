@@ -14,6 +14,8 @@ from .codecs import TextCodec, resolve_text_codec
 from .compiler import StepContext, compile_command
 from . import diagnostic_orchestration as diag_orch
 from . import diagnostic_reuse as diag_reuse
+from . import entity_candidate_review as entity_review
+from . import entity_probe_refresh as entity_refresh
 from . import candidate_actions
 from . import candidate_handoff
 from . import diagnostic_budget
@@ -538,6 +540,9 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
     for key in ("dose_grid", "candidate_ids", "limit", "comparison_axis"):
         if key in value:
             normalized[key] = value[key]
+    if diagnostic_name == entity_refresh.NAME and "probe_refresh_id" in value:
+        normalized["probe_refresh_id"] = _clean_controller_memory_text(value["probe_refresh_id"], limit=160) or ""
+        normalized["terms"] = entity_refresh.terms(value.get("terms"))[:6]
     for key, limit in (
         ("reason", 120),
         ("bundle_key", 160),
@@ -742,6 +747,8 @@ class HookedTransformerWorkerRuntime:
         self._pending_tool_events: list[dict[str, Any]] = []
         self._diagnostic_results: list[dict[str, Any]] = []
         self._diagnostic_calls_used = 0
+        self._entity_probe_attempted_terms: set[str] = set()
+        self._entity_reviewed_blueprint_ids: set[str] = set()
         self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
         self._completed_expansion_keys: set[tuple[str, str]] = set()
         candidate_actions.reset(self)
@@ -1592,6 +1599,12 @@ class HookedTransformerWorkerRuntime:
             )
             if result is None:
                 continue
+            if result.get("diagnostic") == entity_review.NAME and result.get("entity_candidate_review_input_id"):
+                entity_review.account_review(result, [*self._diagnostic_results, *results],
+                    known_blueprint_ids=getattr(self, "_entity_reviewed_blueprint_ids", ()))
+                if not hasattr(self, "_entity_reviewed_blueprint_ids"):
+                    self._entity_reviewed_blueprint_ids = set()
+                self._entity_reviewed_blueprint_ids.update(result["candidate_blueprint_ids"])
             cost = 0 if inspection else int(result.get("diagnostic_call_cost", 1))
             if cost not in (0, 1):
                 raise ValueError("diagnostic_call_cost must be zero or one")
@@ -1618,8 +1631,13 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_calls_used = consumed_before + sum(
             int(result.get("diagnostic_call_cost", bool(result.get("diagnostic_budget_charged", False))))
             for result in results)
-        self._diagnostic_results.extend(r for r in self._latest_diagnostic_results
-                                        if r.get("diagnostic_budget_charged", False))
+        self._diagnostic_results.extend(
+            r for r in self._latest_diagnostic_results
+            if r.get("diagnostic_budget_charged", False)
+            or (r.get("diagnostic") == entity_review.NAME
+                and r.get("entity_candidate_review_input_id") and not r.get("review_reused")
+                and not r.get("review_outputs_unchanged"))
+        )
         self._diagnostic_results = self._diagnostic_results[-self.diagnostic_result_window :]
         self._pending_diagnostic_events.extend(dict(result) for result in self._latest_diagnostic_results)
         self._last_packet = None
@@ -1804,6 +1822,8 @@ class HookedTransformerWorkerRuntime:
         self._pending_tool_events = []
         self._diagnostic_results = []
         self._diagnostic_calls_used = 0
+        self._entity_probe_attempted_terms = set()
+        self._entity_reviewed_blueprint_ids = set()
         self._diagnostic_review_cache = {}
         self._completed_expansion_keys = set()
         candidate_actions.reset(self)
@@ -6694,7 +6714,7 @@ class HookedTransformerWorkerRuntime:
             readout_sidecar_hints=readout_sidecar_hints,
             max_terms=4,
         )
-        target_entity_probe_seen = any(
+        target_entity_probe_seen = bool(getattr(self, "_entity_probe_attempted_terms", ())) or any(
             str(result.get("diagnostic") or "") == "target_entity_insertion_probe"
             for result in self._diagnostic_results
         )
@@ -6741,22 +6761,11 @@ class HookedTransformerWorkerRuntime:
             ),
             None,
         )
-        latest_probe_step = (
-            int(latest_target_entity_probe.get("recorded_step", -1) or -1)
-            if isinstance(latest_target_entity_probe, Mapping)
-            else -1
-        )
-        latest_review_step = (
-            int(latest_entity_candidate_review_before_probe.get("recorded_step", -1) or -1)
-            if isinstance(latest_entity_candidate_review_before_probe, Mapping)
-            else -1
-        )
-        entity_candidate_review_seen_after_latest_probe = bool(
-            latest_target_entity_probe is not None and latest_review_step >= latest_probe_step >= 0
-        )
+        latest_probe_step = entity_review.recorded_step(latest_target_entity_probe)
+        latest_review_step = entity_review.recorded_step(latest_entity_candidate_review_before_probe)
         latest_gap_confirmation_step = max(
             (
-                int(result.get("recorded_step", -1) or -1)
+                entity_review.recorded_step(result)
                 for result in self._diagnostic_results
                 if isinstance(result, Mapping)
                 and str(result.get("diagnostic") or "") == "readout_gap_confirmation_or_variant_sweep"
@@ -6768,7 +6777,6 @@ class HookedTransformerWorkerRuntime:
         )
         if (
             isinstance(latest_target_entity_probe, Mapping)
-            and not entity_candidate_review_seen_after_latest_probe
             and str(latest_target_entity_probe.get("next_evidence_needed") or "")
             == "entity_insertion_operator_candidate_review"
         ):
@@ -6781,6 +6789,35 @@ class HookedTransformerWorkerRuntime:
                 "diagnostic": "entity_insertion_operator_candidate_review",
                 "next_evidence_needed": review_next_evidence,
             }
+            review_preview = self._entity_insertion_operator_candidate_review_diagnostic(
+                {**request, "target_entity_insertion_probe": latest_target_entity_probe},
+                source="availability_preflight", strategy_hints=hints,
+            )
+            hints["entity_candidate_review_availability"] = {
+                key: review_preview.get(key) for key in (
+                    "status", "entity_candidate_review_input_id", "source_probe_recorded_step",
+                    "source_probe_is_current_prefix", "review_reused", "candidate_blueprint_count",
+                    "review_outputs_unchanged", "new_candidate_blueprint_count",
+                    "reused_candidate_blueprint_count", "candidate_novelty_scope", "diagnostic_call_cost",
+                    "diagnostic_budget_charge_reason", "evidence_scope", "production_apply_allowed",
+                )
+            }
+            review_block_reason = (
+                "unchanged_review_inputs" if review_preview.get("review_reused") else
+                "unchanged_candidate_blueprints" if review_preview.get("candidate_blueprint_count")
+                    and review_preview.get("review_outputs_unchanged") else
+                "no_candidate_blueprints" if not review_preview.get("candidate_blueprint_count") else None
+            )
+            # Legacy receipts without input identity can still close a review at
+            # the same probe step, including step zero.
+            if (not review_block_reason and latest_review_step >= latest_probe_step >= 0
+                    and not latest_entity_candidate_review_before_probe.get("entity_candidate_review_input_id")):
+                review_block_reason = "review_completed_for_recorded_probe"
+            if review_block_reason:
+                _block_next_diagnostic(request, reason=review_block_reason, priority=20)
+        else:
+            review_block_reason = "no_target_entity_probe"
+        if isinstance(latest_target_entity_probe, Mapping) and not review_block_reason:
             hints["entity_insertion_operator_candidate_review_recommended"] = True
             hints["entity_insertion_operator_candidate_review_after_objective_rotation"] = bool(
                 latest_probe_is_objective_rotation
@@ -6812,6 +6849,21 @@ class HookedTransformerWorkerRuntime:
                 ),
                 priority=20,
             )
+        refresh = self._entity_probe_refresh_report()
+        hints["entity_probe_refresh"] = {key: value for key, value in refresh.items() if key != "request"}
+        refresh_request = refresh["request"]
+        if refresh_request is not None:
+            if refresh["status"] == "refresh_available":
+                _add_available_next_diagnostic(refresh_request,
+                    reason="recorded entity candidates exhausted; inspect currently missing terms not previously probed",
+                    priority=30)
+                hints.setdefault("diagnostic_frontier_request", entity_refresh.NAME)
+                hints.setdefault("diagnostic_frontier_next_evidence", refresh_request["next_evidence_needed"])
+                hints.setdefault("diagnostic_frontier_canonical_request", dict(refresh_request))
+                hints.setdefault("diagnostic_frontier_reason_text",
+                    "missing terms remain outside recorded probe coverage; a bounded fresh readout is available")
+            else:
+                _block_next_diagnostic(refresh_request, reason=refresh["status"], priority=30)
         latest_entity_candidate_review = next(
             (
                 result
@@ -6832,16 +6884,8 @@ class HookedTransformerWorkerRuntime:
             ),
             None,
         )
-        latest_entity_candidate_review_step = (
-            int(latest_entity_candidate_review.get("recorded_step", -1) or -1)
-            if isinstance(latest_entity_candidate_review, Mapping)
-            else -1
-        )
-        latest_entity_operator_replay_step = (
-            int(latest_entity_operator_replay.get("recorded_step", -1) or -1)
-            if isinstance(latest_entity_operator_replay, Mapping)
-            else -1
-        )
+        latest_entity_candidate_review_step = entity_review.recorded_step(latest_entity_candidate_review)
+        latest_entity_operator_replay_step = entity_review.recorded_step(latest_entity_operator_replay)
         operator_entity_replay_seen_after_latest_review = bool(
             latest_entity_candidate_review_step >= 0
             and latest_entity_operator_replay_step >= latest_entity_candidate_review_step
@@ -7266,7 +7310,7 @@ class HookedTransformerWorkerRuntime:
                     if term and (not current_term or str(term).lower() != current_term.lower())
                     and str(term).lower() not in excluded_terms
                 ][:3]
-                latest_gap_step = int(latest_gap_confirmation_review.get("recorded_step", -1) or -1)
+                latest_gap_step = entity_review.recorded_step(latest_gap_confirmation_review)
                 rotation_probe_consumed = any(
                     isinstance(result, Mapping)
                     and str(result.get("diagnostic") or "") in {
@@ -7274,7 +7318,7 @@ class HookedTransformerWorkerRuntime:
                         "objective_rotation_pipeline",
                         "carrier_to_actuator_conversion_sweep",
                     }
-                    and int(result.get("recorded_step", -1) or -1) > latest_gap_step
+                    and entity_review.recorded_step(result) > latest_gap_step
                     for result in self._diagnostic_results
                 )
                 if (
@@ -19203,6 +19247,22 @@ class HookedTransformerWorkerRuntime:
             return "trajectory_shift"
         return None
 
+    def _entity_probe_refresh_report(self) -> dict[str, Any]:
+        history = getattr(self, "_diagnostic_results", ())
+        latest_probe = next((row for row in reversed(history)
+                             if row.get("diagnostic") == entity_refresh.NAME), None)
+        preview = self._entity_insertion_operator_candidate_review_diagnostic(
+            {"diagnostic": entity_review.NAME, "target_entity_insertion_probe": latest_probe},
+            source="refresh_availability_preflight", strategy_hints={},
+        ) if latest_probe is not None else {}
+        return entity_refresh.report(
+            missing_terms=self._feedback_terms(entity_review.MISSING_TERM_KEYS),
+            missing_known=entity_review.missing_terms_known(getattr(self, "_last_task_feedback", {})),
+            history=history, attempted=getattr(self, "_entity_probe_attempted_terms", set()),
+            pending_blueprint_count=int(preview.get("candidate_blueprint_count") or 0),
+            budget_left=diagnostic_budget.left(self),
+        )
+
     def _target_entity_insertion_probe_diagnostic(
         self,
         request: Mapping[str, Any],
@@ -19210,6 +19270,17 @@ class HookedTransformerWorkerRuntime:
         source: str,
         strategy_hints: Mapping[str, Any],
     ) -> dict[str, Any]:
+        if "probe_refresh_id" in request:
+            refresh = self._entity_probe_refresh_report()
+            if (refresh["status"] != "refresh_available"
+                    or request["probe_refresh_id"] != refresh["probe_refresh_id"]
+                    or entity_refresh.terms(request.get("terms")) != refresh["probe_terms"]):
+                return {"diagnostic": entity_refresh.NAME, "status": "stale_refresh_request",
+                    "probe_refresh_id": request["probe_refresh_id"], "refresh_status": refresh["status"],
+                    "recorded_step": self._steps, "diagnostic_call_cost": 0,
+                    "new_measurement_count": 0, "model_forward_count": 0, "physical_replay_count": 0,
+                    "production_apply_allowed": False, "certified_for_apply": False,
+                    "next_evidence_needed": "choose_current_diagnostic_offer"}
         requested_terms = request.get("terms") or request.get("target_terms") or strategy_hints.get(
             "target_entity_insertion_probe_terms"
         )
@@ -19224,8 +19295,13 @@ class HookedTransformerWorkerRuntime:
         for term in raw_terms:
             if term and term not in terms:
                 terms.append(term)
+        probe_context = {"requested_terms": terms[:6], "probe_refresh_id": request.get("probe_refresh_id"),
+            "probe_kind": "missing_term_refresh" if "probe_refresh_id" in request else "entity_readout",
+            "evidence_scope": "current_prefix_term_readout_not_operator_effect",
+            "physical_replay_count": 0, "diagnostic_only": True}
         if not terms:
             return {
+                **probe_context, "diagnostic_call_cost": 0, "model_forward_count": 0, "new_measurement_count": 0,
                 "diagnostic": "target_entity_insertion_probe",
                 "status": "no_missing_terms",
                 "source": str(source),
@@ -19241,12 +19317,16 @@ class HookedTransformerWorkerRuntime:
         saved_last_cache = None
         if getattr(self.runtime_state, "last_cache", None) is not None:
             saved_last_cache = {str(name): tensor.detach().clone() for name, tensor in self.runtime_state.last_cache.items()}
+        self._entity_probe_attempted_terms = entity_refresh.coverage(
+            self._diagnostic_results, getattr(self, "_entity_probe_attempted_terms", set()))
+        self._entity_probe_attempted_terms.update(term.casefold() for term in terms[:6])
         try:
             logits, _cache = self.runtime_state.run_with_cache(self._current_token_tensor(), return_type="logits")
             next_logits = self._apply_token_constraints(logits[0, -1].detach())
             next_logits, _decoder_state = self._apply_decoder_control(next_logits)
         except Exception as exc:
             return {
+                **probe_context, "diagnostic_call_cost": 1, "model_forward_count": 1, "new_measurement_count": 0,
                 "diagnostic": "target_entity_insertion_probe",
                 "status": "error",
                 "source": str(source),
@@ -19338,6 +19418,8 @@ class HookedTransformerWorkerRuntime:
         )
         source_body_count = sum(1 for row in rows if str(row.get("source_provenance", "") or "") == "source_body")
         return {
+            **probe_context, "diagnostic_call_cost": 1, "model_forward_count": 1, "new_measurement_count": 1,
+            "readout_cache_restored": True,
             "diagnostic": "target_entity_insertion_probe",
             "status": "ok" if rows else "no_rows",
             "source": str(source),
@@ -19363,10 +19445,10 @@ class HookedTransformerWorkerRuntime:
         source: str,
         strategy_hints: Mapping[str, Any],
     ) -> dict[str, Any]:
+        latest_results = getattr(self, "_latest_diagnostic_results", [])
+        all_results = list(getattr(self, "_diagnostic_results", [])) + list(latest_results)
         probe = request.get("target_entity_insertion_probe")
         if not isinstance(probe, Mapping):
-            latest_results = getattr(self, "_latest_diagnostic_results", [])
-            all_results = list(getattr(self, "_diagnostic_results", [])) + list(latest_results)
             probe = next(
                 (
                     result
@@ -19376,8 +19458,19 @@ class HookedTransformerWorkerRuntime:
                 ),
                 None,
             )
+        feedback = getattr(self, "_last_task_feedback", {})
+        missing_terms = self._feedback_terms(entity_review.MISSING_TERM_KEYS) if feedback else []
+        missing_known = entity_review.missing_terms_known(feedback) or bool(missing_terms)
+
+        def _report(result: dict[str, Any]) -> dict[str, Any]:
+            return entity_review.annotate_review(
+                result, probe=probe, request=request, missing_terms=missing_terms,
+                missing_known=missing_known, history=all_results,
+                known_blueprint_ids=getattr(self, "_entity_reviewed_blueprint_ids", ()),
+            )
+
         if not isinstance(probe, Mapping):
-            return {
+            return _report({
                 "diagnostic": "entity_insertion_operator_candidate_review",
                 "diagnostic_role": "entity_insertion_operator_candidate_review",
                 "status": "no_target_entity_probe",
@@ -19391,7 +19484,7 @@ class HookedTransformerWorkerRuntime:
                 "operator_certified": False,
                 "next_evidence_needed": "target_entity_insertion_probe",
                 "why_not_apply": "entity insertion candidate review requires a prior target_entity_insertion_probe",
-            }
+            })
 
         rows_raw = probe.get("term_readout_rows")
         rows = [
@@ -19399,21 +19492,7 @@ class HookedTransformerWorkerRuntime:
             for row in rows_raw
             if isinstance(row, Mapping)
         ] if isinstance(rows_raw, SequenceABC) and not isinstance(rows_raw, (str, bytes, bytearray)) else []
-        feedback = getattr(self, "_last_task_feedback", {})
-        missing_terms = self._feedback_terms(
-            ("entity_recall_terms", "missing_required_terms", "missing_keywords", "missing_summary_terms")
-        ) if hasattr(self, "_feedback_terms") else []
-        if not missing_terms and isinstance(feedback, Mapping):
-            raw_missing = (
-                feedback.get("entity_recall_terms")
-                or feedback.get("missing_required_terms")
-                or feedback.get("missing_keywords")
-                or feedback.get("missing_summary_terms")
-                or []
-            )
-            if isinstance(raw_missing, SequenceABC) and not isinstance(raw_missing, (str, bytes, bytearray)):
-                missing_terms = [str(term) for term in raw_missing if str(term)]
-        missing_set = {str(term).lower() for term in missing_terms}
+        missing_set = {str(term).casefold() for term in missing_terms}
 
         def _as_int(value: Any, default: int = 10**9) -> int:
             try:
@@ -19458,7 +19537,7 @@ class HookedTransformerWorkerRuntime:
             readout_status = str(row.get("readout_status") or "unknown")
             source_provenance = str(row.get("source_provenance") or "")
             rank = _as_int(row.get("rank"))
-            term_missing = (not missing_set) or term.lower() in missing_set
+            term_missing = not missing_known or term.casefold() in missing_set
             has_source_body = source_provenance == "source_body"
             already_satisfied = bool(span_progress >= 0.999 or not term_missing)
             if already_satisfied:
@@ -19539,7 +19618,7 @@ class HookedTransformerWorkerRuntime:
             if not rows
             else "readout_steering_or_tokenization_scan"
         )
-        return {
+        return _report({
             "diagnostic": "entity_insertion_operator_candidate_review",
             "diagnostic_role": "entity_insertion_operator_candidate_review",
             "status": status,
@@ -19568,7 +19647,7 @@ class HookedTransformerWorkerRuntime:
             "operator_certified": False,
             "next_evidence_needed": next_evidence,
             "why_not_apply": "entity insertion candidate review emits shadow blueprints only; operator replay must certify any candidate before apply",
-        }
+        })
 
     def _latest_entity_insertion_candidate_blueprints(
         self,
