@@ -49,10 +49,12 @@ Selim.`, 1.0). Unforced, every prefix ends at 0.938889 with `Selim` missing.
   strength, not of routing or budget. Best post-edit ranks equal the unedited
   ranks there. Target-logit lift is reported, not gap closure; competitors can
   move too.
-- **The activation-patch dose never varied.** All 1,080 activation-patch rows
-  are `activation_patch_step_size_clip_saturated`: the step-size cap, not alpha,
-  bounds the edit, so the 0.04/0.08 alpha arms applied the same movement. The
-  strongest rows are readout steering at alpha 0.08.
+- **Activation patches were movement-limited.** All 1,080 activation-patch rows
+  are `activation_patch_step_size_clip_saturated`. The step size defaults to
+  alpha, so each arm was clipped at its own limit: doubling alpha from 0.04 to
+  0.08 changed the target-logit lift in 304 of 540 pairs, but only slightly
+  (e.g. token 9 `resid_pre` term token, 0.016 to 0.023). No patch exceeded
+  |0.055| logit; the strongest rows are readout steering at alpha 0.08.
 - **The orphan blueprints would not have changed the outcome.** Readout replays
   report `target_lift` (`send`, `Selim`) and `readout_gap_movement` (`report`)
   without rank change. Of 24 activation-patch rows, 23 are dead or neutral; one
@@ -82,9 +84,9 @@ blueprints because its sampled view omitted those lines.
 ## Narrowed improvement candidates
 
 1. **Dose gap first.** A diagnostic-only dose response at tokens 9, 10 and 13
-   would show whether any dose flips ` Sel` before the text degrades. Release
-   the step-size cap for activation patches (alpha alone does not move them)
-   and raise alpha for readout steering. If none does, intervention within this operator family cannot
+   would show whether any dose flips ` Sel` before the text degrades. Raise
+   the step-size limit together with alpha for activation patches (every arm
+   here was clipped) and raise alpha for readout steering. If none does, intervention within this operator family cannot
    solve L1, and the next step is a different family (e.g. multi-token or
    attention-route source copy), not more accounting.
 2. **Position-aware value as an offer.** The forced-first-piece branch costs one
