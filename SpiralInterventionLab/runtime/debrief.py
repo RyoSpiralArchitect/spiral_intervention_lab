@@ -157,6 +157,7 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
     paths = sorted(base.rglob("*.jsonl")) if base and base.exists() else []
     counts: Counter[str] = Counter()
     anchors: dict[str, tuple[str, int, dict[str, Any]]] = {}
+    anchor_episode: dict[str, tuple[str, int]] = {}
     files = []
     total = 0
     action_counts: Counter[str] = Counter()
@@ -170,6 +171,7 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
         relative = str(path.relative_to(base))
         local_counts: Counter[str] = Counter()
         seen_blueprints: set[str] = set()
+        episode_start_line = 0
         with path.open("rb") as handle:
             for line_number, raw in enumerate(handle, 1):
                 file_hash.update(raw)
@@ -184,6 +186,7 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                 name = str(event.get("event", "<missing_event>"))
                 if name == "episode_start":
                     seen_blueprints.clear()
+                    episode_start_line = line_number
                 counts[name] += 1
                 local_counts[name] += 1
                 kinds = []
@@ -253,6 +256,7 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                     anchor_counts[kind] += 1
                     if kind not in anchors or kind == "termination" or kind.startswith("last_"):
                         anchors[kind] = (relative, line_number, event)
+                        anchor_episode[kind] = (relative, episode_start_line)
         files.append({"path": relative, "sha256": file_hash.hexdigest(), "event_counts": dict(local_counts)})
     anchor_views = []
     included = set()
@@ -304,7 +308,12 @@ def event_anchored_log_digest(log_dir: str | Path | None, *, max_files: int = 16
                   "interpretation": "Absent from this view does not imply absent from runtime."}}
     final_feedback = anchors.get("last_task_feedback")
     termination = anchors.get("termination")
-    if final_feedback and (not termination or final_feedback[0] == termination[0]):
+    # Appended logs can hold several episodes; final feedback must come from the
+    # terminating episode, at or before its termination.
+    same_episode = bool(final_feedback and termination
+        and anchor_episode.get("last_task_feedback") == anchor_episode.get("termination")
+        and final_feedback[1] <= termination[1])
+    if final_feedback and (not termination or same_episode):
         relative, line_number, event = final_feedback
         result["final_constraint_report"] = {
             "event_id": f"{relative}:L{line_number}",

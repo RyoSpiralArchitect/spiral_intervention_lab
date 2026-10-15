@@ -130,12 +130,13 @@ def test_existing_blueprints_and_exhausted_budget_do_not_offer_refresh():
     assert worker.request_controller_diagnostics(refresh_request(worker)) == []
 
 
-@pytest.mark.parametrize("failure", ["stale", "error"])
+@pytest.mark.parametrize("failure", ["stale", "error", "no_missing_terms"])
 def test_unmeasured_refresh_receipts_do_not_replace_the_recorded_probe(failure):
     worker = worker_with_probe()
     recorded = worker._diagnostic_results[0]
-    unmeasured = {"diagnostic": entity_probe_refresh.NAME, "recorded_step": 3,
-                  "status": "stale_refresh_request" if failure == "stale" else "error"}
+    status = {"stale": "stale_refresh_request", "error": "error", "no_missing_terms": "no_missing_terms"}[failure]
+    unmeasured = {"diagnostic": entity_probe_refresh.NAME, "recorded_step": 3, "status": status,
+                  "term_readout_rows": [], "new_measurement_count": 0}
     worker._latest_diagnostic_results = [unmeasured]
     worker._diagnostic_results.append(dict(unmeasured))
     assert not entity_probe_refresh.is_recorded_probe(unmeasured)

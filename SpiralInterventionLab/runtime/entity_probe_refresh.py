@@ -15,8 +15,11 @@ UNMEASURED_STATUSES = frozenset({"stale_refresh_request", "error"})
 
 
 def is_recorded_probe(row: Any) -> bool:
-    """A probe receipt that measured readout rows; rejected or failed refreshes are not evidence."""
-    return isinstance(row, Mapping) and row.get("diagnostic") == NAME and row.get("status") not in UNMEASURED_STATUSES
+    """A probe receipt that measured readout rows; rejected, failed or empty probes are not evidence."""
+    if not isinstance(row, Mapping) or row.get("diagnostic") != NAME or row.get("status") in UNMEASURED_STATUSES:
+        return False
+    rows = row.get("term_readout_rows")
+    return isinstance(rows, (list, tuple)) and any(isinstance(item, Mapping) for item in rows)
 
 
 def terms(value: Any) -> list[str]:

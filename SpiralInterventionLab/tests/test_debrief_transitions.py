@@ -177,3 +177,15 @@ def test_final_constraints_do_not_borrow_baseline_feedback_for_controller_run(tm
     write_events(tmp_path, [{"event": "episode_end", "steps": 18, "task_done": False}])
     assert event_anchored_log_digest(tmp_path)["final_constraint_report"] == {
         "status": "not_recorded_in_scanned_events"}
+
+
+def test_final_constraints_do_not_borrow_feedback_from_an_earlier_episode_in_the_same_file(tmp_path):
+    write_events(tmp_path, [
+        {"event": "episode_start", "prompt": "p"},
+        {"event": "episode_end", "steps": 18, "task_done": True,
+         "task_feedback": {"missing_required_terms": []}, "task_feedback_scope": "final_output_task_feedback"},
+        {"event": "episode_start", "prompt": "p"},
+        {"event": "episode_end", "steps": 18, "task_done": False},
+    ])
+    assert event_anchored_log_digest(tmp_path)["final_constraint_report"] == {
+        "status": "not_recorded_in_scanned_events"}
