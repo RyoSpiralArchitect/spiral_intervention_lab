@@ -1,0 +1,705 @@
+{
+  "kind": "orphan_blueprint_ceiling_replay",
+  "created_at_utc": "2026-10-15T02:13:03.445045+00:00",
+  "source_jsonl": "/Users/ryospiralarchitect/spiral_intervention_lab/results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl",
+  "source_jsonl_sha256": "0626b1e17fecb74040ad59a43485a11b1406892bc0170a13b04689f43e83b317",
+  "source_manifest_sha256": "8dae8ce36368dfccf0a326a3ca331be4864a9828f72ff255b33dc7894511a4ef",
+  "worker_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "worker_model_path": "/Users/ryospiralarchitect/🌀SpiralReality🌀/model/llama-3.2-3b",
+  "model_config_sha256": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+  "device": "mps",
+  "dtype": "float16",
+  "seed": 0,
+  "task": "constrained_rewrite_l1",
+  "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+  "recorded_final_output": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+  "recorded_final": {
+    "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+    "score": 0.938889,
+    "word_count": 15,
+    "missing_required_terms": [
+      "Selim"
+    ],
+    "constraint_violations": [
+      "missing_required_terms"
+    ]
+  },
+  "recorded_review_line": 219,
+  "recorded_probe_line": 195,
+  "recorded_review_step": 6,
+  "orphan_terms": [
+    "report",
+    "send",
+    "Selim"
+  ],
+  "objective_term": "Selim",
+  "first_piece": " Sel",
+  "first_piece_token_id": 24082,
+  "positions": [
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "scope": "diagnostic_only_ceiling_not_controller_choice_or_rollout_outcome",
+  "production_apply_allowed": false,
+  "positions_report": [
+    {
+      "generated_tokens": 6,
+      "prefix": " Nora will take the sample to",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 3,
+        "first_piece_prob": 0.01463,
+        "top": [
+          {
+            "piece": " I",
+            "prob": 0.905155
+          },
+          {
+            "piece": " Y",
+            "prob": 0.073148
+          },
+          {
+            "piece": " Sel",
+            "prob": 0.01463
+          },
+          {
+            "piece": " send",
+            "prob": 0.001919
+          },
+          {
+            "piece": " the",
+            "prob": 0.00069
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Selim before dusk, who will send the report to Yara.",
+        "score": 0.938889,
+        "word_count": 16,
+        "missing_required_terms": [
+          "Ivo"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 7,
+      "prefix": " Nora will take the sample to I",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 3211,
+        "first_piece_prob": 0.0,
+        "top": [
+          {
+            "piece": "vo",
+            "prob": 0.99992
+          },
+          {
+            "piece": "wo",
+            "prob": 3.5e-05
+          },
+          {
+            "piece": "va",
+            "prob": 1.3e-05
+          },
+          {
+            "piece": "ivo",
+            "prob": 5e-06
+          },
+          {
+            "piece": "avo",
+            "prob": 5e-06
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to I Selim before dusk, who will send the report to Yara.",
+        "score": 0.938889,
+        "word_count": 17,
+        "missing_required_terms": [
+          "Ivo"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 8,
+      "prefix": " Nora will take the sample to Ivo",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 66,
+        "first_piece_prob": 4e-05,
+        "top": [
+          {
+            "piece": " before",
+            "prob": 0.560365
+          },
+          {
+            "piece": ",",
+            "prob": 0.181924
+          },
+          {
+            "piece": " and",
+            "prob": 0.125034
+          },
+          {
+            "piece": " by",
+            "prob": 0.039344
+          },
+          {
+            "piece": " to",
+            "prob": 0.032617
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo Selim will send the report to Yara before dusk.",
+        "score": 1.0,
+        "word_count": 16,
+        "missing_required_terms": [],
+        "constraint_violations": []
+      }
+    },
+    {
+      "generated_tokens": 9,
+      "prefix": " Nora will take the sample to Ivo before",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 5,
+        "first_piece_prob": 0.010286,
+        "top": [
+          {
+            "piece": " sending",
+            "prob": 0.507377
+          },
+          {
+            "piece": " dusk",
+            "prob": 0.317509
+          },
+          {
+            "piece": " Y",
+            "prob": 0.051832
+          },
+          {
+            "piece": " the",
+            "prob": 0.020298
+          },
+          {
+            "piece": " Sel",
+            "prob": 0.010286
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before Selim sends the report to Yara.",
+        "score": 0.938889,
+        "word_count": 14,
+        "missing_required_terms": [
+          "before dusk"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 10,
+      "prefix": " Nora will take the sample to Ivo before sending",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 5,
+        "first_piece_prob": 0.021261,
+        "top": [
+          {
+            "piece": " the",
+            "prob": 0.62133
+          },
+          {
+            "piece": " it",
+            "prob": 0.19551
+          },
+          {
+            "piece": " Y",
+            "prob": 0.069711
+          },
+          {
+            "piece": " a",
+            "prob": 0.037314
+          },
+          {
+            "piece": " Sel",
+            "prob": 0.021261
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending Selim's report to Yara before dusk.",
+        "score": 1.0,
+        "word_count": 15,
+        "missing_required_terms": [],
+        "constraint_violations": []
+      }
+    },
+    {
+      "generated_tokens": 11,
+      "prefix": " Nora will take the sample to Ivo before sending the",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 131,
+        "first_piece_prob": 3e-06,
+        "top": [
+          {
+            "piece": " report",
+            "prob": 0.994663
+          },
+          {
+            "piece": " Y",
+            "prob": 0.000788
+          },
+          {
+            "piece": " rest",
+            "prob": 0.000525
+          },
+          {
+            "piece": " full",
+            "prob": 0.000493
+          },
+          {
+            "piece": " reports",
+            "prob": 0.000277
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the Selim's report to Yara before dusk.",
+        "score": 1.0,
+        "word_count": 16,
+        "missing_required_terms": [],
+        "constraint_violations": []
+      }
+    },
+    {
+      "generated_tokens": 12,
+      "prefix": " Nora will take the sample to Ivo before sending the report",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 169,
+        "first_piece_prob": 3e-06,
+        "top": [
+          {
+            "piece": " to",
+            "prob": 0.917669
+          },
+          {
+            "piece": ".",
+            "prob": 0.027711
+          },
+          {
+            "piece": ",",
+            "prob": 0.01875
+          },
+          {
+            "piece": " by",
+            "prob": 0.005993
+          },
+          {
+            "piece": " with",
+            "prob": 0.005809
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report Selim to Yara.",
+        "score": 0.938889,
+        "word_count": 14,
+        "missing_required_terms": [
+          "before dusk"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 13,
+      "prefix": " Nora will take the sample to Ivo before sending the report to",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 2,
+        "first_piece_prob": 0.011654,
+        "top": [
+          {
+            "piece": " Y",
+            "prob": 0.98548
+          },
+          {
+            "piece": " Sel",
+            "prob": 0.011654
+          },
+          {
+            "piece": " the",
+            "prob": 0.000618
+          },
+          {
+            "piece": " her",
+            "prob": 0.000255
+          },
+          {
+            "piece": " Nora",
+            "prob": 0.000238
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Selim before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Yara"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 14,
+      "prefix": " Nora will take the sample to Ivo before sending the report to Y",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 181,
+        "first_piece_prob": 0.0,
+        "top": [
+          {
+            "piece": "ara",
+            "prob": 0.999966
+          },
+          {
+            "piece": "ARA",
+            "prob": 8e-06
+          },
+          {
+            "piece": " ara",
+            "prob": 6e-06
+          },
+          {
+            "piece": "ura",
+            "prob": 2e-06
+          },
+          {
+            "piece": "aya",
+            "prob": 2e-06
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Y Selim.",
+        "score": 0.877778,
+        "word_count": 14,
+        "missing_required_terms": [
+          "Yara",
+          "before dusk"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 15,
+      "prefix": " Nora will take the sample to Ivo before sending the report to Yara",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 1079,
+        "first_piece_prob": 0.0,
+        "top": [
+          {
+            "piece": " before",
+            "prob": 0.378364
+          },
+          {
+            "piece": ".",
+            "prob": 0.281176
+          },
+          {
+            "piece": " by",
+            "prob": 0.14817
+          },
+          {
+            "piece": " at",
+            "prob": 0.054509
+          },
+          {
+            "piece": ",",
+            "prob": 0.034648
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara Selim.",
+        "score": 0.938889,
+        "word_count": 14,
+        "missing_required_terms": [
+          "before dusk"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 16,
+      "prefix": " Nora will take the sample to Ivo before sending the report to Yara before",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 560,
+        "first_piece_prob": 0.0,
+        "top": [
+          {
+            "piece": " dusk",
+            "prob": 0.970253
+          },
+          {
+            "piece": " the",
+            "prob": 0.009365
+          },
+          {
+            "piece": " sunset",
+            "prob": 0.003554
+          },
+          {
+            "piece": " night",
+            "prob": 0.002662
+          },
+          {
+            "piece": " it",
+            "prob": 0.002386
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before Selim.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "before dusk"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      }
+    },
+    {
+      "generated_tokens": 17,
+      "prefix": " Nora will take the sample to Ivo before sending the report to Yara before dusk",
+      "next_token": {
+        "status": "ok",
+        "first_piece_rank": 1766,
+        "first_piece_prob": 0.0,
+        "top": [
+          {
+            "piece": ".",
+            "prob": 0.972385
+          },
+          {
+            "piece": ".\n",
+            "prob": 0.008479
+          },
+          {
+            "piece": " arrives",
+            "prob": 0.00332
+          },
+          {
+            "piece": ",",
+            "prob": 0.002282
+          },
+          {
+            "piece": ".\n\n",
+            "prob": 0.001819
+          }
+        ]
+      },
+      "natural": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ]
+      },
+      "forced_first_piece": {
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk Selim.",
+        "score": 1.0,
+        "word_count": 16,
+        "missing_required_terms": [],
+        "constraint_violations": []
+      }
+    }
+  ],
+  "parts": [
+    "ceiling"
+  ],
+  "elapsed_seconds": 194.7
+}
