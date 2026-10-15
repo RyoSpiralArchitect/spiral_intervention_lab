@@ -19259,7 +19259,7 @@ class HookedTransformerWorkerRuntime:
             missing_terms=self._feedback_terms(entity_review.MISSING_TERM_KEYS),
             missing_known=entity_review.missing_terms_known(getattr(self, "_last_task_feedback", {})),
             history=history, attempted=getattr(self, "_entity_probe_attempted_terms", set()),
-            pending_blueprint_count=int(preview.get("candidate_blueprint_count") or 0),
+            pending_blueprint_count=int(preview.get("new_candidate_blueprint_count") or 0),
             budget_left=diagnostic_budget.left(self),
         )
 

@@ -130,6 +130,18 @@ def test_existing_blueprints_and_exhausted_budget_do_not_offer_refresh():
     assert worker.request_controller_diagnostics(refresh_request(worker)) == []
 
 
+def test_reviewed_blueprints_no_longer_block_refresh_for_unprobed_terms():
+    worker = worker_with_probe()
+    worker._last_task_feedback = {"missing_required_terms": ["sample", "Ivo", "Selim", "Yara"]}
+    assert worker._entity_probe_refresh_report()["status"] == "recorded_candidates_pending"
+    review = worker.request_controller_diagnostics({"diagnostic": NAME})[0]
+    assert review["candidate_blueprint_count"] > 0
+    refresh = worker._entity_probe_refresh_report()
+    assert refresh["status"] == "refresh_available"
+    assert refresh["pending_blueprint_count"] == 0
+    assert "Yara" in refresh["probe_terms"]
+
+
 def test_signatures_distinguish_refreshes_and_casefolded_coverage_is_not_reoffered():
     worker = exhausted_worker()
     first = refresh_request(worker)

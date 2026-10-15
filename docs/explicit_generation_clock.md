@@ -458,3 +458,22 @@ plus 9 subtests, with 15 dependency deprecation warnings. `git diff --check`
 passed. Tests cover feedback-only input changes, probe updates without blueprint
 novelty, binding/span/family changes, history eviction/reset, explicit-prefix
 measurement separation, bounded transition coverage and immutable offline rebuilds.
+
+### Receipt revisions and refresh pending repair (2026-10-15)
+
+The receipts above were produced by intermediate revisions, not by the merged
+accounting. Both live runs record `entity_candidate_review.py` sha `0d3e996e…`
+(merged: `ebff926f…`) and different `worker.py` hashes. At that revision a
+review with changed inputs and any blueprints cost one slot. The 10-10 audit
+table and the retry's token-4 review therefore show a one-slot charge for an
+unchanged `sample` blueprint (`c1.jsonl:L158` repeats the token-0 blueprint).
+Under the merged novelty rule that review costs zero and is not offered, which
+would have left one slot after the token-6 review. No live receipt exercises
+the merged accounting yet; the next fixed-prefix comparison should.
+
+A follow-up repair concerns refresh availability. Pending recorded candidates
+previously counted every blueprint from the latest probe, including ones
+already reviewed. A failed but reviewed `Selim` blueprint could then keep the
+refresh blocked as `recorded_candidates_pending` while other missing terms
+were never probed. Pending now means blueprints not yet reviewed in the
+episode. Regression: `test_reviewed_blueprints_no_longer_block_refresh_for_unprobed_terms`.
