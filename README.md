@@ -41,6 +41,13 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/orphan_blueprint_ceiling.md`](docs/orphan_blueprint_ceiling.md)
+  Diagnostic-only ceiling for the three blueprints the 10-14 Llama retry never
+  replayed. Forcing ` Sel` reaches 1.0 at three prefixes, but none of 1,116
+  bounded first-token replays makes it the greedy token: the best lift is +0.14
+  logit against a smallest useful gap of 3.37. More budget or routing would not
+  have helped; the evaluator also rewards role-incorrect insertions.
+
 - [`docs/explicit_generation_clock.md`](docs/explicit_generation_clock.md)
   Opt-in `inspect_prefix` / `commit_token` actions separate bounded investigation
   from one-token generation, including before the first answer token. Failed
