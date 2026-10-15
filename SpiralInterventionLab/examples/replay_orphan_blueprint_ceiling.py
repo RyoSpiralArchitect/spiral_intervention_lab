@@ -152,9 +152,14 @@ def _replay_summary(replay: Mapping[str, Any]) -> dict[str, Any]:
 
 def _scored(task: Any, text: str) -> dict[str, Any]:
     feedback = task.task_feedback(text)
-    return {"text": text, "score": task.score(text), "word_count": len(text.split()),
-            "missing_required_terms": feedback.get("missing_required_terms"),
-            "constraint_violations": feedback.get("constraint_violations")}
+    scored = {"text": text, "score": task.score(text), "word_count": len(text.split()),
+              "missing_required_terms": feedback.get("missing_required_terms"),
+              "constraint_violations": feedback.get("constraint_violations")}
+    role_report = getattr(task, "role_binding_report", None)
+    if callable(role_report):
+        roles = role_report(text)
+        scored.update(role_binding_ok=roles["role_binding_ok"], role_violations=roles["role_violations"])
+    return scored
 
 
 def _branch(worker: Any, task: Any, *, forced_token_ids: Sequence[int], horizon: int) -> dict[str, Any]:

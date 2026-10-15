@@ -41,6 +41,14 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/operator_dose_response.md`](docs/operator_dose_response.md)
+  Dose response on the L1 `Selim` case. Readout steering writes the name only at
+  12-24% of the residual norm, where it is equivalent to forcing the token;
+  source-anchored activation patches never reach and damage the state at high
+  dose. The real bottleneck is clause structure: pushing `,` at 6% of the norm
+  makes the worker write the full role-correct rewrite itself. Adds an offline
+  role-binding check (not part of the legacy score).
+
 - [`docs/orphan_blueprint_ceiling.md`](docs/orphan_blueprint_ceiling.md)
   Diagnostic-only ceiling for the three blueprints the 10-14 Llama retry never
   replayed. Forcing ` Sel` reaches 1.0 at four prefixes, but none of 1,116

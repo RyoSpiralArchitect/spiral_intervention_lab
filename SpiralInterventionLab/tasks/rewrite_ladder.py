@@ -10,6 +10,7 @@ import hashlib
 from typing import Any
 
 from .language_tasks import SpiralConstrainedRewriteEnv, _strip_output, _word_count
+from .role_binding import check_role_frames
 from .semantic_critic import SemanticCritic
 
 
@@ -32,6 +33,12 @@ class SpiralRewriteLadderEnv(SpiralConstrainedRewriteEnv):
          ("Ada", "bring", "cable", "Niko", "Rami", "send", "diagram", "Vera", "before lunch")),
     )
     _AXES = {1: "required_term_load", 2: "word_budget_compression", 3: "lexical_exclusion"}
+    # (agent, action, theme, recipient) per clause of each source sentence.
+    _ROLE_FRAMES = {
+        "delivery": (("Mira", "send", "budget", "Omar"), ("Leena", "bring", "contract", "Priya")),
+        "review": (("Nora", "take", "sample", "Ivo"), ("Selim", "send", "report", "Yara")),
+        "workshop": (("Ada", "bring", "cable", "Niko"), ("Rami", "send", "diagram", "Vera")),
+    }
 
     def __init__(self, *, level: int, semantic_critic: SemanticCritic | None = None) -> None:
         if isinstance(level, bool) or not isinstance(level, int) or level not in self._AXES:
@@ -65,6 +72,12 @@ class SpiralRewriteLadderEnv(SpiralConstrainedRewriteEnv):
 
     def task_feedback(self, output: str) -> dict[str, Any]:
         return {**super().task_feedback(output), "rewrite_ladder": self.benchmark_manifest()}
+
+    def role_binding_report(self, output: str) -> dict[str, Any]:
+        """Offline check of who does what for whom; not part of score() or controller feedback."""
+        episode = self._episode()
+        case_id = next(case_id for case_id, source, _ in self._CASES if source == episode.source_text)
+        return {"case_id": case_id, **check_role_frames(_strip_output(output), self._ROLE_FRAMES[case_id])}
 
     def stop_checker(self, output: str) -> bool:
         # Do not turn a word-budget violation into artificial decode starvation.
