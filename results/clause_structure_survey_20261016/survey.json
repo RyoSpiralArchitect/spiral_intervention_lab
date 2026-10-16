@@ -1,0 +1,4626 @@
+{
+  "kind": "clause_structure_survey",
+  "created_at_utc": "2026-10-15T22:41:36.585623+00:00",
+  "worker_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "checkpoint_manifest_sha256": "8dae8ce36368dfccf0a326a3ca331be4864a9828f72ff255b33dc7894511a4ef",
+  "device": "mps",
+  "dtype": "float16",
+  "connectives": [
+    ",",
+    " while",
+    ";",
+    " and",
+    " whereas",
+    " but"
+  ],
+  "top_k": 10,
+  "rescue_criterion": "score 1.0, no constraint violations, role_binding_ok",
+  "scope": "diagnostic_only_forced_connective_ceiling_not_controller_choice_or_rollout_outcome",
+  "production_apply_allowed": false,
+  "cases": [
+    {
+      "task": "constrained_rewrite_l1",
+      "seed": 1,
+      "case_id": "delivery",
+      "natural": {
+        "text": " Mira will send the budget to Omar before noon, while Leena will bring the contract to Priya.",
+        "score": 1.0,
+        "word_count": 17,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "natural_success": true,
+      "matches_reference": true,
+      "rescue_count": 9,
+      "best_rescue": {
+        "generated_tokens": 8,
+        "prefix": " Mira will send the budget to Omar",
+        "piece": " and",
+        "rank": 3,
+        "prob": 0.162104,
+        "gap_to_top1": 1.1875,
+        "rescue": true,
+        "status": "ok",
+        "text": " Mira will send the budget to Omar and Leena will bring the contract to Priya before noon.",
+        "score": 1.0,
+        "word_count": 17,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " M",
+          "missing_term_first_piece_ranks": {
+            "Mira": 1,
+            "send": 37,
+            "budget": 1874,
+            "Omar": 12,
+            "Leena": 5,
+            "bring": 396,
+            "contract": 1598,
+            "Priya": 20,
+            "before noon": 52
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " M",
+          "natural_next": "ira",
+          "missing_term_first_piece_ranks": {
+            "Mira": 144,
+            "send": 331,
+            "budget": 3054,
+            "Omar": 2121,
+            "Leena": 10464,
+            "bring": 9667,
+            "contract": 16375,
+            "Priya": 30464,
+            "before noon": 535
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Mira",
+          "natural_next": " will",
+          "missing_term_first_piece_ranks": {
+            "send": 4,
+            "budget": 228,
+            "Omar": 255,
+            "Leena": 234,
+            "bring": 45,
+            "contract": 485,
+            "Priya": 1243,
+            "before noon": 14
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 8,
+              "prob": 0.004665,
+              "gap_to_top1": 4.64062,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira, send budget to Omar, before noon; Leena, bring contract to Priya, before noon.",
+              "score": 1.0,
+              "word_count": 14,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 6,
+              "prob": 0.010349,
+              "gap_to_top1": 3.84375,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira and Leena will send and bring the budget and contract to Priya before noon.",
+              "score": 0.938889,
+              "word_count": 15,
+              "missing_required_terms": [
+                "Omar"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent leena, expected mira"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Mira will",
+          "natural_next": " send",
+          "missing_term_first_piece_ranks": {
+            "send": 1,
+            "budget": 48,
+            "Omar": 1781,
+            "Leena": 1189,
+            "bring": 2,
+            "contract": 60,
+            "Priya": 2169,
+            "before noon": 12
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Mira will send",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "budget": 2,
+            "Omar": 3,
+            "Leena": 5,
+            "bring": 1738,
+            "contract": 9,
+            "Priya": 4,
+            "before noon": 23
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 8,
+              "prob": 0.002997,
+              "gap_to_top1": 5.60938,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send and Leena will bring the contract to Priya before noon.",
+              "score": 0.877778,
+              "word_count": 13,
+              "missing_required_terms": [
+                "budget",
+                "Omar"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Mira will send the",
+          "natural_next": " budget",
+          "missing_term_first_piece_ranks": {
+            "budget": 1,
+            "Omar": 15,
+            "Leena": 3,
+            "bring": 5768,
+            "contract": 2,
+            "Priya": 51,
+            "before noon": 319
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Mira will send the budget",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Omar": 51,
+            "Leena": 32,
+            "bring": 1325,
+            "contract": 19,
+            "Priya": 175,
+            "before noon": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 5,
+              "prob": 0.005833,
+              "gap_to_top1": 5.0625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget, and Leena will bring the contract to Priya before noon.",
+              "score": 0.938889,
+              "word_count": 15,
+              "missing_required_terms": [
+                "Omar"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 7,
+              "prob": 0.000629,
+              "gap_to_top1": 7.28906,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget; Leena will bring the contract before noon.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Omar",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 3,
+              "prob": 0.011069,
+              "gap_to_top1": 4.42188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget and Leena will bring the contract to Priya before noon.",
+              "score": 0.938889,
+              "word_count": 15,
+              "missing_required_terms": [
+                "Omar"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Mira will send the budget to",
+          "natural_next": " Omar",
+          "missing_term_first_piece_ranks": {
+            "Omar": 1,
+            "Leena": 3,
+            "bring": 15,
+            "contract": 31,
+            "Priya": 2,
+            "before noon": 8
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Mira will send the budget to Omar",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Leena": 17,
+            "bring": 264,
+            "contract": 319,
+            "Priya": 168,
+            "before noon": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.077779,
+              "gap_to_top1": 1.92188,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar, while Leena brings the contract to Priya before noon.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 5,
+              "prob": 0.006485,
+              "gap_to_top1": 4.40625,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar while Leena brings the contract to Priya before noon.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 6,
+              "prob": 0.003995,
+              "gap_to_top1": 4.89062,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar; Leena will bring the contract to Priya before noon.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 3,
+              "prob": 0.162104,
+              "gap_to_top1": 1.1875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar and Leena will bring the contract to Priya before noon.",
+              "score": 1.0,
+              "word_count": 17,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Mira will send the budget to Omar before",
+          "natural_next": " noon",
+          "missing_term_first_piece_ranks": {
+            "Leena": 3,
+            "bring": 104,
+            "contract": 223,
+            "Priya": 47,
+            "before noon": 160
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Mira will send the budget to Omar before noon",
+          "natural_next": ",",
+          "missing_term_first_piece_ranks": {
+            "Leena": 42,
+            "bring": 178,
+            "contract": 474,
+            "Priya": 669
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 4,
+              "prob": 0.060799,
+              "gap_to_top1": 2.10938,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon while Leena brings the contract to Priya.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 2,
+              "prob": 0.145849,
+              "gap_to_top1": 1.23438,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon; Leena will bring the contract to Priya.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.059856,
+              "gap_to_top1": 2.125,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon and Leena will bring the contract to Priya.",
+              "score": 1.0,
+              "word_count": 17,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Mira will send the budget to Omar before noon,",
+          "natural_next": " while",
+          "missing_term_first_piece_ranks": {
+            "Leena": 5,
+            "bring": 51,
+            "contract": 598,
+            "Priya": 161
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 2,
+              "prob": 0.083658,
+              "gap_to_top1": 2.04688,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon, and Leena will bring the contract to Priya.",
+              "score": 1.0,
+              "word_count": 17,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Mira will send the budget to Omar before noon, while",
+          "natural_next": " Le",
+          "missing_term_first_piece_ranks": {
+            "Leena": 1,
+            "bring": 23,
+            "contract": 92,
+            "Priya": 4
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Mira will send the budget to Omar before noon, while Le",
+          "natural_next": "ena",
+          "missing_term_first_piece_ranks": {
+            "Leena": 2728,
+            "bring": 14643,
+            "contract": 32861,
+            "Priya": 4569
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena",
+          "natural_next": " will",
+          "missing_term_first_piece_ranks": {
+            "bring": 7,
+            "contract": 658,
+            "Priya": 1199
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.00133,
+              "gap_to_top1": 5.98438,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon, while Leena and Priya will bring the contract.",
+              "score": 1.0,
+              "word_count": 17,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 15,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will",
+          "natural_next": " bring",
+          "missing_term_first_piece_ranks": {
+            "bring": 1,
+            "contract": 9,
+            "Priya": 646
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 16,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will bring",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "contract": 3,
+            "Priya": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 17,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will bring the",
+          "natural_next": " contract",
+          "missing_term_first_piece_ranks": {
+            "contract": 1,
+            "Priya": 6
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 18,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will bring the contract",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Priya": 6
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.000976,
+              "gap_to_top1": 6.92188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon, while Leena will bring the contract, before noon.",
+              "score": 0.938889,
+              "word_count": 17,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 9,
+              "prob": 0.000109,
+              "gap_to_top1": 9.11719,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon, while Leena will bring the contract and Priya will.",
+              "score": 1.0,
+              "word_count": 18,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 19,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will bring the contract to",
+          "natural_next": " Pri",
+          "missing_term_first_piece_ranks": {
+            "Priya": 1
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 20,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will bring the contract to Pri",
+          "natural_next": "ya",
+          "missing_term_first_piece_ranks": {
+            "Priya": 248
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 21,
+          "prefix": " Mira will send the budget to Omar before noon, while Leena will bring the contract to Priya",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {},
+          "forced": []
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l1",
+      "seed": 0,
+      "case_id": "review",
+      "natural": {
+        "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk.",
+        "score": 0.938889,
+        "word_count": 15,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "role_binding_ok": false,
+        "role_violations": [
+          "send: agent nora, expected selim"
+        ]
+      },
+      "natural_success": false,
+      "matches_reference": true,
+      "rescue_count": 4,
+      "best_rescue": {
+        "generated_tokens": 8,
+        "prefix": " Nora will take the sample to Ivo",
+        "piece": ",",
+        "rank": 2,
+        "prob": 0.181924,
+        "gap_to_top1": 1.125,
+        "rescue": true,
+        "status": "ok",
+        "text": " Nora will take the sample to Ivo, while Selim sends the report to Yara before dusk.",
+        "score": 1.0,
+        "word_count": 16,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " Nora",
+          "missing_term_first_piece_ranks": {
+            "Nora": 1,
+            "take": 199,
+            "sample": 1326,
+            "Ivo": 6,
+            "Selim": 48,
+            "send": 271,
+            "report": 953,
+            "Yara": 38,
+            "before dusk": 70
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " Nora",
+          "natural_next": " will",
+          "missing_term_first_piece_ranks": {
+            "take": 3,
+            "sample": 74,
+            "Ivo": 20,
+            "Selim": 484,
+            "send": 16,
+            "report": 293,
+            "Yara": 228,
+            "before dusk": 9
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 6,
+              "prob": 0.017138,
+              "gap_to_top1": 3.21875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Nora, before dusk, takes the sample to Ivo, while Selim sends the report to Yara.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 10,
+              "prob": 0.008484,
+              "gap_to_top1": 3.92188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora and Ivo will take the sample to Yara before dusk.",
+              "score": 0.816667,
+              "word_count": 11,
+              "missing_required_terms": [
+                "Selim",
+                "send",
+                "report"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "sample: recipient yara, expected ivo"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Nora will",
+          "natural_next": " take",
+          "missing_term_first_piece_ranks": {
+            "take": 1,
+            "sample": 7,
+            "Ivo": 23,
+            "Selim": 2942,
+            "send": 2,
+            "report": 16,
+            "Yara": 352,
+            "before dusk": 11
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Nora will take",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "sample": 3,
+            "Ivo": 4,
+            "Selim": 6,
+            "send": 72,
+            "report": 26,
+            "Yara": 5,
+            "before dusk": 18
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 7,
+              "prob": 0.000979,
+              "gap_to_top1": 6.13281,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take and send the sample to Ivo and Yara before dusk.",
+              "score": 0.877778,
+              "word_count": 13,
+              "missing_required_terms": [
+                "Selim",
+                "report"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Nora will take the",
+          "natural_next": " sample",
+          "missing_term_first_piece_ranks": {
+            "sample": 1,
+            "Ivo": 4,
+            "Selim": 468,
+            "send": 201,
+            "report": 2,
+            "Yara": 3,
+            "before dusk": 149
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Nora will take the sample",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 10,
+            "Selim": 119,
+            "send": 64,
+            "report": 41,
+            "Yara": 19,
+            "before dusk": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 3,
+              "prob": 0.004744,
+              "gap_to_top1": 5.26562,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample, then send the report to Yara before dusk.",
+              "score": 0.877778,
+              "word_count": 13,
+              "missing_required_terms": [
+                "Ivo",
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.003063,
+              "gap_to_top1": 5.70312,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample and send the report to Yara before dusk.",
+              "score": 0.877778,
+              "word_count": 13,
+              "missing_required_terms": [
+                "Ivo",
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Nora will take the sample to",
+          "natural_next": " I",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 1,
+            "Selim": 3,
+            "send": 4,
+            "report": 11,
+            "Yara": 2,
+            "before dusk": 10
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Nora will take the sample to I",
+          "natural_next": "vo",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 1250,
+            "Selim": 3211,
+            "send": 1460,
+            "report": 2367,
+            "Yara": 1926,
+            "before dusk": 316
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Nora will take the sample to Ivo",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Selim": 66,
+            "send": 45,
+            "report": 75,
+            "Yara": 43,
+            "before dusk": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.181924,
+              "gap_to_top1": 1.125,
+              "rescue": true,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo, while Selim sends the report to Yara before dusk.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 7,
+              "prob": 0.008247,
+              "gap_to_top1": 4.21875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo while Selim sends the report to Yara before dusk.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 10,
+              "prob": 0.004554,
+              "gap_to_top1": 4.8125,
+              "rescue": true,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo; Selim will send the report to Yara before dusk.",
+              "score": 1.0,
+              "word_count": 16,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 3,
+              "prob": 0.125034,
+              "gap_to_top1": 1.5,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo and send the report to Yara before dusk.",
+              "score": 0.938889,
+              "word_count": 15,
+              "missing_required_terms": [
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Nora will take the sample to Ivo before",
+          "natural_next": " sending",
+          "missing_term_first_piece_ranks": {
+            "Selim": 5,
+            "send": 12,
+            "report": 37,
+            "Yara": 3,
+            "before dusk": 113
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Nora will take the sample to Ivo before sending",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "Selim": 5,
+            "report": 7,
+            "Yara": 3,
+            "before dusk": 14
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 8,
+              "prob": 0.002122,
+              "gap_to_top1": 5.67969,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending, then to Yara, before dusk.",
+              "score": 0.877778,
+              "word_count": 14,
+              "missing_required_terms": [
+                "Selim",
+                "report"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " and",
+              "rank": 10,
+              "prob": 0.001962,
+              "gap_to_top1": 5.75781,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending and Yara the report.",
+              "score": 0.877778,
+              "word_count": 13,
+              "missing_required_terms": [
+                "Selim",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Nora will take the sample to Ivo before sending the",
+          "natural_next": " report",
+          "missing_term_first_piece_ranks": {
+            "Selim": 131,
+            "report": 1,
+            "Yara": 2,
+            "before dusk": 326
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Nora will take the sample to Ivo before sending the report",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Selim": 169,
+            "Yara": 12,
+            "before dusk": 6
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 3,
+              "prob": 0.01875,
+              "gap_to_top1": 3.89062,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending the report, as Selim, before dusk.",
+              "score": 0.938889,
+              "word_count": 15,
+              "missing_required_terms": [
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " and",
+              "rank": 10,
+              "prob": 0.001208,
+              "gap_to_top1": 6.63281,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending the report and finishing before dusk.",
+              "score": 0.877778,
+              "word_count": 15,
+              "missing_required_terms": [
+                "Selim",
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Nora will take the sample to Ivo before sending the report to",
+          "natural_next": " Y",
+          "missing_term_first_piece_ranks": {
+            "Selim": 2,
+            "Yara": 1,
+            "before dusk": 7
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Nora will take the sample to Ivo before sending the report to Y",
+          "natural_next": "ara",
+          "missing_term_first_piece_ranks": {
+            "Selim": 181,
+            "Yara": 279,
+            "before dusk": 150
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 15,
+          "prefix": " Nora will take the sample to Ivo before sending the report to Yara",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Selim": 1079,
+            "before dusk": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 5,
+              "prob": 0.034648,
+              "gap_to_top1": 2.39062,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending the report to Yara, finishing before dusk.",
+              "score": 0.938889,
+              "word_count": 16,
+              "missing_required_terms": [
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 16,
+          "prefix": " Nora will take the sample to Ivo before sending the report to Yara before",
+          "natural_next": " dusk",
+          "missing_term_first_piece_ranks": {
+            "Selim": 560,
+            "before dusk": 128
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 17,
+          "prefix": " Nora will take the sample to Ivo before sending the report to Yara before dusk",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {
+            "Selim": 1766
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.002282,
+              "gap_to_top1": 6.05469,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending the report to Yara before dusk, but Selim will.",
+              "score": 1.0,
+              "word_count": 18,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l1",
+      "seed": 5,
+      "case_id": "workshop",
+      "natural": {
+        "text": " Ada brings the cable to Niko before lunch, while Rami sends the diagram to Vera.",
+        "score": 1.0,
+        "word_count": 15,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "natural_success": true,
+      "matches_reference": true,
+      "rescue_count": 11,
+      "best_rescue": {
+        "generated_tokens": 9,
+        "prefix": " Ada brings the cable to Niko before lunch",
+        "piece": ";",
+        "rank": 2,
+        "prob": 0.161107,
+        "gap_to_top1": 1.21875,
+        "rescue": true,
+        "status": "ok",
+        "text": " Ada brings the cable to Niko before lunch; Rami sends the diagram to Vera.",
+        "score": 1.0,
+        "word_count": 14,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " Ada",
+          "missing_term_first_piece_ranks": {
+            "Ada": 1,
+            "bring": 150,
+            "cable": 11475,
+            "Niko": 3,
+            "Rami": 5,
+            "send": 120,
+            "diagram": 5773,
+            "Vera": 23,
+            "before lunch": 53
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " Ada",
+          "natural_next": " brings",
+          "missing_term_first_piece_ranks": {
+            "bring": 3,
+            "cable": 96,
+            "Niko": 48,
+            "Rami": 30,
+            "send": 13,
+            "diagram": 1464,
+            "Vera": 980,
+            "before lunch": 10
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 9,
+              "prob": 0.005817,
+              "gap_to_top1": 4.4375,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada, before lunch, brings the cable to Niko, while Rami sends the diagram to Vera.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 6,
+              "prob": 0.009296,
+              "gap_to_top1": 3.96875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada and Rami will send the diagram and cable to Niko and Vera before lunch.",
+              "score": 0.938889,
+              "word_count": 15,
+              "missing_required_terms": [
+                "bring"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "diagram: recipient niko, expected vera"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Ada brings",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "cable": 2,
+            "Niko": 4,
+            "Rami": 5,
+            "send": 316,
+            "diagram": 48,
+            "Vera": 8,
+            "before lunch": 14
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Ada brings the",
+          "natural_next": " cable",
+          "missing_term_first_piece_ranks": {
+            "cable": 1,
+            "Niko": 3,
+            "Rami": 4,
+            "send": 357,
+            "diagram": 2,
+            "Vera": 59,
+            "before lunch": 250
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Ada brings the cable",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Niko": 15,
+            "Rami": 26,
+            "send": 170,
+            "diagram": 27,
+            "Vera": 142,
+            "before lunch": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 3,
+              "prob": 0.007781,
+              "gap_to_top1": 4.75,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable, Rami sends the diagram, before lunch.",
+              "score": 0.877778,
+              "word_count": 10,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 10,
+              "prob": 0.000453,
+              "gap_to_top1": 7.59375,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable while Rami sends the diagram before lunch.",
+              "score": 0.877778,
+              "word_count": 11,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 9,
+              "prob": 0.00049,
+              "gap_to_top1": 7.51562,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable; Rami sends the diagram before lunch.",
+              "score": 0.877778,
+              "word_count": 10,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 7,
+              "prob": 0.00077,
+              "gap_to_top1": 7.0625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable and Rami sends the diagram before lunch to Niko and Vera.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": false,
+              "role_violations": [
+                "diagram: recipient niko, expected vera"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Ada brings the cable to",
+          "natural_next": " Nik",
+          "missing_term_first_piece_ranks": {
+            "Niko": 1,
+            "Rami": 2,
+            "send": 4,
+            "diagram": 80,
+            "Vera": 3,
+            "before lunch": 11
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Ada brings the cable to Nik",
+          "natural_next": "o",
+          "missing_term_first_piece_ranks": {
+            "Niko": 102,
+            "Rami": 183,
+            "send": 416,
+            "diagram": 4054,
+            "Vera": 1399,
+            "before lunch": 47
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Ada brings the cable to Niko",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Rami": 12,
+            "send": 40,
+            "diagram": 167,
+            "Vera": 60,
+            "before lunch": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.169469,
+              "gap_to_top1": 1.45312,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko, while Rami sends the diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 3,
+              "prob": 0.018719,
+              "gap_to_top1": 3.65625,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko while Rami sends the diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 6,
+              "prob": 0.011354,
+              "gap_to_top1": 4.15625,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko; Rami sends the diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 14,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 4,
+              "prob": 0.015278,
+              "gap_to_top1": 3.85938,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko and Rami sends the diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Ada brings the cable to Niko before",
+          "natural_next": " lunch",
+          "missing_term_first_piece_ranks": {
+            "Rami": 3,
+            "send": 9,
+            "diagram": 239,
+            "Vera": 5,
+            "before lunch": 58
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 10,
+              "prob": 6.2e-05,
+              "gap_to_top1": 9.67969,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before, Rami sends the diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Ada brings the cable to Niko before lunch",
+          "natural_next": ",",
+          "missing_term_first_piece_ranks": {
+            "Rami": 44,
+            "send": 69,
+            "diagram": 231,
+            "Vera": 108
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 4,
+              "prob": 0.046158,
+              "gap_to_top1": 2.46875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch while Rami sends the diagram to Vera.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 2,
+              "prob": 0.161107,
+              "gap_to_top1": 1.21875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch; Rami sends the diagram to Vera.",
+              "score": 1.0,
+              "word_count": 14,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 8,
+              "prob": 0.008878,
+              "gap_to_top1": 4.11719,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch and Rami sends the diagram to Vera.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Ada brings the cable to Niko before lunch,",
+          "natural_next": " while",
+          "missing_term_first_piece_ranks": {
+            "Rami": 2,
+            "send": 12,
+            "diagram": 681,
+            "Vera": 29
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.020918,
+              "gap_to_top1": 3.34375,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch, and Rami sends the diagram to Vera.",
+              "score": 1.0,
+              "word_count": 15,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Ada brings the cable to Niko before lunch, while",
+          "natural_next": " R",
+          "missing_term_first_piece_ranks": {
+            "Rami": 1,
+            "send": 10,
+            "diagram": 598,
+            "Vera": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Ada brings the cable to Niko before lunch, while R",
+          "natural_next": "ami",
+          "missing_term_first_piece_ranks": {
+            "Rami": 242,
+            "send": 4004,
+            "diagram": 4288,
+            "Vera": 78085
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami",
+          "natural_next": " sends",
+          "missing_term_first_piece_ranks": {
+            "send": 3,
+            "diagram": 658,
+            "Vera": 2090
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 9,
+              "prob": 0.000188,
+              "gap_to_top1": 8.57031,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch, while Rami and Vera exchange diagrams.",
+              "score": 0.938889,
+              "word_count": 14,
+              "missing_required_terms": [
+                "send"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "diagram": 4,
+            "Vera": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 15,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends the",
+          "natural_next": " diagram",
+          "missing_term_first_piece_ranks": {
+            "diagram": 1,
+            "Vera": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 16,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends the diagram",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Vera": 6
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 5,
+              "prob": 0.00086,
+              "gap_to_top1": 7.04688,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch, while Rami sends the diagram, before lunch, to Vera.",
+              "score": 1.0,
+              "word_count": 17,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 17,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends the diagram to",
+          "natural_next": " Vera",
+          "missing_term_first_piece_ranks": {
+            "Vera": 1
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 18,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends the diagram to Vera",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {},
+          "forced": []
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l2",
+      "seed": 1,
+      "case_id": "delivery",
+      "natural": {
+        "text": " Mira will send the budget to Omar before noon.",
+        "score": 0.755556,
+        "word_count": 9,
+        "missing_required_terms": [
+          "Leena",
+          "bring",
+          "contract",
+          "Priya"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "role_binding_ok": false,
+        "role_violations": []
+      },
+      "natural_success": false,
+      "matches_reference": true,
+      "rescue_count": 0,
+      "best_rescue": null,
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " M",
+          "missing_term_first_piece_ranks": {
+            "Mira": 1,
+            "send": 35,
+            "budget": 1325,
+            "Omar": 8,
+            "Leena": 4,
+            "bring": 424,
+            "contract": 1450,
+            "Priya": 17,
+            "before noon": 52
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " M",
+          "natural_next": "ira",
+          "missing_term_first_piece_ranks": {
+            "Mira": 107,
+            "send": 342,
+            "budget": 3083,
+            "Omar": 1764,
+            "Leena": 7900,
+            "bring": 10674,
+            "contract": 15528,
+            "Priya": 29395,
+            "before noon": 624
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Mira",
+          "natural_next": " will",
+          "missing_term_first_piece_ranks": {
+            "send": 4,
+            "budget": 205,
+            "Omar": 123,
+            "Leena": 133,
+            "bring": 46,
+            "contract": 561,
+            "Priya": 1144,
+            "before noon": 16
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 10,
+              "prob": 0.00352,
+              "gap_to_top1": 4.89062,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira, send budget to Omar, before noon; Leena, bring contract to Pri...",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 6,
+              "prob": 0.012676,
+              "gap_to_top1": 3.60938,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira and Leena will send and bring the budget and contract before.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Omar",
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent leena, expected mira"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Mira will",
+          "natural_next": " send",
+          "missing_term_first_piece_ranks": {
+            "send": 1,
+            "budget": 46,
+            "Omar": 1182,
+            "Leena": 840,
+            "bring": 2,
+            "contract": 80,
+            "Priya": 2188,
+            "before noon": 18
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Mira will send",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "budget": 2,
+            "Omar": 3,
+            "Leena": 4,
+            "bring": 2221,
+            "contract": 9,
+            "Priya": 8,
+            "before noon": 26
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.003284,
+              "gap_to_top1": 5.42969,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send and Leena will bring before noon.",
+              "score": 0.755556,
+              "word_count": 9,
+              "missing_required_terms": [
+                "budget",
+                "Omar",
+                "contract",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Mira will send the",
+          "natural_next": " budget",
+          "missing_term_first_piece_ranks": {
+            "budget": 1,
+            "Omar": 5,
+            "Leena": 3,
+            "bring": 5930,
+            "contract": 2,
+            "Priya": 164,
+            "before noon": 302
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Mira will send the budget",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Omar": 32,
+            "Leena": 24,
+            "bring": 1550,
+            "contract": 16,
+            "Priya": 281,
+            "before noon": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 5,
+              "prob": 0.007102,
+              "gap_to_top1": 4.84375,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget, and Leena will bring the contract before.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Omar",
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 7,
+              "prob": 0.000848,
+              "gap_to_top1": 6.96875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget; Leena will bring the contract before noon.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Omar",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 3,
+              "prob": 0.015271,
+              "gap_to_top1": 4.07812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget and Leena will bring the contract before.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Omar",
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Mira will send the budget to",
+          "natural_next": " Omar",
+          "missing_term_first_piece_ranks": {
+            "Omar": 1,
+            "Leena": 2,
+            "bring": 22,
+            "contract": 29,
+            "Priya": 3,
+            "before noon": 6
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Mira will send the budget to Omar",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Leena": 14,
+            "bring": 225,
+            "contract": 278,
+            "Priya": 145,
+            "before noon": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.048401,
+              "gap_to_top1": 2.57812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar, while Leena brings the contract.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 9,
+              "prob": 0.002731,
+              "gap_to_top1": 5.45312,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar while Leena brings the contract.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 8,
+              "prob": 0.002862,
+              "gap_to_top1": 5.40625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar; Leena will bring the contract.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 3,
+              "prob": 0.114307,
+              "gap_to_top1": 1.71875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar and Leena will bring the.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "contract",
+                "Priya",
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Mira will send the budget to Omar before",
+          "natural_next": " noon",
+          "missing_term_first_piece_ranks": {
+            "Leena": 3,
+            "bring": 94,
+            "contract": 132,
+            "Priya": 28,
+            "before noon": 114
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Mira will send the budget to Omar before noon",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {
+            "Leena": 28,
+            "bring": 144,
+            "contract": 193,
+            "Priya": 230
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.294281,
+              "gap_to_top1": 0.1875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon, while Leena brings.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "contract",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 8,
+              "prob": 0.018521,
+              "gap_to_top1": 2.95312,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon while Leena brings.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "contract",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 3,
+              "prob": 0.077977,
+              "gap_to_top1": 1.51562,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon; Leena will bring.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "contract",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.038601,
+              "gap_to_top1": 2.21875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira will send the budget to Omar before noon and Leena will.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "bring",
+                "contract",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l2",
+      "seed": 0,
+      "case_id": "review",
+      "natural": {
+        "text": " Nora will take the sample to Ivo before sending the report to.",
+        "score": 0.816667,
+        "word_count": 12,
+        "missing_required_terms": [
+          "Selim",
+          "Yara",
+          "before dusk"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "role_binding_ok": false,
+        "role_violations": [
+          "send: agent nora, expected selim"
+        ]
+      },
+      "natural_success": false,
+      "matches_reference": false,
+      "rescue_count": 0,
+      "best_rescue": null,
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " Nora",
+          "missing_term_first_piece_ranks": {
+            "Nora": 1,
+            "take": 191,
+            "sample": 1197,
+            "Ivo": 6,
+            "Selim": 28,
+            "send": 229,
+            "report": 712,
+            "Yara": 33,
+            "before dusk": 71
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " Nora",
+          "natural_next": " will",
+          "missing_term_first_piece_ranks": {
+            "take": 3,
+            "sample": 105,
+            "Ivo": 20,
+            "Selim": 431,
+            "send": 15,
+            "report": 249,
+            "Yara": 262,
+            "before dusk": 9
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 8,
+              "prob": 0.012224,
+              "gap_to_top1": 3.64062,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora, take the sample to Ivo, before dusk.",
+              "score": 0.755556,
+              "word_count": 8,
+              "missing_required_terms": [
+                "Selim",
+                "send",
+                "report",
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 10,
+              "prob": 0.008805,
+              "gap_to_top1": 3.96875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora and Selim will send the report to Yara before dusk.",
+              "score": 0.816667,
+              "word_count": 11,
+              "missing_required_terms": [
+                "take",
+                "sample",
+                "Ivo"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Nora will",
+          "natural_next": " take",
+          "missing_term_first_piece_ranks": {
+            "take": 1,
+            "sample": 7,
+            "Ivo": 22,
+            "Selim": 2817,
+            "send": 2,
+            "report": 12,
+            "Yara": 486,
+            "before dusk": 13
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Nora will take",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "sample": 3,
+            "Ivo": 4,
+            "Selim": 6,
+            "send": 68,
+            "report": 25,
+            "Yara": 5,
+            "before dusk": 17
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 7,
+              "prob": 0.001594,
+              "gap_to_top1": 5.75,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take and send the sample to Ivo and Yara before.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Selim",
+                "report",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Nora will take the",
+          "natural_next": " sample",
+          "missing_term_first_piece_ranks": {
+            "sample": 1,
+            "Ivo": 3,
+            "Selim": 504,
+            "send": 219,
+            "report": 2,
+            "Yara": 4,
+            "before dusk": 118
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Nora will take the sample",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 10,
+            "Selim": 97,
+            "send": 58,
+            "report": 36,
+            "Yara": 30,
+            "before dusk": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 3,
+              "prob": 0.005139,
+              "gap_to_top1": 5.1875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample, then send it to Yara before dusk.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Ivo",
+                "Selim",
+                "report"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " and",
+              "rank": 4,
+              "prob": 0.004328,
+              "gap_to_top1": 5.35938,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample and send the report to Yara before.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Ivo",
+                "Selim",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Nora will take the sample to",
+          "natural_next": " I",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 1,
+            "Selim": 3,
+            "send": 4,
+            "report": 10,
+            "Yara": 2,
+            "before dusk": 11
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Nora will take the sample to I",
+          "natural_next": "vo",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 1196,
+            "Selim": 3140,
+            "send": 1861,
+            "report": 2393,
+            "Yara": 3567,
+            "before dusk": 240
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Nora will take the sample to Ivo",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Selim": 55,
+            "send": 38,
+            "report": 66,
+            "Yara": 46,
+            "before dusk": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.138626,
+              "gap_to_top1": 1.48438,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo, then send the report to.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Selim",
+                "Yara",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " while",
+              "rank": 9,
+              "prob": 0.004456,
+              "gap_to_top1": 4.92188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo while Selim sends the report.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Yara",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 3,
+              "prob": 0.111389,
+              "gap_to_top1": 1.70312,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo and send the report to.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Selim",
+                "Yara",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Nora will take the sample to Ivo before",
+          "natural_next": " sending",
+          "missing_term_first_piece_ranks": {
+            "Selim": 5,
+            "send": 15,
+            "report": 28,
+            "Yara": 3,
+            "before dusk": 101
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Nora will take the sample to Ivo before sending",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "Selim": 7,
+            "report": 6,
+            "Yara": 4,
+            "before dusk": 14
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Nora will take the sample to Ivo before sending the",
+          "natural_next": " report",
+          "missing_term_first_piece_ranks": {
+            "Selim": 271,
+            "report": 1,
+            "Yara": 2,
+            "before dusk": 185
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Nora will take the sample to Ivo before sending the report",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Selim": 400,
+            "Yara": 6,
+            "before dusk": 3
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.00535,
+              "gap_to_top1": 5.07812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora will take the sample to Ivo before sending the report, as.",
+              "score": 0.816667,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Selim",
+                "Yara",
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Nora will take the sample to Ivo before sending the report to",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {
+            "Selim": 80,
+            "Yara": 80,
+            "before dusk": 80
+          },
+          "forced": []
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l2",
+      "seed": 5,
+      "case_id": "workshop",
+      "natural": {
+        "text": " Ada brings the cable to Niko before lunch, while Rami sends the.",
+        "score": 0.877778,
+        "word_count": 12,
+        "missing_required_terms": [
+          "diagram",
+          "Vera"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "role_binding_ok": false,
+        "role_violations": []
+      },
+      "natural_success": false,
+      "matches_reference": false,
+      "rescue_count": 0,
+      "best_rescue": null,
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " Ada",
+          "missing_term_first_piece_ranks": {
+            "Ada": 1,
+            "bring": 128,
+            "cable": 10658,
+            "Niko": 3,
+            "Rami": 5,
+            "send": 124,
+            "diagram": 5214,
+            "Vera": 19,
+            "before lunch": 49
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " Ada",
+          "natural_next": " brings",
+          "missing_term_first_piece_ranks": {
+            "bring": 3,
+            "cable": 134,
+            "Niko": 69,
+            "Rami": 27,
+            "send": 13,
+            "diagram": 1464,
+            "Vera": 870,
+            "before lunch": 12
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 9,
+              "prob": 0.004389,
+              "gap_to_top1": 4.63281,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada, bring cable to Niko, before lunch, while Rami sends Vera diagram.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 6,
+              "prob": 0.009968,
+              "gap_to_top1": 3.8125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada and Rami will send the diagram to Vera before lunch.",
+              "score": 0.816667,
+              "word_count": 11,
+              "missing_required_terms": [
+                "bring",
+                "cable",
+                "Niko"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Ada brings",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "cable": 2,
+            "Niko": 4,
+            "Rami": 5,
+            "send": 281,
+            "diagram": 40,
+            "Vera": 10,
+            "before lunch": 22
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Ada brings the",
+          "natural_next": " cable",
+          "missing_term_first_piece_ranks": {
+            "cable": 1,
+            "Niko": 4,
+            "Rami": 3,
+            "send": 349,
+            "diagram": 2,
+            "Vera": 127,
+            "before lunch": 313
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Ada brings the cable",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Niko": 24,
+            "Rami": 19,
+            "send": 146,
+            "diagram": 13,
+            "Vera": 222,
+            "before lunch": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 3,
+              "prob": 0.006518,
+              "gap_to_top1": 4.9375,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable, Rami sends the diagram, before lunch.",
+              "score": 0.877778,
+              "word_count": 10,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 8,
+              "prob": 0.000621,
+              "gap_to_top1": 7.28906,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable while Rami sends the diagram before lunch.",
+              "score": 0.877778,
+              "word_count": 11,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.001,
+              "gap_to_top1": 6.8125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable and Rami sends the diagram before lunch.",
+              "score": 0.877778,
+              "word_count": 11,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Ada brings the cable to",
+          "natural_next": " Nik",
+          "missing_term_first_piece_ranks": {
+            "Niko": 1,
+            "Rami": 2,
+            "send": 10,
+            "diagram": 77,
+            "Vera": 3,
+            "before lunch": 8
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Ada brings the cable to Nik",
+          "natural_next": "o",
+          "missing_term_first_piece_ranks": {
+            "Niko": 103,
+            "Rami": 174,
+            "send": 367,
+            "diagram": 3511,
+            "Vera": 874,
+            "before lunch": 53
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Ada brings the cable to Niko",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Rami": 12,
+            "send": 37,
+            "diagram": 133,
+            "Vera": 74,
+            "before lunch": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.128581,
+              "gap_to_top1": 1.78125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko, while Rami sends the diagram to.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera",
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 3,
+              "prob": 0.017676,
+              "gap_to_top1": 3.76562,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko while Rami sends the diagram to.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera",
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 9,
+              "prob": 0.006922,
+              "gap_to_top1": 4.70312,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko; Rami sends the diagram to Vera.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 4,
+              "prob": 0.014426,
+              "gap_to_top1": 3.96875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko and Rami sends the diagram to.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera",
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Ada brings the cable to Niko before",
+          "natural_next": " lunch",
+          "missing_term_first_piece_ranks": {
+            "Rami": 3,
+            "send": 8,
+            "diagram": 285,
+            "Vera": 4,
+            "before lunch": 60
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Ada brings the cable to Niko before lunch",
+          "natural_next": ",",
+          "missing_term_first_piece_ranks": {
+            "Rami": 42,
+            "send": 62,
+            "diagram": 156,
+            "Vera": 117
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 5,
+              "prob": 0.062261,
+              "gap_to_top1": 1.8125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch while Rami sends Vera.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "diagram"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 3,
+              "prob": 0.07279,
+              "gap_to_top1": 1.65625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch; Rami sends the diagram.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 9,
+              "prob": 0.010405,
+              "gap_to_top1": 3.60156,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch and Rami sends the.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "diagram",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Ada brings the cable to Niko before lunch,",
+          "natural_next": " while",
+          "missing_term_first_piece_ranks": {
+            "Rami": 2,
+            "send": 13,
+            "diagram": 785,
+            "Vera": 37
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 7,
+              "prob": 0.019711,
+              "gap_to_top1": 3.10156,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings the cable to Niko before lunch, and Rami sends the.",
+              "score": 0.877778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "diagram",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Ada brings the cable to Niko before lunch, while",
+          "natural_next": " R",
+          "missing_term_first_piece_ranks": {
+            "Rami": 1,
+            "send": 10,
+            "diagram": 349,
+            "Vera": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Ada brings the cable to Niko before lunch, while R",
+          "natural_next": "ami",
+          "missing_term_first_piece_ranks": {
+            "Rami": 178,
+            "send": 4167,
+            "diagram": 7356,
+            "Vera": 72611
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami",
+          "natural_next": " sends",
+          "missing_term_first_piece_ranks": {
+            "send": 3,
+            "diagram": 344,
+            "Vera": 2540
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends",
+          "natural_next": " the",
+          "missing_term_first_piece_ranks": {
+            "diagram": 5,
+            "Vera": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 15,
+          "prefix": " Ada brings the cable to Niko before lunch, while Rami sends the",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {
+            "diagram": 80,
+            "Vera": 80
+          },
+          "forced": []
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l3",
+      "seed": 1,
+      "case_id": "delivery",
+      "natural": {
+        "text": " Mira sends budget to Omar before noon, while Leena brings contract to.",
+        "score": 0.938889,
+        "word_count": 12,
+        "missing_required_terms": [
+          "Priya"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "role_binding_ok": false,
+        "role_violations": []
+      },
+      "natural_success": false,
+      "matches_reference": false,
+      "rescue_count": 2,
+      "best_rescue": {
+        "generated_tokens": 6,
+        "prefix": " Mira sends budget to Omar",
+        "piece": ",",
+        "rank": 2,
+        "prob": 0.176804,
+        "gap_to_top1": 1.1875,
+        "rescue": true,
+        "status": "ok",
+        "text": " Mira sends budget to Omar, Leena brings contract to Priya before noon.",
+        "score": 1.0,
+        "word_count": 12,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " M",
+          "missing_term_first_piece_ranks": {
+            "Mira": 1,
+            "send": 24,
+            "budget": 642,
+            "Omar": 6,
+            "Leena": 4,
+            "bring": 388,
+            "contract": 1135,
+            "Priya": 11,
+            "before noon": 40
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " M",
+          "natural_next": "ira",
+          "missing_term_first_piece_ranks": {
+            "Mira": 99,
+            "send": 295,
+            "budget": 1842,
+            "Omar": 1351,
+            "Leena": 5883,
+            "bring": 11260,
+            "contract": 14381,
+            "Priya": 20905,
+            "before noon": 897
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Mira",
+          "natural_next": " sends",
+          "missing_term_first_piece_ranks": {
+            "send": 2,
+            "budget": 172,
+            "Omar": 156,
+            "Leena": 76,
+            "bring": 29,
+            "contract": 412,
+            "Priya": 996,
+            "before noon": 12
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 6,
+              "prob": 0.003471,
+              "gap_to_top1": 5.33594,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira, send budget to Omar, before noon; Leena bring contract to Pri.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.005335,
+              "gap_to_top1": 4.90625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira and Leena bring contracts to Priya and Omar before noon.",
+              "score": 0.877778,
+              "word_count": 11,
+              "missing_required_terms": [
+                "send",
+                "budget"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Mira sends",
+          "natural_next": " budget",
+          "missing_term_first_piece_ranks": {
+            "budget": 1,
+            "Omar": 2,
+            "Leena": 3,
+            "bring": 2045,
+            "contract": 6,
+            "Priya": 7,
+            "before noon": 15
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Mira sends budget",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Omar": 11,
+            "Leena": 9,
+            "bring": 1039,
+            "contract": 16,
+            "Priya": 92,
+            "before noon": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 3,
+              "prob": 0.007082,
+              "gap_to_top1": 4.82812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget, Leena brings contract, before noon.",
+              "score": 0.877778,
+              "word_count": 8,
+              "missing_required_terms": [
+                "Omar",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 6,
+              "prob": 0.000712,
+              "gap_to_top1": 7.125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget; Leena brings contract before noon.",
+              "score": 0.877778,
+              "word_count": 8,
+              "missing_required_terms": [
+                "Omar",
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.002177,
+              "gap_to_top1": 6.00781,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget and contract to Priya before noon.",
+              "score": 0.816667,
+              "word_count": 9,
+              "missing_required_terms": [
+                "Omar",
+                "Leena",
+                "bring"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "budget: recipient priya, expected omar"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Mira sends budget to",
+          "natural_next": " Omar",
+          "missing_term_first_piece_ranks": {
+            "Omar": 1,
+            "Leena": 2,
+            "bring": 15,
+            "contract": 14,
+            "Priya": 3,
+            "before noon": 6
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Mira sends budget to Omar",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Leena": 12,
+            "bring": 154,
+            "contract": 454,
+            "Priya": 228,
+            "before noon": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.176804,
+              "gap_to_top1": 1.1875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira sends budget to Omar, Leena brings contract to Priya before noon.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 6,
+              "prob": 0.033744,
+              "gap_to_top1": 2.84375,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget to Omar while Leena brings contract to Priya before.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 4,
+              "prob": 0.055634,
+              "gap_to_top1": 2.34375,
+              "rescue": true,
+              "status": "ok",
+              "text": " Mira sends budget to Omar; Leena brings contract to Priya before noon.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 5,
+              "prob": 0.040071,
+              "gap_to_top1": 2.67188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget to Omar and Leena brings contract to Priya before.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "before noon"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Mira sends budget to Omar before",
+          "natural_next": " noon",
+          "missing_term_first_piece_ranks": {
+            "Leena": 3,
+            "bring": 68,
+            "contract": 41,
+            "Priya": 60,
+            "before noon": 77
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Mira sends budget to Omar before noon",
+          "natural_next": ",",
+          "missing_term_first_piece_ranks": {
+            "Leena": 13,
+            "bring": 77,
+            "contract": 152,
+            "Priya": 230
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 4,
+              "prob": 0.072659,
+              "gap_to_top1": 1.60938,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget to Omar before noon while Leena brings contract to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 2,
+              "prob": 0.33597,
+              "gap_to_top1": 0.07812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget to Omar before noon; Leena brings contract to Pri.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Mira sends budget to Omar before noon,",
+          "natural_next": " while",
+          "missing_term_first_piece_ranks": {
+            "Leena": 2,
+            "bring": 14,
+            "contract": 333,
+            "Priya": 53
+          },
+          "forced": [
+            {
+              "piece": " and",
+              "rank": 9,
+              "prob": 0.005816,
+              "gap_to_top1": 4.30469,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget to Omar before noon, and Leena brings contract to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Mira sends budget to Omar before noon, while",
+          "natural_next": " Le",
+          "missing_term_first_piece_ranks": {
+            "Leena": 1,
+            "bring": 8,
+            "contract": 20,
+            "Priya": 6
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Mira sends budget to Omar before noon, while Le",
+          "natural_next": "ena",
+          "missing_term_first_piece_ranks": {
+            "Leena": 3449,
+            "bring": 4498,
+            "contract": 16626,
+            "Priya": 6254
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Mira sends budget to Omar before noon, while Leena",
+          "natural_next": " brings",
+          "missing_term_first_piece_ranks": {
+            "bring": 5,
+            "contract": 302,
+            "Priya": 1455
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Mira sends budget to Omar before noon, while Leena brings",
+          "natural_next": " contract",
+          "missing_term_first_piece_ranks": {
+            "contract": 1,
+            "Priya": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Mira sends budget to Omar before noon, while Leena brings contract",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Priya": 4
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 5,
+              "prob": 0.001083,
+              "gap_to_top1": 6.79688,
+              "rescue": false,
+              "status": "ok",
+              "text": " Mira sends budget to Omar before noon, while Leena brings contract, before.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Priya"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 15,
+          "prefix": " Mira sends budget to Omar before noon, while Leena brings contract to",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {
+            "Priya": 80
+          },
+          "forced": []
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l3",
+      "seed": 0,
+      "case_id": "review",
+      "natural": {
+        "text": " Nora takes sample to Ivo before dusk, sends report to Yara.",
+        "score": 0.938889,
+        "word_count": 11,
+        "missing_required_terms": [
+          "Selim"
+        ],
+        "constraint_violations": [
+          "missing_required_terms"
+        ],
+        "role_binding_ok": false,
+        "role_violations": [
+          "send: agent nora, expected selim"
+        ]
+      },
+      "natural_success": false,
+      "matches_reference": true,
+      "rescue_count": 1,
+      "best_rescue": {
+        "generated_tokens": 6,
+        "prefix": " Nora takes sample to Ivo",
+        "piece": ";",
+        "rank": 8,
+        "prob": 0.014666,
+        "gap_to_top1": 3.67188,
+        "rescue": true,
+        "status": "ok",
+        "text": " Nora takes sample to Ivo; Selim sends report to Yara before dusk.",
+        "score": 1.0,
+        "word_count": 12,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " Nora",
+          "missing_term_first_piece_ranks": {
+            "Nora": 1,
+            "take": 139,
+            "sample": 694,
+            "Ivo": 6,
+            "Selim": 19,
+            "send": 142,
+            "report": 484,
+            "Yara": 27,
+            "before dusk": 59
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " Nora",
+          "natural_next": " takes",
+          "missing_term_first_piece_ranks": {
+            "take": 2,
+            "sample": 96,
+            "Ivo": 17,
+            "Selim": 340,
+            "send": 8,
+            "report": 145,
+            "Yara": 218,
+            "before dusk": 4
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 5,
+              "prob": 0.016925,
+              "gap_to_top1": 3.57812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora, take sample to Ivo, send report to Yara before dusk.",
+              "score": 0.938889,
+              "word_count": 11,
+              "missing_required_terms": [
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " and",
+              "rank": 10,
+              "prob": 0.007932,
+              "gap_to_top1": 4.33594,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora and Selim send report to Yara before dusk.",
+              "score": 0.816667,
+              "word_count": 9,
+              "missing_required_terms": [
+                "take",
+                "sample",
+                "Ivo"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Nora takes",
+          "natural_next": " sample",
+          "missing_term_first_piece_ranks": {
+            "sample": 1,
+            "Ivo": 3,
+            "Selim": 5,
+            "send": 22,
+            "report": 11,
+            "Yara": 4,
+            "before dusk": 9
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Nora takes sample",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 6,
+            "Selim": 48,
+            "send": 14,
+            "report": 32,
+            "Yara": 13,
+            "before dusk": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.004333,
+              "gap_to_top1": 5.375,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample, sends report before dusk to Ivo, Yara.",
+              "score": 0.938889,
+              "word_count": 10,
+              "missing_required_terms": [
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim",
+                "report: recipient ivo, expected yara"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Nora takes sample to",
+          "natural_next": " I",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 1,
+            "Selim": 3,
+            "send": 4,
+            "report": 6,
+            "Yara": 2,
+            "before dusk": 8
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Nora takes sample to I",
+          "natural_next": "vo",
+          "missing_term_first_piece_ranks": {
+            "Ivo": 575,
+            "Selim": 1390,
+            "send": 424,
+            "report": 866,
+            "Yara": 3249,
+            "before dusk": 114
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Nora takes sample to Ivo",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Selim": 41,
+            "send": 15,
+            "report": 33,
+            "Yara": 48,
+            "before dusk": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.233026,
+              "gap_to_top1": 0.90625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo, sends report to Yara before dusk.",
+              "score": 0.938889,
+              "word_count": 11,
+              "missing_required_terms": [
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            },
+            {
+              "piece": " while",
+              "rank": 5,
+              "prob": 0.025739,
+              "gap_to_top1": 3.10938,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo while Selim sends report to Yara before.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "before dusk"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 8,
+              "prob": 0.014666,
+              "gap_to_top1": 3.67188,
+              "rescue": true,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo; Selim sends report to Yara before dusk.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 7,
+              "prob": 0.016619,
+              "gap_to_top1": 3.54688,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo and sends report to Yara before dusk.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Selim"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Nora takes sample to Ivo before",
+          "natural_next": " dusk",
+          "missing_term_first_piece_ranks": {
+            "Selim": 4,
+            "send": 5,
+            "report": 6,
+            "Yara": 3,
+            "before dusk": 83
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Nora takes sample to Ivo before dusk",
+          "natural_next": ",",
+          "missing_term_first_piece_ranks": {
+            "Selim": 71,
+            "send": 39,
+            "report": 30,
+            "Yara": 164
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 10,
+              "prob": 0.012312,
+              "gap_to_top1": 3.32031,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo before dusk while Selim sends report to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 5,
+              "prob": 0.032185,
+              "gap_to_top1": 2.35938,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo before dusk; Selim sends report to Y.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Nora takes sample to Ivo before dusk,",
+          "natural_next": " sends",
+          "missing_term_first_piece_ranks": {
+            "Selim": 3,
+            "send": 6,
+            "report": 13,
+            "Yara": 26
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 2,
+              "prob": 0.164098,
+              "gap_to_top1": 0.39062,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo before dusk, while Selim sends report to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Nora takes sample to Ivo before dusk, sends",
+          "natural_next": " report",
+          "missing_term_first_piece_ranks": {
+            "Selim": 4,
+            "report": 1,
+            "Yara": 3
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Nora takes sample to Ivo before dusk, sends report",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Selim": 162,
+            "Yara": 5
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.00316,
+              "gap_to_top1": 5.70312,
+              "rescue": false,
+              "status": "ok",
+              "text": " Nora takes sample to Ivo before dusk, sends report, then to Y.",
+              "score": 0.827778,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Selim",
+                "Yara"
+              ],
+              "constraint_violations": [
+                "missing_required_terms",
+                "forbidden_terms_present"
+              ],
+              "role_binding_ok": false,
+              "role_violations": [
+                "send: agent nora, expected selim"
+              ]
+            }
+          ]
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Nora takes sample to Ivo before dusk, sends report to",
+          "natural_next": " Y",
+          "missing_term_first_piece_ranks": {
+            "Selim": 2,
+            "Yara": 1
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Nora takes sample to Ivo before dusk, sends report to Y",
+          "natural_next": "ara",
+          "missing_term_first_piece_ranks": {
+            "Selim": 546,
+            "Yara": 1628
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Nora takes sample to Ivo before dusk, sends report to Yara",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {
+            "Selim": 183
+          },
+          "forced": []
+        }
+      ]
+    },
+    {
+      "task": "constrained_rewrite_l3",
+      "seed": 5,
+      "case_id": "workshop",
+      "natural": {
+        "text": " Ada brings cable to Niko before lunch, Rami sends diagram to Vera.",
+        "score": 1.0,
+        "word_count": 12,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "natural_success": true,
+      "matches_reference": true,
+      "rescue_count": 3,
+      "best_rescue": {
+        "generated_tokens": 8,
+        "prefix": " Ada brings cable to Niko before lunch",
+        "piece": ";",
+        "rank": 3,
+        "prob": 0.142337,
+        "gap_to_top1": 1.1875,
+        "rescue": true,
+        "status": "ok",
+        "text": " Ada brings cable to Niko before lunch; Rami sends diagram to Vera.",
+        "score": 1.0,
+        "word_count": 12,
+        "missing_required_terms": [],
+        "constraint_violations": [],
+        "role_binding_ok": true,
+        "role_violations": []
+      },
+      "positions": [
+        {
+          "generated_tokens": 0,
+          "prefix": "",
+          "natural_next": " Ada",
+          "missing_term_first_piece_ranks": {
+            "Ada": 1,
+            "bring": 78,
+            "cable": 6993,
+            "Niko": 3,
+            "Rami": 5,
+            "send": 58,
+            "diagram": 5162,
+            "Vera": 17,
+            "before lunch": 35
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 1,
+          "prefix": " Ada",
+          "natural_next": " brings",
+          "missing_term_first_piece_ranks": {
+            "bring": 2,
+            "cable": 107,
+            "Niko": 47,
+            "Rami": 17,
+            "send": 7,
+            "diagram": 1606,
+            "Vera": 662,
+            "before lunch": 5
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 9,
+              "prob": 0.005364,
+              "gap_to_top1": 5.01562,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada, before lunch, brings cable to Niko, while Rami sends diagram to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 6,
+              "prob": 0.007218,
+              "gap_to_top1": 4.71875,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada and Rami send cables to Niko and Vera before lunch.",
+              "score": 0.877778,
+              "word_count": 11,
+              "missing_required_terms": [
+                "bring",
+                "diagram"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 2,
+          "prefix": " Ada brings",
+          "natural_next": " cable",
+          "missing_term_first_piece_ranks": {
+            "cable": 1,
+            "Niko": 2,
+            "Rami": 4,
+            "send": 136,
+            "diagram": 20,
+            "Vera": 9,
+            "before lunch": 13
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 3,
+          "prefix": " Ada brings cable",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Niko": 5,
+            "Rami": 7,
+            "send": 45,
+            "diagram": 24,
+            "Vera": 63,
+            "before lunch": 2
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 4,
+              "prob": 0.003109,
+              "gap_to_top1": 5.67188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable, Rami sends diagram, before lunch.",
+              "score": 0.877778,
+              "word_count": 8,
+              "missing_required_terms": [
+                "Niko",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 6,
+              "prob": 0.000424,
+              "gap_to_top1": 7.66406,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable and diagram to Niko before lunch.",
+              "score": 0.816667,
+              "word_count": 9,
+              "missing_required_terms": [
+                "Rami",
+                "send",
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 4,
+          "prefix": " Ada brings cable to",
+          "natural_next": " Nik",
+          "missing_term_first_piece_ranks": {
+            "Niko": 1,
+            "Rami": 3,
+            "send": 4,
+            "diagram": 21,
+            "Vera": 2,
+            "before lunch": 7
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 5,
+          "prefix": " Ada brings cable to Nik",
+          "natural_next": "o",
+          "missing_term_first_piece_ranks": {
+            "Niko": 76,
+            "Rami": 172,
+            "send": 297,
+            "diagram": 8725,
+            "Vera": 627,
+            "before lunch": 27
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 6,
+          "prefix": " Ada brings cable to Niko",
+          "natural_next": " before",
+          "missing_term_first_piece_ranks": {
+            "Rami": 10,
+            "send": 20,
+            "diagram": 156,
+            "Vera": 41,
+            "before lunch": 1
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 2,
+              "prob": 0.181057,
+              "gap_to_top1": 1.35938,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings cable to Niko, Rami sends diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " while",
+              "rank": 3,
+              "prob": 0.019689,
+              "gap_to_top1": 3.57812,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko while Rami sends diagram to Vera before.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 5,
+              "prob": 0.013532,
+              "gap_to_top1": 3.95312,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings cable to Niko; Rami sends diagram to Vera before lunch.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 8,
+              "prob": 0.008601,
+              "gap_to_top1": 4.40625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko and Rami sends diagram to Vera before.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 7,
+          "prefix": " Ada brings cable to Niko before",
+          "natural_next": " lunch",
+          "missing_term_first_piece_ranks": {
+            "Rami": 3,
+            "send": 5,
+            "diagram": 233,
+            "Vera": 4,
+            "before lunch": 41
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 7,
+              "prob": 0.000147,
+              "gap_to_top1": 8.8125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko before, Rami sends diagram to Vera.",
+              "score": 0.938889,
+              "word_count": 11,
+              "missing_required_terms": [
+                "before lunch"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": true,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 8,
+          "prefix": " Ada brings cable to Niko before lunch",
+          "natural_next": ",",
+          "missing_term_first_piece_ranks": {
+            "Rami": 21,
+            "send": 33,
+            "diagram": 116,
+            "Vera": 56
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 4,
+              "prob": 0.059335,
+              "gap_to_top1": 2.0625,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko before lunch while Rami sends diagram to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            },
+            {
+              "piece": ";",
+              "rank": 3,
+              "prob": 0.142337,
+              "gap_to_top1": 1.1875,
+              "rescue": true,
+              "status": "ok",
+              "text": " Ada brings cable to Niko before lunch; Rami sends diagram to Vera.",
+              "score": 1.0,
+              "word_count": 12,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": true,
+              "role_violations": []
+            },
+            {
+              "piece": " and",
+              "rank": 9,
+              "prob": 0.007722,
+              "gap_to_top1": 4.10156,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko before lunch and Rami sends diagram to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 9,
+          "prefix": " Ada brings cable to Niko before lunch,",
+          "natural_next": " R",
+          "missing_term_first_piece_ranks": {
+            "Rami": 1,
+            "send": 6,
+            "diagram": 498,
+            "Vera": 19
+          },
+          "forced": [
+            {
+              "piece": " while",
+              "rank": 2,
+              "prob": 0.339151,
+              "gap_to_top1": 0.28125,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko before lunch, while Rami sends diagram to.",
+              "score": 0.938889,
+              "word_count": 12,
+              "missing_required_terms": [
+                "Vera"
+              ],
+              "constraint_violations": [
+                "missing_required_terms"
+              ],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 10,
+          "prefix": " Ada brings cable to Niko before lunch, R",
+          "natural_next": "ami",
+          "missing_term_first_piece_ranks": {
+            "Rami": 155,
+            "send": 3065,
+            "diagram": 10852,
+            "Vera": 66379
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 11,
+          "prefix": " Ada brings cable to Niko before lunch, Rami",
+          "natural_next": " sends",
+          "missing_term_first_piece_ranks": {
+            "send": 3,
+            "diagram": 321,
+            "Vera": 2158
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 12,
+          "prefix": " Ada brings cable to Niko before lunch, Rami sends",
+          "natural_next": " diagram",
+          "missing_term_first_piece_ranks": {
+            "diagram": 1,
+            "Vera": 2
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 13,
+          "prefix": " Ada brings cable to Niko before lunch, Rami sends diagram",
+          "natural_next": " to",
+          "missing_term_first_piece_ranks": {
+            "Vera": 3
+          },
+          "forced": [
+            {
+              "piece": ",",
+              "rank": 6,
+              "prob": 0.001561,
+              "gap_to_top1": 6.42188,
+              "rescue": false,
+              "status": "ok",
+              "text": " Ada brings cable to Niko before lunch, Rami sends diagram, Vera.",
+              "score": 1.0,
+              "word_count": 11,
+              "missing_required_terms": [],
+              "constraint_violations": [],
+              "role_binding_ok": false,
+              "role_violations": []
+            }
+          ]
+        },
+        {
+          "generated_tokens": 14,
+          "prefix": " Ada brings cable to Niko before lunch, Rami sends diagram to",
+          "natural_next": " Vera",
+          "missing_term_first_piece_ranks": {
+            "Vera": 1
+          },
+          "forced": []
+        },
+        {
+          "generated_tokens": 15,
+          "prefix": " Ada brings cable to Niko before lunch, Rami sends diagram to Vera",
+          "natural_next": ".",
+          "missing_term_first_piece_ranks": {},
+          "forced": []
+        }
+      ]
+    }
+  ],
+  "elapsed_seconds": 1718.1
+}

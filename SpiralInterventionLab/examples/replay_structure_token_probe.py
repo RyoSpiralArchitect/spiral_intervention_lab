@@ -32,8 +32,22 @@ from .digit_transform_e2e import (
     create_task_env,
     load_worker_model,
 )
-from .replay_operator_dose_response import READOUT_RECIPES, RELEASED, _readout_edit, released_replay_policy
-from .replay_orphan_blueprint_ceiling import _branch, _release_memory, _scored, load_source, verify_checkpoint
+from .replay_operator_dose_response import (
+    PATCH_DOSES,
+    READOUT_RECIPES,
+    RELEASED,
+    _patch_edit,
+    _readout_edit,
+    released_replay_policy,
+)
+from .replay_orphan_blueprint_ceiling import (
+    PATCH_LOCALIZATIONS,
+    _branch,
+    _release_memory,
+    _scored,
+    load_source,
+    verify_checkpoint,
+)
 
 STRUCTURE_DOSES = (0.08, 0.16, 0.32, 0.64, 1.28, 1.92, 2.56, 5.12)
 
@@ -62,6 +76,20 @@ def token_rank(logits: Any, token_id: int) -> int:
     return int((logits > logits[token_id]).sum().item()) + 1
 
 
+def patch_edit_size(simulated: dict[str, Any]) -> dict[str, Any]:
+    """Blend movement relative to the edited site's own norm, from the hook telemetry."""
+    rows = [row for row in simulated.get("edit_runtime_telemetry") or () if isinstance(row, dict)
+            and str(row.get("op") or "") == "activation_patch"]
+    if not rows:
+        return {}
+    before = rows[0].get("target_norm_before")
+    delta = rows[0].get("blend_delta_norm")
+    size = {"site_norm_before": before, "blend_delta_norm": delta}
+    if isinstance(before, (int, float)) and isinstance(delta, (int, float)) and before > 0:
+        size["blend_delta_over_site_norm"] = round(float(delta) / float(before), 5)
+    return size
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-jsonl", type=Path, required=True)
@@ -72,12 +100,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--connectives", default=",| and| while| whereas|;")
     parser.add_argument("--dose-target", default=",")
     parser.add_argument("--dose-positions", default="8")
+    parser.add_argument("--patch-source-terms", default="",
+                        help="comma-separated source-body terms whose activations are blended in (e.g. while)")
+    parser.add_argument("--skip-forced-and-readout", action="store_true",
+                        help="run only the activation-patch curves")
     parser.add_argument("--device", choices=("cpu", "mps"), default="mps")
     parser.add_argument("--mps-memory-fraction", type=float, default=0.85)
     args = parser.parse_args(argv)
     positions = sorted({int(item) for item in args.positions.split(",") if item.strip()})
     dose_positions = sorted({int(item) for item in args.dose_positions.split(",") if item.strip()})
     connectives = [piece for piece in args.connectives.split("|") if piece]
+    patch_terms = [item.strip() for item in args.patch_source_terms.split(",") if item.strip()]
     output = args.output.expanduser().resolve()
     if output.exists():
         raise FileExistsError(output)
@@ -124,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
         "device": args.device, "dtype": profile.get("dtype"), "seed": profile["seed"], "task": profile["task"],
         "connectives": connectives, "dose_target": args.dose_target, "dose_target_token_id": dose_token,
         "dose_recipe": READOUT_RECIPES[1][0], "doses": list(STRUCTURE_DOSES),
+        "patch_source_terms": patch_terms, "patch_doses": list(PATCH_DOSES),
+        "patch_localizations": list(PATCH_LOCALIZATIONS),
         "readout_residual_hook": f"blocks.{readout_layer}.hook_resid_pre",
         "release": {"surface_max_alpha": RELEASED, "surface_step_size": RELEASED, "worker_max_total_alpha": RELEASED,
                     "edit_ttl_tokens": 1, "scope": "quarantined_worker_only_shared_defaults_unchanged"},
@@ -144,6 +179,47 @@ def main(argv: list[str] | None = None) -> int:
                                        policy_override=released_replay_policy(max_edits_per_step_override=1),
                                        score_candidate_text=False, score_observer_check=False)
 
+    def patch_curves(position: int, prefix: str, horizon: int, base_logits: Any, residual_norm: float) -> list[dict[str, Any]]:
+        surfaces = [surface for surface in worker.surface_catalog
+                    if getattr(surface.target, "kind", None) == "activation"
+                    and "activation_patch" in set(getattr(surface, "allow_ops", ()) or ())
+                    and getattr(getattr(surface.target, "token", None), "mode", None) == "last"]
+        result = []
+        for term in patch_terms:
+            for surface in surfaces:
+                for localization in PATCH_LOCALIZATIONS:
+                    points = []
+                    for dose in PATCH_DOSES:
+                        edit = _patch_edit(worker, term=term, bundle_key=f"structure:patch:{term}", surface=surface,
+                                           localization=localization, dose=dose)
+                        if edit is None:
+                            points.append({"dose": dose, "status": "materialization_failed"})
+                            continue
+                        edit.setdefault("id", f"structure_patch_{dose:g}")
+                        edited = simulate(edit, 1)
+                        if edited is None:
+                            points.append({"dose": dose, "status": "error", "error": worker._last_simulate_decode_error})
+                            continue
+                        logits = edited["first_logits"].float()
+                        point = {"dose": dose, "status": "ok", "target_rank": token_rank(logits, dose_token),
+                                 "target_logit_delta": round(float(logits[dose_token] - base_logits[dose_token]), 5),
+                                 "gap_to_top1": round(float(logits.max() - logits[dose_token]), 5),
+                                 "top1": worker.codec.decode([int(logits.argmax())]),
+                                 **patch_edit_size(edited)}
+                        if point["target_rank"] == 1:
+                            full = simulate(edit, horizon)
+                            if full is not None:
+                                point["full_continuation"] = _scored(task, worker.codec.decode(
+                                    worker._output_token_ids() + list(full["continuation_token_ids"])))
+                        points.append(point)
+                        _release_memory()
+                    wins = [point["dose"] for point in points if point.get("target_rank") == 1]
+                    result.append({"source_term": term, "site": str(getattr(surface.target, "site", "")),
+                                   "layer": int(getattr(surface.target, "layer", 0) or 0),
+                                   "localization": localization, "points": points,
+                                   "minimal_winning_dose": min(wins) if wins else None})
+        return result
+
     started = time.monotonic()
     for position in sorted(set(positions) | set(dose_positions)):
         advance_to(position)
@@ -160,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
         entry: dict[str, Any] = {"generated_tokens": position, "prefix": prefix,
                                  "readout_residual_norm": round(residual_norm, 4),
                                  "baseline_top1": worker.codec.decode([int(base_logits.argmax())])}
-        if position in positions:
+        if position in positions and not args.skip_forced_and_readout:
             forced = []
             for piece in connectives:
                 token_id = single_token_id(worker.codec, piece, special_ids=special_ids)
@@ -172,7 +248,9 @@ def main(argv: list[str] | None = None) -> int:
                                "prob": round(float(probs[token_id]), 6),
                                **_branch(worker, task, forced_token_ids=(token_id,), horizon=horizon - 1)})
             entry["forced_connectives"] = forced
-        if position in dose_positions:
+        if position in dose_positions and patch_terms:
+            entry["patch_dose_curves"] = patch_curves(position, prefix, horizon, base_logits, residual_norm)
+        if position in dose_positions and not args.skip_forced_and_readout:
             curve = []
             for dose in STRUCTURE_DOSES:
                 edit = copy.deepcopy(_readout_edit(worker, term=args.dose_target, bundle_key="structure:dose",
@@ -206,6 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"generated_tokens": position, "prefix": prefix,
                           "residual_norm": entry["readout_residual_norm"],
                           "min_dose": (entry.get("readout_dose_curve") or {}).get("minimal_winning_dose"),
+                          "patch_wins": sum(1 for curve in entry.get("patch_dose_curves", ())
+                                            if curve["minimal_winning_dose"] is not None),
                           "elapsed_s": round(time.monotonic() - started, 1)}, ensure_ascii=False), flush=True)
 
     report["elapsed_seconds"] = round(time.monotonic() - started, 1)

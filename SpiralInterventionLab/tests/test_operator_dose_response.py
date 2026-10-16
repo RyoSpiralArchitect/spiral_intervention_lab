@@ -74,3 +74,33 @@ def test_token_rank_is_exact_over_the_full_vocabulary():
 
     assert token_rank(logits, 2) == 3
     assert token_rank(logits, 1) == 1
+
+
+def test_survey_rescue_requires_full_score_no_violations_and_correct_roles():
+    from SpiralInterventionLab.examples.survey_clause_structure import is_rescue
+
+    assert is_rescue({"score": 1.0, "constraint_violations": [], "role_binding_ok": True})
+    assert not is_rescue({"score": 1.0, "constraint_violations": [], "role_binding_ok": False})
+    assert not is_rescue({"score": 1.0, "constraint_violations": ["word_budget"], "role_binding_ok": True})
+    assert not is_rescue({"score": 0.938889, "constraint_violations": [], "role_binding_ok": True})
+
+
+def test_survey_first_piece_takes_the_first_non_special_token_of_multi_piece_names():
+    from SpiralInterventionLab.examples.survey_clause_structure import first_piece_id
+
+    codec = _Codec({" Selim": [24082, 318]})
+
+    assert first_piece_id(codec, " Selim", special_ids={0}) == 24082
+
+
+def test_patch_edit_size_reads_activation_patch_telemetry_only():
+    from SpiralInterventionLab.examples.replay_structure_token_probe import patch_edit_size
+
+    simulated = {"edit_runtime_telemetry": [
+        {"op": "resid_add", "target_norm_before": 1.0, "blend_delta_norm": 9.0},
+        {"op": "activation_patch", "target_norm_before": 63.445, "blend_delta_norm": 19.8125},
+    ]}
+
+    assert patch_edit_size(simulated) == {"site_norm_before": 63.445, "blend_delta_norm": 19.8125,
+                                          "blend_delta_over_site_norm": 0.31228}
+    assert patch_edit_size({"edit_runtime_telemetry": []}) == {}
