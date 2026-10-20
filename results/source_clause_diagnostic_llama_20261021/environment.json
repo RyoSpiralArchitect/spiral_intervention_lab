@@ -1,0 +1,18 @@
+{
+  "kind": "source_clause_replay_environment",
+  "python": "3.12.6 (v3.12.6:a4a2d2b0d85, Sep  6 2024, 16:08:03) [Clang 13.0.0 (clang-1300.0.29.30)]",
+  "platform": "macOS-26.4.1-arm64-arm-64bit",
+  "git_head": "62c972e55b3dcb65d89f71c151384a5d98ce08f3",
+  "git_branch": "codex/source-clause-diagnostic",
+  "dirty_source": true,
+  "versions": {
+    "torch": "2.12.1",
+    "transformers": "4.57.6",
+    "transformer-lens": "3.5.1",
+    "safetensors": "0.8.0"
+  },
+  "controller_calls": 0,
+  "startup_environment": "existing global site startup enabled, including Spiralton hooks; no startup override",
+  "measurement_receipt": "source_clause_readout.json",
+  "audit_receipt": "readout_audit.json"
+}

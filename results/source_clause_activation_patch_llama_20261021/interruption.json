@@ -1,0 +1,19 @@
+{
+  "kind": "source_clause_activation_patch_resource_interruption",
+  "status": "stopped_before_diagnostic_measurement",
+  "worker_model": "llama-3.2-3b",
+  "requested_prefix_tokens": 8,
+  "requested_mode": "normal_cap_source_clause_activation_patch_probe",
+  "supervisor_stop_reason": "low_disk",
+  "stop_below_free_gib": 8,
+  "free_gib_at_supervised_end": 7.669513702392578,
+  "elapsed_seconds": 35,
+  "child_returncode": -15,
+  "stage": "model_initialization_before_replay_receipt_creation",
+  "source_log": "runtime.stdout.log",
+  "source_snapshot": "source_snapshot.tgz",
+  "new_operator_measurements": 0,
+  "controller_provider_calls": 0,
+  "production_apply_executed": false,
+  "interpretation": "Resource-guard interruption, not evidence that the operator is ineffective or that the model failed the task."
+}

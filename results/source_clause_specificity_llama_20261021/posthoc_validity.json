@@ -1,0 +1,10 @@
+{
+  "valid_for_source_specificity": false,
+  "reason": "self_copy_is_not_null_control",
+  "observed_source_target_delta_norm": 12.78097248,
+  "observed_self_copy_blend_delta_norm": 0.08000007,
+  "interpretation": "The retained cache last position precedes the current generated prefix; self-copy was a different-position patch. Do not interpret it as a null control.",
+  "original_receipts_preserved": true,
+  "rerun_requires": "Explicitly account a current-prefix no-edit cache-alignment forward and verify zero self-copy displacement.",
+  "production_apply_allowed": false
+}

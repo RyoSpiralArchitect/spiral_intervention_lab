@@ -16,6 +16,8 @@ from . import diagnostic_orchestration as diag_orch
 from . import diagnostic_reuse as diag_reuse
 from . import entity_candidate_review as entity_review
 from . import entity_probe_refresh as entity_refresh
+from . import clause_structure
+from . import clause_actuation
 from . import candidate_actions
 from . import candidate_handoff
 from . import diagnostic_budget
@@ -117,6 +119,8 @@ _CONTROLLER_MEMORY_ALLOWED_NEXT_ACTIONS = {
 }
 _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode"}
 _CONTROLLER_DIAGNOSTIC_NAMES = {
+    clause_structure.NAME,
+    clause_actuation.NAME,
     "inspect_evidence",
     "matched_response_probe",
     "candidate_action",
@@ -534,7 +538,7 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
     if diagnostic_name is None:
         return None
     normalized: dict[str, Any] = {"diagnostic": diagnostic_name}
-    for key in ("execution_id", "evidence_id", "action_id"):
+    for key in ("execution_id", "evidence_id", "action_id", "structure_context_id", "structure_operator_id"):
         if isinstance(value.get(key), str):
             normalized[key] = value[key][:160]
     for key in ("dose_grid", "candidate_ids", "limit", "comparison_axis"):
@@ -647,6 +651,8 @@ class HookedTransformerWorkerRuntime:
         max_diagnostic_calls_per_run: int = 8,
         diagnostic_result_window: int = 8,
         candidate_handoff_mode: str = "off",
+        clause_structure_diagnostics: bool = False,
+        clause_structure_operator_diagnostics: bool = False,
         readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
         readout_analyzer_rerank_mode: str = "apply",
     ) -> None:
@@ -711,6 +717,14 @@ class HookedTransformerWorkerRuntime:
         if candidate_handoff_mode not in {"off", "soft"}:
             raise ValueError("candidate_handoff_mode must be off or soft")
         self.candidate_handoff_mode = candidate_handoff_mode
+        if not isinstance(clause_structure_diagnostics, bool):
+            raise ValueError("clause_structure_diagnostics must be boolean")
+        self.clause_structure_diagnostics = clause_structure_diagnostics
+        if not isinstance(clause_structure_operator_diagnostics, bool):
+            raise ValueError("clause_structure_operator_diagnostics must be boolean")
+        if clause_structure_operator_diagnostics and not clause_structure_diagnostics:
+            raise ValueError("clause structure operators require clause structure observations")
+        self.clause_structure_operator_diagnostics = clause_structure_operator_diagnostics
         self.readout_sidecar_analyzer = readout_sidecar_analyzer
         self.readout_analyzer_rerank_mode = _normalize_readout_analyzer_rerank_mode(readout_analyzer_rerank_mode)
 
@@ -748,6 +762,8 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_results: list[dict[str, Any]] = []
         self._diagnostic_calls_used = 0
         self._entity_probe_attempted_terms: set[str] = set()
+        self._clause_structure_attempted_contexts: set[str] = set()
+        self._clause_patch_attempted_ids: set[str] = set()
         self._entity_reviewed_blueprint_ids: set[str] = set()
         self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
         self._completed_expansion_keys: set[tuple[str, str]] = set()
@@ -1822,6 +1838,8 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_results = []
         self._diagnostic_calls_used = 0
         self._entity_probe_attempted_terms = set()
+        self._clause_structure_attempted_contexts = set()
+        self._clause_patch_attempted_ids = set()
         self._entity_reviewed_blueprint_ids = set()
         self._diagnostic_review_cache = {}
         self._completed_expansion_keys = set()
@@ -8458,6 +8476,33 @@ class HookedTransformerWorkerRuntime:
                     option["request"],
                     reason="source_body_blueprint_available_for_diagnostic_activation_patch_review",
                     priority=20)
+        if getattr(self, "clause_structure_diagnostics", False):
+            structure = clause_structure.offer(self)
+            hints["source_clause_structure"] = structure
+            if structure["status"] == "available":
+                # Append an optional observation without displacing or reranking
+                # the existing six offers, or replacing the canonical frontier.
+                hints.setdefault("available_next_diagnostics", []).append({
+                    "diagnostic": clause_structure.NAME, "request": structure["request"],
+                    "reason": "source_body_structure_tokens_available_for_current_prefix_observation",
+                    "permission": "diagnostic_only", "production_apply_allowed": False,
+                })
+            elif structure["request"] is not None:
+                _block_next_diagnostic(structure["request"], reason=structure["status"])
+        if getattr(self, "clause_structure_operator_diagnostics", False):
+            patches = clause_actuation.offer(self)
+            hints["source_clause_activation_patch"] = patches
+            for candidate in patches["candidates"]:
+                if patches["status"] == "available" and candidate["available"]:
+                    hints.setdefault("available_next_diagnostics", []).append({
+                        "diagnostic": clause_actuation.NAME, "request": candidate["request"],
+                        "target_piece": candidate["target_piece"],
+                        "physical_replays_upper_bound": candidate["physical_replays_upper_bound"],
+                        "reason": "exact_source_token_normal_cap_patch_measurement_available",
+                        "permission": "diagnostic_only", "production_apply_allowed": False,
+                    })
+                else:
+                    _block_next_diagnostic(candidate["request"], reason="already_attempted_at_context")
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -12557,6 +12602,10 @@ class HookedTransformerWorkerRuntime:
             }
         packet_context = packet if isinstance(packet, Mapping) else {}
         strategy_hints = packet_context.get("strategy_hints") if isinstance(packet_context.get("strategy_hints"), Mapping) else {}
+        if diagnostic_name == clause_structure.NAME:
+            return clause_structure.execute(self, request, source=source)
+        if diagnostic_name == clause_actuation.NAME:
+            return clause_actuation.execute(self, request, source=source)
         if diagnostic_name == "inspect_evidence":
             return {"diagnostic": diagnostic_name, "step": self._steps, "source": source,
                     **inspect_evidence(self, request, strategy_hints)}

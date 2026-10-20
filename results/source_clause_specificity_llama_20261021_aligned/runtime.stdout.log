@@ -1,0 +1,40 @@
+{"event": "resource_checkpoint", "elapsed_seconds": 0, "disk_free_gib": 13.730915069580078}
+[Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+[🌀] [OK] PyTorch Turbo active (MPS available, explicit device mode)
+[🌀] [OK] torch default device → MPS auto (factory funcs)
+[🌀] [OK] HF/safetensors load guard auto (large CPU load → MPS restore)
+[🌀] [OK] mlx_lm.generate → AutoRouter (native + greedy-short MegaMax)
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s][Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+Loading checkpoint shards:  50%|█████     | 1/2 [00:01<00:01,  1.52s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.16s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:02<00:00,  1.21s/it]
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformer_lens/config/hooked_transformer_config.py:354: UserWarning: MPS backend may produce silently incorrect results (PyTorch 2.12.1). Set TRANSFORMERLENS_ALLOW_MPS=1 to suppress this warning. See: https://github.com/TransformerLensOrg/TransformerLens/issues/1178
+  warn_if_mps(self.device)
+{"event": "resource_checkpoint", "elapsed_seconds": 30, "disk_free_gib": 10.805652618408203}
+{"generated_tokens": 8, "status": "ok", "rows": [{"token_id": 1603, "piece": " before", "source_positions": [74], "source_provenance": "source_body", "status": "measured", "rank": 1, "prob": 0.5603647828102112, "logit": 21.515625, "gap_to_top1": 0.0, "top20_hit": true, "is_greedy_token": true}, {"token_id": 11, "piece": ",", "source_positions": [76, 85], "source_provenance": "source_body", "status": "measured", "rank": 2, "prob": 0.18192380666732788, "logit": 20.390625, "gap_to_top1": 1.125, "top20_hit": true, "is_greedy_token": false}, {"token_id": 1418, "piece": " while", "source_positions": [86], "source_provenance": "source_body", "status": "measured", "rank": 7, "prob": 0.00824690517038107, "logit": 17.296875, "gap_to_top1": 4.21875, "top20_hit": true, "is_greedy_token": false}, {"token_id": 627, "piece": ".\n", "source_positions": [96], "source_provenance": "source_body", "status": "measured", "rank": 33, "prob": 0.00025098814512602985, "logit": 13.8046875, "gap_to_top1": 7.7109375, "top20_hit": false, "is_greedy_token": false}], "context_unchanged": true}
+{"event": "resource_checkpoint", "elapsed_seconds": 60, "disk_free_gib": 10.79323959350586}
+{"operator_target": " before", "status": "ok", "physical_replays": 4, "effects": ["bound_readout_regression"]}
+{"operator_target": ",", "status": "ok", "physical_replays": 4, "effects": ["bound_target_lift_candidate"]}
+{"event": "resource_checkpoint", "elapsed_seconds": 90, "disk_free_gib": 12.799678802490234}
+{"operator_target": " while", "status": "ok", "physical_replays": 4, "effects": ["bound_target_lift_candidate"]}
+{"operator_target": ".\n", "status": "ok", "physical_replays": 4, "effects": ["no_resolved_target_response"]}
+{"event": "resource_checkpoint", "elapsed_seconds": 120, "disk_free_gib": 12.795536041259766}
+{"specificity_control": "self_copy", "status": "ok", "physical_replays": 4}
+{"specificity_control": "radial_shrink", "status": "ok", "physical_replays": 4}
+{"event": "supervised_end", "returncode": 0, "stop_reason": null, "elapsed_seconds": 150, "disk_free_gib": 12.788047790527344}

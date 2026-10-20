@@ -1,0 +1,241 @@
+{
+  "kind": "source_clause_matched_readout_audit",
+  "scope": "readout_reproduction_not_operator_or_controller_efficacy",
+  "all_contexts_unchanged": true,
+  "total_physical_replays": 3,
+  "total_charged_slots": 3,
+  "total_edited_replays": 0,
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "matches": [
+    {
+      "generated_tokens": 8,
+      "piece": ",",
+      "prefix_equal": true,
+      "rank_before": 2,
+      "rank_now": 2,
+      "gap_before": 1.125,
+      "gap_now": 1.125,
+      "exact_readout_match": true
+    },
+    {
+      "generated_tokens": 8,
+      "piece": " while",
+      "prefix_equal": true,
+      "rank_before": 7,
+      "rank_now": 7,
+      "gap_before": 4.21875,
+      "gap_now": 4.21875,
+      "exact_readout_match": true
+    }
+  ],
+  "measurements": [
+    {
+      "generated_tokens": 7,
+      "prefix": " Nora will take the sample to I",
+      "greedy_piece": "vo",
+      "diagnostic_budget_left": 11,
+      "structure_readout_rows": [
+        {
+          "token_id": 1603,
+          "piece": " before",
+          "source_positions": [
+            74
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 316,
+          "prob": 1.0485459167597355E-9,
+          "logit": 5.27734375,
+          "gap_to_top1": 20.67578125,
+          "top20_hit": false,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            85
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 62,
+          "prob": 2.5304901285494452E-8,
+          "logit": 8.4609375,
+          "gap_to_top1": 17.4921875,
+          "top20_hit": false,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            86
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 3025,
+          "prob": 2.8052168227210572E-11,
+          "logit": 1.65625,
+          "gap_to_top1": 24.296875,
+          "top20_hit": false,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 55,
+          "prob": 3.052353747534653E-8,
+          "logit": 8.6484375,
+          "gap_to_top1": 17.3046875,
+          "top20_hit": false,
+          "is_greedy_token": false
+        }
+      ]
+    },
+    {
+      "generated_tokens": 8,
+      "prefix": " Nora will take the sample to Ivo",
+      "greedy_piece": " before",
+      "diagnostic_budget_left": 10,
+      "structure_readout_rows": [
+        {
+          "token_id": 1603,
+          "piece": " before",
+          "source_positions": [
+            74
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 1,
+          "prob": 0.5603647828102112,
+          "logit": 21.515625,
+          "gap_to_top1": 0.0,
+          "top20_hit": true,
+          "is_greedy_token": true
+        },
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            85
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 2,
+          "prob": 0.18192380666732788,
+          "logit": 20.390625,
+          "gap_to_top1": 1.125,
+          "top20_hit": true,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            86
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 7,
+          "prob": 0.00824690517038107,
+          "logit": 17.296875,
+          "gap_to_top1": 4.21875,
+          "top20_hit": true,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 33,
+          "prob": 0.00025098814512602985,
+          "logit": 13.8046875,
+          "gap_to_top1": 7.7109375,
+          "top20_hit": false,
+          "is_greedy_token": false
+        }
+      ]
+    },
+    {
+      "generated_tokens": 9,
+      "prefix": " Nora will take the sample to Ivo before",
+      "greedy_piece": " sending",
+      "diagnostic_budget_left": 9,
+      "structure_readout_rows": [
+        {
+          "token_id": 1603,
+          "piece": " before",
+          "source_positions": [
+            74
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 113,
+          "prob": 0.0000720697789802216,
+          "logit": 9.328125,
+          "gap_to_top1": 8.859375,
+          "top20_hit": false,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            85
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 75,
+          "prob": 0.00013050153211224824,
+          "logit": 9.921875,
+          "gap_to_top1": 8.265625,
+          "top20_hit": false,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            86
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 787,
+          "prob": 0.000005079897618998075,
+          "logit": 6.67578125,
+          "gap_to_top1": 11.51171875,
+          "top20_hit": false,
+          "is_greedy_token": false
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ],
+          "source_provenance": "source_body",
+          "status": "measured",
+          "rank": 789,
+          "prob": 0.000005060093371866969,
+          "logit": 6.671875,
+          "gap_to_top1": 11.515625,
+          "top20_hit": false,
+          "is_greedy_token": false
+        }
+      ]
+    }
+  ]
+}

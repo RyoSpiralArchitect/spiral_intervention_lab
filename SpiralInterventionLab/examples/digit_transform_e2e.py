@@ -265,6 +265,8 @@ def build_hooked_transformer_worker_runtime(
     max_diagnostic_calls_per_run: int = 8,
     diagnostic_result_window: int = 8,
     candidate_handoff_mode: str = "off",
+    clause_structure_diagnostics: bool = False,
+    clause_structure_operator_diagnostics: bool = False,
     readout_sidecar_analyzer: ReadoutSidecarAnalyzer | None = None,
     readout_analyzer_rerank_mode: str = "apply",
 ) -> HookedTransformerWorkerRuntime:
@@ -326,6 +328,8 @@ def build_hooked_transformer_worker_runtime(
         max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
         diagnostic_result_window=diagnostic_result_window,
         candidate_handoff_mode=candidate_handoff_mode,
+        clause_structure_diagnostics=clause_structure_diagnostics,
+        clause_structure_operator_diagnostics=clause_structure_operator_diagnostics,
         allowed_token_ids=allowed_token_ids,
         readout_sidecar_analyzer=readout_sidecar_analyzer,
         readout_analyzer_rerank_mode=readout_analyzer_rerank_mode,
@@ -5360,6 +5364,8 @@ def run_digit_transform_experiment(
     diagnostic_result_window: int = 8,
     max_candidate_handoff_rounds: int = 2,
     candidate_handoff_mode: str = "off",
+    clause_structure_diagnostics: bool = False,
+    clause_structure_operator_diagnostics: bool = False,
 ) -> DigitTransformExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -5411,6 +5417,8 @@ def run_digit_transform_experiment(
             max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
             diagnostic_result_window=diagnostic_result_window,
             candidate_handoff_mode=candidate_handoff_mode,
+            clause_structure_diagnostics=clause_structure_diagnostics,
+            clause_structure_operator_diagnostics=clause_structure_operator_diagnostics,
         )
 
     suite = run_minimal_baseline_suite(
@@ -5489,6 +5497,8 @@ def run_digit_transform_c1_only_experiment(
     diagnostic_result_window: int = 8,
     max_candidate_handoff_rounds: int = 2,
     candidate_handoff_mode: str = "off",
+    clause_structure_diagnostics: bool = False,
+    clause_structure_operator_diagnostics: bool = False,
 ) -> DigitTransformC1OnlyExperimentResult:
     env = task_env or SpiralDigitTransformEnv()
     model = worker_model or load_worker_model(
@@ -5533,6 +5543,8 @@ def run_digit_transform_c1_only_experiment(
         max_diagnostic_calls_per_run=max_diagnostic_calls_per_run,
         diagnostic_result_window=diagnostic_result_window,
         candidate_handoff_mode=candidate_handoff_mode,
+        clause_structure_diagnostics=clause_structure_diagnostics,
+        clause_structure_operator_diagnostics=clause_structure_operator_diagnostics,
     )
     logger_factory = _logger_factory(log_dir)
     c1 = run_c1(
@@ -9313,6 +9325,8 @@ def run_digit_transform_sweep(
     diagnostic_result_window: int = 8,
     max_candidate_handoff_rounds: int = 2,
     candidate_handoff_mode: str = "off",
+    clause_structure_diagnostics: bool = False,
+    clause_structure_operator_diagnostics: bool = False,
 ) -> DigitTransformSweepResult:
     resolved_seeds = tuple(int(seed) for seed in seeds)
     if not resolved_seeds:
@@ -9377,6 +9391,8 @@ def run_digit_transform_sweep(
                 max_candidate_handoff_rounds=max_candidate_handoff_rounds,
                 diagnostic_result_window=diagnostic_result_window,
                 candidate_handoff_mode=candidate_handoff_mode,
+                clause_structure_diagnostics=clause_structure_diagnostics,
+                clause_structure_operator_diagnostics=clause_structure_operator_diagnostics,
             )
         )
     result = DigitTransformSweepResult(seeds=resolved_seeds, runs=tuple(runs))
@@ -9561,6 +9577,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Shared same-prefix rounds for explicit hold_prefix diagnostics and qualified trial handoffs; no automatic apply.")
     parser.add_argument("--candidate-handoff-mode", choices=("off", "soft"), default="off",
         help="Optional seed-to-card measurement offers and soft diagnostic-delay accounting; never grants apply.")
+    parser.add_argument("--clause-structure-diagnostics", action="store_true",
+        help="Offer source-body connective/punctuation readout observations; no forced token, cap change or apply right.")
+    parser.add_argument("--clause-structure-operator-diagnostics", action="store_true",
+        help="Offer exact source-token activation-patch measurements after clause observations; requires --clause-structure-diagnostics, no production permission.")
     parser.add_argument(
         "--diagnostic-result-window",
         type=int,
@@ -9587,6 +9607,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--max-diagnostic-calls-per-run must be >= 0")
     if args.diagnostic_result_window <= 0:
         parser.error("--diagnostic-result-window must be >= 1")
+    if args.clause_structure_operator_diagnostics and not args.clause_structure_diagnostics:
+        parser.error("--clause-structure-operator-diagnostics requires --clause-structure-diagnostics")
     if args.post_run_debrief_max_output_tokens <= 0:
         parser.error("--post-run-debrief-max-output-tokens must be >= 1")
     if args.post_run_debrief != "off" and args.log_dir is None:
@@ -9650,6 +9672,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_candidate_handoff_rounds=args.candidate_handoff_rounds,
             diagnostic_result_window=args.diagnostic_result_window,
             candidate_handoff_mode=args.candidate_handoff_mode,
+            clause_structure_diagnostics=args.clause_structure_diagnostics,
+            clause_structure_operator_diagnostics=args.clause_structure_operator_diagnostics,
         )
         payload = result.to_dict()
     elif args.num_seeds == 1:
@@ -9690,6 +9714,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_candidate_handoff_rounds=args.candidate_handoff_rounds,
             diagnostic_result_window=args.diagnostic_result_window,
             candidate_handoff_mode=args.candidate_handoff_mode,
+            clause_structure_diagnostics=args.clause_structure_diagnostics,
+            clause_structure_operator_diagnostics=args.clause_structure_operator_diagnostics,
         )
         payload = result.to_dict()
     else:
@@ -9730,6 +9756,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_candidate_handoff_rounds=args.candidate_handoff_rounds,
             diagnostic_result_window=args.diagnostic_result_window,
             candidate_handoff_mode=args.candidate_handoff_mode,
+            clause_structure_diagnostics=args.clause_structure_diagnostics,
+            clause_structure_operator_diagnostics=args.clause_structure_operator_diagnostics,
         )
         payload = sweep.to_dict()
     if args.post_run_debrief == "controller":
