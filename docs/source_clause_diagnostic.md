@@ -564,8 +564,12 @@ observations in the context-keyed episode cache described above. Regressions
 cover full source-matrix execution with history windows of one and two,
 duplicate rejection after eviction, stale-context rejection, reset, failed
 observations, and isolation from mutations of returned reports.
+Re-review also tightened the missing-observation control test: it now clears
+the prerequisite cache, checks the exact rejection reason and asserts zero
+forwards. The previous test passed via an unrelated toy-adapter preflight
+error, so a green status alone did not establish the intended coverage.
 
-[Post-review test output](../results/source_clause_pr35_review_20261021/tests.txt):
+[Post-review test output](../results/source_clause_pr35_review_20261021/tests_r2.txt):
 **653 passed, 9 subtests passed, 14 dependency deprecation warnings**.
 The live measurements above predate this storage-only fix; their receipts and
 source snapshot are retained unchanged. No additional live run or provider call

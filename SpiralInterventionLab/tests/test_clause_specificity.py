@@ -39,18 +39,29 @@ def test_controls_are_normal_cap_and_budgeted_without_authority():
     assert duplicate["diagnostic_call_cost"] == 0
 
 
-@pytest.mark.parametrize("condition", ["budget", "off", "no_receipt"])
-def test_controls_fail_preflight_without_a_slot_or_observation(condition):
+@pytest.mark.parametrize("condition,blocked_reason", [
+    ("budget", "diagnostic_budget_exhausted"),
+    ("off", "disabled"),
+    ("no_receipt", "current_prefix_structure_observation_required"),
+])
+def test_controls_fail_preflight_without_a_slot_or_observation(condition, blocked_reason):
     worker = make_worker()
+    old_read = worker.adapter.read_ref
+    worker.adapter.read_ref = lambda ref, ctx: old_read(
+        {**ref, "token": {"mode": "index", "value": -1}} if ref["token"]["mode"] == "last" else ref, ctx)
     if condition == "budget":
         worker._diagnostic_calls_used = worker.max_diagnostic_calls_per_run
     elif condition == "off":
         worker.clause_structure_operator_diagnostics = False
     else:
         worker._diagnostic_results = []
-    with patch.object(worker, "_simulate_decode", side_effect=AssertionError("preflight must block")):
+        worker._clause_structure_receipts = {}
+    with patch.object(worker, "_simulate_decode", side_effect=AssertionError("preflight must block")) as simulate:
         result = clause_specificity.measure_control(worker, "radial_shrink")
+    simulate.assert_not_called()
     assert result["status"] == "unavailable" and result["diagnostic_call_cost"] == 0
+    assert result["physical_replay_count"] == 0
+    assert result["blocked_reason"] == blocked_reason
 
 
 def test_control_physical_failure_is_charged_once_and_drift_stops():
