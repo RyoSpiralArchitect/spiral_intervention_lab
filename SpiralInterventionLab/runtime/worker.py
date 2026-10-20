@@ -763,6 +763,7 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_calls_used = 0
         self._entity_probe_attempted_terms: set[str] = set()
         self._clause_structure_attempted_contexts: set[str] = set()
+        self._clause_structure_receipts: dict[str, dict[str, Any]] = {}
         self._clause_patch_attempted_ids: set[str] = set()
         self._entity_reviewed_blueprint_ids: set[str] = set()
         self._diagnostic_review_cache: dict[str, dict[str, Any]] = {}
@@ -1839,6 +1840,7 @@ class HookedTransformerWorkerRuntime:
         self._diagnostic_calls_used = 0
         self._entity_probe_attempted_terms = set()
         self._clause_structure_attempted_contexts = set()
+        self._clause_structure_receipts = {}
         self._clause_patch_attempted_ids = set()
         self._entity_reviewed_blueprint_ids = set()
         self._diagnostic_review_cache = {}

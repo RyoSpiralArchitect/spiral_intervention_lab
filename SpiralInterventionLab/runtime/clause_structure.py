@@ -7,6 +7,7 @@ reference role frames, or preferred output tokens enter the offer.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 import torch
@@ -177,4 +178,10 @@ def execute(worker: Any, request: Mapping[str, Any], *, source: str) -> dict[str
     if not result["state_restored"]:
         # A mutated diagnostic context must not be used as a new generation state.
         raise RuntimeError("source_clause_structure_probe_changed_worker_state")
+    if result["status"] == "ok":
+        # Executable prerequisites outlive the bounded controller display history.
+        # The run budget bounds this context-keyed cache; reset clears it.
+        if not hasattr(worker, "_clause_structure_receipts"):
+            worker._clause_structure_receipts = {}
+        worker._clause_structure_receipts[current["structure_context_id"]] = deepcopy(result)
     return result

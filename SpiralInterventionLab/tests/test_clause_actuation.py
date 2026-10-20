@@ -104,14 +104,35 @@ def test_duplicate_stale_and_evicted_receipts_cannot_repeat_or_retarget():
     assert duplicate["physical_replay_count"] == duplicate["diagnostic_call_cost"] == 0
     worker._diagnostic_results = []
     worker._latest_diagnostic_results = []
-    with patch.object(worker, "_simulate_decode", side_effect=AssertionError("no receipt, no measurement")):
+    with patch.object(worker, "_simulate_decode", side_effect=AssertionError("duplicates cannot measure")):
         lost = worker.request_controller_diagnostics(req)[0]
-    assert lost["blocked_reason"] == "current_prefix_structure_observation_required"
+    assert lost["blocked_reason"] == "already_attempted_at_context"
     worker._append_output_token(2)
     stale = worker.request_controller_diagnostics(req)[0]
     assert stale["physical_replay_count"] == 0
     worker.reset("p")
     assert not worker._clause_patch_attempted_ids
+    assert not worker._clause_structure_receipts
+
+
+@pytest.mark.parametrize("history_window", [1, 2])
+def test_source_matrix_prerequisite_survives_controller_history_eviction(history_window):
+    from SpiralInterventionLab.examples.replay_source_clause_diagnostic import measure_source_operators
+    worker = make_worker(observe=False)
+    worker.diagnostic_result_window = history_window
+    observed = worker.request_controller_diagnostics(clause_structure.offer(worker)["request"])[0]
+    context = observed["structure_context_id"]
+    budget = diagnostic_budget.left(worker)
+    receipts = measure_source_operators(worker)
+    assert len(receipts) == 2
+    assert all(row["result"]["status"] == "ok" for row in receipts)
+    assert diagnostic_budget.left(worker) == budget - 2
+    assert len(worker._diagnostic_results) == history_window
+    assert all(row["diagnostic"] != clause_structure.NAME for row in worker._diagnostic_results)
+    assert worker._clause_structure_receipts[context]["structure_readout_rows"] == observed["structure_readout_rows"]
+    assert clause_actuation.offer(worker)["status"] == "already_attempted_at_context"
+    worker._append_output_token(2)
+    assert clause_actuation.offer(worker)["status"] == "current_prefix_structure_observation_required"
 
 
 def test_different_bindings_and_caps_rotate_ids_and_legacy_request_is_exclusive():

@@ -56,10 +56,11 @@ def offer(worker: Any) -> dict[str, Any]:
     enabled = getattr(worker, "clause_structure_operator_diagnostics", False)
     structure = clause_structure.offer(worker) if enabled else {}
     context = structure.get("structure_context_id")
-    receipt = next((r for r in reversed(getattr(worker, "_diagnostic_results", []))
-                    if r.get("diagnostic") == clause_structure.NAME
-                    and r.get("structure_context_id") == context and context
-                    and r.get("status") == "ok" and r.get("state_restored") is True), None)
+    receipt = getattr(worker, "_clause_structure_receipts", {}).get(context)
+    if (not isinstance(receipt, Mapping) or receipt.get("diagnostic") != clause_structure.NAME
+            or receipt.get("structure_context_id") != context
+            or receipt.get("status") != "ok" or receipt.get("state_restored") is not True):
+        receipt = None
     surfaces = _surfaces(worker) if receipt else []
     status = "available"
     if not enabled:

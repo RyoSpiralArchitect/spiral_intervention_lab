@@ -126,6 +126,7 @@ def test_duplicate_and_evicted_receipts_never_repeat_work_but_a_new_prefix_can()
     assert worker.request_controller_diagnostics(new_request)[0]["status"] == "ok"
     worker.reset("p")
     assert not worker._clause_structure_attempted_contexts
+    assert not worker._clause_structure_receipts
 
 
 @pytest.mark.parametrize("condition,status", [
@@ -165,6 +166,17 @@ def test_failed_measurement_is_charged_once_as_attempt_not_positive_evidence():
     assert result["status"] == "error" and result["new_measurement_count"] == 0
     assert result["state_restored"] and duplicate["diagnostic_call_cost"] == 0
     assert "structure_readout_rows" not in result
+    assert not worker._clause_structure_receipts
+
+
+def test_prerequisite_receipt_is_not_mutated_through_returned_result():
+    worker = make_worker()
+    result = worker.request_controller_diagnostics(request(worker))[0]
+    context = result["structure_context_id"]
+    before = deepcopy(worker._clause_structure_receipts[context])
+    result["structure_readout_rows"][0]["token_id"] = 999
+    result["state_restored"] = False
+    assert worker._clause_structure_receipts[context] == before
 
 
 @pytest.mark.parametrize("change", ["mask", "source", "patch", "guardrails", "decoder"])
@@ -198,6 +210,7 @@ def test_drift_fails_closed_instead_of_returning_measurement_as_restored():
     with patch.object(worker, "_simulate_decode", side_effect=mutate):
         with pytest.raises(RuntimeError, match="changed_worker_state"):
             worker.request_controller_diagnostics(request(worker))
+    assert not worker._clause_structure_receipts
 
 
 def test_ties_masks_and_invalid_logits_do_not_claim_greedy_win_or_emit_infinity():

@@ -58,6 +58,13 @@ failed physical attempts cost one existing diagnostic slot, invalid/duplicate
 requests cost zero, and generation/TTL do not advance. Exhausted budgets do not
 offer executable cards.
 
+Successful, restored observations are also retained in an episode-local cache
+keyed by the exact context ID. Operator prerequisites do not depend on the
+bounded controller-history window: measuring one candidate must not evict the
+observation needed by the next candidate. Only successful observations enter
+this cache, returned reports cannot mutate it, changed contexts cannot reuse it,
+and episode reset clears it. Its size is bounded by the run's diagnostic budget.
+
 Operation-card and legacy requests preserve this exact context instead of
 inheriting another frontier's objective or expansion mode. Compact packets and
 results retain binding, costs, masked rows, state restoration and the permission
@@ -547,6 +554,22 @@ completed with **650 passed, 9 subtests passed and 14 dependency deprecation
 warnings**. Regression coverage includes stale-cache rejection, charged cache
 alignment, zero self-copy displacement, repeat accounting, missing controls,
 cross-context rejection, and reserving the complete comparison's budget.
+
+### PR review follow-up
+
+[PR #35 review](https://github.com/RyoSpiralArchitect/spiral_intervention_lab/pull/35#discussion_r4328999502)
+identified that the operator prerequisite was incorrectly read from the
+bounded display-history ledger. The fix retains only successful, restored
+observations in the context-keyed episode cache described above. Regressions
+cover full source-matrix execution with history windows of one and two,
+duplicate rejection after eviction, stale-context rejection, reset, failed
+observations, and isolation from mutations of returned reports.
+
+[Post-review test output](../results/source_clause_pr35_review_20261021/tests.txt):
+**653 passed, 9 subtests passed, 14 dependency deprecation warnings**.
+The live measurements above predate this storage-only fix; their receipts and
+source snapshot are retained unchanged. No additional live run or provider call
+was needed for this regression.
 
 ## Wider interpretation
 
