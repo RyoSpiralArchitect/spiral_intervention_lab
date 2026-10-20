@@ -1,0 +1,458 @@
+{
+  "kind": "source_clause_diagnostic_replay",
+  "schema_version": 1,
+  "status": "complete",
+  "created_at_utc": "2026-10-20T16:13:42.182563+00:00",
+  "source_jsonl_sha256": "0626b1e17fecb74040ad59a43485a11b1406892bc0170a13b04689f43e83b317",
+  "source_manifest_sha256": "8dae8ce36368dfccf0a326a3ca331be4864a9828f72ff255b33dc7894511a4ef",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "worker_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "task": "constrained_rewrite_l1",
+  "seed": 0,
+  "device": "mps",
+  "dtype": "float16",
+  "positions": [
+    7,
+    8,
+    9
+  ],
+  "measurements": [
+    {
+      "generated_tokens": 7,
+      "prefix": " Nora will take the sample to I",
+      "selection_origin": "diagnostic_harness_not_controller_choice",
+      "operation_card": {
+        "operation_id": "operation:7eebd03919f7fd4fbe95cd5e",
+        "diagnostic": "source_clause_structure_probe",
+        "action": null,
+        "mode": null,
+        "objective_bundle_key": null,
+        "candidate_id": null,
+        "target_piece": null,
+        "purpose": "Observe current-prefix readout for source-body connectives and punctuation; not their causal utility",
+        "prerequisites": [
+          "offered_by_runtime",
+          "current_request_preflight_at_dispatch"
+        ],
+        "available": true,
+        "blocked_reason": null,
+        "cost": {
+          "diagnostic_slots_upper_bound": 1,
+          "inspection_calls_upper_bound": 0,
+          "physical_replays_upper_bound": 1,
+          "basis": "dispatch_dependent",
+          "charge": "actual_work_under_existing_budget"
+        },
+        "possible_result": "source_structure_readout_not_operator_effect",
+        "result_guaranteed": false,
+        "timing": {
+          "generation_during_diagnostic": "unchanged",
+          "same_prefix_rounds_left": 2,
+          "result_before_next_token": "conditional_on_usable_result_and_explicit_hold",
+          "requires_followup_round": false
+        },
+        "production_apply_allowed": false
+      },
+      "resolved_request": {
+        "diagnostic": "source_clause_structure_probe",
+        "structure_context_id": "clause-context:484b9318230e4e32d2694833"
+      },
+      "result": {
+        "diagnostic": "source_clause_structure_probe",
+        "source": "diagnostic_harness",
+        "recorded_step": 7,
+        "structure_context_id": "clause-context:484b9318230e4e32d2694833",
+        "requested_structure_context_id": "clause-context:484b9318230e4e32d2694833",
+        "generated_tokens": 7,
+        "active_edit_count": 0,
+        "evidence_scope": "current_prefix_readout_not_clause_rescue_or_operator_effect",
+        "diagnostic_only": true,
+        "production_apply_allowed": false,
+        "certified_for_apply": false,
+        "policy_candidate_ready": false,
+        "diagnostic_call_cost": 1,
+        "new_measurement_count": 1,
+        "physical_replay_count": 1,
+        "edited_replay_count": 0,
+        "status": "ok",
+        "structure_readout_rows": [
+          {
+            "token_id": 1603,
+            "piece": " before",
+            "source_positions": [
+              74
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 316,
+            "prob": 1.0485459167597355e-09,
+            "logit": 5.27734375,
+            "gap_to_top1": 20.67578125,
+            "top20_hit": false,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 11,
+            "piece": ",",
+            "source_positions": [
+              76,
+              85
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 62,
+            "prob": 2.5304901285494452e-08,
+            "logit": 8.4609375,
+            "gap_to_top1": 17.4921875,
+            "top20_hit": false,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 1418,
+            "piece": " while",
+            "source_positions": [
+              86
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 3025,
+            "prob": 2.8052168227210572e-11,
+            "logit": 1.65625,
+            "gap_to_top1": 24.296875,
+            "top20_hit": false,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 627,
+            "piece": ".\n",
+            "source_positions": [
+              96
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 55,
+            "prob": 3.052353747534653e-08,
+            "logit": 8.6484375,
+            "gap_to_top1": 17.3046875,
+            "top20_hit": false,
+            "is_greedy_token": false
+          }
+        ],
+        "greedy_token_id": 3415,
+        "greedy_piece": "vo",
+        "readout_stage": "post_constraints_and_decoder_control",
+        "ordering": "source_occurrence_not_expected_utility",
+        "state_restored": true,
+        "budget_before": {
+          "diagnostic_calls_left": 12,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 11,
+          "inspection_calls_left": 4
+        },
+        "diagnostic_budget_charged": true
+      },
+      "context_unchanged": true,
+      "diagnostic_budget_left": 11,
+      "rollout_edit_count": 0,
+      "production_apply_allowed": false
+    },
+    {
+      "generated_tokens": 8,
+      "prefix": " Nora will take the sample to Ivo",
+      "selection_origin": "diagnostic_harness_not_controller_choice",
+      "operation_card": {
+        "operation_id": "operation:caaf16927990f76af2116655",
+        "diagnostic": "source_clause_structure_probe",
+        "action": null,
+        "mode": null,
+        "objective_bundle_key": null,
+        "candidate_id": null,
+        "target_piece": null,
+        "purpose": "Observe current-prefix readout for source-body connectives and punctuation; not their causal utility",
+        "prerequisites": [
+          "offered_by_runtime",
+          "current_request_preflight_at_dispatch"
+        ],
+        "available": true,
+        "blocked_reason": null,
+        "cost": {
+          "diagnostic_slots_upper_bound": 1,
+          "inspection_calls_upper_bound": 0,
+          "physical_replays_upper_bound": 1,
+          "basis": "dispatch_dependent",
+          "charge": "actual_work_under_existing_budget"
+        },
+        "possible_result": "source_structure_readout_not_operator_effect",
+        "result_guaranteed": false,
+        "timing": {
+          "generation_during_diagnostic": "unchanged",
+          "same_prefix_rounds_left": 2,
+          "result_before_next_token": "conditional_on_usable_result_and_explicit_hold",
+          "requires_followup_round": false
+        },
+        "production_apply_allowed": false
+      },
+      "resolved_request": {
+        "diagnostic": "source_clause_structure_probe",
+        "structure_context_id": "clause-context:c672bf6632e70d52ae3d395b"
+      },
+      "result": {
+        "diagnostic": "source_clause_structure_probe",
+        "source": "diagnostic_harness",
+        "recorded_step": 8,
+        "structure_context_id": "clause-context:c672bf6632e70d52ae3d395b",
+        "requested_structure_context_id": "clause-context:c672bf6632e70d52ae3d395b",
+        "generated_tokens": 8,
+        "active_edit_count": 0,
+        "evidence_scope": "current_prefix_readout_not_clause_rescue_or_operator_effect",
+        "diagnostic_only": true,
+        "production_apply_allowed": false,
+        "certified_for_apply": false,
+        "policy_candidate_ready": false,
+        "diagnostic_call_cost": 1,
+        "new_measurement_count": 1,
+        "physical_replay_count": 1,
+        "edited_replay_count": 0,
+        "status": "ok",
+        "structure_readout_rows": [
+          {
+            "token_id": 1603,
+            "piece": " before",
+            "source_positions": [
+              74
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 1,
+            "prob": 0.5603647828102112,
+            "logit": 21.515625,
+            "gap_to_top1": 0.0,
+            "top20_hit": true,
+            "is_greedy_token": true
+          },
+          {
+            "token_id": 11,
+            "piece": ",",
+            "source_positions": [
+              76,
+              85
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 2,
+            "prob": 0.18192380666732788,
+            "logit": 20.390625,
+            "gap_to_top1": 1.125,
+            "top20_hit": true,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 1418,
+            "piece": " while",
+            "source_positions": [
+              86
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 7,
+            "prob": 0.00824690517038107,
+            "logit": 17.296875,
+            "gap_to_top1": 4.21875,
+            "top20_hit": true,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 627,
+            "piece": ".\n",
+            "source_positions": [
+              96
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 33,
+            "prob": 0.00025098814512602985,
+            "logit": 13.8046875,
+            "gap_to_top1": 7.7109375,
+            "top20_hit": false,
+            "is_greedy_token": false
+          }
+        ],
+        "greedy_token_id": 1603,
+        "greedy_piece": " before",
+        "readout_stage": "post_constraints_and_decoder_control",
+        "ordering": "source_occurrence_not_expected_utility",
+        "state_restored": true,
+        "budget_before": {
+          "diagnostic_calls_left": 11,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "diagnostic_budget_charged": true
+      },
+      "context_unchanged": true,
+      "diagnostic_budget_left": 10,
+      "rollout_edit_count": 0,
+      "production_apply_allowed": false
+    },
+    {
+      "generated_tokens": 9,
+      "prefix": " Nora will take the sample to Ivo before",
+      "selection_origin": "diagnostic_harness_not_controller_choice",
+      "operation_card": {
+        "operation_id": "operation:1626c4aa3155c404de1d07a8",
+        "diagnostic": "source_clause_structure_probe",
+        "action": null,
+        "mode": null,
+        "objective_bundle_key": null,
+        "candidate_id": null,
+        "target_piece": null,
+        "purpose": "Observe current-prefix readout for source-body connectives and punctuation; not their causal utility",
+        "prerequisites": [
+          "offered_by_runtime",
+          "current_request_preflight_at_dispatch"
+        ],
+        "available": true,
+        "blocked_reason": null,
+        "cost": {
+          "diagnostic_slots_upper_bound": 1,
+          "inspection_calls_upper_bound": 0,
+          "physical_replays_upper_bound": 1,
+          "basis": "dispatch_dependent",
+          "charge": "actual_work_under_existing_budget"
+        },
+        "possible_result": "source_structure_readout_not_operator_effect",
+        "result_guaranteed": false,
+        "timing": {
+          "generation_during_diagnostic": "unchanged",
+          "same_prefix_rounds_left": 2,
+          "result_before_next_token": "conditional_on_usable_result_and_explicit_hold",
+          "requires_followup_round": false
+        },
+        "production_apply_allowed": false
+      },
+      "resolved_request": {
+        "diagnostic": "source_clause_structure_probe",
+        "structure_context_id": "clause-context:f2f4f7fd05ef52925c896018"
+      },
+      "result": {
+        "diagnostic": "source_clause_structure_probe",
+        "source": "diagnostic_harness",
+        "recorded_step": 9,
+        "structure_context_id": "clause-context:f2f4f7fd05ef52925c896018",
+        "requested_structure_context_id": "clause-context:f2f4f7fd05ef52925c896018",
+        "generated_tokens": 9,
+        "active_edit_count": 0,
+        "evidence_scope": "current_prefix_readout_not_clause_rescue_or_operator_effect",
+        "diagnostic_only": true,
+        "production_apply_allowed": false,
+        "certified_for_apply": false,
+        "policy_candidate_ready": false,
+        "diagnostic_call_cost": 1,
+        "new_measurement_count": 1,
+        "physical_replay_count": 1,
+        "edited_replay_count": 0,
+        "status": "ok",
+        "structure_readout_rows": [
+          {
+            "token_id": 1603,
+            "piece": " before",
+            "source_positions": [
+              74
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 113,
+            "prob": 7.20697789802216e-05,
+            "logit": 9.328125,
+            "gap_to_top1": 8.859375,
+            "top20_hit": false,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 11,
+            "piece": ",",
+            "source_positions": [
+              76,
+              85
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 75,
+            "prob": 0.00013050153211224824,
+            "logit": 9.921875,
+            "gap_to_top1": 8.265625,
+            "top20_hit": false,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 1418,
+            "piece": " while",
+            "source_positions": [
+              86
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 787,
+            "prob": 5.079897618998075e-06,
+            "logit": 6.67578125,
+            "gap_to_top1": 11.51171875,
+            "top20_hit": false,
+            "is_greedy_token": false
+          },
+          {
+            "token_id": 627,
+            "piece": ".\n",
+            "source_positions": [
+              96
+            ],
+            "source_provenance": "source_body",
+            "status": "measured",
+            "rank": 789,
+            "prob": 5.060093371866969e-06,
+            "logit": 6.671875,
+            "gap_to_top1": 11.515625,
+            "top20_hit": false,
+            "is_greedy_token": false
+          }
+        ],
+        "greedy_token_id": 11889,
+        "greedy_piece": " sending",
+        "readout_stage": "post_constraints_and_decoder_control",
+        "ordering": "source_occurrence_not_expected_utility",
+        "state_restored": true,
+        "budget_before": {
+          "diagnostic_calls_left": 10,
+          "inspection_calls_left": 4
+        },
+        "budget_after": {
+          "diagnostic_calls_left": 9,
+          "inspection_calls_left": 4
+        },
+        "diagnostic_budget_charged": true
+      },
+      "context_unchanged": true,
+      "diagnostic_budget_left": 9,
+      "rollout_edit_count": 0,
+      "production_apply_allowed": false
+    }
+  ],
+  "controller_calls": 0,
+  "scope": "current_prefix_readout_not_operator_or_controller_efficacy",
+  "caps": "unchanged_runtime_defaults",
+  "production_apply_allowed": false,
+  "reconstruction": "natural_no_edit_prefix_without_historical_diagnostic_ledger"
+}

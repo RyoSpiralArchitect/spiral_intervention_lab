@@ -14,6 +14,12 @@ from typing import Any
 
 
 DIAGNOSTICS = {
+    "source_clause_activation_patch_probe": (
+        "Measure a source-bound structure token patch under normal caps; not clause rescue or apply permission",
+        "repeated_one_token_effect_and_cross_token_response"),
+    "source_clause_structure_probe": (
+        "Observe current-prefix readout for source-body connectives and punctuation; not their causal utility",
+        "source_structure_readout_not_operator_effect"),
     "target_entity_insertion_probe": (
         "Inspect missing-term source spans and token reachability", "source_and_binding_evidence"),
     "entity_insertion_operator_candidate_review": (
@@ -116,7 +122,10 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
             prerequisites=["offered_by_runtime", "current_request_preflight_at_dispatch"],
             available=item.get("available") is not False and not item.get("blocked_reason"),
             blocked=item.get("blocked_reason"), slots=0 if name == "inspect_evidence" else 1,
-            replays=0 if name in {"inspect_evidence", "entity_insertion_operator_candidate_review"} else None)
+            candidate={"target_piece": item.get("target_piece")} if name == "source_clause_activation_patch_probe" else None,
+            replays=1 if name == "source_clause_structure_probe" else
+                item.get("physical_replays_upper_bound") if name == "source_clause_activation_patch_probe" else
+                0 if name in {"inspect_evidence", "entity_insertion_operator_candidate_review"} else None)
 
     choices = hints.get("candidate_diagnostic_choices") or {}
     for candidate in _rows(choices.get("cards")):

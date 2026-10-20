@@ -41,6 +41,23 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/source_clause_diagnostic.md`](docs/source_clause_diagnostic.md)
+  Opt-in source-bound connective/punctuation observation for the controller.
+  Exact current-prefix IDs, one unedited replay and unchanged caps separate
+  structural readout visibility from operator efficacy or apply permission.
+  The frozen-prefix harness has no provider calls or forced-token oracle.
+  A separate opt-in connects measured SOURCE token IDs to normal-cap activation
+  patch diagnostics, with repeated controls and cross-token response logs;
+  neither readout movement nor these new cards grant production permission.
+  The normal-cap Llama retry completed four source-token probes: comma
+  probability increased, but all sources favored comma and greedy ` before`
+  remained unchanged. Source specificity and clause rescue are not established.
+  Matched controls reproduce zero self-copy response and a negative comma
+  response to pure radial shrink. A stale-cache `last` reference initially
+  invalidated the null control; explicit, budgeted cache alignment now guards
+  that distinction. Direction matters locally, but source-specific actuation
+  and task success remain unestablished.
+
 - [`docs/clause_structure_survey.md`](docs/clause_structure_survey.md)
   Across the nine rewrite-ladder cases, three of six failures turn on the same
   choice after the first clause's recipient (` before` vs a separator ranked

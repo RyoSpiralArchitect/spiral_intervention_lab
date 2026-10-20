@@ -741,8 +741,10 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         # A selected offer is exclusive; stale next_action/memory prose must not
         # append a second diagnostic or rewrite a read into a measurement.
         return [{"diagnostic": "candidate_action", "action_id": diagnostic_request.get("action_id")}]
-    if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("diagnostic") == "matched_response_probe":
-        # Preserve the offered objective/seed and keep this bounded physical
+    if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("diagnostic") in {
+        "matched_response_probe", "source_clause_structure_probe", "source_clause_activation_patch_probe",
+    }:
+        # Preserve the offered seed/context and keep this bounded physical
         # measurement separate from stale frontier or next_action requests.
         return [dict(diagnostic_request)]
     if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("evidence_id"):
@@ -942,6 +944,10 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
     ) + "|" + str(candidate_recipe_id or "")
     if "probe_refresh_id" in request:
         signature += "|" + str(request["probe_refresh_id"]) + "|" + str(request.get("terms"))
+    if "structure_context_id" in request:
+        signature += "|" + str(request["structure_context_id"])
+    if "structure_operator_id" in request:
+        signature += "|" + str(request["structure_operator_id"])
     return signature
 
 

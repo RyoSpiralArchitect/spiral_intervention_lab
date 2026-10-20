@@ -1,0 +1,32 @@
+{"event": "supervised_start", "argv": ["/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", "-u", "-m", "SpiralInterventionLab.examples.replay_source_clause_diagnostic", "--source-jsonl", "results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl", "--source-manifest", "results/entity_probe_refresh_llama_20261014_retry1/manifest.json", "--worker-model-path", "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/llama-3.2-3b", "--positions", "8", "--measure-source-operators", "--output", "results/source_clause_activation_patch_llama_20261021/normal_cap_structure_patch.json"], "disk_free_gib": 11.657817840576172, "stop_below_free_gib": 8, "timeout_seconds": 900}
+[Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+[🌀] [OK] PyTorch Turbo active (MPS available, explicit device mode)
+[🌀] [OK] torch default device → MPS auto (factory funcs)
+[🌀] [OK] HF/safetensors load guard auto (large CPU load → MPS restore)
+[🌀] [OK] mlx_lm.generate → AutoRouter (native + greedy-short MegaMax)
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s][Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+Loading checkpoint shards:  50%|█████     | 1/2 [00:09<00:09,  9.36s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:12<00:00,  5.55s/it]Loading checkpoint shards: 100%|██████████| 2/2 [00:12<00:00,  6.12s/it]
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformer_lens/config/hooked_transformer_config.py:354: UserWarning: MPS backend may produce silently incorrect results (PyTorch 2.12.1). Set TRANSFORMERLENS_ALLOW_MPS=1 to suppress this warning. See: https://github.com/TransformerLensOrg/TransformerLens/issues/1178
+  warn_if_mps(self.device)
+{"event": "resource_checkpoint", "elapsed_seconds": 30, "disk_free_gib": 10.667121887207031, "child_pid": 96061}
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/multiprocessing/resource_tracker.py:254: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+{"event": "supervised_end", "returncode": -15, "stop_reason": "low_disk", "elapsed_seconds": 35, "disk_free_gib": 7.669513702392578}

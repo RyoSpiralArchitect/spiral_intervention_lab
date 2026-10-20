@@ -236,6 +236,8 @@ _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
     "entity_insertion_operator_candidate_review_recommended",
     "entity_candidate_review_availability",
     "entity_probe_refresh",
+    "source_clause_structure",
+    "source_clause_activation_patch",
     "entity_insertion_operator_replay_recommended",
     "entity_insertion_operator_deepening_recommended",
     "bridge_plan_available",
@@ -313,6 +315,9 @@ def _compact_strategy_hints(value: Any) -> dict[str, Any]:
     compact: dict[str, Any] = {}
     for key in _STRATEGY_HINT_PRIORITY_KEYS:
         if key in value and value.get(key) not in (None, "", []):
+            if key in {"source_clause_structure", "source_clause_activation_patch"}:
+                compact[key] = _bounded_json(value[key], max_depth=5, max_items=16, max_string=260)
+                continue
             if key in {"candidate_diagnostic_choices", "candidate_handoff", "candidate_trial_handoffs", "candidate_trial_offer", "generation_control"}:
                 # Runtime bounds the catalog; preserve nested executable IDs.
                 compact[key] = _bounded_json(value[key], max_depth=8, max_items=12, max_string=260)
@@ -903,6 +908,34 @@ def _tool_result_summaries(items: Any) -> list[dict[str, Any]]:
 def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
+    if value.get("diagnostic") == "source_clause_activation_patch_probe":
+        summary = {key: _bounded_json(value[key], max_depth=4, max_items=16, max_string=220)
+            for key in ("diagnostic", "status", "recorded_step", "structure_context_id",
+                "structure_operator_id", "candidate_binding", "evidence_scope", "state_restored",
+                "caps_unchanged", "error", "blocked_reason", "diagnostic_call_cost",
+                "diagnostic_budget_charged", "budget_before", "budget_after", "new_measurement_count",
+                "physical_replay_count", "physical_replays_upper_bound", "edited_replay_count",
+                "production_apply_allowed", "certified_for_apply", "policy_candidate_ready") if key in value}
+        summary["operator_rows"] = [
+            {key: _bounded_json(row[key], max_depth=4, max_items=16, max_string=220)
+             for key in ("candidate_fingerprint", "surface", "source_tensor_identity", "runtime_telemetry",
+                 "paired_deltas", "baseline_repeat_variation", "edited_repeat_variation",
+                 "metric_repeat_floors", "effect_role", "ownership_role", "realized_lift_token_id",
+                 "self_delta", "cross_delta", "alignment_margin", "alignment_repeat_floor",
+                 "ownership_scope", "safety_deltas", "collapse_sharpening_signal", "semantic_safety",
+                 "clause_correctness", "target_readout_effect_certified", "production_apply_allowed") if key in row}
+            for row in value.get("operator_rows", [])[:2]]
+        return summary
+    if value.get("diagnostic") == "source_clause_structure_probe":
+        return {key: _bounded_json(value[key], max_depth=4, max_items=16, max_string=220)
+                for key in ("diagnostic", "status", "recorded_step", "generated_tokens",
+                    "active_edit_count",
+                    "structure_context_id", "requested_structure_context_id", "structure_readout_rows",
+                    "greedy_token_id", "greedy_piece", "readout_stage", "ordering", "evidence_scope",
+                    "state_restored", "error", "blocked_reason", "diagnostic_call_cost",
+                    "diagnostic_budget_charged", "budget_before", "budget_after", "new_measurement_count",
+                    "physical_replay_count", "edited_replay_count", "production_apply_allowed",
+                    "certified_for_apply", "policy_candidate_ready") if key in value}
     summary: dict[str, Any] = {}
     if value.get("diagnostic") == "target_entity_insertion_probe":
         summary.update({key: _bounded_json(value[key], max_depth=2, max_items=6, max_string=200)

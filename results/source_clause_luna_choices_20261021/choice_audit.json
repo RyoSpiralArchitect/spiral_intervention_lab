@@ -1,0 +1,87 @@
+{
+  "kind": "source_clause_luna_choice_audit",
+  "scope": "interface_choice_not_operator_or_task_efficacy",
+  "controller_model": "gpt-5.6-luna",
+  "generated_tokens": 8,
+  "prefix": " Nora will take the sample to Ivo",
+  "source_receipt_sha256": "e51fd46e15ca73cb5410271bf86f0e1d94158d4d553d247b60ecb2774b7bd1b6",
+  "provider_calls_attempted": 6,
+  "all_packets_unchanged": true,
+  "all_protocol_parses_valid": true,
+  "diagnostics_dispatched": 0,
+  "rollout_edits_applied": 0,
+  "conditions": [
+    {
+      "condition": "observed",
+      "choice_count": 2,
+      "source_clause_selections": 0,
+      "apply_commands": 0,
+      "requests": [
+        [],
+        []
+      ]
+    },
+    {
+      "condition": "off",
+      "choice_count": 2,
+      "source_clause_selections": 0,
+      "apply_commands": 0,
+      "requests": [
+        [],
+        []
+      ]
+    },
+    {
+      "condition": "offered",
+      "choice_count": 2,
+      "source_clause_selections": 1,
+      "apply_commands": 0,
+      "requests": [
+        [
+          {
+            "diagnostic": "source_clause_structure_probe",
+            "structure_context_id": "clause-context:c672bf6632e70d52ae3d395b"
+          }
+        ],
+        []
+      ]
+    }
+  ],
+  "available_card_counts": [
+    {
+      "condition": "off",
+      "count": 0
+    },
+    {
+      "condition": "offered",
+      "count": 1
+    },
+    {
+      "condition": "observed",
+      "count": 0
+    }
+  ],
+  "legacy_hold_without_request": [
+    {
+      "condition": "off",
+      "repeat": 2,
+      "operation_id": null,
+      "runtime_hold_would_be_blocked_by": "no_fresh_requested_result",
+      "actually_dispatched": false
+    }
+  ],
+  "usage": {
+    "input_tokens": 72692,
+    "cached_input_tokens": 36337,
+    "output_tokens": 961,
+    "total_tokens": 73653
+  },
+  "limitations": [
+    "single_retrospectively_selected_prefix",
+    "two_calls_per_condition",
+    "no_existing_diagnostic_cards_in_reconstructed_context",
+    "legacy_clock_not_explicit_clock",
+    "observed_evidence_supplied_by_harness_not_a_real_controller_followup",
+    "no_operator_effect_or_task_score_measured"
+  ]
+}

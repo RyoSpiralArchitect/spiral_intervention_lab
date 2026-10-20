@@ -1,0 +1,35 @@
+{
+  "started_at_utc": "2026-10-20T18:37:44.669248+00:00",
+  "command": [
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "-u",
+    "-m",
+    "SpiralInterventionLab.examples.replay_source_clause_diagnostic",
+    "--source-jsonl",
+    "results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl",
+    "--source-manifest",
+    "results/entity_probe_refresh_llama_20261014_retry1/manifest.json",
+    "--worker-model-path",
+    "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/llama-3.2-3b",
+    "--positions",
+    "8",
+    "--measure-source-operators",
+    "--source-specificity-controls",
+    "--output",
+    "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_clause_specificity_llama_20261021/specificity.json"
+  ],
+  "git_head": "62c972e55b3dcb65d89f71c151384a5d98ce08f3",
+  "disk_stop_gib": 8,
+  "timeout_seconds": 900,
+  "preflight_free_gib": 16.451942443847656,
+  "scope": "normal_cap_source_specificity_not_task_or_controller_uplift",
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "predeclared_controls": [
+    "self_copy",
+    "radial_shrink"
+  ],
+  "physical_replay_bound_one_site": 25,
+  "physical_replay_bound_two_sites": 37,
+  "diagnostic_slot_bound": 7
+}
