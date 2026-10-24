@@ -1,0 +1,244 @@
+{
+  "started_at_utc": "2026-10-21T20:01:26.027043+00:00",
+  "command": [
+    "python3",
+    "-u",
+    "-m",
+    "SpiralInterventionLab.examples.replay_source_clause_trajectory",
+    "--source-jsonl",
+    "results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl",
+    "--source-manifest",
+    "results/entity_probe_refresh_llama_20261014_retry1/manifest.json",
+    "--reference-receipt",
+    "results/source_clause_specificity_llama_20261021_aligned/specificity.json",
+    "--worker-model-path",
+    "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/llama-3.2-3b",
+    "--position",
+    "8",
+    "--source-token-ids",
+    "11,1418",
+    "--device",
+    "cpu",
+    "--dtype",
+    "float32",
+    "--torch-threads",
+    "4",
+    "--output-dir",
+    "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_clause_trajectory_cpu32_20261022/measurement"
+  ],
+  "wall_time_limit_seconds": 900,
+  "stop_free_disk_gib": 16,
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "status": "stopped_or_failed",
+  "resource_samples": [
+    {
+      "seconds": 0.0,
+      "free_disk_gib": 42.81
+    },
+    {
+      "seconds": 10.01,
+      "free_disk_gib": 42.81
+    },
+    {
+      "seconds": 20.01,
+      "free_disk_gib": 37.81
+    },
+    {
+      "seconds": 30.13,
+      "free_disk_gib": 32.8
+    },
+    {
+      "seconds": 40.14,
+      "free_disk_gib": 32.8
+    },
+    {
+      "seconds": 50.15,
+      "free_disk_gib": 29.8
+    },
+    {
+      "seconds": 60.93,
+      "free_disk_gib": 27.8
+    },
+    {
+      "seconds": 70.94,
+      "free_disk_gib": 26.8
+    },
+    {
+      "seconds": 80.94,
+      "free_disk_gib": 25.8
+    },
+    {
+      "seconds": 90.95,
+      "free_disk_gib": 24.8
+    },
+    {
+      "seconds": 100.96,
+      "free_disk_gib": 23.8
+    },
+    {
+      "seconds": 110.96,
+      "free_disk_gib": 22.8
+    },
+    {
+      "seconds": 120.97,
+      "free_disk_gib": 21.8
+    },
+    {
+      "seconds": 131.05,
+      "free_disk_gib": 21.8
+    },
+    {
+      "seconds": 141.06,
+      "free_disk_gib": 21.8
+    },
+    {
+      "seconds": 151.07,
+      "free_disk_gib": 24.8
+    },
+    {
+      "seconds": 161.07,
+      "free_disk_gib": 28.8
+    },
+    {
+      "seconds": 171.07,
+      "free_disk_gib": 31.8
+    },
+    {
+      "seconds": 181.08,
+      "free_disk_gib": 32.8
+    },
+    {
+      "seconds": 191.08,
+      "free_disk_gib": 31.8
+    },
+    {
+      "seconds": 201.09,
+      "free_disk_gib": 30.8
+    },
+    {
+      "seconds": 211.09,
+      "free_disk_gib": 30.8
+    },
+    {
+      "seconds": 221.1,
+      "free_disk_gib": 30.8
+    },
+    {
+      "seconds": 231.1,
+      "free_disk_gib": 30.8
+    },
+    {
+      "seconds": 241.1,
+      "free_disk_gib": 29.8
+    },
+    {
+      "seconds": 251.11,
+      "free_disk_gib": 29.8
+    },
+    {
+      "seconds": 261.12,
+      "free_disk_gib": 30.8
+    },
+    {
+      "seconds": 271.12,
+      "free_disk_gib": 30.8
+    },
+    {
+      "seconds": 281.44,
+      "free_disk_gib": 29.8
+    },
+    {
+      "seconds": 291.44,
+      "free_disk_gib": 31.8
+    },
+    {
+      "seconds": 301.45,
+      "free_disk_gib": 31.79
+    },
+    {
+      "seconds": 311.77,
+      "free_disk_gib": 31.79
+    },
+    {
+      "seconds": 321.8,
+      "free_disk_gib": 31.79
+    },
+    {
+      "seconds": 331.8,
+      "free_disk_gib": 30.79
+    },
+    {
+      "seconds": 341.81,
+      "free_disk_gib": 29.79
+    },
+    {
+      "seconds": 351.82,
+      "free_disk_gib": 30.78
+    },
+    {
+      "seconds": 361.82,
+      "free_disk_gib": 31.78
+    },
+    {
+      "seconds": 371.82,
+      "free_disk_gib": 31.78
+    },
+    {
+      "seconds": 381.83,
+      "free_disk_gib": 30.78
+    },
+    {
+      "seconds": 391.83,
+      "free_disk_gib": 30.78
+    },
+    {
+      "seconds": 401.84,
+      "free_disk_gib": 30.76
+    },
+    {
+      "seconds": 411.84,
+      "free_disk_gib": 30.76
+    },
+    {
+      "seconds": 421.84,
+      "free_disk_gib": 30.76
+    },
+    {
+      "seconds": 431.85,
+      "free_disk_gib": 30.76
+    },
+    {
+      "seconds": 441.86,
+      "free_disk_gib": 30.76
+    },
+    {
+      "seconds": 451.86,
+      "free_disk_gib": 31.75
+    },
+    {
+      "seconds": 461.87,
+      "free_disk_gib": 31.75
+    },
+    {
+      "seconds": 471.87,
+      "free_disk_gib": 31.76
+    },
+    {
+      "seconds": 481.88,
+      "free_disk_gib": 31.76
+    },
+    {
+      "seconds": 491.88,
+      "free_disk_gib": 30.75
+    },
+    {
+      "seconds": 501.89,
+      "free_disk_gib": 31.75
+    }
+  ],
+  "child_pid": 48363,
+  "returncode": 1,
+  "elapsed_seconds": 511.89,
+  "final_free_disk_gib": 31.74
+}

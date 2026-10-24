@@ -1,0 +1,68 @@
+{
+  "started_at_utc": "2026-10-21T20:13:07.491454+00:00",
+  "command": [
+    "python3",
+    "-u",
+    "-m",
+    "SpiralInterventionLab.examples.replay_source_clause_trajectory",
+    "--source-jsonl",
+    "results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl",
+    "--source-manifest",
+    "results/entity_probe_refresh_llama_20261014_retry1/manifest.json",
+    "--reference-receipt",
+    "results/source_clause_specificity_llama_20261021_aligned/specificity.json",
+    "--worker-model-path",
+    "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/llama-3.2-3b",
+    "--position",
+    "8",
+    "--source-token-ids",
+    "11,1418",
+    "--device",
+    "mps",
+    "--dtype",
+    "float16",
+    "--torch-threads",
+    "4",
+    "--output-dir",
+    "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_clause_trajectory_mps16_20261022/measurement"
+  ],
+  "wall_time_limit_seconds": 600,
+  "stop_free_disk_gib": 12,
+  "status": "complete",
+  "resource_samples": [
+    {
+      "seconds": 0.0,
+      "free_disk_gib": 34.65
+    },
+    {
+      "seconds": 10.0,
+      "free_disk_gib": 34.26
+    },
+    {
+      "seconds": 20.02,
+      "free_disk_gib": 33.26
+    },
+    {
+      "seconds": 30.03,
+      "free_disk_gib": 33.26
+    },
+    {
+      "seconds": 40.04,
+      "free_disk_gib": 33.25
+    },
+    {
+      "seconds": 50.04,
+      "free_disk_gib": 33.24
+    },
+    {
+      "seconds": 60.05,
+      "free_disk_gib": 33.23
+    }
+  ],
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "child_pid": 49982,
+  "returncode": 0,
+  "elapsed_seconds": 70.05,
+  "final_free_disk_gib": 33.22
+}

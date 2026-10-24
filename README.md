@@ -41,6 +41,32 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+Source-response artifact availability and fresh-clone verification are described
+in [`docs/source_response_artifacts.md`](docs/source_response_artifacts.md).
+
+- [`docs/source_choice_boundary.md`](docs/source_choice_boundary.md)
+  A fixed-source/cap CPU32 follow-up at the next natural token preserves signed
+  comma/while contrast reversal, but common-component comma lift does not carry
+  over. The actual winner is now ` sending`, outside the structural readout set.
+  Fixed-baseline-winner margins separate relative improvement from token choice;
+  all seven conditions retain the same greedy winner and no authority is added.
+
+- [`docs/source_response_components.md`](docs/source_response_components.md)
+  At the same prefix/site/cap, CPU/float32 replicates common-component comma lift
+  and signed comma/while logit-contrast reversal seen in MPS/float16. Absolute
+  probability changes are numerics-sensitive: positive difference on CPU mainly
+  suppresses while, not lifts comma. Greedy ` before` is unchanged; relative
+  preference is not lift ownership or permission. Original blocked/error receipts
+  and the qualified signed-zero reanalysis remain alongside the completed CPU run.
+
+- [`docs/source_response_trajectory.md`](docs/source_response_trajectory.md)
+  Matched comma/while patches differ at input and retain distinct downstream
+  displacements while both favor comma. CPU/float32 preserves the response
+  direction, not the MPS/float16 effect size; greedy ` before` is unchanged.
+  Read-only trajectory capture now separates packet canaries from diagnostic
+  replays (31 actual forwards vs 18 declared replays in this diagnostic interval).
+  No production permission or task-success claim is added.
+
 - [`docs/source_clause_diagnostic.md`](docs/source_clause_diagnostic.md)
   Opt-in source-bound connective/punctuation observation for the controller.
   Exact current-prefix IDs, one unedited replay and unchanged caps separate

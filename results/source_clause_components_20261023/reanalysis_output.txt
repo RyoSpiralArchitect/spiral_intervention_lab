@@ -1,0 +1,17 @@
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+[Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+[🌀] [OK] PyTorch Turbo active (MPS available, explicit device mode)
+[🌀] [OK] torch default device → MPS auto (factory funcs)
+[🌀] [OK] HF/safetensors load guard auto (large CPU load → MPS restore)
+[🌀] [OK] mlx_lm.generate → AutoRouter (native + greedy-short MegaMax)
+{"numerics": "mps16", "site": "s_resid_pre_l14_last", "matched_dose": true, "zero_null_repeat_floors": true, "rows": [{"condition": "source:11", "norm": 0.08002514200629253, "comma": 0.003940656996010872, "while": 4.802080245606098e-05, "comma_minus_while_logit_contrast": 0.015625, "greedy": [1603, 1603]}, {"condition": "source:1418", "norm": 0.08014056992931874, "comma": 0.004022855574530526, "while": 0.000182362647160152, "comma_minus_while_logit_contrast": 0.0, "greedy": [1603, 1603]}, {"condition": "self_copy", "norm": 0.0, "comma": 0.0, "while": 0.0, "comma_minus_while_logit_contrast": 0.0, "greedy": [1603, 1603]}, {"condition": "radial_shrink", "norm": 0.07994388690239267, "comma": -0.00046510552713080466, "while": -0.00014860326672653558, "comma_minus_while_logit_contrast": 0.015625, "greedy": [1603, 1603]}, {"condition": "common", "norm": 0.08011845262844622, "comma": 0.004015276592267247, "while": 0.00018201907945241368, "comma_minus_while_logit_contrast": 0.0, "greedy": [1603, 1603]}, {"condition": "difference_positive", "norm": 0.07990769881142079, "comma": 0.00223010558237155, "while": -0.0001557262217361105, "comma_minus_while_logit_contrast": 0.03125, "greedy": [1603, 1603]}, {"condition": "difference_negative", "norm": 0.07991404432187162, "comma": 0.001516134747154868, "while": 0.0003326744154096249, "comma_minus_while_logit_contrast": -0.03125, "greedy": [1603, 1603]}]}
