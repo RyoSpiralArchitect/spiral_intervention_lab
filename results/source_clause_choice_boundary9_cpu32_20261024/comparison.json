@@ -1,0 +1,4607 @@
+{
+  "kind": "source_component_adjacent_boundary_choice_audit",
+  "status": "complete",
+  "prefixes_differ": true,
+  "same_prefix_replication": false,
+  "checkpoint_sources_sites_caps_numerics_matched": true,
+  "new_model_forwards_for_reanalysis": 0,
+  "original_artifacts_modified": false,
+  "code_changes": [
+    {
+      "path": "SpiralInterventionLab/examples/replay_source_clause_trajectory.py",
+      "before_sha256": "324dcfd0442ff7e728345a8a56cbc6cbccd17fa428a92d06ee8dcf00be6c05d2",
+      "after_sha256": "f06d5312525a8d74f19a540ebd95af8345662458cfe71215e1e0f45815a13cd7"
+    },
+    {
+      "path": "SpiralInterventionLab/runtime/clause_choice.py",
+      "before_sha256": null,
+      "after_sha256": "33e0162df57e38ee8680d0849a76aeecfe0f0f3f2be250058326e3b5db7d24f2"
+    },
+    {
+      "path": "SpiralInterventionLab/tests/test_clause_choice.py",
+      "before_sha256": null,
+      "after_sha256": "5b26e8be13b98a69d5e2a79b879b9da94d7338b35ee3b1449e15e2410d7bbef0"
+    },
+    {
+      "path": "SpiralInterventionLab/tests/test_clause_trajectory.py",
+      "before_sha256": "6bb78463abe0f5a08c7a1679de405ef86825842d3b9a12bcd0bfa25705e15ac0",
+      "after_sha256": "b898132b16bf3ebf076b9666bd4f8dd316d96f0d92a9800386b1661ff5b5bf84"
+    }
+  ],
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "task_success": "unassessed",
+  "semantic_ownership": "not_established",
+  "generalization": "not_established_two_boundaries_one_trajectory",
+  "reference_bindings": [
+    {
+      "target_token_id": 11,
+      "target_piece": ",",
+      "source_token_index": 76,
+      "source_provenance": "source_body",
+      "source_localization": "exact_source_token",
+      "source_occurrence_rule": "first_source_occurrence",
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ]
+    },
+    {
+      "target_token_id": 1418,
+      "target_piece": " while",
+      "source_token_index": 86,
+      "source_provenance": "source_body",
+      "source_localization": "exact_source_token",
+      "source_occurrence_rule": "first_source_occurrence",
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ]
+    }
+  ],
+  "boundaries": {
+    "position8": {
+      "receipt": "results/source_clause_components_cpu32_20261024/cpu32/measurement/trajectory.json",
+      "receipt_sha256": "cf914040dd1d41850d17da185eb0a00bf33cdca9dd88e1a460395d1458603857",
+      "vector_hashes_and_compact_records_verified": true,
+      "component_summary_reproduced": true,
+      "position": 8,
+      "prefix": " Nora will take the sample to Ivo",
+      "tokens_identity": {
+        "shape": [
+          1,
+          108
+        ],
+        "dtype": "torch.int64",
+        "sha256": "404675115f71bd07b66be7bb325337ce9b6c743c94f543e7234a2cb6900bf870"
+      },
+      "forward_counts_total": {
+        "attempted": 60,
+        "completed": 60
+      },
+      "diagnostic_interval_forward_counts": {
+        "attempted": 52,
+        "completed": 52
+      },
+      "choice_comparison": {
+        "schema_version": 1,
+        "status": "ok",
+        "fixed_baseline_winner_token_id": 1603,
+        "fixed_baseline_winner_piece": " before",
+        "baseline_winner_ids": [
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603,
+          1603
+        ],
+        "baseline_winner_stable_across_conditions_and_repeats": true,
+        "baseline_argmax_tie_count": 1,
+        "anchor_contract": "first_no_edit_raw_argmax_never_reanchor_to_edited_winner",
+        "probability_contract": "pre_constraint_full_vocabulary_softmax_cpu_float64",
+        "margin_contract": "raw_target_logit_minus_fixed_baseline_winner_logit",
+        "repeat_contract": "paired_deterministic_replays_not_independent_samples",
+        "target_readout_effect_certified": false,
+        "production_apply_allowed": false,
+        "semantic_safety": "unassessed",
+        "surfaces": [
+          {
+            "surface": {
+              "surface_id": "s_resid_pre_l14_last",
+              "site": "resid_pre",
+              "layer": 14,
+              "cache_hook_name": "blocks.14.hook_resid_pre",
+              "caps": {
+                "max_alpha": 0.18,
+                "max_ttl_steps": 2,
+                "norm_clip": 1.5,
+                "step_size": 0.12,
+                "rank_cap": null,
+                "revertible_only": true
+              },
+              "alpha": 0.04,
+              "step_size": 0.08,
+              "norm_clip": 1.0
+            },
+            "structure_readout_token_ids": [
+              1603,
+              11,
+              1418,
+              627
+            ],
+            "baseline_winner_in_structure_readout": true,
+            "conditions": [
+              {
+                "label": "source:11",
+                "kind": "source",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0041904449462890625,
+                      -0.0041904449462890625
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5573791129858366,
+                      0.5573791129858366
+                    ],
+                    "raw_probability_deltas": [
+                      -0.001211107315669202,
+                      -0.001211107315669202
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1059398651123047,
+                      -1.1059398651123047
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.00905609130859375,
+                      0.00905609130859375
+                    ],
+                    "raw_logit_deltas": [
+                      0.0048656463623046875,
+                      0.0048656463623046875
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.1844366007425887,
+                      0.1844366007425887
+                    ],
+                    "raw_probability_deltas": [
+                      0.0012655921968730832,
+                      0.0012655921968730832
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.20989990234375,
+                      -4.20989990234375
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.006534576416015625,
+                      -0.006534576416015625
+                    ],
+                    "raw_logit_deltas": [
+                      -0.010725021362304688,
+                      -0.010725021362304688
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008275883970473793,
+                      0.008275883970473793
+                    ],
+                    "raw_probability_deltas": [
+                      -7.235671167119331e-05,
+                      -7.235671167119331e-05
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.710638046264648,
+                      -7.710638046264648
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0008096694946289062,
+                      0.0008096694946289062
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0033807754516601562,
+                      -0.0033807754516601562
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.000249725639902975,
+                      0.000249725639902975
+                    ],
+                    "raw_probability_deltas": [
+                      -3.4006653076569223e-07,
+                      -3.4006653076569223e-07
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "source:1418",
+                "kind": "source",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0043468475341796875,
+                      -0.0043468475341796875
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5576141931746543,
+                      0.5576141931746543
+                    ],
+                    "raw_probability_deltas": [
+                      -0.0009760271268515197,
+                      -0.0009760271268515197
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1054744720458984,
+                      -1.1054744720458984
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.009521484375,
+                      0.009521484375
+                    ],
+                    "raw_logit_deltas": [
+                      0.0051746368408203125,
+                      0.0051746368408203125
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.18460028041706691,
+                      0.18460028041706691
+                    ],
+                    "raw_probability_deltas": [
+                      0.0014292718713513064,
+                      0.0014292718713513064
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.190088272094727,
+                      -4.190088272094727
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.013277053833007812,
+                      0.013277053833007812
+                    ],
+                    "raw_logit_deltas": [
+                      0.008930206298828125,
+                      0.008930206298828125
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008445037924987204,
+                      0.008445037924987204
+                    ],
+                    "raw_probability_deltas": [
+                      9.679724284221772e-05,
+                      9.679724284221772e-05
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.706528663635254,
+                      -7.706528663635254
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0049190521240234375,
+                      0.0049190521240234375
+                    ],
+                    "raw_logit_deltas": [
+                      0.00057220458984375,
+                      0.00057220458984375
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.0002508597275451703,
+                      0.0002508597275451703
+                    ],
+                    "raw_probability_deltas": [
+                      7.940211114295867e-07,
+                      7.940211114295867e-07
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "self_copy",
+                "kind": "self_copy",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "radial_shrink",
+                "kind": "radial_shrink",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.00011444091796875,
+                      -0.00011444091796875
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5581352670891901,
+                      0.5581352670891901
+                    ],
+                    "raw_probability_deltas": [
+                      -0.00045495321231570074,
+                      -0.00045495321231570074
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1168708801269531,
+                      -1.1168708801269531
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.0018749237060546875,
+                      -0.0018749237060546875
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0019893646240234375,
+                      -0.0019893646240234375
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.18267899137139604,
+                      0.18267899137139604
+                    ],
+                    "raw_probability_deltas": [
+                      -0.00049201717431957,
+                      -0.00049201717431957
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.222587585449219,
+                      -4.222587585449219
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.019222259521484375,
+                      -0.019222259521484375
+                    ],
+                    "raw_logit_deltas": [
+                      -0.019336700439453125,
+                      -0.019336700439453125
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008182631201708892,
+                      0.008182631201708892
+                    ],
+                    "raw_probability_deltas": [
+                      -0.00016560948043609428,
+                      -0.00016560948043609428
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.703065872192383,
+                      -7.703065872192383
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.008381843566894531,
+                      0.008381843566894531
+                    ],
+                    "raw_logit_deltas": [
+                      0.008267402648925781,
+                      0.008267402648925781
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.0002519651423489922,
+                      0.0002519651423489922
+                    ],
+                    "raw_probability_deltas": [
+                      1.8994359152514628e-06,
+                      1.8994359152514628e-06
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "common",
+                "kind": "component",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0047893524169921875,
+                      -0.0047893524169921875
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5573586219706237,
+                      0.5573586219706237
+                    ],
+                    "raw_probability_deltas": [
+                      -0.0012315983308821554,
+                      -0.0012315983308821554
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1045379638671875,
+                      -1.1045379638671875
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.010457992553710938,
+                      0.010457992553710938
+                    ],
+                    "raw_logit_deltas": [
+                      0.00566864013671875,
+                      0.00566864013671875
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.18468855398294276,
+                      0.18468855398294276
+                    ],
+                    "raw_probability_deltas": [
+                      0.0015175454372271524,
+                      0.0015175454372271524
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.199621200561523,
+                      -4.199621200561523
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0037441253662109375,
+                      0.0037441253662109375
+                    ],
+                    "raw_logit_deltas": [
+                      -0.00104522705078125,
+                      -0.00104522705078125
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008361080605168504,
+                      0.008361080605168504
+                    ],
+                    "raw_probability_deltas": [
+                      1.2839923023517594e-05,
+                      1.2839923023517594e-05
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.708257675170898,
+                      -7.708257675170898
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0031900405883789062,
+                      0.0031900405883789062
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0015993118286132812,
+                      -0.0015993118286132812
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.00025031158507066566,
+                      0.00025031158507066566
+                    ],
+                    "raw_probability_deltas": [
+                      2.4587863692494437e-07,
+                      2.4587863692494437e-07
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "difference_positive",
+                "kind": "component",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      8.58306884765625e-05,
+                      8.58306884765625e-05
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5583095398337664,
+                      0.5583095398337664
+                    ],
+                    "raw_probability_deltas": [
+                      -0.0002806804677394359,
+                      -0.0002806804677394359
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1153278350830078,
+                      -1.1153278350830078
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.000331878662109375,
+                      -0.000331878662109375
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0002460479736328125,
+                      -0.0002460479736328125
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.18301821883783242,
+                      0.18301821883783242
+                    ],
+                    "raw_probability_deltas": [
+                      -0.00015278970788318302,
+                      -0.00015278970788318302
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.225217819213867,
+                      -4.225217819213867
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.021852493286132812,
+                      -0.021852493286132812
+                    ],
+                    "raw_logit_deltas": [
+                      -0.02176666259765625,
+                      -0.02176666259765625
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008163685490394635,
+                      0.008163685490394635
+                    ],
+                    "raw_probability_deltas": [
+                      -0.00018455519175035115,
+                      -0.00018455519175035115
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.715882301330566,
+                      -7.715882301330566
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.0044345855712890625,
+                      -0.0044345855712890625
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0043487548828125,
+                      -0.0043487548828125
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.0002488341268144147,
+                      0.0002488341268144147
+                    ],
+                    "raw_probability_deltas": [
+                      -1.231579619326035e-06,
+                      -1.231579619326035e-06
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "difference_negative",
+                "kind": "component",
+                "baseline_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_ids": [
+                  1603,
+                  1603
+                ],
+                "edited_winner_pieces": [
+                  " before",
+                  " before"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  true,
+                  true
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0001697540283203125,
+                      -0.0001697540283203125
+                    ],
+                    "raw_probabilities_before": [
+                      0.5585902203015058,
+                      0.5585902203015058
+                    ],
+                    "raw_probabilities_after": [
+                      0.5588504397592751,
+                      0.5588504397592751
+                    ],
+                    "raw_probability_deltas": [
+                      0.0002602194577692174,
+                      0.0002602194577692174
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -1.1149959564208984,
+                      -1.1149959564208984
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -1.1145133972167969,
+                      -1.1145133972167969
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0004825592041015625,
+                      0.0004825592041015625
+                    ],
+                    "raw_logit_deltas": [
+                      0.00031280517578125,
+                      0.00031280517578125
+                    ],
+                    "raw_probabilities_before": [
+                      0.1831710085457156,
+                      0.1831710085457156
+                    ],
+                    "raw_probabilities_after": [
+                      0.18334479220011324,
+                      0.18334479220011324
+                    ],
+                    "raw_probability_deltas": [
+                      0.0001737836543976301,
+                      0.0001737836543976301
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -4.203365325927734,
+                      -4.203365325927734
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -4.181528091430664,
+                      -4.181528091430664
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.021837234497070312,
+                      0.021837234497070312
+                    ],
+                    "raw_logit_deltas": [
+                      0.02166748046875,
+                      0.02166748046875
+                    ],
+                    "raw_probabilities_before": [
+                      0.008348240682144986,
+                      0.008348240682144986
+                    ],
+                    "raw_probabilities_after": [
+                      0.008536523121755095,
+                      0.008536523121755095
+                    ],
+                    "raw_probability_deltas": [
+                      0.00018828243961010842,
+                      0.00018828243961010842
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -7.711447715759277,
+                      -7.711447715759277
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -7.706904411315918,
+                      -7.706904411315918
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.004543304443359375,
+                      0.004543304443359375
+                    ],
+                    "raw_logit_deltas": [
+                      0.0043735504150390625,
+                      0.0043735504150390625
+                    ],
+                    "raw_probabilities_before": [
+                      0.0002500657064337407,
+                      0.0002500657064337407
+                    ],
+                    "raw_probabilities_after": [
+                      0.000251321439530692,
+                      0.000251321439530692
+                    ],
+                    "raw_probability_deltas": [
+                      1.2557330969512818e-06,
+                      1.2557330969512818e-06
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "component_conditions": [
+        {
+          "surface": {
+            "surface_id": "s_resid_pre_l14_last",
+            "site": "resid_pre",
+            "layer": 14,
+            "cache_hook_name": "blocks.14.hook_resid_pre",
+            "caps": {
+              "max_alpha": 0.18,
+              "max_ttl_steps": 2,
+              "norm_clip": 1.5,
+              "step_size": 0.12,
+              "rank_cap": null,
+              "revertible_only": true
+            },
+            "alpha": 0.04,
+            "step_size": 0.08,
+            "norm_clip": 1.0
+          },
+          "ideal_component_geometry": {
+            "left_norm": 11.152185443795366,
+            "right_norm": 5.6661160314247585,
+            "distance": 12.430166840030827,
+            "relative_separation": 1.1145947045694509,
+            "cosine": 0.015564777335188138
+          },
+          "raw_reconstruction_error_norms": [
+            0.0,
+            0.0
+          ],
+          "conditions": [
+            {
+              "label": "source:11",
+              "kind": "source",
+              "source_displacement_norm": 12.587421278313437,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.5034968256950378,
+              "step_clip_scale": 0.15888878405673845,
+              "actual_written_delta_norms": [
+                0.0800000079719927,
+                0.0800000079719927
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.015590667724609375,
+                0.015590667724609375
+              ],
+              "first_minus_second_probability_deltas": [
+                0.00133795998595297,
+                0.00133795998595297
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -0.0012110921384933526,
+                    -0.0012110921384933526
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0041904449462890625,
+                    -0.0041904449462890625
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    0.001265603301163848,
+                    0.001265603301163848
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    0.0048656463623046875,
+                    0.0048656463623046875
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -7.235668478912209e-05,
+                    -7.235668478912209e-05
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    -0.010725021362304688,
+                    -0.010725021362304688
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -3.400589915350592e-07,
+                    -3.400589915350592e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0033807754516601562,
+                    -0.0033807754516601562
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0009737014770507812,
+                  "top1_margin_delta": -0.0024766623973846436,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0009737014770507812,
+                  "top1_margin_delta": -0.0024766623973846436,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "source:1418",
+              "kind": "source",
+              "source_displacement_norm": 12.430166840030827,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.4972067177295685,
+              "step_clip_scale": 0.16089886869654774,
+              "actual_written_delta_norms": [
+                0.07999998929427732,
+                0.07999998929427732
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                -0.0037555694580078125,
+                -0.0037555694580078125
+              ],
+              "first_minus_second_probability_deltas": [
+                0.0013324847512757275,
+                0.0013324847512757275
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -0.0009760140413996865,
+                    -0.0009760140413996865
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0043468475341796875,
+                    -0.0043468475341796875
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    0.001429282599560211,
+                    0.001429282599560211
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    0.0051746368408203125,
+                    0.0051746368408203125
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    9.679784828448348e-05,
+                    9.679784828448348e-05
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    0.008930206298828125,
+                    0.008930206298828125
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    7.940314991941285e-07,
+                    7.940314991941285e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    0.00057220458984375,
+                    0.00057220458984375
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0014015436172485352,
+                  "top1_margin_delta": -0.002405613660812378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0014015436172485352,
+                  "top1_margin_delta": -0.002405613660812378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "self_copy",
+              "kind": "self_copy",
+              "source_displacement_norm": 0.0,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.0,
+              "step_clip_scale": 1.0,
+              "actual_written_delta_norms": [
+                0.0,
+                0.0
+              ],
+              "step_size_clip_saturated": [
+                false,
+                false
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.0,
+                0.0
+              ],
+              "first_minus_second_probability_deltas": [
+                0.0,
+                0.0
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "radial_shrink",
+              "kind": "radial_shrink",
+              "source_displacement_norm": 10.466008764808233,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.4186403453350067,
+              "step_clip_scale": 0.19109481200392628,
+              "actual_written_delta_norms": [
+                0.07999999753490236,
+                0.07999999753490236
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.017347335815429688,
+                0.017347335815429688
+              ],
+              "first_minus_second_probability_deltas": [
+                -0.00032640688860467726,
+                -0.00032640688860467726
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -0.00045494848645699637,
+                    -0.00045494848645699637
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    -0.00011444091796875,
+                    -0.00011444091796875
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -0.0004920168798859537,
+                    -0.0004920168798859537
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0019893646240234375,
+                    -0.0019893646240234375
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -0.0001656099912812764,
+                    -0.0001656099912812764
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    -0.019336700439453125,
+                    -0.019336700439453125
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    1.8994457312920755e-06,
+                    1.8994457312920755e-06
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    0.008267402648925781,
+                    0.008267402648925781
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.001013636589050293,
+                  "top1_margin_delta": 3.7223100662231445e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.001013636589050293,
+                  "top1_margin_delta": 3.7223100662231445e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "common",
+              "kind": "component",
+              "source_displacement_norm": 11.152185449515441,
+              "source_rounding_error_vs_ideal_component_norm": 2.773325307447862e-07,
+              "pre_clip_alpha_displacement_norm": 0.4460873603820801,
+              "step_clip_scale": 0.1793370655875751,
+              "actual_written_delta_norms": [
+                0.08000000842477643,
+                0.08000000842477643
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.0067138671875,
+                0.0067138671875
+              ],
+              "first_minus_second_probability_deltas": [
+                0.0015047174383542427,
+                0.0015047174383542427
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -0.001231582495197281,
+                    -0.001231582495197281
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0047893524169921875,
+                    -0.0047893524169921875
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    0.0015175577132343354,
+                    0.0015175577132343354
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    0.00566864013671875,
+                    0.00566864013671875
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    1.284027488009272e-05,
+                    1.284027488009272e-05
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    -0.00104522705078125,
+                    -0.00104522705078125
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    2.458886651089567e-07,
+                    2.458886651089567e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0015993118286132812,
+                    -0.0015993118286132812
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0013321638107299805,
+                  "top1_margin_delta": -0.0027492940425872803,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0013321638107299805,
+                  "top1_margin_delta": -0.0027492940425872803,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "difference_positive",
+              "kind": "component",
+              "source_displacement_norm": 5.666116035191301,
+              "source_rounding_error_vs_ideal_component_norm": 3.5810114170257626e-07,
+              "pre_clip_alpha_displacement_norm": 0.2266446202993393,
+              "step_clip_scale": 0.35297549248945614,
+              "actual_written_delta_norms": [
+                0.08000000455152875,
+                0.08000000455152875
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.021520614624023438,
+                0.021520614624023438
+              ],
+              "first_minus_second_probability_deltas": [
+                3.1766749812560044e-05,
+                3.1766749812560044e-05
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -0.00028067782027518806,
+                    -0.00028067782027518806
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    8.58306884765625e-05,
+                    8.58306884765625e-05
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -0.00015278906187243813,
+                    -0.00015278906187243813
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0002460479736328125,
+                    -0.0002460479736328125
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -0.00018455581168499817,
+                    -0.00018455581168499817
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    -0.02176666259765625,
+                    -0.02176666259765625
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -1.2315824780334463e-06,
+                    -1.2315824780334463e-06
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0043487548828125,
+                    -0.0043487548828125
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.0004431009292602539,
+                  "top1_margin_delta": -0.00012803077697753906,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.0004431009292602539,
+                  "top1_margin_delta": -0.00012803077697753906,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "difference_negative",
+              "kind": "component",
+              "source_displacement_norm": 5.666116013552451,
+              "source_rounding_error_vs_ideal_component_norm": 3.761638685789337e-07,
+              "pre_clip_alpha_displacement_norm": 0.2266446202993393,
+              "step_clip_scale": 0.35297549248945614,
+              "actual_written_delta_norms": [
+                0.08000000381924498,
+                0.08000000381924498
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                -0.02135467529296875,
+                -0.02135467529296875
+              ],
+              "first_minus_second_probability_deltas": [
+                -1.4499884736863047e-05,
+                -1.4499884736863047e-05
+              ],
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    0.00026021706164713887,
+                    0.00026021706164713887
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    1,
+                    1
+                  ],
+                  "edited_ranks": [
+                    1,
+                    1
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0001697540283203125,
+                    -0.0001697540283203125
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    0.00017378319099464745,
+                    0.00017378319099464745
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    2,
+                    2
+                  ],
+                  "edited_ranks": [
+                    2,
+                    2
+                  ],
+                  "raw_logit_deltas": [
+                    0.00031280517578125,
+                    0.00031280517578125
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    0.0001882830757315105,
+                    0.0001882830757315105
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    7,
+                    7
+                  ],
+                  "edited_ranks": [
+                    7,
+                    7
+                  ],
+                  "raw_logit_deltas": [
+                    0.02166748046875,
+                    0.02166748046875
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    1.2557361756769243e-06,
+                    1.2557361756769243e-06
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    33,
+                    33
+                  ],
+                  "edited_ranks": [
+                    33,
+                    33
+                  ],
+                  "raw_logit_deltas": [
+                    0.0043735504150390625,
+                    0.0043735504150390625
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0004792213439941406,
+                  "top1_margin_delta": 8.651614189147949e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0004792213439941406,
+                  "top1_margin_delta": 8.651614189147949e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            }
+          ],
+          "actual_dose_matches_cap_within_2pct": true,
+          "signed_difference_sum_written_norms": [
+            7.470190780198143e-08,
+            7.470190780198143e-08
+          ],
+          "all_captured_null_repeat_and_baseline_floors_zero": true
+        }
+      ]
+    },
+    "position9": {
+      "receipt": "results/source_clause_choice_boundary9_cpu32_20261024/cpu32/measurement/trajectory.json",
+      "receipt_sha256": "f9f9319993d665406b2270a70f1e24075e836f9096d74076cda0c41bca1dd83d",
+      "vector_hashes_and_compact_records_verified": true,
+      "component_summary_reproduced": true,
+      "position": 9,
+      "prefix": " Nora will take the sample to Ivo before",
+      "tokens_identity": {
+        "shape": [
+          1,
+          109
+        ],
+        "dtype": "torch.int64",
+        "sha256": "42e95f18138e648a4d9d484da20ffed760f6cbfe138dc7e78d202689894bcaef"
+      },
+      "forward_counts_total": {
+        "attempted": 61,
+        "completed": 61
+      },
+      "diagnostic_interval_forward_counts": {
+        "attempted": 52,
+        "completed": 52
+      },
+      "choice_comparison": {
+        "schema_version": 1,
+        "status": "ok",
+        "fixed_baseline_winner_token_id": 11889,
+        "fixed_baseline_winner_piece": " sending",
+        "baseline_winner_ids": [
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889,
+          11889
+        ],
+        "baseline_winner_stable_across_conditions_and_repeats": true,
+        "baseline_argmax_tie_count": 1,
+        "anchor_contract": "first_no_edit_raw_argmax_never_reanchor_to_edited_winner",
+        "probability_contract": "pre_constraint_full_vocabulary_softmax_cpu_float64",
+        "margin_contract": "raw_target_logit_minus_fixed_baseline_winner_logit",
+        "repeat_contract": "paired_deterministic_replays_not_independent_samples",
+        "target_readout_effect_certified": false,
+        "production_apply_allowed": false,
+        "semantic_safety": "unassessed",
+        "surfaces": [
+          {
+            "surface": {
+              "surface_id": "s_resid_pre_l14_last",
+              "site": "resid_pre",
+              "layer": 14,
+              "cache_hook_name": "blocks.14.hook_resid_pre",
+              "caps": {
+                "max_alpha": 0.18,
+                "max_ttl_steps": 2,
+                "norm_clip": 1.5,
+                "step_size": 0.12,
+                "rank_cap": null,
+                "revertible_only": true
+              },
+              "alpha": 0.04,
+              "step_size": 0.08,
+              "norm_clip": 1.0
+            },
+            "structure_readout_token_ids": [
+              1603,
+              11,
+              1418,
+              627
+            ],
+            "baseline_winner_in_structure_readout": false,
+            "conditions": [
+              {
+                "label": "source:11",
+                "kind": "source",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.865928649902344,
+                      -8.865928649902344
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.005274772644042969,
+                      0.005274772644042969
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0024919509887695312,
+                      -0.0024919509887695312
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.133025890159276e-05,
+                      7.133025890159276e-05
+                    ],
+                    "raw_probability_deltas": [
+                      2.1102014514775885e-07,
+                      2.1102014514775885e-07
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.264336585998535,
+                      -8.264336585998535
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.00086212158203125,
+                      -0.00086212158203125
+                    ],
+                    "raw_logit_deltas": [
+                      -0.00862884521484375,
+                      -0.00862884521484375
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.00013017929464424744,
+                      0.00013017929464424744
+                    ],
+                    "raw_probability_deltas": [
+                      -4.13865854351946e-07,
+                      -4.13865854351946e-07
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.507533550262451,
+                      -11.507533550262451
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0006837844848632812,
+                      0.0006837844848632812
+                    ],
+                    "raw_logit_deltas": [
+                      -0.007082939147949219,
+                      -0.007082939147949219
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.082055092514797e-06,
+                      5.082055092514797e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -8.281595323684146e-09,
+                      -8.281595323684146e-09
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.5208158493042,
+                      -11.5208158493042
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.008713722229003906,
+                      -0.008713722229003906
+                    ],
+                    "raw_logit_deltas": [
+                      -0.016480445861816406,
+                      -0.016480445861816406
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.015000025570457e-06,
+                      5.015000025570457e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -5.560012235753278e-08,
+                      -5.560012235753278e-08
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0077667236328125,
+                      -0.0077667236328125
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5054726826963156,
+                      0.5054726826963156
+                    ],
+                    "raw_probability_deltas": [
+                      -0.0011700221883531592,
+                      -0.0011700221883531592
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "source:1418",
+                "kind": "source",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.8651762008667,
+                      -8.8651762008667
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0060272216796875,
+                      0.0060272216796875
+                    ],
+                    "raw_logit_deltas": [
+                      0.0011749267578125,
+                      0.0011749267578125
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.163238842595229e-05,
+                      7.163238842595229e-05
+                    ],
+                    "raw_probability_deltas": [
+                      5.131496695072837e-07,
+                      5.131496695072837e-07
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.27340316772461,
+                      -8.27340316772461
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.009928703308105469,
+                      -0.009928703308105469
+                    ],
+                    "raw_logit_deltas": [
+                      -0.014780998229980469,
+                      -0.014780998229980469
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.00012945332055786389,
+                      0.00012945332055786389
+                    ],
+                    "raw_probability_deltas": [
+                      -1.1398399407354983e-06,
+                      -1.1398399407354983e-06
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.514314651489258,
+                      -11.514314651489258
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.006097316741943359,
+                      -0.006097316741943359
+                    ],
+                    "raw_logit_deltas": [
+                      -0.01094961166381836,
+                      -0.01094961166381836
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.065277243810229e-06,
+                      5.065277243810229e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -2.5059444028252607e-08,
+                      -2.5059444028252607e-08
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.525945663452148,
+                      -11.525945663452148
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.013843536376953125,
+                      -0.013843536376953125
+                    ],
+                    "raw_logit_deltas": [
+                      -0.018695831298828125,
+                      -0.018695831298828125
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.006704235585498e-06,
+                      5.006704235585498e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -6.389591234249177e-08,
+                      -6.389591234249177e-08
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.004852294921875,
+                      -0.004852294921875
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5072318748521771,
+                      0.5072318748521771
+                    ],
+                    "raw_probability_deltas": [
+                      0.0005891699675083517,
+                      0.0005891699675083517
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "self_copy",
+                "kind": "self_copy",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probability_deltas": [
+                      0.0,
+                      0.0
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "radial_shrink",
+                "kind": "radial_shrink",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.879302024841309,
+                      -8.879302024841309
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.008098602294921875,
+                      -0.008098602294921875
+                    ],
+                    "raw_logit_deltas": [
+                      -0.01175689697265625,
+                      -0.01175689697265625
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.03902091973083e-05,
+                      7.03902091973083e-05
+                    ],
+                    "raw_probability_deltas": [
+                      -7.290295591366996e-07,
+                      -7.290295591366996e-07
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.2643404006958,
+                      -8.2643404006958
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.000865936279296875,
+                      -0.000865936279296875
+                    ],
+                    "raw_logit_deltas": [
+                      -0.00452423095703125,
+                      -0.00452423095703125
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.00013019271863339729,
+                      0.00013019271863339729
+                    ],
+                    "raw_probability_deltas": [
+                      -4.00441865202098e-07,
+                      -4.00441865202098e-07
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.510298252105713,
+                      -11.510298252105713
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.0020809173583984375,
+                      -0.0020809173583984375
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0057392120361328125,
+                      -0.0057392120361328125
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.068566075858634e-06,
+                      5.068566075858634e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -2.1770611979847457e-08,
+                      -2.1770611979847457e-08
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.519566059112549,
+                      -11.519566059112549
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.007463932037353516,
+                      -0.007463932037353516
+                    ],
+                    "raw_logit_deltas": [
+                      -0.01112222671508789,
+                      -0.01112222671508789
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.021808588027845e-06,
+                      5.021808588027845e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -4.8791559900145135e-08,
+                      -4.8791559900145135e-08
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.003658294677734375,
+                      -0.003658294677734375
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5055267350799526,
+                      0.5055267350799526
+                    ],
+                    "raw_probability_deltas": [
+                      -0.001115969804716177,
+                      -0.001115969804716177
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "common",
+                "kind": "component",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.864824295043945,
+                      -8.864824295043945
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.006379127502441406,
+                      0.006379127502441406
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0007925033569335938,
+                      -0.0007925033569335938
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.15256757575833e-05,
+                      7.15256757575833e-05
+                    ],
+                    "raw_probability_deltas": [
+                      4.0643700113830175e-07,
+                      4.0643700113830175e-07
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.269532203674316,
+                      -8.269532203674316
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.0060577392578125,
+                      -0.0060577392578125
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0132293701171875,
+                      -0.0132293701171875
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.0001297161469417268,
+                      0.0001297161469417268
+                    ],
+                    "raw_probability_deltas": [
+                      -8.770135568725963e-07,
+                      -8.770135568725963e-07
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.511255264282227,
+                      -11.511255264282227
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.0030379295349121094,
+                      -0.0030379295349121094
+                    ],
+                    "raw_logit_deltas": [
+                      -0.01020956039428711,
+                      -0.01020956039428711
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.071443633993282e-06,
+                      5.071443633993282e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -1.8893053845199163e-08,
+                      -1.8893053845199163e-08
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.524862289428711,
+                      -11.524862289428711
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.012760162353515625,
+                      -0.012760162353515625
+                    ],
+                    "raw_logit_deltas": [
+                      -0.019931793212890625,
+                      -0.019931793212890625
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.002903742466946e-06,
+                      5.002903742466946e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -6.769640546104404e-08,
+                      -6.769640546104404e-08
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.007171630859375,
+                      -0.007171630859375
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5062980374984538,
+                      0.5062980374984538
+                    ],
+                    "raw_probability_deltas": [
+                      -0.0003446673862149696,
+                      -0.0003446673862149696
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "difference_positive",
+                "kind": "component",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.87173080444336,
+                      -8.87173080444336
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.0005273818969726562,
+                      -0.0005273818969726562
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0038042068481445312,
+                      -0.0038042068481445312
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.081179855494233e-05,
+                      7.081179855494233e-05
+                    ],
+                    "raw_probability_deltas": [
+                      -3.074402015026728e-07,
+                      -3.074402015026728e-07
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.253851890563965,
+                      -8.253851890563965
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.009622573852539062,
+                      0.009622573852539062
+                    ],
+                    "raw_logit_deltas": [
+                      0.0063457489013671875,
+                      0.0063457489013671875
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.00013135512679823458,
+                      0.00013135512679823458
+                    ],
+                    "raw_probability_deltas": [
+                      7.619662996351988e-07,
+                      7.619662996351988e-07
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.500906944274902,
+                      -11.500906944274902
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.007310390472412109,
+                      0.007310390472412109
+                    ],
+                    "raw_logit_deltas": [
+                      0.004033565521240234,
+                      0.004033565521240234
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.108212267708649e-06,
+                      5.108212267708649e-06
+                    ],
+                    "raw_probability_deltas": [
+                      1.7875579870167854e-08,
+                      1.7875579870167854e-08
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.506805419921875,
+                      -11.506805419921875
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0052967071533203125,
+                      0.0052967071533203125
+                    ],
+                    "raw_logit_deltas": [
+                      0.0020198822021484375,
+                      0.0020198822021484375
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.078170290086393e-06,
+                      5.078170290086393e-06
+                    ],
+                    "raw_probability_deltas": [
+                      7.57014215840283e-09,
+                      7.57014215840283e-09
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      -0.003276824951171875,
+                      -0.003276824951171875
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5047186566746916,
+                      0.5047186566746916
+                    ],
+                    "raw_probability_deltas": [
+                      -0.0019240482099771583,
+                      -0.0019240482099771583
+                    ]
+                  }
+                ]
+              },
+              {
+                "label": "difference_negative",
+                "kind": "component",
+                "baseline_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_ids": [
+                  11889,
+                  11889
+                ],
+                "edited_winner_pieces": [
+                  " sending",
+                  " sending"
+                ],
+                "winner_changed_vs_fixed_baseline": [
+                  false,
+                  false
+                ],
+                "edited_winner_in_structure_readout": [
+                  false,
+                  false
+                ],
+                "readout_rows": [
+                  {
+                    "token_id": 1603,
+                    "piece": " before",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.871203422546387,
+                      -8.871203422546387
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.87033748626709,
+                      -8.87033748626709
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.000865936279296875,
+                      0.000865936279296875
+                    ],
+                    "raw_logit_deltas": [
+                      0.0040721893310546875,
+                      0.0040721893310546875
+                    ],
+                    "raw_probabilities_before": [
+                      7.1119238756445e-05,
+                      7.1119238756445e-05
+                    ],
+                    "raw_probabilities_after": [
+                      7.144509375612884e-05,
+                      7.144509375612884e-05
+                    ],
+                    "raw_probability_deltas": [
+                      3.258549996838398e-07,
+                      3.258549996838398e-07
+                    ]
+                  },
+                  {
+                    "token_id": 11,
+                    "piece": ",",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -8.263474464416504,
+                      -8.263474464416504
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -8.272810935974121,
+                      -8.272810935974121
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.009336471557617188,
+                      -0.009336471557617188
+                    ],
+                    "raw_logit_deltas": [
+                      -0.006130218505859375,
+                      -0.006130218505859375
+                    ],
+                    "raw_probabilities_before": [
+                      0.00013059316049859938,
+                      0.00013059316049859938
+                    ],
+                    "raw_probabilities_after": [
+                      0.00012985984915687754,
+                      0.00012985984915687754
+                    ],
+                    "raw_probability_deltas": [
+                      -7.33311341721848e-07,
+                      -7.33311341721848e-07
+                    ]
+                  },
+                  {
+                    "token_id": 1418,
+                    "piece": " while",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.508217334747314,
+                      -11.508217334747314
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.515204906463623,
+                      -11.515204906463623
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.006987571716308594,
+                      -0.006987571716308594
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0037813186645507812,
+                      -0.0037813186645507812
+                    ],
+                    "raw_probabilities_before": [
+                      5.090336687838481e-06,
+                      5.090336687838481e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.0736567749446504e-06,
+                      5.0736567749446504e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -1.6679912893830842e-08,
+                      -1.6679912893830842e-08
+                    ]
+                  },
+                  {
+                    "token_id": 627,
+                    "piece": ".\n",
+                    "in_structure_readout": true,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      -11.512102127075195,
+                      -11.512102127075195
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      -11.517145156860352,
+                      -11.517145156860352
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      -0.00504302978515625,
+                      -0.00504302978515625
+                    ],
+                    "raw_logit_deltas": [
+                      -0.0018367767333984375,
+                      -0.0018367767333984375
+                    ],
+                    "raw_probabilities_before": [
+                      5.07060014792799e-06,
+                      5.07060014792799e-06
+                    ],
+                    "raw_probabilities_after": [
+                      5.0638221542727906e-06,
+                      5.0638221542727906e-06
+                    ],
+                    "raw_probability_deltas": [
+                      -6.777993655199239e-09,
+                      -6.777993655199239e-09
+                    ]
+                  },
+                  {
+                    "token_id": 11889,
+                    "piece": " sending",
+                    "in_structure_readout": false,
+                    "baseline_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "edited_logit_margins_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "logit_margin_deltas_vs_fixed_winner": [
+                      0.0,
+                      0.0
+                    ],
+                    "raw_logit_deltas": [
+                      0.0032062530517578125,
+                      0.0032062530517578125
+                    ],
+                    "raw_probabilities_before": [
+                      0.5066427048846688,
+                      0.5066427048846688
+                    ],
+                    "raw_probabilities_after": [
+                      0.5085235069730221,
+                      0.5085235069730221
+                    ],
+                    "raw_probability_deltas": [
+                      0.0018808020883532839,
+                      0.0018808020883532839
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "component_conditions": [
+        {
+          "surface": {
+            "surface_id": "s_resid_pre_l14_last",
+            "site": "resid_pre",
+            "layer": 14,
+            "cache_hook_name": "blocks.14.hook_resid_pre",
+            "caps": {
+              "max_alpha": 0.18,
+              "max_ttl_steps": 2,
+              "norm_clip": 1.5,
+              "step_size": 0.12,
+              "rank_cap": null,
+              "revertible_only": true
+            },
+            "alpha": 0.04,
+            "step_size": 0.08,
+            "norm_clip": 1.0
+          },
+          "ideal_component_geometry": {
+            "left_norm": 10.601858473611907,
+            "right_norm": 5.6661160314247585,
+            "distance": 11.896190025142403,
+            "relative_separation": 1.1220853452017017,
+            "cosine": 0.02484492484302874
+          },
+          "raw_reconstruction_error_norms": [
+            0.0,
+            0.0
+          ],
+          "conditions": [
+            {
+              "label": "source:11",
+              "kind": "source",
+              "source_displacement_norm": 12.144513610591131,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.4857805669307709,
+              "step_clip_scale": 0.16468340604610235,
+              "actual_written_delta_norms": [
+                0.07999998000576544,
+                0.07999998000576544
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                -0.0015459060668945312,
+                -0.0015459060668945312
+              ],
+              "first_minus_second_probability_deltas": [
+                -4.0558325674746784e-07,
+                -4.0558325674746784e-07
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    2.110209018634532e-07,
+                    2.110209018634532e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    115,
+                    115
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0024919509887695312,
+                    -0.0024919509887695312
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -4.138648079217238e-07,
+                    -4.138648079217238e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    -0.00862884521484375,
+                    -0.00862884521484375
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -8.28155117425594e-09,
+                    -8.28155117425594e-09
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    789,
+                    789
+                  ],
+                  "raw_logit_deltas": [
+                    -0.007082939147949219,
+                    -0.007082939147949219
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -5.560009865213753e-08,
+                    -5.560009865213753e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    798,
+                    798
+                  ],
+                  "raw_logit_deltas": [
+                    -0.016480445861816406,
+                    -0.016480445861816406
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.005945444107055664,
+                  "top1_margin_delta": -0.001413881778717041,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.005945444107055664,
+                  "top1_margin_delta": -0.001413881778717041,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "source:1418",
+              "kind": "source",
+              "source_displacement_norm": 11.896190025142403,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.4758475720882416,
+              "step_clip_scale": 0.1681210602120171,
+              "actual_written_delta_norms": [
+                0.07999999468776124,
+                0.07999999468776124
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                -0.0038313865661621094,
+                -0.0038313865661621094
+              ],
+              "first_minus_second_probability_deltas": [
+                -1.1147800329910577e-06,
+                -1.1147800329910577e-06
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    5.13150420288245e-07,
+                    5.13150420288245e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    114,
+                    114
+                  ],
+                  "raw_logit_deltas": [
+                    0.0011749267578125,
+                    0.0011749267578125
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -1.1398394496198053e-06,
+                    -1.1398394496198053e-06
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    -0.014780998229980469,
+                    -0.014780998229980469
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -2.505941662874762e-08,
+                    -2.505941662874762e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    794,
+                    794
+                  ],
+                  "raw_logit_deltas": [
+                    -0.01094961166381836,
+                    -0.01094961166381836
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -6.389590164485867e-08,
+                    -6.389590164485867e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    801,
+                    801
+                  ],
+                  "raw_logit_deltas": [
+                    -0.018695831298828125,
+                    -0.018695831298828125
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0076247453689575195,
+                  "top1_margin_delta": 0.002986907958984375,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0076247453689575195,
+                  "top1_margin_delta": 0.002986907958984375,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "self_copy",
+              "kind": "self_copy",
+              "source_displacement_norm": 0.0,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.0,
+              "step_clip_scale": 1.0,
+              "actual_written_delta_norms": [
+                0.0,
+                0.0
+              ],
+              "step_size_clip_saturated": [
+                false,
+                false
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.0,
+                0.0
+              ],
+              "first_minus_second_probability_deltas": [
+                0.0,
+                0.0
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    114,
+                    114
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    786,
+                    786
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    0.0,
+                    0.0
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    788,
+                    788
+                  ],
+                  "raw_logit_deltas": [
+                    0.0,
+                    0.0
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "radial_shrink",
+              "kind": "radial_shrink",
+              "source_displacement_norm": 10.367483849301605,
+              "source_rounding_error_vs_ideal_component_norm": null,
+              "pre_clip_alpha_displacement_norm": 0.41469940543174744,
+              "step_clip_scale": 0.1929108096685192,
+              "actual_written_delta_norms": [
+                0.08000000033362603,
+                0.08000000033362603
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.0012149810791015625,
+                0.0012149810791015625
+              ],
+              "first_minus_second_probability_deltas": [
+                -3.786711214253605e-07,
+                -3.786711214253605e-07
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -7.290297010810714e-07,
+                    -7.290297010810714e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    114,
+                    114
+                  ],
+                  "raw_logit_deltas": [
+                    -0.01175689697265625,
+                    -0.01175689697265625
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -4.00441730759592e-07,
+                    -4.00441730759592e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    -0.00452423095703125,
+                    -0.00452423095703125
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -2.1770609334231526e-08,
+                    -2.1770609334231526e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    788,
+                    788
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0057392120361328125,
+                    -0.0057392120361328125
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -4.87915686786955e-08,
+                    -4.87915686786955e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    794,
+                    794
+                  ],
+                  "raw_logit_deltas": [
+                    -0.01112222671508789,
+                    -0.01112222671508789
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.003256559371948242,
+                  "top1_margin_delta": -0.001604229211807251,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.003256559371948242,
+                  "top1_margin_delta": -0.001604229211807251,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "common",
+              "kind": "component",
+              "source_displacement_norm": 10.601858477498793,
+              "source_rounding_error_vs_ideal_component_norm": 2.773325307447862e-07,
+              "pre_clip_alpha_displacement_norm": 0.4240742623806,
+              "step_clip_scale": 0.18864619999442284,
+              "actual_written_delta_norms": [
+                0.07999999643697915,
+                0.07999999643697915
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                -0.0030198097229003906,
+                -0.0030198097229003906
+              ],
+              "first_minus_second_probability_deltas": [
+                -8.581196718471763e-07,
+                -8.581196718471763e-07
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    4.064378545176264e-07,
+                    4.064378545176264e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    114,
+                    114
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0007925033569335938,
+                    -0.0007925033569335938
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -8.77012685164617e-07,
+                    -8.77012685164617e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0132293701171875,
+                    -0.0132293701171875
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -1.889301331744074e-08,
+                    -1.889301331744074e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    793,
+                    793
+                  ],
+                  "raw_logit_deltas": [
+                    -0.01020956039428711,
+                    -0.01020956039428711
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -6.769638602549021e-08,
+                    -6.769638602549021e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    800,
+                    800
+                  ],
+                  "raw_logit_deltas": [
+                    -0.019931793212890625,
+                    -0.019931793212890625
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.007678031921386719,
+                  "top1_margin_delta": 0.0008527040481567383,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.007678031921386719,
+                  "top1_margin_delta": 0.0008527040481567383,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "difference_positive",
+              "kind": "component",
+              "source_displacement_norm": 5.666116051136446,
+              "source_rounding_error_vs_ideal_component_norm": 3.375451415817615e-07,
+              "pre_clip_alpha_displacement_norm": 0.2266446352005005,
+              "step_clip_scale": 0.35297546928244544,
+              "actual_written_delta_norms": [
+                0.08000000058321781,
+                0.08000000058321781
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                0.002312183380126953,
+                0.002312183380126953
+              ],
+              "first_minus_second_probability_deltas": [
+                7.440913002198792e-07,
+                7.440913002198792e-07
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    -3.074401794530364e-07,
+                    -3.074401794530364e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    115,
+                    115
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0038042068481445312,
+                    -0.0038042068481445312
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    7.61966898454072e-07,
+                    7.61966898454072e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    0.0063457489013671875,
+                    0.0063457489013671875
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    1.7875598234192823e-08,
+                    1.7875598234192823e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    783,
+                    783
+                  ],
+                  "raw_logit_deltas": [
+                    0.004033565521240234,
+                    0.004033565521240234
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    7.570156142806676e-09,
+                    7.570156142806676e-09
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    786,
+                    786
+                  ],
+                  "raw_logit_deltas": [
+                    0.0020198822021484375,
+                    0.0020198822021484375
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.001644134521484375,
+                  "top1_margin_delta": -0.004743754863739014,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.001644134521484375,
+                  "top1_margin_delta": -0.004743754863739014,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "difference_negative",
+              "kind": "component",
+              "source_displacement_norm": 5.666116018685915,
+              "source_rounding_error_vs_ideal_component_norm": 3.7304189103565526e-07,
+              "pre_clip_alpha_displacement_norm": 0.2266446202993393,
+              "step_clip_scale": 0.35297549248945614,
+              "actual_written_delta_norms": [
+                0.08000000455456531,
+                0.08000000455456531
+              ],
+              "step_size_clip_saturated": [
+                true,
+                true
+              ],
+              "first_minus_second_logit_contrast_deltas": [
+                -0.0023488998413085938,
+                -0.0023488998413085938
+              ],
+              "first_minus_second_probability_deltas": [
+                -7.166319765014732e-07,
+                -7.166319765014732e-07
+              ],
+              "raw_greedy_token_ids": [
+                11889,
+                11889
+              ],
+              "readout_rows": [
+                {
+                  "token_id": 1603,
+                  "piece": " before",
+                  "probability_deltas": [
+                    3.258549944011054e-07,
+                    3.258549944011054e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    114,
+                    114
+                  ],
+                  "edited_ranks": [
+                    114,
+                    114
+                  ],
+                  "raw_logit_deltas": [
+                    0.0040721893310546875,
+                    0.0040721893310546875
+                  ]
+                },
+                {
+                  "token_id": 11,
+                  "piece": ",",
+                  "probability_deltas": [
+                    -7.33311906446195e-07,
+                    -7.33311906446195e-07
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    75,
+                    75
+                  ],
+                  "edited_ranks": [
+                    75,
+                    75
+                  ],
+                  "raw_logit_deltas": [
+                    -0.006130218505859375,
+                    -0.006130218505859375
+                  ]
+                },
+                {
+                  "token_id": 1418,
+                  "piece": " while",
+                  "probability_deltas": [
+                    -1.6679929944721808e-08,
+                    -1.6679929944721808e-08
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    786,
+                    786
+                  ],
+                  "edited_ranks": [
+                    792,
+                    792
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0037813186645507812,
+                    -0.0037813186645507812
+                  ]
+                },
+                {
+                  "token_id": 627,
+                  "piece": ".\n",
+                  "probability_deltas": [
+                    -6.778006539918843e-09,
+                    -6.778006539918843e-09
+                  ],
+                  "repeat_probability_floor": 1e-12,
+                  "baseline_ranks": [
+                    788,
+                    788
+                  ],
+                  "edited_ranks": [
+                    794,
+                    794
+                  ],
+                  "raw_logit_deltas": [
+                    -0.0018367767333984375,
+                    -0.0018367767333984375
+                  ]
+                }
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0016831159591674805,
+                  "top1_margin_delta": 0.004679292440414429,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0016831159591674805,
+                  "top1_margin_delta": 0.004679292440414429,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            }
+          ],
+          "actual_dose_matches_cap_within_2pct": true,
+          "signed_difference_sum_written_norms": [
+            6.41182023001302e-08,
+            6.41182023001302e-08
+          ],
+          "all_captured_null_repeat_and_baseline_floors_zero": true
+        }
+      ]
+    }
+  }
+}

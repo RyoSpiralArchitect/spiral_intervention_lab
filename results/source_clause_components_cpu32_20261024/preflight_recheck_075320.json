@@ -1,0 +1,20 @@
+{
+  "recorded_at_utc": "2026-10-24T07:53:20Z",
+  "check_type": "resource_preflight_recheck",
+  "status": "blocked",
+  "measurement_status": "not_run",
+  "stop_reason": "preflight_disk_floor",
+  "resource_source": "diskutil info /System/Volumes/Data; corroborated by df -h",
+  "available_container_bytes": 20420091904,
+  "available_container_gib": 19.01769256591797,
+  "required_start_free_disk_gib": 32,
+  "intended_device": "cpu",
+  "intended_dtype": "float32",
+  "planned_condition_count": 7,
+  "model_loaded": false,
+  "diagnostic_replays_executed": 0,
+  "controller_calls": 0,
+  "production_applies": 0,
+  "resource_guards_relaxed": false,
+  "prior_receipts_modified": false
+}

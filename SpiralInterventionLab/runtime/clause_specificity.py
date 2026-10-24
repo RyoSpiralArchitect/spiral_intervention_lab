@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import torch
 
@@ -42,6 +42,23 @@ def measure_control(worker: Any, kind: str) -> dict[str, Any]:
     if kind not in CONTROL_KINDS:
         raise ValueError("unknown source-specificity control")
     offered = clause_actuation.offer(worker)
+    anchor = offered["candidates"][0] if offered["candidates"] else {}
+    expressions = []
+    for surface in anchor.get("surfaces", []):
+        ref = clause_actuation.materialize(worker, anchor, surface)["source"]["expr"]
+        ref["ref"]["token"] = {"mode": "last"}
+        expressions.append(ref if kind == "self_copy" else {"fn": "scale", "by": 0.0, "arg": ref})
+    return measure_expression_control(worker, kind, anchor, expressions)
+
+
+def measure_expression_control(worker: Any, kind: str, anchor: Mapping[str, Any],
+                               expressions: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Offline-only expression control, validated against current sites and normal policy.
+
+    No controller offer, frozen candidate, or production certificate is created.
+    These controls have no intended token owner; report the full structural readout.
+    """
+    offered = clause_actuation.offer(worker)
     context = offered["structure_context_id"]
     control_id = identity("clause-control:", [context, kind, offered["candidates"][:1]])
     report = {
@@ -57,8 +74,12 @@ def measure_control(worker: Any, kind: str) -> dict[str, Any]:
     if not isinstance(cached, torch.Tensor) or not torch.equal(cached, worker._current_token_tensor()):
         return {**report, "blocked_reason": "cache_not_aligned_to_current_prefix"}
     # Availability changes as source requests are consumed; it is not control identity.
-    anchor = {k: v for k, v in offered["candidates"][0].items() if k not in {"available", "request"}}
-    control_id = identity("clause-control:", [kind, anchor])
+    anchor = {k: v for k, v in anchor.items() if k not in {"available", "request"}}
+    current = [{k: v for k, v in c.items() if k not in {"available", "request"}}
+               for c in offered["candidates"]]
+    if anchor not in current or len(expressions) != len(anchor["surfaces"]):
+        return {**report, "blocked_reason": "unknown_or_stale_control_binding"}
+    control_id = identity("clause-control:", [kind, anchor, expressions])
     report["control_id"] = control_id
     attempted = getattr(worker, "_clause_patch_attempted_ids", set())
     if control_id in attempted:
@@ -69,18 +90,17 @@ def measure_control(worker: Any, kind: str) -> dict[str, Any]:
         packet = worker.build_controller_packet()
         ctx = StepContext(packet=packet, runtime_state=worker.runtime_state,
                           adapter=worker.adapter, traces={}, stats={}, active_edits={})
-        for surface in anchor["surfaces"]:
+        for surface, expression in zip(anchor["surfaces"], expressions, strict=True):
             edit = clause_actuation.materialize(worker, anchor, surface)
             edit["id"] = identity("clause-control-edit:", [control_id, surface])
-            ref = deepcopy(edit["source"]["expr"])
-            ref["ref"]["token"] = {"mode": "last"}
-            edit["source"]["expr"] = ref if kind == "self_copy" else {"fn": "scale", "by": 0.0, "arg": ref}
+            edit["source"]["expr"] = deepcopy(expression)
             edit["meta"]["activation_patch_source_localization"] = kind
             command = {"version": "0.1", "decision": "apply", "edits": [edit]}
             validate_command_against_packet(command, packet)
             value = compile_expr(edit["source"]["expr"])(ctx)
-            if not torch.isfinite(value).all():
-                raise ValueError("nonfinite_control_source")
+            target = worker.runtime_state.last_cache[surface["cache_hook_name"]][0, -1]
+            if value.shape != target.shape or not torch.isfinite(value).all():
+                raise ValueError("nonfinite_or_misaligned_control_source")
             prepared.append((surface, edit, command, tensor_identity(value)))
     except Exception as exc:
         report.update(blocked_reason="normal_cap_preflight_failed", error=str(exc))

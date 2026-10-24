@@ -508,7 +508,7 @@ change to runtime reference semantics or production authority.
 ### Aligned control result
 
 The corrected run completed in 150 seconds, at the same natural prefix and
-`resid_pre L14`, alpha 0.04, step size 0.08. It used 26 forwards and eight of
+`resid_pre L14`, alpha 0.04, step size 0.08. It reported 26 explicit diagnostic replays and eight of
 12 diagnostic slots; four remained. Every edited repeat executed one hook.
 All state/cap checks passed. Self-copy's source-target distance, blend
 displacement and observed-token probability deltas were exactly zero.
@@ -540,6 +540,12 @@ unchanged. There is no full-continuation or task-success result, no controller
 call, and no production apply. Repeated MPS/fp16 outputs remain subject to the
 numerical caveat above. These are deterministic local contrasts, not statistical
 confidence estimates or cross-backend validation.
+
+The later [source-response trajectory audit](source_response_trajectory.md)
+separates packet-preparation canaries from those explicit diagnostic replays.
+The count of 26 above was not total physical forwards. That audit also adds a
+CPU/float32 numerical comparison and distinguishes input differences from
+downstream/readout alignment without changing these original receipts.
 
 Artifacts:
 
