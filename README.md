@@ -44,6 +44,13 @@ Key current notes:
 Source-response artifact availability and fresh-clone verification are described
 in [`docs/source_response_artifacts.md`](docs/source_response_artifacts.md).
 
+- [`docs/source_direction_controls.md`](docs/source_direction_controls.md)
+  A same-prefix CPU32 control matches common's actual write norm while permuting
+  its coordinates. Common raises comma probability about seven times more than
+  this one positive control, but the control pair also reverses comma/while
+  contrast. Contrast reversal alone is not source ownership; all nine conditions
+  still choose ` before`. No cap or production-authority increase.
+
 - [`docs/source_choice_boundary.md`](docs/source_choice_boundary.md)
   A fixed-source/cap CPU32 follow-up at the next natural token preserves signed
   comma/while contrast reversal, but common-component comma lift does not carry

@@ -15,7 +15,7 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from ..runtime import clause_actuation, clause_choice, clause_components, clause_specificity, clause_trajectory, diagnostic_budget
+from ..runtime import clause_actuation, clause_choice, clause_components, clause_direction_controls, clause_specificity, clause_trajectory, diagnostic_budget
 from ..runtime.response_probe import tensor_identity
 from .digit_transform_e2e import build_hooked_transformer_worker_runtime, create_task_env, load_worker_model
 from .replay_orphan_blueprint_ceiling import verify_checkpoint
@@ -96,12 +96,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-token-ids", required=True, help="Two exact source token IDs, declared before measurement")
     parser.add_argument("--decompose-components", action="store_true",
                         help="Also measure common and signed half-difference directions; seven conditions, nine slots")
+    parser.add_argument("--permuted-direction-controls", action="store_true",
+                        help="Add a fixed permuted-common direction and its inverse; nine conditions, eleven slots")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "mps"), default="cpu")
     parser.add_argument("--dtype", choices=("float32", "float16"), default="float32")
     parser.add_argument("--mps-memory-fraction", type=float, default=0.7)
     parser.add_argument("--torch-threads", type=int, default=4)
     args = parser.parse_args(argv)
+    if args.permuted_direction_controls and (not args.decompose_components or args.next_natural_boundary):
+        parser.error("--permuted-direction-controls requires --decompose-components at the strict same prefix")
     try:
         token_ids = [int(s) for s in args.source_token_ids.split(",")]
     except ValueError:
@@ -148,6 +152,8 @@ def main(argv: list[str] | None = None) -> int:
                                             for name in ("torch", "transformers", "transformer-lens")}}
     if args.decompose_components:
         report["component_plan"] = clause_components.plan(token_ids)
+    if args.permuted_direction_controls:
+        report.update(kind="source_clause_direction_controls", direction_control_plan=clause_direction_controls.plan(token_ids))
     if boundary is not None:
         report["boundary_plan"] = boundary
     root = Path(__file__).resolve().parents[2]
@@ -230,12 +236,14 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"condition": item["label"], "status": item["result"]["status"],
                               "captured_forwards": len(item["frames"])}), flush=True)
 
-        instrument = clause_components if args.decompose_components else clause_trajectory
+        instrument = (clause_direction_controls if args.permuted_direction_controls else
+                      clause_components if args.decompose_components else clause_trajectory)
         records = instrument.measure(worker, token_ids, record=record)
         report["declared_diagnostic_replay_count"] = 2 + sum(r["result"]["physical_replay_count"] for r in records)
         report["comparison"] = instrument.summarize(records)
         report["choice_comparison"] = clause_choice.summarize(
-            records, component_labels=clause_components.COMPONENTS if args.decompose_components else (),
+            records, component_labels=(clause_direction_controls.LABELS if args.permuted_direction_controls else
+                                       clause_components.COMPONENTS if args.decompose_components else ()),
             decode_token=lambda tid: worker.codec.decode([tid]))
         report["status"] = "complete"
     except Exception as exc:
