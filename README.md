@@ -44,6 +44,17 @@ Key current notes:
 Source-response artifact availability and fresh-clone verification are described
 in [`docs/source_response_artifacts.md`](docs/source_response_artifacts.md).
 
+- [`docs/source_common_radial.md`](docs/source_common_radial.md)
+  Common's signed, current-state parallel and orthogonal components are expressed
+  in the existing blend DSL and offered as bounded controller diagnostic cards.
+  The authorized CPU32 retry completed all ten conditions at the same prefix
+  and caps: Llama's parallel shrink lowers comma probability, while the orthogonal
+  component raises it more than common. GPT-2 at the same visible-text diagnostic
+  prefill instead lowers comma probability with both components. Neither changes
+  its greedy token; this is not a cross-model causal comparison or task success.
+  Both use 12 diagnostic slots, with no production-authority increase. The first
+  incomplete attempt is preserved.
+
 - [`docs/source_direction_controls.md`](docs/source_direction_controls.md)
   A same-prefix CPU32 control matches common's actual write norm while permuting
   its coordinates. Common raises comma probability about seven times more than

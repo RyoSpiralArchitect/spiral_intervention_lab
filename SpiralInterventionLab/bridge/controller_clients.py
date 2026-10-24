@@ -238,6 +238,7 @@ _STRATEGY_HINT_PRIORITY_KEYS: tuple[str, ...] = (
     "entity_probe_refresh",
     "source_clause_structure",
     "source_clause_activation_patch",
+    "source_common_radial",
     "entity_insertion_operator_replay_recommended",
     "entity_insertion_operator_deepening_recommended",
     "bridge_plan_available",
@@ -315,6 +316,14 @@ def _compact_strategy_hints(value: Any) -> dict[str, Any]:
     compact: dict[str, Any] = {}
     for key in _STRATEGY_HINT_PRIORITY_KEYS:
         if key in value and value.get(key) not in (None, "", []):
+            if key == "source_common_radial":
+                report = value[key]
+                compact[key] = {k: report[k] for k in ("status", "structure_context_id", "pair_rule", "evidence_scope", "production_apply_allowed") if k in report}
+                compact[key]["recipes"] = [{k: r[k] for k in (
+                    "component", "component_recipe_id", "source_pair", "dsl_formula", "geometry",
+                    "available", "blocked_reason", "physical_replays_upper_bound", "request", "production_apply_allowed") if k in r}
+                    for r in report.get("recipes", [])[:4]]
+                continue
             if key in {"source_clause_structure", "source_clause_activation_patch"}:
                 compact[key] = _bounded_json(value[key], max_depth=5, max_items=16, max_string=260)
                 continue
@@ -908,10 +917,10 @@ def _tool_result_summaries(items: Any) -> list[dict[str, Any]]:
 def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, Mapping):
         return None
-    if value.get("diagnostic") == "source_clause_activation_patch_probe":
+    if value.get("diagnostic") in {"source_clause_activation_patch_probe", "source_common_radial_probe"}:
         summary = {key: _bounded_json(value[key], max_depth=4, max_items=16, max_string=220)
             for key in ("diagnostic", "status", "recorded_step", "structure_context_id",
-                "structure_operator_id", "candidate_binding", "evidence_scope", "state_restored",
+                "structure_operator_id", "component_recipe_id", "candidate_binding", "evidence_scope", "state_restored",
                 "caps_unchanged", "error", "blocked_reason", "diagnostic_call_cost",
                 "diagnostic_budget_charged", "budget_before", "budget_after", "new_measurement_count",
                 "physical_replay_count", "physical_replays_upper_bound", "edited_replay_count",
@@ -919,12 +928,15 @@ def _compact_diagnostic_result(value: Any) -> dict[str, Any] | None:
         summary["operator_rows"] = [
             {key: _bounded_json(row[key], max_depth=4, max_items=16, max_string=220)
              for key in ("candidate_fingerprint", "surface", "source_tensor_identity", "runtime_telemetry",
-                 "paired_deltas", "baseline_repeat_variation", "edited_repeat_variation",
+                 "component_geometry", "structure_response_rows", "paired_deltas", "baseline_repeat_variation", "edited_repeat_variation",
                  "metric_repeat_floors", "effect_role", "ownership_role", "realized_lift_token_id",
                  "self_delta", "cross_delta", "alignment_margin", "alignment_repeat_floor",
                  "ownership_scope", "safety_deltas", "collapse_sharpening_signal", "semantic_safety",
                  "clause_correctness", "target_readout_effect_certified", "production_apply_allowed") if key in row}
             for row in value.get("operator_rows", [])[:2]]
+        if value.get("diagnostic") == "source_common_radial_probe":
+            summary["recipe"] = {k: value.get("recipe", {}).get(k) for k in
+                ("component", "component_recipe_id", "source_pair", "dsl_formula", "geometry", "production_apply_allowed")}
         return summary
     if value.get("diagnostic") == "source_clause_structure_probe":
         return {key: _bounded_json(value[key], max_depth=4, max_items=16, max_string=220)

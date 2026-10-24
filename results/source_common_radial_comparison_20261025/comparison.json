@@ -1,0 +1,1687 @@
+{
+  "kind": "same_visible_prefix_radial_comparison",
+  "models": {
+    "llama": {
+      "summary": "results/source_common_radial_cpu32_retry1_20261025/summary.json",
+      "summary_sha256": "0dd9c68d2c75e7f579efe5d160d38eb0f9fd636b2bcf7047d3a7d4bb4a0d1bd9",
+      "prefix_origin": "natural_greedy_no_edit_refuse_token_prefix_mismatch",
+      "position": 8,
+      "token_identity": {
+        "shape": [
+          1,
+          108
+        ],
+        "dtype": "torch.int64",
+        "sha256": "404675115f71bd07b66be7bb325337ce9b6c743c94f543e7234a2cb6900bf870"
+      },
+      "source_token_ids": [
+        11,
+        1418
+      ],
+      "model_execution": {
+        "parameter_devices": [
+          "cpu"
+        ],
+        "parameter_dtypes": [
+          "torch.float32"
+        ],
+        "n_layers": 28
+      },
+      "baseline_winner": " before",
+      "all_greedy_winners_unchanged": true,
+      "all_captured_null_repeat_and_baseline_floors_zero": true,
+      "surfaces": [
+        {
+          "surface": {
+            "surface_id": "s_resid_pre_l14_last",
+            "site": "resid_pre",
+            "layer": 14,
+            "cache_hook_name": "blocks.14.hook_resid_pre",
+            "caps": {
+              "max_alpha": 0.18,
+              "max_ttl_steps": 2,
+              "norm_clip": 1.5,
+              "step_size": 0.12,
+              "rank_cap": null,
+              "revertible_only": true
+            },
+            "alpha": 0.04,
+            "step_size": 0.08,
+            "norm_clip": 1.0
+          },
+          "conditions": [
+            {
+              "label": "source:11",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.007643793328454998,
+                0.007643793328454998
+              ],
+              "written_cosine_with_current_T": [
+                -0.6017958379153449,
+                -0.6017958379153449
+              ],
+              "comma_probability_deltas": [
+                0.0012655921968730832,
+                0.0012655921968730832
+              ],
+              "while_probability_deltas": [
+                -7.235671167119331e-05,
+                -7.235671167119331e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.00905609130859375,
+                0.00905609130859375
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.006534576416015625,
+                -0.006534576416015625
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.015590667724609375,
+                0.015590667724609375
+              ],
+              "actual_written_norms": [
+                0.0800000079719927,
+                0.0800000079719927
+              ],
+              "target_activation_norm_deltas": [
+                -0.0479477511830364,
+                -0.0479477511830364
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0009737014770507812,
+                  "top1_margin_delta": -0.0024766623973846436,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0009737014770507812,
+                  "top1_margin_delta": -0.0024766623973846436,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "source:1418",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.0076437915438477225,
+                0.0076437915438477225
+              ],
+              "written_cosine_with_current_T": [
+                -0.546810519313205,
+                -0.546810519313205
+              ],
+              "comma_probability_deltas": [
+                0.0014292718713513064,
+                0.0014292718713513064
+              ],
+              "while_probability_deltas": [
+                9.679724284221772e-05,
+                9.679724284221772e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.009521484375,
+                0.009521484375
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.013277053833007812,
+                0.013277053833007812
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0037555694580078125,
+                -0.0037555694580078125
+              ],
+              "actual_written_norms": [
+                0.07999998929427732,
+                0.07999998929427732
+              ],
+              "target_activation_norm_deltas": [
+                -0.04352960695837638,
+                -0.04352960695837638
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0014015436172485352,
+                  "top1_margin_delta": -0.002405613660812378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0014015436172485352,
+                  "top1_margin_delta": -0.002405613660812378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "self_copy",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.0,
+                0.0
+              ],
+              "written_cosine_with_current_T": [
+                null,
+                null
+              ],
+              "comma_probability_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_probability_deltas": [
+                0.0,
+                0.0
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.0,
+                0.0
+              ],
+              "actual_written_norms": [
+                0.0,
+                0.0
+              ],
+              "target_activation_norm_deltas": [
+                0.0,
+                0.0
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "radial_shrink",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.007643792331218078,
+                0.007643792331218078
+              ],
+              "written_cosine_with_current_T": [
+                -0.9999999999945582,
+                -0.9999999999945582
+              ],
+              "comma_probability_deltas": [
+                -0.00049201717431957,
+                -0.00049201717431957
+              ],
+              "while_probability_deltas": [
+                -0.00016560948043609428,
+                -0.00016560948043609428
+              ],
+              "comma_margin_vs_winner_deltas": [
+                -0.0018749237060546875,
+                -0.0018749237060546875
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.019222259521484375,
+                -0.019222259521484375
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.017347335815429688,
+                0.017347335815429688
+              ],
+              "actual_written_norms": [
+                0.07999999753490236,
+                0.07999999753490236
+              ],
+              "target_activation_norm_deltas": [
+                -0.07999999753445763,
+                -0.07999999753445763
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.001013636589050293,
+                  "top1_margin_delta": 3.7223100662231445e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.001013636589050293,
+                  "top1_margin_delta": 3.7223100662231445e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.007643793371717309,
+                0.007643793371717309
+              ],
+              "written_cosine_with_current_T": [
+                -0.6443583075618708,
+                -0.6443583075618708
+              ],
+              "comma_probability_deltas": [
+                0.0015175454372271524,
+                0.0015175454372271524
+              ],
+              "while_probability_deltas": [
+                1.2839923023517594e-05,
+                1.2839923023517594e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.010457992553710938,
+                0.010457992553710938
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0037441253662109375,
+                0.0037441253662109375
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.0067138671875,
+                0.0067138671875
+              ],
+              "actual_written_norms": [
+                0.08000000842477643,
+                0.08000000842477643
+              ],
+              "target_activation_norm_deltas": [
+                -0.0513689821935408,
+                -0.0513689821935408
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0013321638107299805,
+                  "top1_margin_delta": -0.0027492940425872803,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0013321638107299805,
+                  "top1_margin_delta": -0.0027492940425872803,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "difference_positive",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.007643793001638536,
+                0.007643793001638536
+              ],
+              "written_cosine_with_current_T": [
+                -0.06866317239361944,
+                -0.06866317239361944
+              ],
+              "comma_probability_deltas": [
+                -0.00015278970788318302,
+                -0.00015278970788318302
+              ],
+              "while_probability_deltas": [
+                -0.00018455519175035115,
+                -0.00018455519175035115
+              ],
+              "comma_margin_vs_winner_deltas": [
+                -0.000331878662109375,
+                -0.000331878662109375
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.021852493286132812,
+                -0.021852493286132812
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.021520614624023438,
+                0.021520614624023438
+              ],
+              "actual_written_norms": [
+                0.08000000455152875,
+                0.08000000455152875
+              ],
+              "target_activation_norm_deltas": [
+                -0.005188588503951763,
+                -0.005188588503951763
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.0004431009292602539,
+                  "top1_margin_delta": -0.00012803077697753906,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.0004431009292602539,
+                  "top1_margin_delta": -0.00012803077697753906,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "difference_negative",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.0076437929316707206,
+                0.0076437929316707206
+              ],
+              "written_cosine_with_current_T": [
+                0.06866320813850924,
+                0.06866320813850924
+              ],
+              "comma_probability_deltas": [
+                0.0001737836543976301,
+                0.0001737836543976301
+              ],
+              "while_probability_deltas": [
+                0.00018828243961010842,
+                0.00018828243961010842
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0004825592041015625,
+                0.0004825592041015625
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.021837234497070312,
+                0.021837234497070312
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.02135467529296875,
+                -0.02135467529296875
+              ],
+              "actual_written_norms": [
+                0.08000000381924498,
+                0.08000000381924498
+              ],
+              "target_activation_norm_deltas": [
+                0.005797203087409386,
+                0.005797203087409386
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0004792213439941406,
+                  "top1_margin_delta": 8.651614189147949e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0004792213439941406,
+                  "top1_margin_delta": 8.651614189147949e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common_negative",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.007643793352526392,
+                0.007643793352526392
+              ],
+              "written_cosine_with_current_T": [
+                0.6443583110493855,
+                0.6443583110493855
+              ],
+              "comma_probability_deltas": [
+                -0.0014859891201020603,
+                -0.0014859891201020603
+              ],
+              "while_probability_deltas": [
+                -1.0258838696958206e-05,
+                -1.0258838696958206e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                -0.010335922241210938,
+                -0.010335922241210938
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.0034198760986328125,
+                -0.0034198760986328125
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.006916046142578125,
+                -0.006916046142578125
+              ],
+              "actual_written_norms": [
+                0.08000000822392413,
+                0.08000000822392413
+              ],
+              "target_activation_norm_deltas": [
+                0.051726596678097536,
+                0.051726596678097536
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.001359105110168457,
+                  "top1_margin_delta": 0.002710789442062378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.001359105110168457,
+                  "top1_margin_delta": 0.002710789442062378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common_parallel",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.007643792103901212,
+                0.007643792103901212
+              ],
+              "written_cosine_with_current_T": [
+                -0.9999999999945591,
+                -0.9999999999945591
+              ],
+              "comma_probability_deltas": [
+                -0.0004928068713561939,
+                -0.0004928068713561939
+              ],
+              "while_probability_deltas": [
+                -0.00016558242437485736,
+                -0.00016558242437485736
+              ],
+              "comma_margin_vs_winner_deltas": [
+                -0.0018787384033203125,
+                -0.0018787384033203125
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.01921844482421875,
+                -0.01921844482421875
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.017339706420898438,
+                0.017339706420898438
+              ],
+              "actual_written_norms": [
+                0.07999999515580206,
+                0.07999999515580206
+              ],
+              "target_activation_norm_deltas": [
+                -0.07999999515535805,
+                -0.07999999515535805
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0010128021240234375,
+                  "top1_margin_delta": 3.769993782043457e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0010128021240234375,
+                  "top1_margin_delta": 3.769993782043457e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common_orthogonal",
+              "raw_greedy_token_ids": [
+                1603,
+                1603
+              ],
+              "comma_probability_baseline": [
+                0.1831710085457156,
+                0.1831710085457156
+              ],
+              "while_probability_baseline": [
+                0.008348240682144986,
+                0.008348240682144986
+              ],
+              "target_activation_norm": 10.466008764808233,
+              "actual_write_over_target_norm": [
+                0.0076437896011523785,
+                0.0076437896011523785
+              ],
+              "written_cosine_with_current_T": [
+                4.900385209196807e-08,
+                4.900385209196807e-08
+              ],
+              "comma_probability_deltas": [
+                0.0023615771635219496,
+                0.0023615771635219496
+              ],
+              "while_probability_deltas": [
+                0.00015806960129855288,
+                0.00015806960129855288
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.014957427978515625,
+                0.014957427978515625
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.020904541015625,
+                0.020904541015625
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.005947113037109375,
+                -0.005947113037109375
+              ],
+              "actual_written_norms": [
+                0.07999996896201082,
+                0.07999996896201082
+              ],
+              "target_activation_norm_deltas": [
+                0.0003057509196793262,
+                0.0003057509196793262
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0008300542831420898,
+                  "top1_margin_delta": -0.003559976816177368,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0008300542831420898,
+                  "top1_margin_delta": -0.003559976816177368,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            }
+          ]
+        }
+      ],
+      "geometry": [
+        {
+          "surface": {
+            "surface_id": "s_resid_pre_l14_last",
+            "site": "resid_pre",
+            "layer": 14,
+            "cache_hook_name": "blocks.14.hook_resid_pre",
+            "caps": {
+              "max_alpha": 0.18,
+              "max_ttl_steps": 2,
+              "norm_clip": 1.5,
+              "step_size": 0.12,
+              "rank_cap": null,
+              "revertible_only": true
+            },
+            "alpha": 0.04,
+            "step_size": 0.08,
+            "norm_clip": 1.0
+          },
+          "geometry": {
+            "reference": "current_last_activation_not_semantic_basis",
+            "radial_coefficient": -0.6866037697260589,
+            "radial_direction": "shrink",
+            "common_displacement_norm": 11.152185449515441,
+            "parallel_norm": 7.186001071903308,
+            "orthogonal_norm": 8.528342681611033,
+            "raw_reconstruction_error_norm": 0.0,
+            "parallel_orthogonal_dot": -7.993605777301127e-15
+          },
+          "controls": [
+            {
+              "label": "common_negative",
+              "source_displacement_norm": 11.152185440742997,
+              "source_rounding_error_vs_ideal_norm": 6.505633170556064e-07,
+              "actual_written_delta_norms": [
+                0.08000000822392413,
+                0.08000000822392413
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.001359105110168457,
+                  "top1_margin_delta": 0.002710789442062378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.001359105110168457,
+                  "top1_margin_delta": 0.002710789442062378,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "common_parallel",
+              "source_displacement_norm": 7.1860017011770125,
+              "source_rounding_error_vs_ideal_norm": 6.814179491370812e-07,
+              "actual_written_delta_norms": [
+                0.07999999515580206,
+                0.07999999515580206
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0010128021240234375,
+                  "top1_margin_delta": 3.769993782043457e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0010128021240234375,
+                  "top1_margin_delta": 3.769993782043457e-05,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "common_orthogonal",
+              "source_displacement_norm": 8.528342705828964,
+              "source_rounding_error_vs_ideal_norm": 8.537214869897552e-07,
+              "actual_written_delta_norms": [
+                0.07999996896201082,
+                0.07999996896201082
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0008300542831420898,
+                  "top1_margin_delta": -0.003559976816177368,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0008300542831420898,
+                  "top1_margin_delta": -0.003559976816177368,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            }
+          ]
+        }
+      ],
+      "diagnostic_budget_used": 12,
+      "condition_replays": 40,
+      "captured_packet_preparation_forwards": 30,
+      "actual_forwards": {
+        "attempted": 81,
+        "completed": 81
+      }
+    },
+    "gpt2": {
+      "summary": "results/source_common_radial_gpt2_cpu32_20261025/summary.json",
+      "summary_sha256": "f36f5fd30feee1e8930282dbf3049e27345bb127822595e644337f9daeae74c3",
+      "prefix_origin": "explicit_fixed_text_diagnostic_prefill_not_natural_generation",
+      "position": 8,
+      "token_identity": {
+        "shape": [
+          1,
+          112
+        ],
+        "dtype": "torch.int64",
+        "sha256": "1f26506e4fadaaa103d95eaf1abb09d54c50c2f4fa0444456be575fdfca0c3f9"
+      },
+      "source_token_ids": [
+        11,
+        981
+      ],
+      "model_execution": {
+        "parameter_devices": [
+          "cpu"
+        ],
+        "parameter_dtypes": [
+          "torch.float32"
+        ],
+        "n_layers": 12
+      },
+      "baseline_winner": ",",
+      "all_greedy_winners_unchanged": true,
+      "all_captured_null_repeat_and_baseline_floors_zero": true,
+      "surfaces": [
+        {
+          "surface": {
+            "surface_id": "s_resid_pre_l6_last",
+            "site": "resid_pre",
+            "layer": 6,
+            "cache_hook_name": "blocks.6.hook_resid_pre",
+            "caps": {
+              "max_alpha": 0.18,
+              "max_ttl_steps": 2,
+              "norm_clip": 1.5,
+              "step_size": 0.12,
+              "rank_cap": null,
+              "revertible_only": true
+            },
+            "alpha": 0.04,
+            "step_size": 0.08,
+            "norm_clip": 1.0
+          },
+          "conditions": [
+            {
+              "label": "source:11",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653839889007644,
+                0.0009653839889007644
+              ],
+              "written_cosine_with_current_T": [
+                -0.6287808649150914,
+                -0.6287808649150914
+              ],
+              "comma_probability_deltas": [
+                -0.00033987526934109447,
+                -0.00033987526934109447
+              ],
+              "while_probability_deltas": [
+                2.5779788572549353e-05,
+                2.5779788572549353e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0026769638061523438,
+                0.0026769638061523438
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0026769638061523438,
+                -0.0026769638061523438
+              ],
+              "actual_written_norms": [
+                0.08000007040006055,
+                0.08000007040006055
+              ],
+              "target_activation_norm_deltas": [
+                -0.05027915107741876,
+                -0.05027915107741876
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0010814666748046875,
+                  "top1_margin_delta": -0.0004208385944366455,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0010814666748046875,
+                  "top1_margin_delta": -0.0004208385944366455,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "source:981",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653855334538495,
+                0.0009653855334538495
+              ],
+              "written_cosine_with_current_T": [
+                -0.5701183967135822,
+                -0.5701183967135822
+              ],
+              "comma_probability_deltas": [
+                -0.0001524013173677674,
+                -0.0001524013173677674
+              ],
+              "while_probability_deltas": [
+                8.958731645641524e-06,
+                8.958731645641524e-06
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0010232925415039062,
+                0.0010232925415039062
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0010232925415039062,
+                -0.0010232925415039062
+              ],
+              "actual_written_norms": [
+                0.08000019839509356,
+                0.08000019839509356
+              ],
+              "target_activation_norm_deltas": [
+                -0.04558350637366004,
+                -0.04558350637366004
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0003921985626220703,
+                  "top1_margin_delta": -0.0002180039882659912,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0003921985626220703,
+                  "top1_margin_delta": -0.0002180039882659912,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "self_copy",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0,
+                0.0
+              ],
+              "written_cosine_with_current_T": [
+                null,
+                null
+              ],
+              "comma_probability_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_probability_deltas": [
+                0.0,
+                0.0
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.0,
+                0.0
+              ],
+              "actual_written_norms": [
+                0.0,
+                0.0
+              ],
+              "target_activation_norm_deltas": [
+                0.0,
+                0.0
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0,
+                  "top1_margin_delta": 0.0,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "radial_shrink",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653852066447122,
+                0.0009653852066447122
+              ],
+              "written_cosine_with_current_T": [
+                -0.9999999996683137,
+                -0.9999999996683137
+              ],
+              "comma_probability_deltas": [
+                -0.0002001046741603174,
+                -0.0002001046741603174
+              ],
+              "while_probability_deltas": [
+                2.7457111405858325e-06,
+                2.7457111405858325e-06
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.000728607177734375,
+                0.000728607177734375
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.000728607177734375,
+                -0.000728607177734375
+              ],
+              "actual_written_norms": [
+                0.0800001713128607,
+                0.0800001713128607
+              ],
+              "target_activation_norm_deltas": [
+                -0.08000017128625814,
+                -0.08000017128625814
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0009779930114746094,
+                  "top1_margin_delta": -0.0001681596040725708,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0009779930114746094,
+                  "top1_margin_delta": -0.0001681596040725708,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.000965384835513835,
+                0.000965384835513835
+              ],
+              "written_cosine_with_current_T": [
+                -0.6517114080007086,
+                -0.6517114080007086
+              ],
+              "comma_probability_deltas": [
+                -0.00026080391065480546,
+                -0.00026080391065480546
+              ],
+              "while_probability_deltas": [
+                1.8254346570519345e-05,
+                1.8254346570519345e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0019502639770507812,
+                0.0019502639770507812
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0019502639770507812,
+                -0.0019502639770507812
+              ],
+              "actual_written_norms": [
+                0.08000014055774497,
+                0.08000014055774497
+              ],
+              "target_activation_norm_deltas": [
+                -0.052114775858157714,
+                -0.052114775858157714
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0007779598236083984,
+                  "top1_margin_delta": -0.0003397911787033081,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0007779598236083984,
+                  "top1_margin_delta": -0.0003397911787033081,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "difference_positive",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653833132486508,
+                0.0009653833132486508
+              ],
+              "written_cosine_with_current_T": [
+                0.030600619278754432,
+                0.030600619278754432
+              ],
+              "comma_probability_deltas": [
+                -0.00018729676035089682,
+                -0.00018729676035089682
+              ],
+              "while_probability_deltas": [
+                1.778644998783052e-05,
+                1.778644998783052e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0017194747924804688,
+                0.0017194747924804688
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0017194747924804688,
+                -0.0017194747924804688
+              ],
+              "actual_written_norms": [
+                0.08000001440968026,
+                0.08000001440968026
+              ],
+              "target_activation_norm_deltas": [
+                0.00248662801482169,
+                0.00248662801482169
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0007114410400390625,
+                  "top1_margin_delta": -0.0001948326826095581,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0007114410400390625,
+                  "top1_margin_delta": -0.0001948326826095581,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "difference_negative",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653833164159957,
+                0.0009653833164159957
+              ],
+              "written_cosine_with_current_T": [
+                -0.030600619285322716,
+                -0.030600619285322716
+              ],
+              "comma_probability_deltas": [
+                0.00017880063929565093,
+                0.00017880063929565093
+              ],
+              "while_probability_deltas": [
+                -1.7630158846183852e-05,
+                -1.7630158846183852e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.0016870498657226562,
+                -0.0016870498657226562
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.0016870498657226562,
+                0.0016870498657226562
+              ],
+              "actual_written_norms": [
+                0.08000001467215387,
+                0.08000001467215387
+              ],
+              "target_activation_norm_deltas": [
+                -0.0024094696806287175,
+                -0.0024094696806287175
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.0006966590881347656,
+                  "top1_margin_delta": 0.00018046796321868896,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.0006966590881347656,
+                  "top1_margin_delta": 0.00018046796321868896,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common_negative",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653848659028322,
+                0.0009653848659028322
+              ],
+              "written_cosine_with_current_T": [
+                0.6517113963849874,
+                0.6517113963849874
+              ],
+              "comma_probability_deltas": [
+                0.00025388063670805927,
+                0.00025388063670805927
+              ],
+              "while_probability_deltas": [
+                -1.816379093661294e-05,
+                -1.816379093661294e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                -0.001926422119140625,
+                -0.001926422119140625
+              ],
+              "comma_minus_while_logit_deltas": [
+                0.001926422119140625,
+                0.001926422119140625
+              ],
+              "actual_written_norms": [
+                0.08000014307604023,
+                0.08000014307604023
+              ],
+              "target_activation_norm_deltas": [
+                0.05215920538958585,
+                0.05215920538958585
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.0007636547088623047,
+                  "top1_margin_delta": 0.0003292262554168701,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.0007636547088623047,
+                  "top1_margin_delta": 0.0003292262554168701,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common_parallel",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.000965385265843865,
+                0.000965385265843865
+              ],
+              "written_cosine_with_current_T": [
+                -0.9999999996684454,
+                -0.9999999996684454
+              ],
+              "comma_probability_deltas": [
+                -0.00019984815961088254,
+                -0.00019984815961088254
+              ],
+              "while_probability_deltas": [
+                2.7698651317124845e-06,
+                2.7698651317124845e-06
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0007295608520507812,
+                0.0007295608520507812
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0007295608520507812,
+                -0.0007295608520507812
+              ],
+              "actual_written_norms": [
+                0.08000017621861473,
+                0.08000017621861473
+              ],
+              "target_activation_norm_deltas": [
+                -0.08000017619201572,
+                -0.08000017619201572
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0009784698486328125,
+                  "top1_margin_delta": -0.00016739964485168457,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0009784698486328125,
+                  "top1_margin_delta": -0.00016739964485168457,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            },
+            {
+              "label": "common_orthogonal",
+              "raw_greedy_token_ids": [
+                11,
+                11
+              ],
+              "comma_probability_baseline": [
+                0.3697859607388371,
+                0.3697859607388371
+              ],
+              "while_probability_baseline": [
+                0.014656160666637743,
+                0.014656160666637743
+              ],
+              "target_activation_norm": 82.86865259817776,
+              "actual_write_over_target_norm": [
+                0.0009653796129404431,
+                0.0009653796129404431
+              ],
+              "written_cosine_with_current_T": [
+                -8.160139505007886e-06,
+                -8.160139505007886e-06
+              ],
+              "comma_probability_deltas": [
+                -0.00018007833177635657,
+                -0.00018007833177635657
+              ],
+              "while_probability_deltas": [
+                2.1866022096377405e-05,
+                2.1866022096377405e-05
+              ],
+              "comma_margin_vs_winner_deltas": [
+                0.0,
+                0.0
+              ],
+              "while_margin_vs_winner_deltas": [
+                0.0019779205322265625,
+                0.0019779205322265625
+              ],
+              "comma_minus_while_logit_deltas": [
+                -0.0019779205322265625,
+                -0.0019779205322265625
+              ],
+              "actual_written_norms": [
+                0.0799997077701249,
+                0.0799997077701249
+              ],
+              "target_activation_norm_deltas": [
+                3.796222601692989e-05,
+                3.796222601692989e-05
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.00020813941955566406,
+                  "top1_margin_delta": -0.00031404197216033936,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.00020813941955566406,
+                  "top1_margin_delta": -0.00031404197216033936,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false
+            }
+          ]
+        }
+      ],
+      "geometry": [
+        {
+          "surface": {
+            "surface_id": "s_resid_pre_l6_last",
+            "site": "resid_pre",
+            "layer": 6,
+            "cache_hook_name": "blocks.6.hook_resid_pre",
+            "caps": {
+              "max_alpha": 0.18,
+              "max_ttl_steps": 2,
+              "norm_clip": 1.5,
+              "step_size": 0.12,
+              "rank_cap": null,
+              "revertible_only": true
+            },
+            "alpha": 0.04,
+            "step_size": 0.08,
+            "norm_clip": 1.0
+          },
+          "geometry": {
+            "reference": "current_last_activation_not_semantic_basis",
+            "radial_coefficient": -0.5222539033481698,
+            "radial_direction": "shrink",
+            "common_displacement_norm": 66.407506642205,
+            "parallel_norm": 43.27847728460183,
+            "orthogonal_norm": 50.367949554857844,
+            "raw_reconstruction_error_norm": 0.0,
+            "parallel_orthogonal_dot": -8.952838470577262e-13
+          },
+          "controls": [
+            {
+              "label": "common_negative",
+              "source_displacement_norm": 66.40750636405333,
+              "source_rounding_error_vs_ideal_norm": 4.261771177732945e-06,
+              "actual_written_delta_norms": [
+                0.08000014307604023,
+                0.08000014307604023
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": -0.0007636547088623047,
+                  "top1_margin_delta": 0.0003292262554168701,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": -0.0007636547088623047,
+                  "top1_margin_delta": 0.0003292262554168701,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "common_parallel",
+              "source_displacement_norm": 43.27847645625471,
+              "source_rounding_error_vs_ideal_norm": 1.734265059631704e-06,
+              "actual_written_delta_norms": [
+                0.08000017621861473,
+                0.08000017621861473
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.0009784698486328125,
+                  "top1_margin_delta": -0.00016739964485168457,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.0009784698486328125,
+                  "top1_margin_delta": -0.00016739964485168457,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            },
+            {
+              "label": "common_orthogonal",
+              "source_displacement_norm": 50.367949485834494,
+              "source_rounding_error_vs_ideal_norm": 3.4626473097672675e-06,
+              "actual_written_delta_norms": [
+                0.0799997077701249,
+                0.0799997077701249
+              ],
+              "safety_deltas": [
+                {
+                  "entropy_delta": 0.00020813941955566406,
+                  "top1_margin_delta": -0.00031404197216033936,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                },
+                {
+                  "entropy_delta": 0.00020813941955566406,
+                  "top1_margin_delta": -0.00031404197216033936,
+                  "repeat_flag_delta": 0.0,
+                  "repetition_score_delta": 0.0
+                }
+              ],
+              "collapse_sharpening_signal": false,
+              "production_apply_allowed": false
+            }
+          ]
+        }
+      ],
+      "diagnostic_budget_used": 12,
+      "condition_replays": 40,
+      "captured_packet_preparation_forwards": 0,
+      "actual_forwards": {
+        "attempted": 42,
+        "completed": 42
+      }
+    }
+  },
+  "production_apply_allowed": false,
+  "controller_calls": 0,
+  "cross_model_causal_attribution": false,
+  "task_success_evaluated": false,
+  "scope": "within_model_normal_cap_readout_diagnostics_not_component_contribution_percentages",
+  "same_visible_prefix": " Nora will take the sample to Ivo"
+}

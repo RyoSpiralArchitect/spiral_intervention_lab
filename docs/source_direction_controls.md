@@ -105,10 +105,14 @@ preferentially raises one observed token, and it changes the actual token choice
 Only the first two have limited within-boundary evidence here. Task success,
 ownership, semantic safety and production certification remain unestablished.
 
-A next bounded question is whether common's advantage remains after separating
+A next bounded question was whether common's advantage remains after separating
 its radial component relative to the current activation, alongside a negative
-common control. That is not yet executed or authorized as an expanded sweep;
-this run did not raise caps, rotate sites or search for a favorable permutation.
+common control. This run did not raise caps, rotate sites or search for a favorable
+permutation. The later [radial follow-up](source_common_radial.md) now provides
+diagnostic DSL/cards and a completed authorized retry: at this Llama boundary,
+parallel shrink lowers comma probability and the orthogonal component raises it.
+The separate GPT-2 fixed-text-prefill comparison differs. These observations do
+not establish additive mediation, general semantic ownership or task success.
 
 Retained [summary](../results/source_direction_controls_cpu32_20261024/summary.json),
 [full receipt](../results/source_direction_controls_cpu32_20261024/cpu32/measurement/trajectory.json),

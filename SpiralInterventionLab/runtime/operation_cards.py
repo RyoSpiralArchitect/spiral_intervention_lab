@@ -14,6 +14,9 @@ from typing import Any
 
 
 DIAGNOSTICS = {
+    "source_common_radial_probe": (
+        "Measure a current-state radial/nonradial component using existing blend DSL; not an apply certificate",
+        "geometric_component_readout_and_safety_evidence"),
     "source_clause_activation_patch_probe": (
         "Measure a source-bound structure token patch under normal caps; not clause rescue or apply permission",
         "repeated_one_token_effect_and_cross_token_response"),
@@ -93,6 +96,8 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
                 or (candidate or {}).get("objective_bundle_key"),
             "candidate_id": (candidate or {}).get("candidate_id"),
             "target_piece": (candidate or {}).get("target_piece"),
+            **({"component_recipe_id": request["component_recipe_id"],
+                "dsl_formula": (candidate or {}).get("dsl_formula")} if request.get("component_recipe_id") else {}),
             **({"probe_terms": request["terms"]} if request.get("probe_refresh_id") else {}),
             "purpose": purpose, "prerequisites": prerequisites,
             "available": available, "blocked_reason": blocked,
@@ -122,9 +127,9 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
             prerequisites=["offered_by_runtime", "current_request_preflight_at_dispatch"],
             available=item.get("available") is not False and not item.get("blocked_reason"),
             blocked=item.get("blocked_reason"), slots=0 if name == "inspect_evidence" else 1,
-            candidate={"target_piece": item.get("target_piece")} if name == "source_clause_activation_patch_probe" else None,
+            candidate={"target_piece": item.get("target_piece"), "dsl_formula": item.get("dsl_formula")},
             replays=1 if name == "source_clause_structure_probe" else
-                item.get("physical_replays_upper_bound") if name == "source_clause_activation_patch_probe" else
+                item.get("physical_replays_upper_bound") if name in {"source_clause_activation_patch_probe", "source_common_radial_probe"} else
                 0 if name in {"inspect_evidence", "entity_insertion_operator_candidate_review"} else None)
 
     choices = hints.get("candidate_diagnostic_choices") or {}
