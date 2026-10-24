@@ -183,8 +183,11 @@ be a new intervention experiment, not a conclusion licensed by cosine alone.
 
 The [2026-10-23 component follow-up](source_response_components.md) now tests this
 under the same caps. Its MPS result separates relative token preference from
-shared probability lift, without changing the greedy token. CPU replication is
-resource-blocked; the component experiment is not yet numerically replicated.
+shared probability lift, without changing the greedy token. CPU replication was
+resource-blocked on October 23; the October 24 follow-up in that note completed
+CPU32 replication. Backend and dtype remain confounded. The later
+[adjacent-boundary audit](source_choice_boundary.md) separates relative contrast
+from the unchanged full-vocabulary greedy winner.
 
 Artifacts:
 

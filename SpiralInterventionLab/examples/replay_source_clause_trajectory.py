@@ -55,6 +55,17 @@ def verify_reference(worker: Any, reference: dict, token_ids: list[int]) -> dict
     return _verify_source_bindings(worker, reference, token_ids)
 
 
+def verify_reference_provenance(reference: dict, manifest: dict,
+                                source_sha256: str, manifest_sha256: str) -> None:
+    """Bind both replay modes to the same checkpoint and recorded experiment."""
+    if (reference.get("source_jsonl_sha256") != source_sha256
+            or reference.get("source_manifest_sha256") != manifest_sha256):
+        raise ValueError("reference_source_hashes_differ")
+    checkpoint = manifest.get("checkpoint_sha256")
+    if not checkpoint or reference.get("checkpoint_sha256_verified") != checkpoint:
+        raise ValueError("reference_checkpoint_identity_missing_or_different")
+
+
 def next_boundary_plan(reference: dict, prefixes: dict, position: int,
                        source_sha256: str, manifest_sha256: str) -> dict:
     if reference.get("status") != "complete" or len(reference.get("measurements", [])) != 1:
@@ -111,6 +122,8 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("position not present in the recorded trajectory")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     reference = json.loads(reference_path.read_text(encoding="utf-8"))
+    verify_reference_provenance(reference, manifest, hashlib.sha256(source_path.read_bytes()).hexdigest(),
+                                hashlib.sha256(manifest_path.read_bytes()).hexdigest())
     boundary = next_boundary_plan(
         reference, prefixes, args.position, hashlib.sha256(source_path.read_bytes()).hexdigest(),
         hashlib.sha256(manifest_path.read_bytes()).hexdigest()) if args.next_natural_boundary else None

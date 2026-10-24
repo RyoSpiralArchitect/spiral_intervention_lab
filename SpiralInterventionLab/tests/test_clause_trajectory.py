@@ -201,6 +201,24 @@ def test_cli_rejects_unspecified_pair_without_loading_a_model():
     assert exc.value.code == 2
 
 
+@pytest.mark.parametrize("change", [None, "source", "manifest", "checkpoint", "missing_checkpoint"])
+def test_reference_provenance_requires_same_inputs_and_checkpoint(change):
+    reference = {"source_jsonl_sha256": "source", "source_manifest_sha256": "manifest",
+                 "checkpoint_sha256_verified": {"model": "original"}}
+    manifest = {"checkpoint_sha256": {"model": "original"}}
+    if change in {"source", "manifest"}:
+        reference["source_jsonl_sha256" if change == "source" else "source_manifest_sha256"] = "other"
+    elif change == "checkpoint":
+        manifest["checkpoint_sha256"]["model"] = "other"
+    elif change == "missing_checkpoint":
+        reference.pop("checkpoint_sha256_verified")
+    if change:
+        with pytest.raises(ValueError):
+            cli.verify_reference_provenance(reference, manifest, "source", "manifest")
+    else:
+        cli.verify_reference_provenance(reference, manifest, "source", "manifest")
+
+
 @pytest.mark.parametrize("change", [None, "position", "prefix", "source", "manifest", "incomplete"])
 def test_adjacent_boundary_plan_is_explicit_and_source_bound(change):
     reference = {"status": "complete", "source_jsonl_sha256": "source", "source_manifest_sha256": "manifest",
@@ -293,7 +311,12 @@ def test_cli_partial_failure_saves_failed_receipt_counts_and_restores_wrappers(t
                  "cache_alignment": {"tokens_identity": tensor_identity(worker._current_token_tensor())},
                  "measurements": [{"prefix": worker.final_text(), "operator_measurements": [
                      {"result": {"status": "ok", "candidate_binding": c}} for c in candidates]}]}
-    manifest = {"profile": {"task": "test", "seed": 0, "worker_model": "test"}}
+    manifest = {"profile": {"task": "test", "seed": 0, "worker_model": "test"},
+                "checkpoint_sha256": {"model": "test"}}
+    import hashlib
+    reference.update(source_jsonl_sha256=hashlib.sha256(json.dumps({}).encode()).hexdigest(),
+                     source_manifest_sha256=hashlib.sha256(json.dumps(manifest).encode()).hexdigest(),
+                     checkpoint_sha256_verified=manifest["checkpoint_sha256"])
     for name, value in [("reference.json", reference), ("manifest.json", manifest), ("source.jsonl", {})]:
         (tmp_path / name).write_text(json.dumps(value))
     monkeypatch.setattr(cli, "source_prefixes", lambda _: ("pac", {1: worker.final_text()}))
