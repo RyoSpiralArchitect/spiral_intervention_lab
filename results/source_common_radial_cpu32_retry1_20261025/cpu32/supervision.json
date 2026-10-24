@@ -1,0 +1,466 @@
+{
+  "started_at_utc": "2026-10-24T21:00:20.622553+00:00",
+  "command": [
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "-u",
+    "-m",
+    "SpiralInterventionLab.examples.replay_source_clause_trajectory",
+    "--source-jsonl",
+    "results/entity_probe_refresh_llama_20261014_retry1/live/c1.jsonl",
+    "--source-manifest",
+    "results/entity_probe_refresh_llama_20261014_retry1/manifest.json",
+    "--reference-receipt",
+    "results/source_clause_specificity_llama_20261021_aligned/specificity.json",
+    "--worker-model-path",
+    "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/llama-3.2-3b",
+    "--position",
+    "8",
+    "--source-token-ids",
+    "11,1418",
+    "--decompose-components",
+    "--radial-component-controls",
+    "--device",
+    "cpu",
+    "--dtype",
+    "float32",
+    "--torch-threads",
+    "4",
+    "--output-dir",
+    "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_common_radial_cpu32_retry1_20261025/cpu32/measurement"
+  ],
+  "wall_time_limit_seconds": 900,
+  "start_free_disk_gib": 32,
+  "stop_free_disk_gib": 16,
+  "preflight_free_disk_gib": 53.398014068603516,
+  "status": "complete",
+  "resource_samples": [
+    {
+      "seconds": 0.0,
+      "free_disk_gib": 53.4,
+      "swap": "total = 5120.00M  used = 3555.06M  free = 1564.94M  (encrypted)"
+    },
+    {
+      "seconds": 10.01,
+      "free_disk_gib": 53.4,
+      "swap": "total = 5120.00M  used = 3555.06M  free = 1564.94M  (encrypted)"
+    },
+    {
+      "seconds": 20.01,
+      "free_disk_gib": 53.39,
+      "swap": "total = 5120.00M  used = 3555.06M  free = 1564.94M  (encrypted)"
+    },
+    {
+      "seconds": 30.02,
+      "free_disk_gib": 50.39,
+      "swap": "total = 8192.00M  used = 7706.00M  free = 486.00M  (encrypted)"
+    },
+    {
+      "seconds": 40.05,
+      "free_disk_gib": 48.39,
+      "swap": "total = 10240.00M  used = 9408.19M  free = 831.81M  (encrypted)"
+    },
+    {
+      "seconds": 50.48,
+      "free_disk_gib": 46.38,
+      "swap": "total = 12288.00M  used = 11302.88M  free = 985.12M  (encrypted)"
+    },
+    {
+      "seconds": 60.49,
+      "free_disk_gib": 46.38,
+      "swap": "total = 12288.00M  used = 11482.38M  free = 805.62M  (encrypted)"
+    },
+    {
+      "seconds": 70.5,
+      "free_disk_gib": 45.38,
+      "swap": "total = 13312.00M  used = 12812.25M  free = 499.75M  (encrypted)"
+    },
+    {
+      "seconds": 80.66,
+      "free_disk_gib": 44.4,
+      "swap": "total = 14336.00M  used = 13962.19M  free = 373.81M  (encrypted)"
+    },
+    {
+      "seconds": 90.67,
+      "free_disk_gib": 42.49,
+      "swap": "total = 15360.00M  used = 15132.00M  free = 228.00M  (encrypted)"
+    },
+    {
+      "seconds": 100.69,
+      "free_disk_gib": 42.4,
+      "swap": "total = 16384.00M  used = 16077.69M  free = 306.31M  (encrypted)"
+    },
+    {
+      "seconds": 110.7,
+      "free_disk_gib": 40.4,
+      "swap": "total = 18432.00M  used = 17029.88M  free = 1402.12M  (encrypted)"
+    },
+    {
+      "seconds": 120.71,
+      "free_disk_gib": 44.4,
+      "swap": "total = 14336.00M  used = 11847.38M  free = 2488.62M  (encrypted)"
+    },
+    {
+      "seconds": 130.72,
+      "free_disk_gib": 47.4,
+      "swap": "total = 11264.00M  used = 9852.69M  free = 1411.31M  (encrypted)"
+    },
+    {
+      "seconds": 140.72,
+      "free_disk_gib": 48.4,
+      "swap": "total = 10240.00M  used = 8811.12M  free = 1428.88M  (encrypted)"
+    },
+    {
+      "seconds": 150.73,
+      "free_disk_gib": 48.39,
+      "swap": "total = 10240.00M  used = 8587.12M  free = 1652.88M  (encrypted)"
+    },
+    {
+      "seconds": 160.74,
+      "free_disk_gib": 48.39,
+      "swap": "total = 10240.00M  used = 8539.12M  free = 1700.88M  (encrypted)"
+    },
+    {
+      "seconds": 170.75,
+      "free_disk_gib": 48.39,
+      "swap": "total = 10240.00M  used = 8523.12M  free = 1716.88M  (encrypted)"
+    },
+    {
+      "seconds": 180.76,
+      "free_disk_gib": 49.38,
+      "swap": "total = 9216.00M  used = 8452.06M  free = 763.94M  (encrypted)"
+    },
+    {
+      "seconds": 190.77,
+      "free_disk_gib": 49.33,
+      "swap": "total = 9216.00M  used = 8751.88M  free = 464.12M  (encrypted)"
+    },
+    {
+      "seconds": 200.78,
+      "free_disk_gib": 49.3,
+      "swap": "total = 9216.00M  used = 8695.88M  free = 520.12M  (encrypted)"
+    },
+    {
+      "seconds": 210.83,
+      "free_disk_gib": 48.27,
+      "swap": "total = 10240.00M  used = 9359.19M  free = 880.81M  (encrypted)"
+    },
+    {
+      "seconds": 220.86,
+      "free_disk_gib": 48.28,
+      "swap": "total = 10240.00M  used = 9087.12M  free = 1152.88M  (encrypted)"
+    },
+    {
+      "seconds": 230.87,
+      "free_disk_gib": 48.29,
+      "swap": "total = 10240.00M  used = 8987.75M  free = 1252.25M  (encrypted)"
+    },
+    {
+      "seconds": 240.89,
+      "free_disk_gib": 47.3,
+      "swap": "total = 11264.00M  used = 9830.69M  free = 1433.31M  (encrypted)"
+    },
+    {
+      "seconds": 250.95,
+      "free_disk_gib": 48.28,
+      "swap": "total = 10240.00M  used = 9047.06M  free = 1192.94M  (encrypted)"
+    },
+    {
+      "seconds": 260.96,
+      "free_disk_gib": 47.27,
+      "swap": "total = 11264.00M  used = 9937.31M  free = 1326.69M  (encrypted)"
+    },
+    {
+      "seconds": 270.97,
+      "free_disk_gib": 48.24,
+      "swap": "total = 10240.00M  used = 8888.44M  free = 1351.56M  (encrypted)"
+    },
+    {
+      "seconds": 280.99,
+      "free_disk_gib": 48.24,
+      "swap": "total = 10240.00M  used = 9505.38M  free = 734.62M  (encrypted)"
+    },
+    {
+      "seconds": 291.0,
+      "free_disk_gib": 48.24,
+      "swap": "total = 10240.00M  used = 9065.19M  free = 1174.81M  (encrypted)"
+    },
+    {
+      "seconds": 301.08,
+      "free_disk_gib": 48.23,
+      "swap": "total = 10240.00M  used = 9416.38M  free = 823.62M  (encrypted)"
+    },
+    {
+      "seconds": 311.17,
+      "free_disk_gib": 47.21,
+      "swap": "total = 11264.00M  used = 9688.50M  free = 1575.50M  (encrypted)"
+    },
+    {
+      "seconds": 321.18,
+      "free_disk_gib": 48.18,
+      "swap": "total = 10240.00M  used = 8942.12M  free = 1297.88M  (encrypted)"
+    },
+    {
+      "seconds": 331.2,
+      "free_disk_gib": 47.18,
+      "swap": "total = 11264.00M  used = 9757.44M  free = 1506.56M  (encrypted)"
+    },
+    {
+      "seconds": 341.21,
+      "free_disk_gib": 48.16,
+      "swap": "total = 10240.00M  used = 9447.94M  free = 792.06M  (encrypted)"
+    },
+    {
+      "seconds": 351.22,
+      "free_disk_gib": 48.16,
+      "swap": "total = 10240.00M  used = 9367.94M  free = 872.06M  (encrypted)"
+    },
+    {
+      "seconds": 361.23,
+      "free_disk_gib": 47.22,
+      "swap": "total = 10240.00M  used = 10120.69M  free = 119.31M  (encrypted)"
+    },
+    {
+      "seconds": 371.26,
+      "free_disk_gib": 47.1,
+      "swap": "total = 11264.00M  used = 9654.38M  free = 1609.62M  (encrypted)"
+    },
+    {
+      "seconds": 381.27,
+      "free_disk_gib": 47.09,
+      "swap": "total = 11264.00M  used = 9749.44M  free = 1514.56M  (encrypted)"
+    },
+    {
+      "seconds": 391.29,
+      "free_disk_gib": 48.06,
+      "swap": "total = 10240.00M  used = 9371.06M  free = 868.94M  (encrypted)"
+    },
+    {
+      "seconds": 401.32,
+      "free_disk_gib": 48.03,
+      "swap": "total = 10240.00M  used = 9315.06M  free = 924.94M  (encrypted)"
+    },
+    {
+      "seconds": 411.32,
+      "free_disk_gib": 47.03,
+      "swap": "total = 11264.00M  used = 9655.81M  free = 1608.19M  (encrypted)"
+    },
+    {
+      "seconds": 421.34,
+      "free_disk_gib": 47.01,
+      "swap": "total = 11264.00M  used = 10021.00M  free = 1243.00M  (encrypted)"
+    },
+    {
+      "seconds": 431.38,
+      "free_disk_gib": 47.96,
+      "swap": "total = 10240.00M  used = 9348.06M  free = 891.94M  (encrypted)"
+    },
+    {
+      "seconds": 441.4,
+      "free_disk_gib": 47.94,
+      "swap": "total = 10240.00M  used = 9203.56M  free = 1036.44M  (encrypted)"
+    },
+    {
+      "seconds": 451.41,
+      "free_disk_gib": 47.94,
+      "swap": "total = 10240.00M  used = 9155.56M  free = 1084.44M  (encrypted)"
+    },
+    {
+      "seconds": 461.42,
+      "free_disk_gib": 46.91,
+      "swap": "total = 11264.00M  used = 9882.75M  free = 1381.25M  (encrypted)"
+    },
+    {
+      "seconds": 471.43,
+      "free_disk_gib": 46.92,
+      "swap": "total = 11264.00M  used = 9873.38M  free = 1390.62M  (encrypted)"
+    },
+    {
+      "seconds": 481.44,
+      "free_disk_gib": 46.9,
+      "swap": "total = 11264.00M  used = 9729.38M  free = 1534.62M  (encrypted)"
+    },
+    {
+      "seconds": 491.45,
+      "free_disk_gib": 46.9,
+      "swap": "total = 11264.00M  used = 9673.25M  free = 1590.75M  (encrypted)"
+    },
+    {
+      "seconds": 501.46,
+      "free_disk_gib": 47.9,
+      "swap": "total = 10240.00M  used = 9732.56M  free = 507.44M  (encrypted)"
+    },
+    {
+      "seconds": 511.49,
+      "free_disk_gib": 47.9,
+      "swap": "total = 10240.00M  used = 9584.19M  free = 655.81M  (encrypted)"
+    },
+    {
+      "seconds": 521.5,
+      "free_disk_gib": 47.87,
+      "swap": "total = 10240.00M  used = 9677.12M  free = 562.88M  (encrypted)"
+    },
+    {
+      "seconds": 531.51,
+      "free_disk_gib": 47.85,
+      "swap": "total = 10240.00M  used = 9533.12M  free = 706.88M  (encrypted)"
+    },
+    {
+      "seconds": 541.52,
+      "free_disk_gib": 47.84,
+      "swap": "total = 10240.00M  used = 9277.12M  free = 962.88M  (encrypted)"
+    },
+    {
+      "seconds": 551.53,
+      "free_disk_gib": 47.83,
+      "swap": "total = 10240.00M  used = 9714.88M  free = 525.12M  (encrypted)"
+    },
+    {
+      "seconds": 561.54,
+      "free_disk_gib": 47.61,
+      "swap": "total = 10240.00M  used = 10064.75M  free = 175.25M  (encrypted)"
+    },
+    {
+      "seconds": 571.97,
+      "free_disk_gib": 46.82,
+      "swap": "total = 11264.00M  used = 9701.00M  free = 1563.00M  (encrypted)"
+    },
+    {
+      "seconds": 581.98,
+      "free_disk_gib": 46.82,
+      "swap": "total = 11264.00M  used = 9597.00M  free = 1667.00M  (encrypted)"
+    },
+    {
+      "seconds": 591.99,
+      "free_disk_gib": 47.8,
+      "swap": "total = 10240.00M  used = 9739.62M  free = 500.38M  (encrypted)"
+    },
+    {
+      "seconds": 602.0,
+      "free_disk_gib": 45.79,
+      "swap": "total = 12288.00M  used = 11454.94M  free = 833.06M  (encrypted)"
+    },
+    {
+      "seconds": 612.02,
+      "free_disk_gib": 45.79,
+      "swap": "total = 12288.00M  used = 10891.12M  free = 1396.88M  (encrypted)"
+    },
+    {
+      "seconds": 622.05,
+      "free_disk_gib": 47.77,
+      "swap": "total = 10240.00M  used = 9760.62M  free = 479.38M  (encrypted)"
+    },
+    {
+      "seconds": 632.15,
+      "free_disk_gib": 47.76,
+      "swap": "total = 10240.00M  used = 9740.69M  free = 499.31M  (encrypted)"
+    },
+    {
+      "seconds": 642.15,
+      "free_disk_gib": 47.76,
+      "swap": "total = 10240.00M  used = 9452.69M  free = 787.31M  (encrypted)"
+    },
+    {
+      "seconds": 652.16,
+      "free_disk_gib": 47.75,
+      "swap": "total = 10240.00M  used = 9364.69M  free = 875.31M  (encrypted)"
+    },
+    {
+      "seconds": 662.17,
+      "free_disk_gib": 47.73,
+      "swap": "total = 10240.00M  used = 9428.88M  free = 811.12M  (encrypted)"
+    },
+    {
+      "seconds": 672.18,
+      "free_disk_gib": 46.71,
+      "swap": "total = 11264.00M  used = 9925.00M  free = 1339.00M  (encrypted)"
+    },
+    {
+      "seconds": 682.19,
+      "free_disk_gib": 47.7,
+      "swap": "total = 10240.00M  used = 9468.75M  free = 771.25M  (encrypted)"
+    },
+    {
+      "seconds": 692.2,
+      "free_disk_gib": 46.7,
+      "swap": "total = 11264.00M  used = 9922.94M  free = 1341.06M  (encrypted)"
+    },
+    {
+      "seconds": 702.22,
+      "free_disk_gib": 44.69,
+      "swap": "total = 13312.00M  used = 12758.50M  free = 553.50M  (encrypted)"
+    },
+    {
+      "seconds": 712.23,
+      "free_disk_gib": 44.67,
+      "swap": "total = 13312.00M  used = 12735.12M  free = 576.88M  (encrypted)"
+    },
+    {
+      "seconds": 722.26,
+      "free_disk_gib": 44.6,
+      "swap": "total = 13312.00M  used = 12883.56M  free = 428.44M  (encrypted)"
+    },
+    {
+      "seconds": 732.28,
+      "free_disk_gib": 43.58,
+      "swap": "total = 14336.00M  used = 12835.00M  free = 1501.00M  (encrypted)"
+    },
+    {
+      "seconds": 742.29,
+      "free_disk_gib": 45.54,
+      "swap": "total = 12288.00M  used = 11479.62M  free = 808.38M  (encrypted)"
+    },
+    {
+      "seconds": 752.31,
+      "free_disk_gib": 45.54,
+      "swap": "total = 12288.00M  used = 11473.69M  free = 814.31M  (encrypted)"
+    },
+    {
+      "seconds": 762.33,
+      "free_disk_gib": 47.54,
+      "swap": "total = 10240.00M  used = 9354.31M  free = 885.69M  (encrypted)"
+    },
+    {
+      "seconds": 772.34,
+      "free_disk_gib": 45.54,
+      "swap": "total = 12288.00M  used = 11387.19M  free = 900.81M  (encrypted)"
+    },
+    {
+      "seconds": 782.38,
+      "free_disk_gib": 44.54,
+      "swap": "total = 13312.00M  used = 12603.75M  free = 708.25M  (encrypted)"
+    },
+    {
+      "seconds": 792.4,
+      "free_disk_gib": 44.54,
+      "swap": "total = 13312.00M  used = 11613.88M  free = 1698.12M  (encrypted)"
+    },
+    {
+      "seconds": 802.44,
+      "free_disk_gib": 46.54,
+      "swap": "total = 11264.00M  used = 10078.50M  free = 1185.50M  (encrypted)"
+    },
+    {
+      "seconds": 812.47,
+      "free_disk_gib": 46.54,
+      "swap": "total = 11264.00M  used = 10094.50M  free = 1169.50M  (encrypted)"
+    },
+    {
+      "seconds": 822.48,
+      "free_disk_gib": 46.54,
+      "swap": "total = 11264.00M  used = 10732.69M  free = 531.31M  (encrypted)"
+    },
+    {
+      "seconds": 832.5,
+      "free_disk_gib": 46.52,
+      "swap": "total = 11264.00M  used = 9844.69M  free = 1419.31M  (encrypted)"
+    }
+  ],
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "implicit_retries": 0,
+  "selection_not_adaptive": true,
+  "child_pid": 25164,
+  "returncode": 0,
+  "elapsed_seconds": 842.52,
+  "final_free_disk_gib": 47.52
+}

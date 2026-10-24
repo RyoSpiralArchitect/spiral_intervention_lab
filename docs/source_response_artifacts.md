@@ -1,6 +1,6 @@
 # Published source-response evidence
 
-The source-response PR publishes code, research notes, measurement JSON,
+The source-response work publishes code, research notes, measurement JSON,
 resource receipts, source snapshots, analysis scripts and checksum inventories
 for the following experiments:
 
@@ -9,13 +9,25 @@ for the following experiments:
 - `results/source_clause_components_20261023/`
 - `results/source_clause_components_cpu32_20261024/`
 - `results/source_clause_choice_boundary9_cpu32_20261024/`
+- `results/source_direction_controls_cpu32_20261024/` (fixed-coordinate follow-up)
+- `results/source_common_radial_cpu32_20261025/` (preserved incomplete attempt)
+- `results/source_common_radial_cpu32_retry1_20261025/` (authorized completed Llama retry)
+- `results/source_common_radial_gpt2_cpu32_20261025/` (completed fixed-text GPT-2 prefill)
+- `results/source_common_radial_comparison_20261025/` (offline paired analysis)
 
 Raw `vectors_*.pt` tensors remain retained locally, unchanged, and are **not
 included in Git**. The full `SHA256SUMS` inventories preserve their identities;
 checking those inventories on a fresh clone will report missing local artifacts.
-`PUBLISHED_SHA256SUMS` covers only the files published in this PR and can be
+`PUBLISHED_SHA256SUMS` covers only each experiment's published file subset and can be
 checked from the repository root. Neither inventory is a signature or independent
 attestation.
+
+The completed radial retry and GPT-2 experiments' `source_snapshot.tgz` archives
+also remain local and are excluded from their `PUBLISHED_SHA256SUMS`. The earlier
+experiments, including the incomplete radial attempt, publish the code snapshots
+listed in their own inventories. Do not infer availability from the full local
+inventory. Ignored analysis/run logs named in the published inventory are included
+explicitly, so the published subset verifies on a fresh clone.
 
 JSON receipts contain per-vector hashes and the derived measurements. Analysis
 scripts require the retained tensors to rederive those measurements; the JSON

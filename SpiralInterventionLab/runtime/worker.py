@@ -18,6 +18,7 @@ from . import entity_candidate_review as entity_review
 from . import entity_probe_refresh as entity_refresh
 from . import clause_structure
 from . import clause_actuation
+from . import clause_radial
 from . import candidate_actions
 from . import candidate_handoff
 from . import diagnostic_budget
@@ -121,6 +122,7 @@ _CONTROLLER_TOOL_NAMES = {"tokenize_terms", "constraint_scorer", "dry_run_decode
 _CONTROLLER_DIAGNOSTIC_NAMES = {
     clause_structure.NAME,
     clause_actuation.NAME,
+    clause_radial.NAME,
     "inspect_evidence",
     "matched_response_probe",
     "candidate_action",
@@ -538,7 +540,7 @@ def _normalize_controller_diagnostic_request(value: Any) -> dict[str, Any] | Non
     if diagnostic_name is None:
         return None
     normalized: dict[str, Any] = {"diagnostic": diagnostic_name}
-    for key in ("execution_id", "evidence_id", "action_id", "structure_context_id", "structure_operator_id"):
+    for key in ("execution_id", "evidence_id", "action_id", "structure_context_id", "structure_operator_id", "component_recipe_id"):
         if isinstance(value.get(key), str):
             normalized[key] = value[key][:160]
     for key in ("dose_grid", "candidate_ids", "limit", "comparison_axis"):
@@ -8505,6 +8507,19 @@ class HookedTransformerWorkerRuntime:
                     })
                 else:
                     _block_next_diagnostic(candidate["request"], reason="already_attempted_at_context")
+            components = clause_radial.offer(self)
+            hints["source_common_radial"] = components
+            for recipe in components["recipes"]:
+                if recipe["available"]:
+                    hints.setdefault("available_next_diagnostics", []).append({
+                        "diagnostic": clause_radial.NAME, "request": recipe["request"],
+                        "component": recipe["component"], "dsl_formula": recipe["dsl_formula"],
+                        "physical_replays_upper_bound": recipe["physical_replays_upper_bound"],
+                        "reason": "bounded_current_state_component_comparison_not_ownership",
+                        "permission": "diagnostic_only", "production_apply_allowed": False,
+                    })
+                else:
+                    _block_next_diagnostic(recipe["request"], reason=recipe["blocked_reason"])
         return hints
 
     def _latest_tokenize_terms_result(self) -> Mapping[str, Any]:
@@ -12608,6 +12623,8 @@ class HookedTransformerWorkerRuntime:
             return clause_structure.execute(self, request, source=source)
         if diagnostic_name == clause_actuation.NAME:
             return clause_actuation.execute(self, request, source=source)
+        if diagnostic_name == clause_radial.NAME:
+            return clause_radial.execute(self, request, source=source)
         if diagnostic_name == "inspect_evidence":
             return {"diagnostic": diagnostic_name, "step": self._steps, "source": source,
                     **inspect_evidence(self, request, strategy_hints)}

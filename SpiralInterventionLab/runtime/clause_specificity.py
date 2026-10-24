@@ -1,4 +1,4 @@
-"""Offline-only controls for source-clause patches, with no new operation cards."""
+"""Bounded expression controls for source-clause patches, without apply authority."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -13,6 +13,11 @@ from .response_probe import identity, state_identity, tensor_identity
 
 
 CONTROL_KINDS = ("self_copy", "radial_shrink")
+
+
+def expression_control_id(kind: str, anchor: Mapping[str, Any], expressions: Sequence[dict]) -> str:
+    binding = {k: v for k, v in anchor.items() if k not in {"available", "request"}}
+    return identity("clause-control:", [kind, binding, expressions])
 
 
 def align_cache(worker: Any) -> dict[str, Any]:
@@ -52,10 +57,12 @@ def measure_control(worker: Any, kind: str) -> dict[str, Any]:
 
 
 def measure_expression_control(worker: Any, kind: str, anchor: Mapping[str, Any],
-                               expressions: Sequence[dict[str, Any]]) -> dict[str, Any]:
-    """Offline-only expression control, validated against current sites and normal policy.
+                               expressions: Sequence[dict[str, Any]], *,
+                               charge_budget: bool = True) -> dict[str, Any]:
+    """Expression control validated against current sites and normal policy.
 
-    No controller offer, frozen candidate, or production certificate is created.
+    Controller dispatch owns accounting when charge_budget is false. No frozen
+    candidate or production certificate is created here.
     These controls have no intended token owner; report the full structural readout.
     """
     offered = clause_actuation.offer(worker)
@@ -79,7 +86,7 @@ def measure_expression_control(worker: Any, kind: str, anchor: Mapping[str, Any]
                for c in offered["candidates"]]
     if anchor not in current or len(expressions) != len(anchor["surfaces"]):
         return {**report, "blocked_reason": "unknown_or_stale_control_binding"}
-    control_id = identity("clause-control:", [kind, anchor, expressions])
+    control_id = expression_control_id(kind, anchor, expressions)
     report["control_id"] = control_id
     attempted = getattr(worker, "_clause_patch_attempted_ids", set())
     if control_id in attempted:
@@ -106,8 +113,9 @@ def measure_expression_control(worker: Any, kind: str, anchor: Mapping[str, Any]
         report.update(blocked_reason="normal_cap_preflight_failed", error=str(exc))
     else:
         worker._clause_patch_attempted_ids = attempted | {control_id}
-        report["diagnostic_budget_before"] = diagnostic_budget.left(worker)
-        worker._diagnostic_calls_used = diagnostic_budget.used(worker) + 1
+        if charge_budget:
+            report["diagnostic_budget_before"] = diagnostic_budget.left(worker)
+            worker._diagnostic_calls_used = diagnostic_budget.used(worker) + 1
         report["diagnostic_call_cost"] = 1
         report["physical_replays_upper_bound"] = 2 + 2 * len(prepared)
 
@@ -150,7 +158,8 @@ def measure_expression_control(worker: Any, kind: str, anchor: Mapping[str, Any]
             report["status"] = "ok"
         except Exception as exc:
             report.update(status="error", error=str(exc))
-        report["diagnostic_budget_after"] = diagnostic_budget.left(worker)
+        if charge_budget:
+            report["diagnostic_budget_after"] = diagnostic_budget.left(worker)
     report["state_restored"] = before == state_identity(worker) and step == worker._steps
     report["caps_unchanged"] = caps == repr(worker.surface_catalog)
     if not report["state_restored"] or not report["caps_unchanged"]:

@@ -1,0 +1,66 @@
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+[Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+[🌀] [OK] PyTorch Turbo active (MPS available, explicit device mode)
+[🌀] [OK] torch default device → MPS auto (factory funcs)
+[🌀] [OK] HF/safetensors load guard auto (large CPU load → MPS restore)
+[🌀] [OK] mlx_lm.generate → AutoRouter (native + greedy-short MegaMax)
+{
+  "status": "verified_completed_subset_only",
+  "experiment_complete": false,
+  "stop_reason": "time_limit",
+  "elapsed_seconds": 903.48,
+  "supervision_sha256": "f76ae94d71599412e4473d2c97123740605bc13253182a52c780cd9bc8bdb71e",
+  "receipt_sha256": "49910f67822c96a37e6c30247872b1d90a716e12eb341902614eb17721939ef3",
+  "completed_conditions": [
+    "source:11",
+    "source:1418",
+    "self_copy",
+    "radial_shrink",
+    "common"
+  ],
+  "missing_conditions": [
+    "difference_positive",
+    "difference_negative",
+    "common_negative",
+    "common_parallel",
+    "common_orthogonal"
+  ],
+  "previous_cpu32_identity": {
+    "same_prefix": true,
+    "same_tokens": true,
+    "same_checkpoint": true,
+    "shared_condition_count": 5,
+    "same_shared_inputs": true,
+    "same_shared_captured_vectors": true
+  },
+  "common_input_geometry": [
+    {
+      "reference": "current_last_activation_not_semantic_basis",
+      "radial_coefficient": -0.6866037697260589,
+      "radial_direction": "shrink",
+      "common_displacement_norm": 11.152185449515441,
+      "parallel_norm": 7.186001071903308,
+      "orthogonal_norm": 8.528342681611033,
+      "raw_reconstruction_error_norm": 0.0,
+      "parallel_orthogonal_dot": -7.993605777301127e-15,
+      "scope": "source_input_geometry_only_not_a_component_effect_measurement"
+    }
+  ],
+  "completed_condition_replay_count": 20,
+  "captured_completed_condition_forward_count": 35,
+  "total_forward_count": null,
+  "total_forward_count_status": "unknown_inflight_condition_not_persisted_before_process_termination",
+  "radial_vs_orthogonal_effect_conclusion": "unmeasured_do_not_infer_from_geometry",
+  "controller_calls": 0,
+  "production_apply_allowed": false
+}

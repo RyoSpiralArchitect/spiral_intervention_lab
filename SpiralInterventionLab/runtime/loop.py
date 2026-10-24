@@ -742,7 +742,7 @@ def _extract_diagnostic_requests(command: Any, packet: Mapping[str, Any]) -> lis
         # append a second diagnostic or rewrite a read into a measurement.
         return [{"diagnostic": "candidate_action", "action_id": diagnostic_request.get("action_id")}]
     if isinstance(diagnostic_request, Mapping) and diagnostic_request.get("diagnostic") in {
-        "matched_response_probe", "source_clause_structure_probe", "source_clause_activation_patch_probe",
+        "matched_response_probe", "source_clause_structure_probe", "source_clause_activation_patch_probe", "source_common_radial_probe",
     }:
         # Preserve the offered seed/context and keep this bounded physical
         # measurement separate from stale frontier or next_action requests.
@@ -948,6 +948,8 @@ def _diagnostic_request_signature(request: Mapping[str, Any]) -> str:
         signature += "|" + str(request["structure_context_id"])
     if "structure_operator_id" in request:
         signature += "|" + str(request["structure_operator_id"])
+    if "component_recipe_id" in request:
+        signature += "|" + str(request["component_recipe_id"])
     return signature
 
 

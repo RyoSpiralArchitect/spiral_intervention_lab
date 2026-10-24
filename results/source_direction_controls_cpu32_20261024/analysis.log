@@ -1,0 +1,442 @@
+/Library/Frameworks/Python.framework/Versions/3.12/lib/python3.12/site-packages/transformers/utils/hub.py:110: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+[Spiralton] MLX not found or incompatible; magic disabled.
+[SpiralReality] Spiralton v6.1.0 MegaMax
+[🌀] * Spiralton MLX fusion active
+[🌀] -> Detected M4 — optimized variants loaded
+[🌀] @ Auto-Tune v2.1 ON (β=0.9+adaptive, explore=0%) 3 profiles loaded
+[🌀] * v5.1 features: SGMAT, SDPA-native, W4A16, PagedV2, ChunkedV2, SwiGLU-SIMD
+[🌀] [OK] mx.take/mx.matmul patched (v5.9: HyperMax)
+[🌀] [OK] NumPy Turbo active (BLAS: Apple Accelerate, openblas-dynamic, fp16-gemm)
+[🌀] [OK] mlx_numpy bridge ready (MLX-accelerated NumPy ops)
+[🌀] [OK] mlx_compute() context ready (10x faster NumPy blocks)
+[🌀] [OK] PyTorch Turbo active (MPS available, explicit device mode)
+[🌀] [OK] torch default device → MPS auto (factory funcs)
+[🌀] [OK] HF/safetensors load guard auto (large CPU load → MPS restore)
+[🌀] [OK] mlx_lm.generate → AutoRouter (native + greedy-short MegaMax)
+{
+  "summary": "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_direction_controls_cpu32_20261024/summary.json",
+  "conditions": [
+    {
+      "label": "source:11",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        0.0012655921968730832,
+        0.0012655921968730832
+      ],
+      "while_probability_deltas": [
+        -7.235671167119331e-05,
+        -7.235671167119331e-05
+      ],
+      "comma_margin_vs_winner_deltas": [
+        0.00905609130859375,
+        0.00905609130859375
+      ],
+      "while_margin_vs_winner_deltas": [
+        -0.006534576416015625,
+        -0.006534576416015625
+      ],
+      "comma_minus_while_logit_deltas": [
+        0.015590667724609375,
+        0.015590667724609375
+      ],
+      "actual_written_norms": [
+        0.0800000079719927,
+        0.0800000079719927
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.0009737014770507812,
+          "top1_margin_delta": -0.0024766623973846436,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.0009737014770507812,
+          "top1_margin_delta": -0.0024766623973846436,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "source:1418",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        0.0014292718713513064,
+        0.0014292718713513064
+      ],
+      "while_probability_deltas": [
+        9.679724284221772e-05,
+        9.679724284221772e-05
+      ],
+      "comma_margin_vs_winner_deltas": [
+        0.009521484375,
+        0.009521484375
+      ],
+      "while_margin_vs_winner_deltas": [
+        0.013277053833007812,
+        0.013277053833007812
+      ],
+      "comma_minus_while_logit_deltas": [
+        -0.0037555694580078125,
+        -0.0037555694580078125
+      ],
+      "actual_written_norms": [
+        0.07999998929427732,
+        0.07999998929427732
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.0014015436172485352,
+          "top1_margin_delta": -0.002405613660812378,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.0014015436172485352,
+          "top1_margin_delta": -0.002405613660812378,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "self_copy",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        0.0,
+        0.0
+      ],
+      "while_probability_deltas": [
+        0.0,
+        0.0
+      ],
+      "comma_margin_vs_winner_deltas": [
+        0.0,
+        0.0
+      ],
+      "while_margin_vs_winner_deltas": [
+        0.0,
+        0.0
+      ],
+      "comma_minus_while_logit_deltas": [
+        0.0,
+        0.0
+      ],
+      "actual_written_norms": [
+        0.0,
+        0.0
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.0,
+          "top1_margin_delta": 0.0,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.0,
+          "top1_margin_delta": 0.0,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "radial_shrink",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        -0.00049201717431957,
+        -0.00049201717431957
+      ],
+      "while_probability_deltas": [
+        -0.00016560948043609428,
+        -0.00016560948043609428
+      ],
+      "comma_margin_vs_winner_deltas": [
+        -0.0018749237060546875,
+        -0.0018749237060546875
+      ],
+      "while_margin_vs_winner_deltas": [
+        -0.019222259521484375,
+        -0.019222259521484375
+      ],
+      "comma_minus_while_logit_deltas": [
+        0.017347335815429688,
+        0.017347335815429688
+      ],
+      "actual_written_norms": [
+        0.07999999753490236,
+        0.07999999753490236
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.001013636589050293,
+          "top1_margin_delta": 3.7223100662231445e-05,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.001013636589050293,
+          "top1_margin_delta": 3.7223100662231445e-05,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "common",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        0.0015175454372271524,
+        0.0015175454372271524
+      ],
+      "while_probability_deltas": [
+        1.2839923023517594e-05,
+        1.2839923023517594e-05
+      ],
+      "comma_margin_vs_winner_deltas": [
+        0.010457992553710938,
+        0.010457992553710938
+      ],
+      "while_margin_vs_winner_deltas": [
+        0.0037441253662109375,
+        0.0037441253662109375
+      ],
+      "comma_minus_while_logit_deltas": [
+        0.0067138671875,
+        0.0067138671875
+      ],
+      "actual_written_norms": [
+        0.08000000842477643,
+        0.08000000842477643
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.0013321638107299805,
+          "top1_margin_delta": -0.0027492940425872803,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.0013321638107299805,
+          "top1_margin_delta": -0.0027492940425872803,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "difference_positive",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        -0.00015278970788318302,
+        -0.00015278970788318302
+      ],
+      "while_probability_deltas": [
+        -0.00018455519175035115,
+        -0.00018455519175035115
+      ],
+      "comma_margin_vs_winner_deltas": [
+        -0.000331878662109375,
+        -0.000331878662109375
+      ],
+      "while_margin_vs_winner_deltas": [
+        -0.021852493286132812,
+        -0.021852493286132812
+      ],
+      "comma_minus_while_logit_deltas": [
+        0.021520614624023438,
+        0.021520614624023438
+      ],
+      "actual_written_norms": [
+        0.08000000455152875,
+        0.08000000455152875
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": -0.0004431009292602539,
+          "top1_margin_delta": -0.00012803077697753906,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": -0.0004431009292602539,
+          "top1_margin_delta": -0.00012803077697753906,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "difference_negative",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        0.0001737836543976301,
+        0.0001737836543976301
+      ],
+      "while_probability_deltas": [
+        0.00018828243961010842,
+        0.00018828243961010842
+      ],
+      "comma_margin_vs_winner_deltas": [
+        0.0004825592041015625,
+        0.0004825592041015625
+      ],
+      "while_margin_vs_winner_deltas": [
+        0.021837234497070312,
+        0.021837234497070312
+      ],
+      "comma_minus_while_logit_deltas": [
+        -0.02135467529296875,
+        -0.02135467529296875
+      ],
+      "actual_written_norms": [
+        0.08000000381924498,
+        0.08000000381924498
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.0004792213439941406,
+          "top1_margin_delta": 8.651614189147949e-05,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.0004792213439941406,
+          "top1_margin_delta": 8.651614189147949e-05,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "permuted_common_positive",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        0.00021607680592802825,
+        0.00021607680592802825
+      ],
+      "while_probability_deltas": [
+        9.534770167326373e-05,
+        9.534770167326373e-05
+      ],
+      "comma_margin_vs_winner_deltas": [
+        0.000213623046875,
+        0.000213623046875
+      ],
+      "while_margin_vs_winner_deltas": [
+        0.0103912353515625,
+        0.0103912353515625
+      ],
+      "comma_minus_while_logit_deltas": [
+        -0.0101776123046875,
+        -0.0101776123046875
+      ],
+      "actual_written_norms": [
+        0.08000001621746777,
+        0.08000001621746777
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": -0.0005965232849121094,
+          "top1_margin_delta": 0.00032332539558410645,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": -0.0005965232849121094,
+          "top1_margin_delta": 0.00032332539558410645,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    },
+    {
+      "label": "permuted_common_negative",
+      "raw_greedy_token_ids": [
+        1603,
+        1603
+      ],
+      "comma_probability_deltas": [
+        -0.00020587197465277152,
+        -0.00020587197465277152
+      ],
+      "while_probability_deltas": [
+        -9.479817649322292e-05,
+        -9.479817649322292e-05
+      ],
+      "comma_margin_vs_winner_deltas": [
+        -0.0001583099365234375,
+        -0.0001583099365234375
+      ],
+      "while_margin_vs_winner_deltas": [
+        -0.010454177856445312,
+        -0.010454177856445312
+      ],
+      "comma_minus_while_logit_deltas": [
+        0.010295867919921875,
+        0.010295867919921875
+      ],
+      "actual_written_norms": [
+        0.08000001605593748,
+        0.08000001605593748
+      ],
+      "safety_deltas": [
+        {
+          "entropy_delta": 0.000582575798034668,
+          "top1_margin_delta": -0.0003337264060974121,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        },
+        {
+          "entropy_delta": 0.000582575798034668,
+          "top1_margin_delta": -0.0003337264060974121,
+          "repeat_flag_delta": 0.0,
+          "repetition_score_delta": 0.0
+        }
+      ],
+      "collapse_sharpening_signal": false
+    }
+  ],
+  "previous_common_replay_identity": {
+    "same_prefix": true,
+    "same_token_identity": true,
+    "same_checkpoint": true,
+    "same_common_inputs": true,
+    "same_common_captured_vectors": true
+  }
+}

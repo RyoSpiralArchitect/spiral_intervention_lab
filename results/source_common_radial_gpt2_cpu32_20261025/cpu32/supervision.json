@@ -1,0 +1,37 @@
+{
+  "started_at_utc": "2026-10-24T21:15:12.932661+00:00",
+  "command": [
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+    "-u",
+    "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_common_radial_gpt2_cpu32_20261025/measure_prefill.py",
+    "--worker-model-path",
+    "/Users/ryospiralarchitect/\ud83c\udf00SpiralReality\ud83c\udf00/model/gpt2",
+    "--output-dir",
+    "/Users/ryospiralarchitect/spiral_intervention_lab/results/source_common_radial_gpt2_cpu32_20261025/cpu32/measurement"
+  ],
+  "wall_time_limit_seconds": 900,
+  "start_free_disk_gib": 32,
+  "stop_free_disk_gib": 16,
+  "preflight_free_disk_gib": 49.54525375366211,
+  "status": "complete",
+  "resource_samples": [
+    {
+      "seconds": 0.0,
+      "free_disk_gib": 49.55,
+      "swap": "total = 8192.00M  used = 6800.00M  free = 1392.00M  (encrypted)"
+    },
+    {
+      "seconds": 10.01,
+      "free_disk_gib": 49.54,
+      "swap": "total = 8192.00M  used = 6784.00M  free = 1408.00M  (encrypted)"
+    }
+  ],
+  "controller_calls": 0,
+  "production_apply_allowed": false,
+  "implicit_retries": 0,
+  "selection_not_adaptive": true,
+  "child_pid": 28335,
+  "returncode": 0,
+  "elapsed_seconds": 20.01,
+  "final_free_disk_gib": 49.53
+}
