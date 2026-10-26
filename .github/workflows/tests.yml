@@ -24,7 +24,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[dev]' numpy 'transformers==4.57.6'
+      - run: python -m pip install -e '.[dev]' numpy 'transformer-lens==3.5.1'
       - run: python -m pytest -q SpiralInterventionLab/tests
       - name: Verify published pilot offline
         run: python -S SpiralInterventionLab/examples/summarize_structural_rescue.py results/published_intervention_20261027/pilot

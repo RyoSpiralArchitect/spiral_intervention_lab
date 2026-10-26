@@ -50,3 +50,15 @@ including all four historical archive members; no secret-like values or local
 paths were found in the evidence bundle, and staged Markdown links resolve.
 `git diff --cached --check` passed. CI status is reported on the PR, not inferred
 from this local run.
+
+The committed-tree clean clone also passed 811 tests and nine subtests (66.22
+seconds), with model downloads disabled and API keys empty. An archive-only copy
+without Git metadata failed the pre-existing CLI commit-provenance test; a Git
+checkout is required for that path.
+
+The first Linux CI attempt exposed two environment gaps: the mocked MLX smoke
+test constructed its backend before patching the optional generator, and the CI
+environment lacked TransformerLens. The follow-up moves construction inside the
+mock and installs the pinned TransformerLens distribution with its declared
+dependencies. CI does not deliberately skip these checks. Local historical model
+versions remain recorded separately from CI's resolved test dependencies.
