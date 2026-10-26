@@ -1,7 +1,8 @@
 """Trace two predeclared source patches at one naturally reconstructed prefix.
 
-Normal runtime caps, two repeats, self-copy and radial controls. No provider calls
-or production apply. A backend/dtype change is an explicit numerical replication.
+Normal runtime caps, two repeats, self-copy and radial controls. No production
+apply. Provider calls require the explicit single-choice mode. A backend/dtype
+change is an explicit numerical replication.
 """
 from __future__ import annotations
 
@@ -11,7 +12,9 @@ from datetime import datetime, timezone
 import hashlib
 import importlib.metadata
 import json
+import math
 from pathlib import Path
+import shutil
 import subprocess
 from typing import Any
 
@@ -100,16 +103,37 @@ def main(argv: list[str] | None = None) -> int:
                         help="Add a fixed permuted-common direction and its inverse; nine conditions, eleven slots")
     parser.add_argument("--radial-component-controls", action="store_true",
                         help="Add negative common and current-state parallel/orthogonal controls; ten conditions, twelve slots")
+    choice_group = parser.add_mutually_exclusive_group()
+    choice_group.add_argument("--controller-radial-choice", action="store_true",
+                        help="Instead of a full matrix, ask the controller once and measure its radial card if selected")
+    choice_group.add_argument("--controller-source-choice", action="store_true",
+                        help="Measure the selected source-token or radial diagnostic, never production apply")
+    parser.add_argument("--recorded-controller-choice", type=Path,
+                        help="Replay an exact prior controller choice at the same packet, with zero provider calls")
+    parser.add_argument("--offline-radial-receipt", type=Path,
+                        help="Historical same-context radial receipt, used only after controller selection")
+    parser.add_argument("--controller-model", default="gpt-5.6-luna")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--device", choices=("cpu", "mps"), default="cpu")
     parser.add_argument("--dtype", choices=("float32", "float16"), default="float32")
     parser.add_argument("--mps-memory-fraction", type=float, default=0.7)
     parser.add_argument("--torch-threads", type=int, default=4)
+    parser.add_argument("--min-free-disk-gib", type=float, default=32,
+                        help="Live-choice startup disk floor; explicit overrides must be at least 10 GiB")
     args = parser.parse_args(argv)
+    choice_mode = args.controller_radial_choice or args.controller_source_choice
     if args.permuted_direction_controls and (not args.decompose_components or args.next_natural_boundary):
         parser.error("--permuted-direction-controls requires --decompose-components at the strict same prefix")
     if args.radial_component_controls and (not args.decompose_components or args.next_natural_boundary or args.permuted_direction_controls):
         parser.error("--radial-component-controls requires only --decompose-components at the strict same prefix")
+    if choice_mode and (not args.radial_component_controls or args.offline_radial_receipt is None):
+        parser.error("controller choice requires --radial-component-controls and --offline-radial-receipt")
+    if args.offline_radial_receipt is not None and not choice_mode:
+        parser.error("--offline-radial-receipt requires a controller choice mode")
+    if args.recorded_controller_choice is not None and not choice_mode:
+        parser.error("--recorded-controller-choice requires a controller choice mode")
+    if not math.isfinite(args.min_free_disk_gib) or args.min_free_disk_gib < 10:
+        parser.error("--min-free-disk-gib must be finite and at least 10")
     try:
         token_ids = [int(s) for s in args.source_token_ids.split(",")]
     except ValueError:
@@ -160,6 +184,41 @@ def main(argv: list[str] | None = None) -> int:
         report.update(kind="source_clause_direction_controls", direction_control_plan=clause_direction_controls.plan(token_ids))
     if args.radial_component_controls:
         report.update(kind="source_common_radial_controls", radial_control_plan=clause_radial.plan(token_ids))
+    offline, recorded = None, None
+    if choice_mode:
+        from .source_radial_choice import validate_offline_reference
+
+        offline_path = args.offline_radial_receipt.expanduser().resolve(strict=True)
+        offline = json.loads(offline_path.read_text(encoding="utf-8"))
+        validate_offline_reference(offline, report)
+        report.update(kind="source_clause_controller_choice" if args.controller_source_choice else "source_common_radial_controller_choice",
+                      selection_origin="live_controller_choice",
+                      controller_model=args.controller_model,
+                      offline_radial_receipt_sha256=hashlib.sha256(offline_path.read_bytes()).hexdigest(),
+                      controller_choice={}, provider_call_limit=1,
+                      plan="one_controller_choice_then_one_selected_diagnostic_no_forced_selection")
+        report.pop("component_plan", None)
+        report.pop("radial_control_plan", None)
+        if args.recorded_controller_choice is not None:
+            from .source_radial_choice import recorded_command
+
+            choice_path = args.recorded_controller_choice.expanduser().resolve(strict=True)
+            recorded = json.loads(choice_path.read_text(encoding="utf-8"))
+            if (recorded.get("kind") not in {"source_common_radial_controller_choice", "source_clause_controller_choice"}
+                    or recorded.get("status") not in {"complete", "no_radial_selection", "non_radial_selection_not_dispatched"}
+                    or recorded.get("production_apply_allowed") is not False or recorded.get("rollout_apply_count") != 0):
+                raise ValueError("recorded_choice_run_not_a_completed_diagnostic_check")
+            for key in ("profile", "device", "dtype", "torch_threads", "position", "expected_prefix",
+                        "source_token_ids", "source_sha256", "caps", "diagnostic_budget_limit", "controller_model"):
+                if recorded.get(key) != report[key]:
+                    raise ValueError(f"recorded_choice_run_context_differs:{key}")
+            if (recorded.get("observed_prefix") != report["expected_prefix"]
+                    or recorded.get("checkpoint_sha256_verified") != manifest.get("checkpoint_sha256")):
+                raise ValueError("recorded_choice_prefix_or_checkpoint_differs")
+            recorded_command(recorded["controller_choice"], recorded["controller_choice"]["packet"])
+            report.update(selection_origin="recorded_controller_choice_replay", provider_call_limit=0,
+                          recorded_controller_choice_sha256=hashlib.sha256(choice_path.read_bytes()).hexdigest(),
+                          plan="one_exact_recorded_choice_replay_no_provider_call")
     if boundary is not None:
         report["boundary_plan"] = boundary
     root = Path(__file__).resolve().parents[2]
@@ -172,11 +231,20 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
 
     save()
+    if choice_mode:
+        report["preflight_free_disk_gib"] = shutil.disk_usage(output).free / 1024 ** 3
+        report["start_free_disk_floor_gib"] = args.min_free_disk_gib
+        if report["preflight_free_disk_gib"] < args.min_free_disk_gib:
+            report.update(status="blocked", stop_reason="preflight_disk_floor")
+            save()
+            return 2
     worker = None
     counts = None
     monitors = ExitStack()
     try:
         report["checkpoint_sha256_verified"] = verify_checkpoint(model_path, manifest.get("checkpoint_sha256") or {})
+        if offline is not None and report["checkpoint_sha256_verified"] != offline.get("checkpoint_sha256_verified"):
+            raise ValueError("offline_reference_checkpoint_differs")
         report["status"] = "loading_model"
         save()
         import torch
@@ -242,6 +310,23 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"condition": item["label"], "status": item["result"]["status"],
                               "captured_forwards": len(item["frames"])}), flush=True)
 
+        if choice_mode:
+            from .source_radial_choice import run_choice
+
+            provider = None
+            if recorded is None:
+                from openai import OpenAI
+                from ..controllers.providers import OpenAIControllerProvider
+
+                provider = OpenAIControllerProvider(
+                    model=args.controller_model, client=OpenAI(max_retries=0, timeout=180))
+            run_choice(worker, provider, report["controller_choice"], historical=offline["records"],
+                       save=save, record=record, allow_source_cards=args.controller_source_choice,
+                       recorded_choice=recorded["controller_choice"] if recorded is not None else None)
+            report["controller_calls"] = report["controller_choice"].get("provider_calls_attempted", 0)
+            report["status"] = report["controller_choice"]["status"]
+            return 1 if report["status"] in {"controller_error", "execution_mismatch"} else 0
+
         instrument = (clause_radial if args.radial_component_controls else
                       clause_direction_controls if args.permuted_direction_controls else
                       clause_components if args.decompose_components else clause_trajectory)
@@ -267,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
         if worker is not None:
             report["diagnostic_budget_used"] = diagnostic_budget.used(worker)
             report["diagnostic_budget_left"] = diagnostic_budget.left(worker)
+        if choice_mode:
+            report["controller_calls"] = report["controller_choice"].get("provider_calls_attempted", 0)
         report["recorded_condition_replay_count"] = sum(
             r["result"].get("physical_replay_count", 0) for r in report["records"])
         report["recorded_condition_count"] = len(report["records"])

@@ -41,6 +41,16 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/structural_rescue_pilot.md`](docs/structural_rescue_pilot.md)
+  Frozen calibration/confirmation cases, conservative role-aware evaluation,
+  and a normal-cap B0/fixed/random/controller comparison at natural boundaries.
+  Full continuations, fixed-winner gaps, actual forward budgets and provider
+  usage are recorded in restored diagnostic branches.
+  The first nine-case MPS pilot completed all 36 conditions: every policy scores
+  2/3 on calibration and 6/6 on confirmation, with identical full outputs.
+  Eight real controller choices execute; the known failure remains and the
+  confirmation set is at baseline ceiling. No task uplift or new authority.
+
 Source-response artifact availability and fresh-clone verification are described
 in [`docs/source_response_artifacts.md`](docs/source_response_artifacts.md).
 
@@ -54,6 +64,22 @@ in [`docs/source_response_artifacts.md`](docs/source_response_artifacts.md).
   its greedy token; this is not a cross-model causal comparison or task success.
   Both use 12 diagnostic slots, with no production-authority increase. The first
   incomplete attempt is preserved.
+  Explicit source-pair cards now expose up to three SOURCE-order pairs, with
+  shared offline/controller recipe identities. The measured comma/while pair is
+  no longer silently replaced by before/comma; historical evidence still requires
+  current-prefix remeasurement, and no apply authority is added.
+  A subsequent recorded Luna choice of a single-source before patch now reaches
+  exact matched execution: zero new API calls, 3/12 diagnostic slots, 19 actual
+  forwards. It raises comma probability but leaves greedy before unchanged;
+  its absent historical offline counterpart is reported as `not_covered`.
+  A fresh Luna follow-up independently selected that same card, and its measured
+  input hashes and operator rows exactly matched the recorded-choice replay.
+  This closes a one-choice execution check, not a full task-success loop.
+
+- [`docs/structural_rescue_benchmark_plan.md`](docs/structural_rescue_benchmark_plan.md)
+  Next-stage design: separate exact-operation binding, normal-cap structural
+  actuation and controller selection value. Evaluate role correctness separately
+  from lexical scores and count actual forwards, not just diagnostic slots.
 
 - [`docs/source_direction_controls.md`](docs/source_direction_controls.md)
   A same-prefix CPU32 control matches common's actual write norm while permuting
