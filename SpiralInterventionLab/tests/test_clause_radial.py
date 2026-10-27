@@ -8,7 +8,10 @@ import torch
 
 from SpiralInterventionLab.bridge.controller_clients import _compact_controller_payload, _compact_diagnostic_result
 from SpiralInterventionLab.examples.replay_source_clause_trajectory import main
-from SpiralInterventionLab.runtime import clause_radial as radial, clause_trajectory, diagnostic_budget, operation_cards
+from SpiralInterventionLab.runtime import (
+    clause_actuation, clause_radial as radial, clause_specificity, clause_structure,
+    clause_trajectory, diagnostic_budget, operation_cards,
+)
 from SpiralInterventionLab.runtime.compiler import compile_expr
 from SpiralInterventionLab.runtime.loop import _diagnostic_request_signature, _extract_diagnostic_requests
 from SpiralInterventionLab.runtime.response_probe import state_identity
@@ -171,3 +174,157 @@ def test_offline_budget_preflight_and_incompatible_cli_are_free():
         with pytest.raises(SystemExit) as error:
             main([*args, *extra])
         assert error.value.code == 2
+
+
+def multi_source_worker(prompt="pacb"):
+    worker = component_worker()
+    worker.reset(prompt)
+    worker._append_output_token(1)
+    worker._steps = 1
+    worker.runtime_state.run_with_cache(worker._current_token_tensor())
+    pieces = {0: "SOURCE:", 1: " before", 3: ",", 2: " while", 4: ";"}
+    records = [{"position": i, "token_id": tid, "piece": pieces[tid],
+                "provenance_class": "constraint_header" if i == 0 else "source_body",
+                "segment_kind": "prompt"} for i, tid in enumerate(worker._current_token_tensor().flatten().tolist()[:-1])]
+    worker._token_position_records = lambda: records
+    observed = worker.request_controller_diagnostics(clause_structure.offer(worker)["request"])[0]
+    assert observed["status"] == "ok"
+    return worker
+
+
+def recipe_for(worker, token_ids=(3, 2), component="common_orthogonal"):
+    return next(r for r in radial.offer(worker)["recipes"] if r["component"] == component
+                and tuple(c["target_token_id"] for c in r["source_pair"]) == token_ids)
+
+
+def test_explicit_pairs_are_bounded_source_order_choices_visible_in_compact_cards():
+    worker = multi_source_worker("pacb!")
+    used = diagnostic_budget.used(worker)
+    with patch.object(worker.runtime_state, "run_with_cache", side_effect=AssertionError("offers cannot measure")):
+        offered = radial.offer(worker)
+        packet = {"strategy_hints": hints(worker)}
+    assert offered["source_candidate_count"] == 4
+    assert offered["excluded_source_candidate_count"] == 1
+    assert len(offered["recipes"]) == radial.MAX_RECIPES == 12
+    assert [tuple(c["target_token_id"] for c in r["source_pair"]) for r in offered["recipes"][::4]] == [
+        (1, 3), (1, 2), (3, 2)]
+    assert diagnostic_budget.used(worker) == used
+    compact = _compact_controller_payload(packet)["strategy_hints"]["source_common_radial"]
+    assert len(compact["recipes"]) == 12  # The final pair must not be lost in prompt dieting.
+    cards = [c for c in operation_cards.build_menu(packet)[0]["cards"] if c["diagnostic"] == radial.NAME]
+    for card, recipe in zip(cards, offered["recipes"], strict=True):
+        for key in ("component_recipe_id", "source_pair_id", "source_pair", "component", "surfaces", "structure_context_id"):
+            assert card[key] == recipe[key]
+        assert card["cost"]["diagnostic_slots_upper_bound"] == 1
+        assert card["cost"]["physical_replays_upper_bound"] == 4
+        assert not card["production_apply_allowed"]
+
+
+def test_third_pair_card_measures_that_pair_not_the_first_global_anchor():
+    worker = multi_source_worker()
+    recipe = recipe_for(worker)
+    packet = {"strategy_hints": hints(worker)}
+    card = next(c for c in operation_cards.build_menu(packet)[0]["cards"]
+                if c.get("component_recipe_id") == recipe["component_recipe_id"])
+    requests = _extract_diagnostic_requests({"decision": "noop", "meta": {"operation_id": card["operation_id"]}}, packet)
+    assert requests == [recipe["request"]]
+    used, before = diagnostic_budget.used(worker), state_identity(worker)
+    with patch.object(worker, "_simulate_decode", wraps=worker._simulate_decode) as simulate:
+        result = worker.request_controller_diagnostics(requests)[0]
+    assert simulate.call_count == 4 and diagnostic_budget.used(worker) == used + 1
+    assert all("policy_override" not in c.kwargs for c in simulate.call_args_list)
+    assert result["status"] == "ok" and result["source_pair_id"] == recipe["source_pair_id"]
+    row = result["operator_rows"][0]
+    assert row["edit"]["source"]["expr"] == recipe["source_expressions"][0]
+    assert [c["source_token_index"] for c in row["source_pair"]] == [2, 3]
+    anchor = clause_actuation.offer(worker)["candidates"][1]
+    expected_id = clause_specificity.expression_control_id(
+        recipe["component"], anchor, recipe["source_expressions"])
+    assert result["control_id"] == expected_id
+    assert _compact_diagnostic_result(result)["recipe"]["source_pair_id"] == recipe["source_pair_id"]
+    assert state_identity(worker) == before and not worker._collect_active_edits()
+    assert not worker._frozen_diagnostic_candidates and not result["production_apply_allowed"]
+    assert recipe_for(worker, (1, 3))["available"]
+    duplicate = worker.request_controller_diagnostics(requests)[0]
+    assert duplicate["blocked_reason"] == "already_attempted_at_context"
+    assert duplicate["diagnostic_call_cost"] == duplicate["physical_replay_count"] == 0
+
+
+def test_offline_replay_and_controller_bind_the_same_pair_expression_and_inputs():
+    offline, controller = multi_source_worker(), multi_source_worker()
+    offered = {r["component"]: r for r in radial.offer(controller)["recipes"]
+               if tuple(c["target_token_id"] for c in r["source_pair"]) == (3, 2)}
+    saved = []
+    records = radial.measure(offline, [3, 2], stages=STAGES, record=lambda r: saved.append(deepcopy(r)))
+    assert radial.summarize(records)["source_pair_binding_status"] == "verified_receipt_binding"
+    for record in saved:
+        if record["label"] not in radial.FORMULAS:
+            continue
+        expected = offered[record["label"]]
+        assert record["result"]["component_recipe_id"] == expected["component_recipe_id"]
+        assert record["component_definition"]["source_pair_id"] == expected["source_pair_id"]
+        assert record["result"]["recipe"]["source_input_identities"] == expected["source_input_identities"]
+    result = controller.request_controller_diagnostics(offered["common_orthogonal"]["request"])[0]
+    assert result["control_id"] == saved[-1]["result"]["control_id"]
+    assert result["operator_rows"][0]["candidate_fingerprint"] == saved[-1]["result"]["operator_rows"][0]["candidate_fingerprint"]
+    assert not recipe_for(offline)["available"]
+    assert recipe_for(offline, (1, 3))["available"]
+
+
+def test_same_piece_at_another_occurrence_is_not_the_recorded_source_pair():
+    worker = multi_source_worker("pacbc")
+    old = recipe_for(worker)
+    records = worker._token_position_records()
+    records[2]["provenance_class"] = "misc_prompt"
+    used = diagnostic_budget.used(worker)
+    with patch.object(worker, "_simulate_decode", side_effect=AssertionError("stale pair cannot measure")):
+        result = worker.request_controller_diagnostics(old["request"])[0]
+    assert result["physical_replay_count"] == result["diagnostic_call_cost"] == 0
+    assert diagnostic_budget.used(worker) == used
+    worker.request_controller_diagnostics(clause_structure.offer(worker)["request"])
+    fresh = recipe_for(worker, (2, 3))
+    assert fresh["source_pair"][1]["target_piece"] == old["source_pair"][0]["target_piece"]
+    assert fresh["source_pair"][1]["source_token_index"] == 4
+    assert fresh["source_pair_id"] != old["source_pair_id"]
+
+
+def test_source_legs_are_bound_even_when_their_mean_does_not_change():
+    worker = multi_source_worker()
+    cache = worker.runtime_state.last_cache[STAGES[0]]
+    cache[0, 2] = torch.tensor([4., 2., 0.])
+    cache[0, 3] = torch.tensor([2., 4., 0.])
+    before = recipe_for(worker, component="common")
+    cache[0, 2, 0] += 1
+    cache[0, 3, 0] -= 1
+    after = recipe_for(worker, component="common")
+    assert before["input_identities"] == after["input_identities"]
+    assert before["source_input_identities"] != after["source_input_identities"]
+    assert before["source_pair_id"] != after["source_pair_id"]
+    with patch.object(worker, "_simulate_decode", side_effect=AssertionError("old raw binding cannot measure")):
+        result = worker.request_controller_diagnostics(before["request"])[0]
+    assert result["physical_replay_count"] == result["diagnostic_call_cost"] == 0
+
+
+@pytest.mark.parametrize("field", ["source_pair_id", "component_recipe_id", "source_pair"])
+def test_reanalysis_rejects_receipt_pair_or_recipe_relabeling(field):
+    records = radial.measure(multi_source_worker(), [3, 2], stages=STAGES)
+    records[-1]["result"]["recipe"][field] = "another binding"
+    with pytest.raises(ValueError, match="recipe_binding_mismatch"):
+        radial.summarize(records)
+
+
+def test_legacy_receipts_remain_unbound_not_retroactively_promoted_to_current_ids():
+    records = radial.measure(component_worker(), [1, 3], stages=STAGES)
+    for record in records:
+        result = record["result"]
+        for key in ("recipe", "source_pair_id", "component_recipe_id"):
+            result.pop(key, None)
+        for holder in [record.get("component_definition", {}), *result["operator_rows"]]:
+            for key in ("source_pair_id", "source_pair", "component_recipe_id"):
+                holder.pop(key, None)
+    summary = radial.summarize(records)
+    assert summary["source_pair_binding_status"] == "legacy_unbound"
+    assert not summary["production_apply_allowed"]
+    records[-1]["result"]["operator_rows"][0]["source_pair_id"] = "partially retained binding"
+    with pytest.raises(ValueError, match="recipe_binding_mismatch"):
+        radial.summarize(records)

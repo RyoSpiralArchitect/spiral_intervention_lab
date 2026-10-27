@@ -1,0 +1,158 @@
+{
+  "status": "error",
+  "created_at_utc": "2026-10-26T23:13:02.103421+00:00",
+  "manifest_sha256": "297ce4ba7c30dc12a60d6038c77a179454a57373a5dc464540eb0a8119958ead",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [
+    {
+      "surface_id": "s_resid_pre_l14_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 14,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    }
+  ],
+  "policies_requested": [
+    "b0",
+    "fixed",
+    "random",
+    "controller"
+  ],
+  "case_ids_requested": [
+    "cal_delivery",
+    "cal_review",
+    "cal_workshop",
+    "confirm_names_a",
+    "confirm_names_b",
+    "confirm_order_a",
+    "confirm_order_b",
+    "confirm_paraphrase_a",
+    "confirm_paraphrase_b"
+  ],
+  "cases": [
+    {
+      "case_id": "cal_delivery",
+      "split": "calibration",
+      "policies": {},
+      "calibration_matrix": []
+    }
+  ],
+  "scope": "restored_normal_cap_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 30.562,
+  "aggregate": {
+    "calibration": {
+      "b0": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "random": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    },
+    "confirmation": {
+      "b0": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "random": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    }
+  },
+  "error_type": "RuntimeError",
+  "error": "MPS backend out of memory (MPS allocated: 11.85 GiB, other allocations: 53.81 MiB, max allowed: 12.43 GiB). Tried to allocate 751.50 MiB on shared pool. Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit for memory allocations (may cause system failure)."
+}

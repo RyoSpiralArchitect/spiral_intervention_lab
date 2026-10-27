@@ -1,0 +1,214 @@
+{
+  "apply_scope": "restored_normal_cap_diagnostic_branch_only",
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "cases": [
+    {
+      "case_id": "cal_delivery",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Mira",
+          "send",
+          "budget",
+          "Omar"
+        ],
+        [
+          "Leena",
+          "bring",
+          "contract",
+          "Priya"
+        ]
+      ],
+      "prompt_sha256": "18ba602700d058d8bcb4a4a5ca617de3d465998db192a064616349b104c7452c",
+      "source": "In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.",
+      "split": "calibration"
+    },
+    {
+      "case_id": "cal_review",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo"
+        ],
+        [
+          "Selim",
+          "send",
+          "report",
+          "Yara"
+        ]
+      ],
+      "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+      "source": "In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.",
+      "split": "calibration"
+    },
+    {
+      "case_id": "cal_workshop",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Ada",
+          "bring",
+          "cable",
+          "Niko"
+        ],
+        [
+          "Rami",
+          "send",
+          "diagram",
+          "Vera"
+        ]
+      ],
+      "prompt_sha256": "f55f8a6b049e5ea905a8439799bc788556519e7e2a00c50fbf0d42c11e603ace",
+      "source": "In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.",
+      "split": "calibration"
+    },
+    {
+      "case_id": "confirm_names_a",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Elise",
+          "take",
+          "parcel",
+          "Hugo"
+        ],
+        [
+          "Tomas",
+          "send",
+          "invoice",
+          "Lena"
+        ]
+      ],
+      "prompt_sha256": "d9aa43c4fb9810745af032b4d829c0eebfa815a74c04cb592bb2a2aa2984b5ed",
+      "source": "In order to finish before dusk, Elise should take the parcel to Hugo, while Tomas should send the invoice to Lena.",
+      "split": "confirmation"
+    },
+    {
+      "case_id": "confirm_names_b",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Iris",
+          "send",
+          "schedule",
+          "Luca"
+        ],
+        [
+          "Pavel",
+          "bring",
+          "folder",
+          "Mina"
+        ]
+      ],
+      "prompt_sha256": "d935942dcb61224e3b23e0df51b1e904dc1e3efb0d86455043181ecb70644cc4",
+      "source": "In order to be ready before noon, Iris should send the schedule to Luca, while Pavel should bring the folder to Mina.",
+      "split": "confirmation"
+    },
+    {
+      "case_id": "confirm_order_a",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Tomas",
+          "send",
+          "invoice",
+          "Lena"
+        ],
+        [
+          "Elise",
+          "take",
+          "parcel",
+          "Hugo"
+        ]
+      ],
+      "prompt_sha256": "6c5046e850c4f58abefc93f61d2b21c86f5bb32532e4834cf3f1e962db3f6d03",
+      "source": "In order to finish before dusk, Tomas should send the invoice to Lena, while Elise should take the parcel to Hugo.",
+      "split": "confirmation"
+    },
+    {
+      "case_id": "confirm_order_b",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Pavel",
+          "bring",
+          "folder",
+          "Mina"
+        ],
+        [
+          "Iris",
+          "send",
+          "schedule",
+          "Luca"
+        ]
+      ],
+      "prompt_sha256": "a63751bb001e78cbb22d209ed5f4816c09fde258ac64f8a3ee2f40a367ae211b",
+      "source": "In order to be ready before noon, Pavel should bring the folder to Mina, while Iris should send the schedule to Luca.",
+      "split": "confirmation"
+    },
+    {
+      "case_id": "confirm_paraphrase_a",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Hana",
+          "bring",
+          "sketch",
+          "Emil"
+        ],
+        [
+          "Dario",
+          "send",
+          "notice",
+          "Cora"
+        ]
+      ],
+      "prompt_sha256": "d325f00c57e65ea2b0ab5ad18788deaac81457d8a074d899b32c0382387481a3",
+      "source": "Before lunch, Hana should bring the sketch to Emil; meanwhile, Dario should send the notice to Cora.",
+      "split": "confirmation"
+    },
+    {
+      "case_id": "confirm_paraphrase_b",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Bruno",
+          "take",
+          "packet",
+          "Anya"
+        ],
+        [
+          "Nadia",
+          "send",
+          "memo",
+          "Leon"
+        ]
+      ],
+      "prompt_sha256": "e76e04a6272193043b96f54aa59ae8138320d444fe140301a2b5831f512a3a83",
+      "source": "Before dusk, Bruno should take the packet to Anya, whereas Nadia should send the memo to Leon.",
+      "split": "confirmation"
+    }
+  ],
+  "components": [
+    "common",
+    "common_parallel",
+    "common_orthogonal"
+  ],
+  "confirmation_status": "predeclared_before_this_pilot_not_a_population_sample",
+  "continuation_forward_cap_per_policy": 64,
+  "diagnostic_forward_cap_per_policy": 24,
+  "fixed_rule": "common_orthogonal_of_first_source_pair",
+  "max_controller_calls_per_case": 1,
+  "max_controller_output_tokens": 1600,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "policy_seeds": [
+    17
+  ],
+  "production_apply_allowed": false,
+  "random_rule": "sha256(case_id,seed)_mod_catalog_size",
+  "version": "structural_rescue_v1"
+}

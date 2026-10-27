@@ -35,10 +35,12 @@ contribution percentages.
 
 With existing `clause_structure_operator_diagnostics` enabled, a current-prefix
 structure observation and aligned cache can expose `source_common_radial` in
-strategy hints. The first two exact source tokens in SOURCE occurrence order
-define one bounded pair; they are not chosen by their measured response. At most
-four component recipes are offered, at the same existing activation sites.
-This first version does not search all pairs or select a preferred component.
+strategy hints. All pairs among the first three exact source tokens in SOURCE
+occurrence order are offered: at most three pairs and twelve component recipes,
+at the same existing activation sites. The original first-two pair stays first;
+neither sources nor components are ranked by measured response. The offer records
+the source count, limit and excluded count. Consuming a pair does not slide this
+window to later sources, and displaying more choices does not execute a matrix.
 
 The controller selects a current `operation_id`, or explicitly requests:
 
@@ -49,12 +51,26 @@ The controller selects a current `operation_id`, or explicitly requests:
 }
 ```
 
-The recipe binds source positions/pieces/provenance, current context, surfaces,
-normal caps, compiled source/target identities and the canonical DSL expression.
+Each `source_pair_id` binds both exact positions/pieces/provenance, the current
+context/observation, surfaces, normal caps and both raw source tensor identities
+plus the current target. Each `component_recipe_id` additionally binds the
+component, compiled source/target identities and the canonical DSL expression.
+Even opposite changes to the two raw sources that leave their mean unchanged
+invalidate the old binding. Repeated pieces retain the explicit first-occurrence
+rule; a different occurrence is not interchangeable evidence.
 The request cannot supply a new expression, target, dose or policy override.
 Prefix, cap and input-tensor changes invalidate the ID. Attempted recipes,
 including failed physical attempts, cannot repeat at the same context; equivalent
 offline measurements also consume the offer.
+
+Offline radial replay and controller dispatch share this binding constructor.
+Both record `source_pair_id` and `component_recipe_id` in results and operator
+rows; the offline writer includes them before persisting each completed row.
+Dispatch resolves the anchor from the selected pair, not the global first source.
+Compact cards retain the pair, site/caps, formula and cost for all twelve choices.
+Reanalysis checks new bindings against raw inputs and rejects relabeled receipts.
+Older receipts remain analyzable with `source_pair_binding_status=legacy_unbound`;
+no current ID or authority is retroactively assigned to them.
 
 One selected recipe costs at most one diagnostic slot: two no-edit repeats plus
 two edited repeats per offered site (four or six explicit physical replays).
@@ -251,13 +267,100 @@ or semantic claims. `git diff --check` passes.
 
 ### Controller Binding Caveat
 
-This offline experiment explicitly measures **comma + while**. The current
-bounded controller offer chooses the first two SOURCE candidates, which at
-this fixture are **before + comma**. These are different recipe identities.
-Do not transfer this result to that card or automatically prefer its orthogonal
-component. The next controller-facing step is explicit, bounded source-pair
-binding plus current-prefix measurement of that exact expression, not a global
-"prefer orthogonal" rule. No permission is conferred by this comparison.
+This offline experiment explicitly measures **comma + while**. At measurement
+time the controller offer only used the first two SOURCE candidates, which at
+this fixture are **before + comma**. Those remain different recipe identities.
+The explicit-pair implementation now offers **before + comma**, **before + while**
+and **comma + while**, with a shared offline/runtime binding contract. This closes
+the selection-path mismatch, not the empirical question: the old receipt does
+not become current evidence, and the controller has not yet demonstrated that
+it selects or benefits from this pair. Remeasure the exact expression at the
+current prefix; do not adopt a global "prefer orthogonal" rule or confer apply
+permission from the historical comparison.
+
+### Live Card-to-Execution Check
+
+`replay_source_clause_trajectory --controller-radial-choice` replaces the full
+offline matrix with **one** controller invocation and, only if selected, one
+radial diagnostic. It requires `--radial-component-controls` and an explicit
+`--offline-radial-receipt` from the same checkpoint, recorded prompt/prefix,
+source pair, device/dtype, threads and caps. Model paths remain CLI arguments.
+
+All current operation cards retain their runtime order and availability. No
+preferred pair, component, offline response, rescue label or follow-up prompt
+is supplied. A non-radial choice or abstention is recorded without forced
+fallback or another provider call. An apply command is never dispatched by this
+diagnostic harness. The legacy receipt is read only for the post-choice audit.
+`selected_operation_card` retains any valid menu choice, while
+`selected_radial_operation_card` is separate. A non-radial request is recorded
+as `non_radial_selection_not_dispatched`, with the harness-scope reason. It is
+not controller abstention, a parser failure or runtime unavailability.
+
+`--controller-source-choice` is the broader diagnostic harness mode: it can
+dispatch either the selected source-token patch or the selected radial recipe.
+The original radial-only mode remains available for reproducing its contract.
+`--recorded-controller-choice <receipt>` makes no provider call; it verifies the
+checkpoint/numerics/prefix, the recorded raw and normalized response, and the
+**entire current packet hash** before reusing the exact operation ID. It refuses
+drift rather than rebinding a similarly named card. This is a replay of a prior
+controller choice, not a new independent controller sample.
+
+Single-source execution is checked against its prepared edit, input hash,
+candidate fingerprint, repeated hooks and caps. A source token absent from the
+historical offline matrix remains `not_covered`; source-token and radial-pair
+effects cannot be equated by a shared surface or token label.
+
+The new receipt separates:
+
+- `selected_execution_comparison`: the selected recipe's exact source inputs,
+  surface, DSL, blend dose/caps, two executed hooks and restored state.
+- `offline_comparison`: the historical raw left/right/target hashes, compiled
+  inputs, expression, context and actual edit. A different pair is `not_covered`,
+  not an identity match or a failure of the operator.
+- `readout_and_execution_exact_checks`: repeated structural response, physical
+  write telemetry and repeat floors, separately from operation identity.
+
+Old receipts remain `legacy_unbound` even if their raw physical evidence
+matches. This is an interface/execution parity check, not a controller efficacy,
+semantic rescue, production permission or task-success experiment. The 12-slot
+ceiling and actual-forward accounting remain unchanged. The single-choice mode
+defaults to a 32-GiB free-disk start floor. An explicitly authorized
+`--min-free-disk-gib` override (minimum 10 GiB) is recorded in the receipt; the
+supervisor must use the same floor, rather than silently lowering it on failure.
+
+### Selected-Source Live Replay (2026-10-26)
+
+The first Luna choice was a single-source ` before` patch, not a radial card.
+The radial-only harness had recorded `no_radial_selection` and performed no
+selected-operator replay. That was a dispatch-scope limitation, not controller
+abstention. The original receipt is preserved.
+
+The source-enabled replay then reconstructed the exact natural prefix and
+**entire packet hash**, reused that recorded choice with zero new API calls, and
+executed its normal-cap L14 resid-pre blend. Card, source index 74, input hash,
+prepared edit, candidate fingerprint, actual hooks and restored state matched.
+Two baseline plus two edited replays used one diagnostic slot; total run usage
+was 3/12 slots and 19 actual forwards, including prefix/inspection overhead.
+
+Both edited repeats lowered before probability by 0.000464914 and raised comma
+by 0.001580512, with zero repeated-logit variation. The comma-to-winner gap fell
+from 1.114996 to 1.105572, but greedy remained before. This is `cross_bound`
+readout response, not semantic rescue. The before-bound `bound_gap_movement`
+label does not imply its probability increased or that a task improved.
+
+The old offline matrix lacks this exact single-source before candidate, so its
+comparison is `not_covered`. The new local baseline measures its effect; it does
+not establish independent historical parity or controller selection value.
+Production authority remains unchanged. See the
+[published derived audits](../results/published_intervention_20261027/README.md)
+for the failed/interrupted attempts, lineage, resource bounds and full counts.
+
+A fresh follow-up Luna call (attempt5) received the same packet/menu and again
+selected the before card. Source-enabled dispatch executed it without fallback;
+candidate binding, compiled inputs and complete repeated operator rows matched
+attempt4 exactly. Usage remained 3/12 slots and 19 actual forwards, with greedy
+before unchanged. This verifies one fresh selection-to-execution path, not
+controller advantage or what the controller would do after receiving its result.
 
 ## Path Toward Use, Not Automatic Promotion
 

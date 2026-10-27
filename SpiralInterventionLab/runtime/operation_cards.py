@@ -97,7 +97,9 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
             "candidate_id": (candidate or {}).get("candidate_id"),
             "target_piece": (candidate or {}).get("target_piece"),
             **({"component_recipe_id": request["component_recipe_id"],
-                "dsl_formula": (candidate or {}).get("dsl_formula")} if request.get("component_recipe_id") else {}),
+                **{key: (candidate or {}).get(key) for key in (
+                    "component", "dsl_formula", "source_pair_id", "source_pair", "structure_context_id", "surfaces")}}
+               if request.get("component_recipe_id") else {}),
             **({"probe_terms": request["terms"]} if request.get("probe_refresh_id") else {}),
             "purpose": purpose, "prerequisites": prerequisites,
             "available": available, "blocked_reason": blocked,
@@ -127,7 +129,8 @@ def build_menu(packet: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, dic
             prerequisites=["offered_by_runtime", "current_request_preflight_at_dispatch"],
             available=item.get("available") is not False and not item.get("blocked_reason"),
             blocked=item.get("blocked_reason"), slots=0 if name == "inspect_evidence" else 1,
-            candidate={"target_piece": item.get("target_piece"), "dsl_formula": item.get("dsl_formula")},
+            candidate={key: item.get(key) for key in (
+                "target_piece", "dsl_formula", "component", "source_pair_id", "source_pair", "structure_context_id", "surfaces")},
             replays=1 if name == "source_clause_structure_probe" else
                 item.get("physical_replays_upper_bound") if name in {"source_clause_activation_patch_probe", "source_common_radial_probe"} else
                 0 if name in {"inspect_evidence", "entity_insertion_operator_candidate_review"} else None)

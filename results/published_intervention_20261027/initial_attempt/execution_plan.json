@@ -1,0 +1,30 @@
+{
+  "manifest_sha256": "297ce4ba7c30dc12a60d6038c77a179454a57373a5dc464540eb0a8119958ead",
+  "device": "mps",
+  "dtype": "float16",
+  "policies": [
+    "b0",
+    "fixed",
+    "random",
+    "controller"
+  ],
+  "case_ids": [
+    "cal_delivery",
+    "cal_review",
+    "cal_workshop",
+    "confirm_names_a",
+    "confirm_names_b",
+    "confirm_order_a",
+    "confirm_order_b",
+    "confirm_paraphrase_a",
+    "confirm_paraphrase_b"
+  ],
+  "wall_seconds": 3600,
+  "controller_model": "gpt-5.6-luna",
+  "code_sha256": {
+    "SpiralInterventionLab/examples/structural_rescue_benchmark.py": "522438196ade6b6826fe68c8ec3e187893af9706dce9f808c3991d1c448d04b7",
+    "SpiralInterventionLab/tasks/structural_rescue.py": "12d73ba3fe4013790e6c24fb5e6400fbfac2a4ea9764b2026cad3fa3f98971b2",
+    "SpiralInterventionLab/runtime/clause_radial.py": "349417da2dec28fb63cbf7e48a764510cc5bd4d4041935f2220c583b5887620b",
+    "SpiralInterventionLab/runtime/clause_actuation.py": "4cf0e15b2a04e23ba707e44c8b71163e736d5a81e701faed552a2d825a5dabc3"
+  }
+}

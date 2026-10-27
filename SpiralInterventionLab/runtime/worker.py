@@ -8514,6 +8514,8 @@ class HookedTransformerWorkerRuntime:
                     hints.setdefault("available_next_diagnostics", []).append({
                         "diagnostic": clause_radial.NAME, "request": recipe["request"],
                         "component": recipe["component"], "dsl_formula": recipe["dsl_formula"],
+                        "source_pair_id": recipe["source_pair_id"], "source_pair": recipe["source_pair"],
+                        "structure_context_id": recipe["structure_context_id"], "surfaces": recipe["surfaces"],
                         "physical_replays_upper_bound": recipe["physical_replays_upper_bound"],
                         "reason": "bounded_current_state_component_comparison_not_ownership",
                         "permission": "diagnostic_only", "production_apply_allowed": False,

@@ -1,0 +1,107 @@
+{
+  "kind": "source_radial_controller_binding_audit",
+  "evidence_origin": "derived_post_run_from_frozen_receipt",
+  "source_sha256": {
+    "attempt3/measurement/trajectory.json": "038e6ae06a1c1d9120d749ba2be3c4c8582a7ea1fde96bd1e8e770b412c7088d",
+    "attempt3/supervision.json": "354da6f13739b412b84508d66929bbf00e1a1faf60a925f5cdf98198e3a6d1cd"
+  },
+  "status": "controller_requested_non_radial_card_not_dispatched_by_harness",
+  "original_receipt_status": "no_radial_selection",
+  "original_selected_operation_card": null,
+  "selection_reconstructed_from": "exact_operation_id_in_recorded_operation_menu_not_a_new_model_answer",
+  "controller_model": "gpt-5.6-luna",
+  "controller_calls": 1,
+  "prefix": " Nora will take the sample to Ivo",
+  "reference_match": "matched",
+  "selected_operation_card": {
+    "operation_id": "operation:f2eaaec971bf441e293cde67",
+    "diagnostic": "source_clause_activation_patch_probe",
+    "action": null,
+    "mode": null,
+    "objective_bundle_key": null,
+    "candidate_id": null,
+    "target_piece": " before",
+    "purpose": "Measure a source-bound structure token patch under normal caps; not clause rescue or apply permission",
+    "prerequisites": [
+      "offered_by_runtime",
+      "current_request_preflight_at_dispatch"
+    ],
+    "available": true,
+    "blocked_reason": null,
+    "cost": {
+      "diagnostic_slots_upper_bound": 1,
+      "inspection_calls_upper_bound": 0,
+      "physical_replays_upper_bound": 4,
+      "basis": "dispatch_dependent",
+      "charge": "actual_work_under_existing_budget"
+    },
+    "possible_result": "repeated_one_token_effect_and_cross_token_response",
+    "result_guaranteed": false,
+    "timing": {
+      "generation_during_diagnostic": "unchanged",
+      "same_prefix_rounds_left": 2,
+      "result_before_next_token": "conditional_on_usable_result_and_explicit_hold",
+      "requires_followup_round": false
+    },
+    "production_apply_allowed": false
+  },
+  "resolved_requests": [
+    {
+      "diagnostic": "source_clause_activation_patch_probe",
+      "structure_operator_id": "clause-patch:24ae2ede9d742f33a183758b"
+    }
+  ],
+  "controller_command": {
+    "version": "0.1",
+    "decision": "noop",
+    "edits": [],
+    "rollback_ids": [],
+    "meta": {
+      "operation_id": "operation:f2eaaec971bf441e293cde67",
+      "generation_action": "hold_prefix",
+      "objective": "improve required-term recall",
+      "micro_rationale": "Measure the greedy structure token's cross-token effect before advancing; required terms remain missing and no apply certificate exists."
+    }
+  },
+  "provider_operation_id_preserved_through_parser": true,
+  "controller_abstained_from_diagnostic": false,
+  "dispatch_block_reason": "outside_predeclared_radial_only_scope",
+  "card_to_executed_operator_comparison": "not_measured",
+  "selected_operator_to_offline_comparison": "not_measured",
+  "radial_recipe_count": 12,
+  "total_menu_cards": 16,
+  "diagnostic_budget_used": 2,
+  "diagnostic_budget_left": 10,
+  "actual_forward_counts": {
+    "attempted": 12,
+    "completed": 12
+  },
+  "prefix_forward_counts": {
+    "attempted": 8,
+    "completed": 8
+  },
+  "diagnostic_interval_forward_counts": {
+    "attempted": 4,
+    "completed": 4
+  },
+  "selected_operator_replays": 0,
+  "rollout_edit_count": 0,
+  "production_apply_allowed": false,
+  "provider_usage": {
+    "input_tokens": 32091,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 176,
+    "output_tokens_details": {
+      "reasoning_tokens": 87
+    },
+    "total_tokens": 32267
+  },
+  "provider_latency_ms": 6093.672,
+  "start_free_disk_gib": 27.74176788330078,
+  "minimum_sampled_free_disk_gib": 15.07,
+  "disk_stop_floor_gib": 10.0,
+  "elapsed_seconds": 261.7,
+  "claim_limit": "prefix_and_request_identity_verified_not_operator_effect_or_controller_value"
+}

@@ -1308,14 +1308,13 @@ class TestBackendsAndBridge(unittest.TestCase):
         self.assertEqual(result.score, 1.0)
 
     def test_mlx_backend_step_can_be_smoked_with_patched_stream_generate(self):
-        backend = MLXLMBackend(model=object(), tokenizer=_FakeTokenizer())
-
         def fake_stream_generate(_model, _tokenizer, prompt, max_tokens, temp, top_p):
             self.assertEqual(prompt, "hello")
             self.assertEqual(max_tokens, 1)
             yield _FakeMLXResponse(4, "x")
 
         with patch("SpiralInterventionLab.backends.mlx_lm.stream_generate", new=fake_stream_generate):
+            backend = MLXLMBackend(model=object(), tokenizer=_FakeTokenizer())
             backend.reset("hello")
             result = backend.step()
 

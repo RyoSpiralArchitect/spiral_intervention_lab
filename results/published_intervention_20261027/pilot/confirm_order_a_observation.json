@@ -1,0 +1,625 @@
+{
+  "version": "structural_rescue_choice_v1",
+  "case_id": "confirm_order_a",
+  "generated_tail": " Tomas sends the invoice to Lena",
+  "structure_readout": [
+    {
+      "token_id": 1603,
+      "piece": " before",
+      "source_positions": [
+        72
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 1,
+      "prob": 0.594638466835022,
+      "logit": 21.203125,
+      "gap_to_top1": 0.0,
+      "top20_hit": true,
+      "is_greedy_token": true
+    },
+    {
+      "token_id": 11,
+      "piece": ",",
+      "source_positions": [
+        74,
+        82
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 2,
+      "prob": 0.16512513160705566,
+      "logit": 19.921875,
+      "gap_to_top1": 1.28125,
+      "top20_hit": true,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 1418,
+      "piece": " while",
+      "source_positions": [
+        83
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 3,
+      "prob": 0.07442773133516312,
+      "logit": 19.125,
+      "gap_to_top1": 2.078125,
+      "top20_hit": true,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 627,
+      "piece": ".\n",
+      "source_positions": [
+        92
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 30,
+      "prob": 0.00021234428277239203,
+      "logit": 13.265625,
+      "gap_to_top1": 7.9375,
+      "top20_hit": false,
+      "is_greedy_token": false
+    }
+  ],
+  "recipes": [
+    {
+      "recipe_id": "clause-radial:1bca10e14e442f7ef27e9d3e",
+      "component": "common",
+      "source_pair_id": "clause-pair:7f0325ae8bf4354b105328cb",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:936596bf2ff091fd701d4afd",
+          "target_token_id": 1603,
+          "target_piece": " before",
+          "source_token_index": 72,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:fe8fdfd4eeaaf00ce6551443",
+          "target_token_id": 11,
+          "target_piece": ",",
+          "source_token_index": 74,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.7257506573726201,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.724857423379948,
+          "parallel_norm": 7.517653483159151,
+          "orthogonal_norm": 8.99762011343739,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": 3.552713678800501e-15
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:261a4d01502acb822cca6845",
+      "component": "common_parallel",
+      "source_pair_id": "clause-pair:7f0325ae8bf4354b105328cb",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:936596bf2ff091fd701d4afd",
+          "target_token_id": 1603,
+          "target_piece": " before",
+          "source_token_index": 72,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:fe8fdfd4eeaaf00ce6551443",
+          "target_token_id": 11,
+          "target_piece": ",",
+          "source_token_index": 74,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.7257506573726201,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.724857423379948,
+          "parallel_norm": 7.517653483159151,
+          "orthogonal_norm": 8.99762011343739,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": 3.552713678800501e-15
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:5075f6d68264ae90fc034051",
+      "component": "common_orthogonal",
+      "source_pair_id": "clause-pair:7f0325ae8bf4354b105328cb",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:936596bf2ff091fd701d4afd",
+          "target_token_id": 1603,
+          "target_piece": " before",
+          "source_token_index": 72,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:fe8fdfd4eeaaf00ce6551443",
+          "target_token_id": 11,
+          "target_piece": ",",
+          "source_token_index": 74,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.7257506573726201,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.724857423379948,
+          "parallel_norm": 7.517653483159151,
+          "orthogonal_norm": 8.99762011343739,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": 3.552713678800501e-15
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:087682b267cb8afbf7c85fc1",
+      "component": "common",
+      "source_pair_id": "clause-pair:9ed360218a93e02a4cb75618",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:936596bf2ff091fd701d4afd",
+          "target_token_id": 1603,
+          "target_piece": " before",
+          "source_token_index": 72,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:13e363ae9cff406a52e96c86",
+          "target_token_id": 1418,
+          "target_piece": " while",
+          "source_token_index": 83,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.6901117391148234,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.425621671283114,
+          "parallel_norm": 7.148489452434483,
+          "orthogonal_norm": 8.913132396847207,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": 0.0
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:a0d52c18d70d84ecf9ae9286",
+      "component": "common_parallel",
+      "source_pair_id": "clause-pair:9ed360218a93e02a4cb75618",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:936596bf2ff091fd701d4afd",
+          "target_token_id": 1603,
+          "target_piece": " before",
+          "source_token_index": 72,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:13e363ae9cff406a52e96c86",
+          "target_token_id": 1418,
+          "target_piece": " while",
+          "source_token_index": 83,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.6901117391148234,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.425621671283114,
+          "parallel_norm": 7.148489452434483,
+          "orthogonal_norm": 8.913132396847207,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": 0.0
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:c4c9374b13c37395af7680b6",
+      "component": "common_orthogonal",
+      "source_pair_id": "clause-pair:9ed360218a93e02a4cb75618",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:936596bf2ff091fd701d4afd",
+          "target_token_id": 1603,
+          "target_piece": " before",
+          "source_token_index": 72,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:13e363ae9cff406a52e96c86",
+          "target_token_id": 1418,
+          "target_piece": " while",
+          "source_token_index": 83,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.6901117391148234,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.425621671283114,
+          "parallel_norm": 7.148489452434483,
+          "orthogonal_norm": 8.913132396847207,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": 0.0
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:d02dfa3c51c8c16a992a0118",
+      "component": "common",
+      "source_pair_id": "clause-pair:640bb990cb6896de93001005",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:fe8fdfd4eeaaf00ce6551443",
+          "target_token_id": 11,
+          "target_piece": ",",
+          "source_token_index": 74,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:13e363ae9cff406a52e96c86",
+          "target_token_id": 1418,
+          "target_piece": " while",
+          "source_token_index": 83,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.6886558451168261,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.106012489947966,
+          "parallel_norm": 7.133408644068734,
+          "orthogonal_norm": 8.512226180242497,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": -4.440892098500626e-16
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:19e591e83f4242c2d6ca1e97",
+      "component": "common_parallel",
+      "source_pair_id": "clause-pair:640bb990cb6896de93001005",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:fe8fdfd4eeaaf00ce6551443",
+          "target_token_id": 11,
+          "target_piece": ",",
+          "source_token_index": 74,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:13e363ae9cff406a52e96c86",
+          "target_token_id": 1418,
+          "target_piece": " while",
+          "source_token_index": 83,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.6886558451168261,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.106012489947966,
+          "parallel_norm": 7.133408644068734,
+          "orthogonal_norm": 8.512226180242497,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": -4.440892098500626e-16
+        }
+      ]
+    },
+    {
+      "recipe_id": "clause-radial:b2654a3bd25216b439c3ac61",
+      "component": "common_orthogonal",
+      "source_pair_id": "clause-pair:640bb990cb6896de93001005",
+      "source_pair": [
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:fe8fdfd4eeaaf00ce6551443",
+          "target_token_id": 11,
+          "target_piece": ",",
+          "source_token_index": 74,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        },
+        {
+          "structure_context_id": "clause-context:56f660e6518e5e70e277dd3f",
+          "structure_operator_id": "clause-patch:13e363ae9cff406a52e96c86",
+          "target_token_id": 1418,
+          "target_piece": " while",
+          "source_token_index": 83,
+          "source_provenance": "source_body",
+          "source_localization": "exact_source_token",
+          "source_occurrence_rule": "first_source_occurrence",
+          "observation_id": "clause-observation:7d091deaf0d9423db024dab8"
+        }
+      ],
+      "surfaces": [
+        {
+          "surface_id": "s_resid_pre_l14_last",
+          "site": "resid_pre",
+          "layer": 14,
+          "cache_hook_name": "blocks.14.hook_resid_pre",
+          "caps": {
+            "max_alpha": 0.18,
+            "max_ttl_steps": 2,
+            "norm_clip": 1.5,
+            "step_size": 0.12,
+            "rank_cap": null,
+            "revertible_only": true
+          },
+          "alpha": 0.04,
+          "step_size": 0.08,
+          "norm_clip": 1.0
+        }
+      ],
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": [
+        {
+          "reference": "current_last_activation_not_semantic_basis",
+          "radial_coefficient": -0.6886558451168261,
+          "radial_direction": "shrink",
+          "common_displacement_norm": 11.106012489947966,
+          "parallel_norm": 7.133408644068734,
+          "orthogonal_norm": 8.512226180242497,
+          "raw_reconstruction_error_norm": 0.0,
+          "parallel_orthogonal_dot": -4.440892098500626e-16
+        }
+      ]
+    }
+  ],
+  "budget": {
+    "max_edits": 1,
+    "diagnostic_forwards": 24,
+    "continuation_forwards": 64
+  },
+  "production_apply_allowed": false
+}
