@@ -41,6 +41,16 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/structural_rescue_contract.md`](docs/structural_rescue_contract.md)
+  An opt-in norm-relative write contract: one edit, one token, at most 8% of the
+  edited residual norm, toward source punctuation or connectives only, enforced
+  at hook time for any adapter and off by default. Rerunning the frozen pilot
+  under it, a fixed `,` push rescues the known failure with correct roles and
+  harms none of the eight successes; middle-layer patches still change nothing.
+  The one-shot controller picks `,` in eight of nine cases but not in the one
+  that matters. A pre-registered screen supplies baseline failures for the
+  next comparison.
+
 - [`docs/structural_rescue_pilot.md`](docs/structural_rescue_pilot.md)
   Frozen calibration/confirmation cases, conservative role-aware evaluation,
   and a normal-cap B0/fixed/random/controller comparison at natural boundaries.

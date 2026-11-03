@@ -1,0 +1,150 @@
+{
+  "status": "running",
+  "created_at_utc": "2026-11-03T01:57:03.078352+00:00",
+  "manifest_sha256": "f9cd0dd715cb383beaeaa3301f8ac0100f89b3188889b676040a40bc567b07ba",
+  "checkpoint_sha256_verified": null,
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [],
+  "policies_requested": [
+    "b0",
+    "fixed",
+    "fixed_readout",
+    "random"
+  ],
+  "case_ids_requested": [
+    "cal_delivery",
+    "cal_review",
+    "cal_workshop"
+  ],
+  "cases": [],
+  "scope": "restored_contract_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 0.0,
+  "aggregate": {
+    "calibration": {
+      "b0": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed_readout": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "random": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    },
+    "confirmation": {
+      "b0": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed_readout": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "random": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    }
+  }
+}

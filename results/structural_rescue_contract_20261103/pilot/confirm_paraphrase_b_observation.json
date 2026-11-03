@@ -1,0 +1,466 @@
+{
+  "version": "structural_rescue_choice_v2",
+  "case_id": "confirm_paraphrase_b",
+  "generated_tail": " Bruno takes the packet to Anya",
+  "structure_readout": [
+    {
+      "token_id": 13538,
+      "piece": " Before",
+      "source_positions": [
+        69
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 131,
+      "prob": 1.339297250524396e-05,
+      "logit": 9.9296875,
+      "gap_to_top1": 10.8984375,
+      "top20_hit": false,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 11,
+      "piece": ",",
+      "source_positions": [
+        71,
+        80
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 2,
+      "prob": 0.14718089997768402,
+      "logit": 19.234375,
+      "gap_to_top1": 1.59375,
+      "top20_hit": true,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 20444,
+      "piece": " whereas",
+      "source_positions": [
+        81
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 21,
+      "prob": 0.0007312315865419805,
+      "logit": 13.9296875,
+      "gap_to_top1": 6.8984375,
+      "top20_hit": false,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 627,
+      "piece": ".\n",
+      "source_positions": [
+        90
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 19,
+      "prob": 0.0009100323659367859,
+      "logit": 14.1484375,
+      "gap_to_top1": 6.6796875,
+      "top20_hit": true,
+      "is_greedy_token": false
+    }
+  ],
+  "recipes": [
+    {
+      "recipe_id": "structural-contract:b2a9a5eb4728525d630754b2",
+      "kind": "patch",
+      "component": "common",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 1.0810100988392064,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.7042290907334261,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.143878907611361,
+        "parallel_norm": 7.259732095729362,
+        "orthogonal_norm": 8.45472217200201,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -3.1086244689504383e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:8f3c08265b6ab535e99875ad",
+      "kind": "patch",
+      "component": "common_parallel",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.7037987249278123,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.7042290907334261,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.143878907611361,
+        "parallel_norm": 7.259732095729362,
+        "orthogonal_norm": 8.45472217200201,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -3.1086244689504383e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:69cbceeda1d70ab988c5092b",
+      "kind": "patch",
+      "component": "common_orthogonal",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.8201598735656678,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.7042290907334261,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.143878907611361,
+        "parallel_norm": 7.259732095729362,
+        "orthogonal_norm": 8.45472217200201,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -3.1086244689504383e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:3ad5b8874829f00508597592",
+      "kind": "patch",
+      "component": "common",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 1.0932640520014383,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.784250446117335,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.27020202922335,
+        "parallel_norm": 8.08465343122732,
+        "orthogonal_norm": 7.8521228133833025,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -1.7763568394002505e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:61ddc7f017a41827637024eb",
+      "kind": "patch",
+      "component": "common_parallel",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.7833270881567859,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.784250446117335,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.27020202922335,
+        "parallel_norm": 8.08465343122732,
+        "orthogonal_norm": 7.8521228133833025,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -1.7763568394002505e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:eceddfb6eebd93d6a82c536e",
+      "kind": "patch",
+      "component": "common_orthogonal",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.7617327883271213,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.784250446117335,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.27020202922335,
+        "parallel_norm": 8.08465343122732,
+        "orthogonal_norm": 7.8521228133833025,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -1.7763568394002505e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:431507a005e1b31c8da37e79",
+      "kind": "patch",
+      "component": "common",
+      "sources": [
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 1.1007963226831823,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.7461823695573362,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.347850436455476,
+        "parallel_norm": 7.69221858174178,
+        "orthogonal_norm": 8.342870178713632,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -3.774758283725532e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:6c894ed34f398708d99e625e",
+      "kind": "patch",
+      "component": "common_parallel",
+      "sources": [
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.7458228644555887,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.7461823695573362,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.347850436455476,
+        "parallel_norm": 7.69221858174178,
+        "orthogonal_norm": 8.342870178713632,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -3.774758283725532e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:c3f550498953e1cad75a554b",
+      "kind": "patch",
+      "component": "common_orthogonal",
+      "sources": [
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.8092902936470572,
+      "expected_relative_write": 0.08,
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.7461823695573362,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.347850436455476,
+        "parallel_norm": 7.69221858174178,
+        "orthogonal_norm": 8.342870178713632,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": -3.774758283725532e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:efb35e5d87c42d8ef5864ae6",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 71
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.08,
+      "expected_relative_write": 0.08
+    },
+    {
+      "recipe_id": "structural-contract:3c71138aa0bc7f067d799fd9",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "position": 81
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.08,
+      "expected_relative_write": 0.08
+    },
+    {
+      "recipe_id": "structural-contract:060f55b24d9a042524d3a9b2",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 90
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.08,
+      "requested_relative_write": 0.08,
+      "expected_relative_write": 0.08
+    }
+  ],
+  "contract": {
+    "id": "norm_relative_structural_v1",
+    "relative_write_cap": 0.08,
+    "ttl_steps": 1,
+    "max_edits": 1
+  },
+  "budget": {
+    "max_edits": 1,
+    "diagnostic_forwards": 24,
+    "continuation_forwards": 64
+  },
+  "production_apply_allowed": false
+}

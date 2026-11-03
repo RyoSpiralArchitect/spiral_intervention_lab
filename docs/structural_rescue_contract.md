@@ -122,4 +122,58 @@ v1's `Meter` default is still 10 GiB.
 
 ## Results
 
-Pending.
+### Calibration pre-check (no provider)
+
+`precheck_r4`: manifest `92f1138a…`, B0/fixed/fixed-readout/random plus every
+catalog recipe on the three calibration cases, 48 branches in 1228 s on
+MPS/float16. Every branch restored state, confirmed one guarded write and stayed
+within the cap (realized relative write 0.08 throughout). The eligible sources
+were `,`, ` while` and `.` in every case; ` before` was protected.
+
+| Recipe | First token changed | Outcome |
+| --- | ---: | --- |
+| Patch, middle layer, any component or pair (27 branches) | 0/27 | identical to B0 |
+| Readout `,`, last layer | 3/3 | rescues `cal_review`; the two successes stay successes |
+| Readout ` while`, last layer | 1/3 | `cal_workshop` only, still a success |
+| Readout `.`, last layer | 0/3 | identical to B0 |
+
+The known failure becomes the role-correct rewrite under the contract:
+
+- B0: `Nora will take the sample to Ivo before sending the report to Yara before dusk.`
+- Readout `,` at 8%: `Nora will take the sample to Ivo, while Selim sends the report to Yara before dusk.`
+
+On the two successes the same push only moves the deadline phrase to the end
+(`… to Omar, while Leena brings the contract to Priya before noon.`). Middle-layer
+patches saturate the cap and still never change the first token, consistent with
+the earlier estimate of about 0.2 logit at 8%. Fixed-readout is the pre-declared
+"first eligible source token" rule; that it is also the winning recipe in all
+three calibration cases is a property of these cases, which all put `,` first.
+
+### Frozen nine cases, all policies
+
+`pilot`: the same manifest, all five policies on all nine v1 cases plus the
+calibration matrix, 1474 s, Luna (`gpt-5.6-luna`) as controller. The analyzer
+verified the manifest and every executed source hash against the snapshot. All
+branches restored state; repeated-baseline drift was zero; the 72 edited
+branches wrote 0.07998-0.08002 of the residual norm.
+
+| Split | B0 | Fixed | Fixed readout | Random | Controller |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Calibration joint success | 2/3 | 2/3 | **3/3** | 2/3 | 2/3 |
+| Confirmation joint success | 6/6 | 6/6 | 6/6 | 6/6 | 6/6 |
+| Wins / losses vs B0 | - | 0 / 0 | 1 / 0 | 0 / 0 | 0 / 0 |
+| Outputs changed vs B0 | - | 0 | 6 | 0 | 5 |
+
+No policy lost a baseline success. The contract-bounded `,` push changed six
+outputs, rescued the one failure, and left the other five correct.
+
+The controller made nine requests and selected a recipe every time, always a
+readout push: `,` in eight cases and `.` in `cal_review`, the only case where
+the choice mattered. It therefore missed the rescue that the fixed rule found,
+on the one case that discriminates between them. With one discriminating case
+this is an observation, not a comparison. Provider usage was 32,020 input and
+1,675 output tokens. Random selection drew a middle-layer patch in seven cases
+and a readout push in two (`.` and ` while`), none of which changed a task outcome.
+
+Actual forward attempts: B0 126, fixed 144, fixed readout 146, random 144,
+controller 143; shared setup 85; calibration matrix 577.
