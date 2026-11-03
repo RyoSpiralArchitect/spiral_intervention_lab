@@ -47,9 +47,10 @@ Key current notes:
   at hook time for any adapter and off by default. Rerunning the frozen pilot
   under it, a fixed `,` push rescues the known failure with correct roles and
   harms none of the eight successes; middle-layer patches still change nothing.
-  The one-shot controller picks `,` in eight of nine cases but not in the one
-  that matters. A pre-registered screen supplies baseline failures for the
-  next comparison.
+  On seven pre-registered baseline failures, fixed `,` rescues 4, the one-shot
+  controller 3, random 1, the v1 patch rule 0. The push closes about 1.8
+  logits; it flips every case with a gap of at most 1.92 (10/10, all ending in
+  success) and none at 2.0 or more, so reach and choice, not the actuator, limit it.
 
 - [`docs/structural_rescue_pilot.md`](docs/structural_rescue_pilot.md)
   Frozen calibration/confirmation cases, conservative role-aware evaluation,

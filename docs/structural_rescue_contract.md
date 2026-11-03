@@ -192,3 +192,95 @@ and a readout push in two (`.` and ` while`), none of which changed a task outco
 
 Actual forward attempts: B0 126, fixed 144, fixed readout 146, random 144,
 controller 143; shared setup 85; calibration matrix 577.
+
+### B0 screen
+
+`screen_r2` (manifest `e018bbcc…`, 1254 s) decoded all 72 candidates. Its 17
+rows that overlap the aborted attempt are identical. 59 candidates reached the
+boundary, and 52 of those succeeded jointly; the 13 without a boundary all
+failed. Seven met the frozen rule, short of the limit of 12:
+
+| Case | B0 failure | B0 output |
+| --- | --- | --- |
+| `gen_002` | constraint | `Lars will send the blueprint to Pablo before lunch.` |
+| `gen_009` | role unknown | `Rosa sends the blueprint to Celia before dawn, while Yusuf gives Wanda the badge.` |
+| `gen_018` | role unknown | `Kira sends the roster to Olga before dawn; Tilda mails Boris the badge.` |
+| `gen_045` | constraint | `Felix brings the permit to Nikos before noon.` |
+| `gen_047` | constraint | `Lars will take the receipt to Nikos before dawn.` |
+| `gen_058` | constraint | `Boris sends the roster to Tilda before midnight, with Edda giving Alma the permit afterwards.` |
+| `gen_060` | constraint | `Ugo must bring the blueprint to Kira before midnight.` |
+
+Four constraint failures drop the second clause outright; `gen_058` keeps it as
+a participle (`giving` does not contain the required `give`). The two role-unknown
+cases are correct double-object datives. The 13 candidates without a boundary
+all open with that construction (`Wanda gives Lars the roster`), so no
+`to <first recipient>` prefix exists. Verb choice in the generator (`give`,
+`hand`, `mail`) interacts with the role check's `to <name>` binding; the next
+screen should either extend the check to double-object datives or restrict the
+verbs, decided before it runs.
+
+### Rescue split (pre-registered primary analysis)
+
+`rescue`: manifest `95f8b371…` (binds the screen's manifest and results hashes),
+all five policies on the seven selected cases, 504 s. The analyzer verified the
+manifest and executed sources. B0 failed again on all seven. The 28 edited
+branches wrote 0.07998-0.08003 of the norm, restored state and showed zero drift.
+
+| Case | B0 failure | Fixed | Fixed readout | Random | Controller |
+| --- | --- | :---: | :---: | :---: | :---: |
+| `gen_002` | constraint | - | ✓ | - | ✓ |
+| `gen_009` | role unknown | - | - | - | - |
+| `gen_018` | role unknown | - | ✓ | ✓ | ✓ |
+| `gen_045` | constraint | - | - | - | - |
+| `gen_047` | constraint | - | ✓ | - | ✓ |
+| `gen_058` | constraint | - | ✓ | - | - |
+| `gen_060` | constraint | - | - | - | - |
+| **Joint successes** | | **0/7** | **4/7** | **1/7** | **3/7** |
+
+B0 is 0/7 by construction. Rescued outputs:
+
+- `gen_002`: `Lars will send the blueprint to Pablo, while Henrik will mail the badge to Ilse before lunch.`
+- `gen_047`: `Lars will take the receipt to Nikos, while Marta sends the ledger to Yusuf before dawn.`
+- `gen_058` (fixed readout): `Boris sends the roster to Tilda, Edda gives the permit to Alma before midnight.`
+  This is a comma splice that the evaluator accepts.
+- `gen_018`: `Kira sends the roster to Olga, and Tilda mails the badge to Boris before dawn.`
+  The B0 output was already correct English, so this success only reflects the evaluator.
+
+The controller made seven requests and again always chose a readout push: `,`
+four times, ` and`, `;` and `.` once each. It matched the fixed rule on three
+rescues and missed `gen_058` by choosing `.`, although its packet showed `,` at
+rank 2 with `gap_to_top1` 1.52. Random drew two readout pushes (` and` on
+`gen_018`, which rescued it, and `.` on `gen_045`) and five middle-layer patches,
+which again changed nothing. Provider usage was 24,873 input and 1,089 output tokens. By failure type
+(exploratory), fixed readout rescued 3/5 constraint failures and 1/2 role-unknown
+cases, and the controller 2/5 and 1/2.
+
+### Reach of an 8% push
+
+Across all 16 cases of the pilot and the rescue split, the fixed `,` push closed
+the `,`-to-winner logit gap by 1.53-2.08 (mean about 1.8). It flipped the first
+token in every case whose baseline gap was at most 1.92 (10/10) and in none whose
+gap was 2.0 or more (0/6). Every flip ended in joint success: five rescues and five
+unchanged successes. The three rescue cases out of reach (`gen_009`, `gen_045`,
+`gen_060`) are exactly the gaps of 2.14-2.42.
+
+So under this contract the actuator is not the bottleneck once the structural
+alternative is within about two logits: one bounded token is enough, and the
+worker writes the missing clause itself. What the cap cannot buy is a larger
+gap, and the one-shot controller's choice, not the actuator, separates it from
+the fixed rule (5 of 8 failures rescued by fixed readout, 3 of 8 by the controller,
+counting `cal_review`).
+
+### Scope
+
+- One worker model, one boundary rule, greedy decoding.
+- Seven selected failures and one calibration failure, so all counts are descriptive.
+- The role check is a conservative surface heuristic. `gen_018` shows a success that only reflects the evaluator, and `gen_058` a comma splice it accepts.
+- Restored diagnostic branches only; no production permission, certificate or new authority.
+- The 8% cap and the last-layer readout site were chosen from the earlier dose study, not tuned on the rescue split.
+
+### Next
+
+- Pre-register a second screen before it runs. Either extend the role check to double-object datives or restrict the verbs, to remove evaluator-only failures. Raise the candidate count to reach the selection limit.
+- The controller already sees each structural token's rank and `gap_to_top1`. What it lacks is the actuator's reach. Add a calibration-derived datasheet to each readout recipe, for example "an 8% push closes about 1.5-2.1 logits", and measure whether the controller then picks a reachable `,` push.
+- Measure the reach curve directly with a cap sweep (for example 4-12%) on calibration cases only, before choosing any cap for the next rescue split.
