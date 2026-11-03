@@ -1384,6 +1384,22 @@
       "output_changed_vs_b0": false
     }
   ],
+  "b0_failure_breakdown": {
+    "calibration": {
+      "constraint": {
+        "cases": [
+          "cal_review"
+        ],
+        "joint_successes": {
+          "b0": 0,
+          "fixed": 0,
+          "fixed_readout": 1,
+          "random": 0,
+          "controller": 0
+        }
+      }
+    }
+  },
   "policy_actual_forward_totals": {
     "b0": 126,
     "fixed": 144,
@@ -1411,5 +1427,5 @@
   ],
   "manifest_and_executed_source_verified": true,
   "source_sha256": "a77d65470434be6cf83fc0128ec0c90d1b61a6582c1f216506510d5cf6f46928",
-  "analyzer_sha256": "fb5c5915a2333049b78f8732ec18b7f680859338bce71eca79b1fd3b91869804"
+  "analyzer_sha256": "871de1645d72d7fb1f27824756ee5edd95eb0983bf2feaaf4f7c65768582baf0"
 }

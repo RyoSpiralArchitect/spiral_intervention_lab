@@ -106,6 +106,21 @@ selected cases from the generator, refuses an incomplete or tampered screen, and
 binds both screen hashes into its own manifest. The contract and policies stay
 unchanged for that `rescue` split.
 
+The first screen attempt (`screen`) ran out of MPS memory after 17 candidates:
+each per-case worker kept a full activation cache on the device until garbage
+collection. The screen and the v2 runner now drop that cache and empty the
+allocator between cases; neither manifest changed. `screen_r2` reruns all 72
+candidates from the start under the same pre-registered hash, so its first 17
+rows also check determinism against the aborted attempt.
+
+One property of the frozen rule became visible in those 17 rows. "B0 joint
+failure" includes outputs whose roles the conservative check cannot establish:
+`Yusuf gives Wanda the badge` is correct English, but the check binds recipients
+only through `to <name>`, so its role status is `unknown`. The pre-registered rule
+stays the primary analysis. Rescue outcomes will additionally be broken down by
+failure type (constraint or role failure versus role `unknown`), as a secondary,
+exploratory split that was not pre-registered.
+
 ## Protocol deviation: disk floor
 
 v1 stops a run below 10 GiB of free disk. On this machine free disk is about

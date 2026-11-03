@@ -16,6 +16,29 @@ def snapshot_member(path: str) -> str:
     return path
 
 
+def failure_type(row: dict) -> str | None:
+    """Why a branch fails jointly; an exploratory label, not a selection rule."""
+    if row.get("joint_success"):
+        return None
+    return "constraint" if not row.get("constraints_ok") else "role_" + str(row.get("role_status"))
+
+
+def failure_breakdown(report: dict) -> dict:
+    """Joint successes per policy, grouped by how B0 failed on the same case."""
+    groups: dict = {}
+    for case in report["cases"]:
+        baseline = case["policies"].get("b0", {})
+        kind = failure_type(baseline) if baseline.get("status") == "ok" else None
+        if kind is None:
+            continue
+        group = groups.setdefault(case["split"], {}).setdefault(kind, {"cases": [], "joint_successes": {}})
+        group["cases"].append(case["case_id"])
+        for policy, row in case["policies"].items():
+            ok = row.get("status") == "ok" and bool(row.get("joint_success"))
+            group["joint_successes"][policy] = group["joint_successes"].get(policy, 0) + ok
+    return groups
+
+
 def summarize(report: dict) -> dict:
     policies = report["policies_requested"]
     summaries = []
@@ -68,6 +91,7 @@ def summarize(report: dict) -> dict:
                     usage[key] = usage.get(key, 0) + value
     return {"status": report["status"], "manifest_sha256": report["manifest_sha256"],
             "aggregate": aggregates, "conditions": summaries, "calibration_matrix": calibration,
+            "b0_failure_breakdown": failure_breakdown(report),
             "policy_actual_forward_totals": {p: sum(sum(v["attempted"] for v in
                 c["policies"].get(p, {}).get("forwards", {}).values()) for c in report["cases"]) for p in policies},
             "shared_setup_forwards": sum(sum(v["attempted"] for v in
@@ -103,7 +127,16 @@ def markdown(summary: dict) -> str:
     lines += ["", "Joint success requires lexical constraints, a single sentence and a passing role report.",
               "Provider errors are excluded from paired efficacy estimates; noop is retained as a decision.",
               "Unavailable-boundary cases remain in overall policy outcomes, not eligible intervention comparisons.",
-              "", "## Calibration Actuation", "",
+              ""]
+    if summary.get("b0_failure_breakdown"):
+        lines += ["## B0 Failures by Type (exploratory)", "",
+                  "| Split | B0 failure | Cases | Joint successes by policy |", "| --- | --- | ---: | --- |"]
+        for split, kinds in summary["b0_failure_breakdown"].items():
+            for kind, group in kinds.items():
+                counts = ", ".join(f"{p} {n}" for p, n in group["joint_successes"].items())
+                lines.append(f"| {split} | {kind} | {len(group['cases'])} | {counts} |")
+        lines += ["", "Grouping by failure type was not part of any pre-registered selection rule.", ""]
+    lines += ["## Calibration Actuation", "",
               "| Case | Component | Raw Winner Changed | Full Output Changed | Joint Success | Best Gap Closure |",
               "| --- | --- | --- | --- | --- | ---: |"]
     for row in summary["calibration_matrix"]:

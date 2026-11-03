@@ -23,6 +23,14 @@ Joint success requires lexical constraints, a single sentence and a passing role
 Provider errors are excluded from paired efficacy estimates; noop is retained as a decision.
 Unavailable-boundary cases remain in overall policy outcomes, not eligible intervention comparisons.
 
+## B0 Failures by Type (exploratory)
+
+| Split | B0 failure | Cases | Joint successes by policy |
+| --- | --- | ---: | --- |
+| calibration | constraint | 1 | b0 0, fixed 0, fixed_readout 1, random 0, controller 0 |
+
+Grouping by failure type was not part of any pre-registered selection rule.
+
 ## Calibration Actuation
 
 | Case | Component | Raw Winner Changed | Full Output Changed | Joint Success | Best Gap Closure |
