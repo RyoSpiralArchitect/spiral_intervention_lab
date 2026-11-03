@@ -91,13 +91,14 @@ def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
     return tuple(task._SCENARIOS[0]["required_terms"])
 
 
-def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int) -> tuple[list[dict], Any, list[dict]]:
+def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int, *,
+                cap: float = RELATIVE_WRITE_CAP) -> tuple[list[dict], Any, list[dict]]:
     sources = structural_contract.eligible_sources(worker, required_terms(task))
-    policy = structural_contract.policy_for(worker, required_terms(task), cap=RELATIVE_WRITE_CAP)
+    policy = structural_contract.policy_for(worker, required_terms(task), cap=cap)
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
-    recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=RELATIVE_WRITE_CAP)
-               + structural_contract.readout_recipes(worker, sources, last, cap=RELATIVE_WRITE_CAP))
+    recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
+               + structural_contract.readout_recipes(worker, sources, last, cap=cap))
     return recipes, policy, sources
 
 
@@ -107,14 +108,15 @@ def fixed_ids(recipes: list[dict]) -> dict[str, str | None]:
     return {"fixed": patch and patch["recipe_id"], "fixed_readout": push and push["recipe_id"]}
 
 
-def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict) -> dict:
+def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict, *,
+                   cap: float = RELATIVE_WRITE_CAP) -> dict:
     keys = ("recipe_id", "kind", "component", "sources", "surface", "relative_write_cap",
             "requested_relative_write", "expected_relative_write")
     return {"version": "structural_rescue_choice_v2", "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
             "recipes": [{**{k: r[k] for k in keys}, **({"dsl_formula": r["dsl_formula"], "geometry": r["geometry"]}
                                                      if r["kind"] == "patch" else {})} for r in recipes],
-            "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": RELATIVE_WRITE_CAP,
+            "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": cap,
                          "ttl_steps": 1, "max_edits": 1},
             "budget": {"max_edits": 1, "diagnostic_forwards": 24, "continuation_forwards": 64},
             "production_apply_allowed": False}
@@ -126,7 +128,8 @@ def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | N
     return choose(policy, packet, provider=provider, system_prompt=SYSTEM_PROMPT)
 
 
-def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any) -> tuple[dict, Any]:
+def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any, *,
+           cap: float = RELATIVE_WRITE_CAP, evaluate: Any = None) -> tuple[dict, Any]:
     before, caps = state_identity(worker), repr(worker.surface_catalog)
     baseline_raw = []
     meter.phase, meter.capture_edited = "branch", False
@@ -160,9 +163,9 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
     if command:
         if len(telemetry) != 1 or telemetry[0].get("guard_call_count") != 1:
             raise RuntimeError("one_token_contract_hook_not_confirmed")
-        if not telemetry[0].get("relative_write_norm", float("inf")) <= RELATIVE_WRITE_CAP + CAST_TOLERANCE:
+        if not telemetry[0].get("relative_write_norm", float("inf")) <= cap + CAST_TOLERANCE:
             raise RuntimeError("contract_write_exceeded_cap")
-    return {"status": "ok", **task.evaluate(text), "state_restored": restored,
+    return {"status": "ok", **(evaluate or task.evaluate)(text), "state_restored": restored,
             "baseline_repeat_max_abs_logit_delta": float((baseline_raw[0] - baseline_raw[1]).abs().max()),
             "baseline_logits_sha256": [tensor_identity(v)["sha256"] for v in baseline_raw],
             "command": command, "recipe_kind": recipe and recipe["kind"],
@@ -171,11 +174,11 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
             "forwards": deepcopy(meter.counts), "production_apply_allowed": False}, meter.raw_first
 
 
-def record_branch(worker, task, recipe, meter, destination: dict, policy) -> Any:
+def record_branch(worker, task, recipe, meter, destination: dict, policy, **options) -> Any:
     """Retain attempted work even if simulation or a contract check fails."""
     destination["status"] = "running"
     try:
-        outcome, raw = branch(worker, task, recipe, meter, policy)
+        outcome, raw = branch(worker, task, recipe, meter, policy, **options)
         destination.update(outcome)
         return raw
     except Exception as exc:

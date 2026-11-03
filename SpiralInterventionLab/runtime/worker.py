@@ -19097,7 +19097,14 @@ class HookedTransformerWorkerRuntime:
         policy_override: HarnessPolicy | None = None,
         score_candidate_text: bool = True,
         score_observer_check: bool = True,
+        packet: Mapping[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        """Decode a restored branch, optionally under a temporary command.
+
+        ``packet`` lets a caller that already built the controller packet for this
+        exact state reuse it for validation and compilation; building one runs an
+        unedited readout forward. It is never mutated.
+        """
         if max_new_tokens <= 0:
             return None
         self._last_simulate_decode_error = None
@@ -19116,7 +19123,7 @@ class HookedTransformerWorkerRuntime:
                 if getattr(self.runtime_state, "last_cache", None) is None:
                     primer_tokens = self._current_token_tensor()
                     self.runtime_state.run_with_cache(primer_tokens, return_type="logits")
-                packet = self.build_controller_packet()
+                packet = self.build_controller_packet() if packet is None else dict(packet)
                 if (
                     policy_override is not None
                     and isinstance(packet, Mapping)
