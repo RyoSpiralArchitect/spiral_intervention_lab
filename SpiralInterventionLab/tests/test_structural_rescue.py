@@ -50,3 +50,49 @@ def test_trailing_unfinished_text_is_not_a_single_completed_sentence():
     row = task.evaluate(output)
     assert row["legacy_score"] == 1.0
     assert not row["single_sentence_ok"] and not row["joint_success"]
+
+
+GEN = StructuralRescueEnv(__import__("SpiralInterventionLab.tasks.structural_rescue", fromlist=["RescueCase"]).RescueCase(
+    "gen_x", "rescue", "Before dusk, Boris should send the roster to Tilda, while Edda should give the permit to Alma.",
+    (("Boris", "send", "roster", "Tilda"), ("Edda", "give", "permit", "Alma")), "before dusk"))
+
+
+@pytest.mark.parametrize("text,kind,joint", [
+    ("Boris sends the roster to Tilda before dusk, while Edda gives the permit to Alma.", "conjunction", True),
+    ("Boris sends the roster to Tilda before dusk; meanwhile, Edda gives the permit to Alma.", "semicolon", True),
+    # The source's tasks are simultaneous; a join that orders them changes its meaning.
+    ("Boris sends the roster to Tilda before Edda gives the permit to Alma before dusk.", "meaning_changing_join", False),
+    # The deadline phrase is not a joining word.
+    ("Boris sends the roster to Tilda before dusk, Edda gives the permit to Alma.", "comma_splice", False),
+    ("Boris sends the roster to Tilda, then Edda gives the permit to Alma before dusk.", "comma_splice", False),
+    ("Boris sends the roster to Tilda Edda gives the permit to Alma before dusk.", "run_on", False),
+])
+def test_v2_judges_how_the_two_clauses_are_joined(text, kind, joint):
+    GEN.reset(0)
+    row = GEN.evaluate_v2(text)
+    assert [j["kind"] for j in row["clause_joins"]] == [kind]
+    assert row["joint_success"] is joint and row["clause_join_ok"] is joint
+    # v1 accepts every one of them; its verdict is kept alongside.
+    assert row["evaluation_v1"]["joint_success"] is True
+
+
+def test_v2_rejects_a_dangling_final_word_and_keeps_v1_fields():
+    GEN.reset(0)
+    row = GEN.evaluate_v2("Boris sends the roster to Tilda before dusk, while Edda gives the permit to Alma before.")
+    assert row["dangling_final_word"] == "before" and not row["joint_success"]
+    v1 = GEN.evaluate("Boris sends the roster to Tilda before dusk, while Edda gives the permit to Alma before.")
+    assert {k: row[k] for k in ("output", "legacy_score", "constraints_ok", "constraint_violations")} == \
+        {k: v1[k] for k in ("output", "legacy_score", "constraints_ok", "constraint_violations")}
+    assert row["evaluator_version"] == "structural_rescue_eval_v2"
+
+
+@pytest.mark.parametrize("text", [
+    "Boris sends the roster to Tilda before dusk, while Edda gives Alma the permit.",
+    "Boris sends the roster to Tilda, and Edda gives Alma the permit before dusk.",
+])
+def test_v2_passes_double_object_datives_that_v1_left_unknown(text):
+    GEN.reset(0)
+    row = GEN.evaluate_v2(text)
+    assert row["evaluation_v1"]["role_status"] == "unknown"
+    assert row["role_status"] == "pass" and row["joint_success"]
+    assert [j["kind"] for j in row["clause_joins"]] == ["conjunction"]

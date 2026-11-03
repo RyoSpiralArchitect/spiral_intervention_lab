@@ -81,3 +81,36 @@ def test_ladder_env_reports_roles_without_changing_score_or_feedback():
     assert report["role_violations"] == ["send: agent nora, expected selim"]
     assert task.score(natural) == 0.938889
     assert "role_binding_ok" not in task.task_feedback(natural)
+
+
+GIVE = (("Rosa", "send", "blueprint", "Celia"), ("Yusuf", "give", "badge", "Wanda"))
+
+
+def test_double_object_recipient_binds_only_when_enabled():
+    output = "Rosa sends the blueprint to Celia before dawn, while Yusuf gives Wanda the badge."
+    v1 = check_role_frames(output, GIVE)
+    v2 = check_role_frames(output, GIVE, v2=True)
+
+    assert v1["frames"][1]["status"] == "partially_bound" and "agent_index" not in v1["frames"][1]
+    assert v2["role_binding_ok"] and v2["frames"][1]["recipient_form"] == "dative"
+    assert v2["frames"][0]["recipient_form"] == "to"
+
+
+@pytest.mark.parametrize("output,expected", [
+    ("Rosa sends the blueprint to Celia, while Yusuf gives Rosa the badge.", ["badge: recipient rosa, expected wanda"]),
+    ("Rosa sends the blueprint to Celia, while Yusuf gives Wanda's badge to Celia.",
+     ["badge: recipient celia, expected wanda"]),
+])
+def test_double_object_reading_still_catches_wrong_recipients(output, expected):
+    assert check_role_frames(output, GIVE, v2=True)["role_violations"] == expected
+
+
+def test_a_name_after_the_action_closes_nothing_but_needs_the_theme_after_it():
+    # The dative recipient is not a new subject, so the theme is still found.
+    agents_and_recipients = (("Rosa", "send", "blueprint", "Yusuf"), ("Yusuf", "give", "badge", "Wanda"))
+    report = check_role_frames("Rosa sends Yusuf the blueprint; Yusuf gives Wanda the badge.",
+                               agents_and_recipients, v2=True)
+    assert report["role_binding_ok"], report
+    # Without a following theme the name is not read as a recipient.
+    report = check_role_frames("Rosa sends the blueprint to Celia; Yusuf gives Wanda.", GIVE, v2=True)
+    assert report["frames"][1]["status"] == "partially_bound"

@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 import tarfile
 
+from ..tasks.structural_rescue import FAULTY_JOINS
+
 
 def snapshot_member(path: str) -> str:
     if "SpiralInterventionLab/" in path:
@@ -17,10 +19,21 @@ def snapshot_member(path: str) -> str:
 
 
 def failure_type(row: dict) -> str | None:
-    """Why a branch fails jointly; an exploratory label, not a selection rule."""
+    """Why a branch fails jointly; an exploratory label, not a selection rule.
+
+    Order: constraints, then roles, then (evaluator v2 rows only) a dangling
+    final word, then the first faulty clause join.
+    """
     if row.get("joint_success"):
         return None
-    return "constraint" if not row.get("constraints_ok") else "role_" + str(row.get("role_status"))
+    if not row.get("constraints_ok"):
+        return "constraint"
+    if row.get("role_status") != "pass":
+        return "role_" + str(row.get("role_status"))
+    if row.get("dangling_final_word"):
+        return "dangling"
+    faulty = [j["kind"] for j in row.get("clause_joins", ()) if j["kind"] in FAULTY_JOINS]
+    return "join_" + faulty[0] if faulty else "role_pass"
 
 
 def failure_breakdown(report: dict) -> dict:
