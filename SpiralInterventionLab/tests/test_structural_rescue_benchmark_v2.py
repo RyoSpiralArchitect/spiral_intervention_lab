@@ -35,6 +35,21 @@ def test_v1_manifest_is_unchanged_and_v2_manifest_is_separate_and_stable():
     assert frozen["controller_system_prompt_sha256"] == hashlib.sha256(v2.SYSTEM_PROMPT.encode()).hexdigest()
 
 
+def test_contract_pilot_records_its_disk_floor_deviation_and_meter_enforces_it(tmp_path):
+    assert v2.manifest()["disk_floor_gib"] == 6 and v2.manifest()["protocol_deviations"]
+    worker = SimpleNamespace(runtime_state=SimpleNamespace(), _collect_active_edits=lambda: [])
+    meter = Meter(worker, deadline=time.monotonic() + 10, disk_path=tmp_path, disk_floor_gib=6)
+    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=7 * 2**30)):
+        meter.check_limits()
+    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=5 * 2**30)):
+        with pytest.raises(ForwardLimit, match="6_gib"):
+            meter.check_limits()
+    v1_meter = Meter(worker, deadline=time.monotonic() + 10, disk_path=tmp_path)
+    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=7 * 2**30)):
+        with pytest.raises(ForwardLimit, match="10_gib"):
+            v1_meter.check_limits()
+
+
 def test_packet_offers_ids_and_geometry_but_no_expressions_tensors_or_answers():
     worker = contract_worker()
     recipes, _policy = toy_catalog(worker)

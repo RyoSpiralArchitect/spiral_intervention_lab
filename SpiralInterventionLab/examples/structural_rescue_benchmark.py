@@ -79,8 +79,9 @@ def unavailable_policies(baseline: dict, policies: list[str]) -> dict:
 
 class Meter:
     """Count and cap actual calls, including packet preparation and failed calls."""
-    def __init__(self, worker: Any, *, deadline: float, disk_path: Path):
+    def __init__(self, worker: Any, *, deadline: float, disk_path: Path, disk_floor_gib: float = 10):
         self.worker, self.deadline, self.disk_path = worker, deadline, disk_path
+        self.disk_floor_gib = disk_floor_gib
         self.phase = "setup"
         self.boundary_length: int | None = None
         self.counts: dict[str, dict[str, int]] = {}
@@ -93,8 +94,8 @@ class Meter:
     def check_limits(self) -> None:
         if time.monotonic() > self.deadline:
             raise ForwardLimit("wall_clock_budget_exhausted")
-        if shutil.disk_usage(self.disk_path).free < 10 * 2**30:
-            raise ForwardLimit("disk_below_predeclared_10_gib_floor")
+        if shutil.disk_usage(self.disk_path).free < self.disk_floor_gib * 2**30:
+            raise ForwardLimit(f"disk_below_predeclared_{self.disk_floor_gib:g}_gib_floor")
 
     @contextmanager
     def install(self):

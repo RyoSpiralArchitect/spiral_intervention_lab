@@ -106,6 +106,20 @@ selected cases from the generator, refuses an incomplete or tampered screen, and
 binds both screen hashes into its own manifest. The contract and policies stay
 unchanged for that `rescue` split.
 
+## Protocol deviation: disk floor
+
+v1 stops a run below 10 GiB of free disk. On this machine free disk is about
+13 GiB at rest and falls to about 8 GiB while the 3B model is loaded, because
+macOS grows its swap files. `precheck` ended with its launching session during
+model load; `precheck_r2` completed nine `cal_delivery` branches and then stopped
+on the floor; `precheck_r3` stopped on it during setup. All three receipts are
+kept under `results/structural_rescue_contract_20261103/`; none called a
+provider, and r2's branches are superseded by the complete rerun. At the user's direction the v2 pilot and
+the screen use a 6 GiB floor. The v2 manifest records it as
+`disk_floor_gib: 6` with a `protocol_deviations` entry, which changed its hash
+from `f9cd0dd7…` to `92f1138a7015ed0cbbed701340193d78e6e39df9aa9ce0a561248e7d843f4e99`.
+v1's `Meter` default is still 10 GiB.
+
 ## Results
 
 Pending.

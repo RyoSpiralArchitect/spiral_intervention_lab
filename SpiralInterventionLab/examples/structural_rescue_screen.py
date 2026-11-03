@@ -13,6 +13,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
 import time
 from typing import Any
 
@@ -24,13 +25,17 @@ from .digit_transform_e2e import (
     build_default_activation_surface_catalog, build_hooked_transformer_worker_runtime, load_worker_model,
 )
 from .replay_orphan_blueprint_ceiling import verify_checkpoint
-from .structural_rescue_benchmark import capture_sources
+from .structural_rescue_benchmark import ForwardLimit, capture_sources
 
 
 SEED = 20261103
 COUNT = 72
 SELECTION_LIMIT = 12
 SELECTION_RULE = "b0_joint_failure_with_natural_boundary_first_12_in_generation_order"
+# v1 stops below 10 GiB free. Here macOS swap takes free disk to about 8 GiB
+# while the model is loaded, so the user set 6 GiB for the contract pilot
+# and this screen (2026-11-03).
+DISK_FLOOR_GIB = 6
 
 
 def manifest() -> dict[str, Any]:
@@ -43,7 +48,8 @@ def manifest() -> dict[str, Any]:
             "selection_rule": SELECTION_RULE, "selection_limit": SELECTION_LIMIT,
             "selected_split": "rescue",
             "follow_up": "structural_rescue_benchmark_v2_unchanged_contract_all_policies_on_selected_cases",
-            "max_words": 18, "max_generated_tokens": 64, "production_apply_allowed": False}
+            "max_words": 18, "max_generated_tokens": 64, "disk_floor_gib": DISK_FLOOR_GIB,
+            "production_apply_allowed": False}
 
 
 def manifest_bytes() -> bytes:
@@ -153,6 +159,8 @@ def main(argv=None) -> int:
         catalog = [s for s in build_default_activation_surface_catalog(model, layers=layers)
                    if s["target"].get("site") == "resid_pre" and s["target"]["token"]["mode"] == "last"]
         for case in generate(SEED, COUNT):
+            if shutil.disk_usage(output).free < DISK_FLOOR_GIB * 2**30:
+                raise ForwardLimit(f"disk_below_predeclared_{DISK_FLOOR_GIB:g}_gib_floor")
             row = screen_case(model, catalog, case)
             report["rows"].append(row)
             persist()

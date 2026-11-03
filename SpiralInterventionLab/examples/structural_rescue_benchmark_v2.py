@@ -29,7 +29,7 @@ from .digit_transform_e2e import (
 )
 from .replay_orphan_blueprint_ceiling import verify_checkpoint
 from .structural_rescue_benchmark import Meter, aggregate, capture_sources, choose, readout, unavailable_policies
-from .structural_rescue_screen import selected_cases
+from .structural_rescue_screen import DISK_FLOOR_GIB, selected_cases
 
 
 POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
@@ -78,7 +78,8 @@ def manifest(case_set: dict[str, Any] | None = None) -> dict[str, Any]:
             "diagnostic_forward_cap_per_policy": 24, "continuation_forward_cap_per_policy": 64,
             "max_controller_calls_per_case": 1, "max_controller_output_tokens": 1600,
             "controller_system_prompt_sha256": hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(),
-            "baseline_repeats_before_each_branch": 2,
+            "baseline_repeats_before_each_branch": 2, "disk_floor_gib": DISK_FLOOR_GIB,
+            "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 
@@ -291,7 +292,8 @@ def main(argv=None) -> int:
                 clause_structure_diagnostics=True, clause_structure_operator_diagnostics=True,
                 max_diagnostic_calls_per_run=12)
             worker.reset(prompt)
-            meter = Meter(worker, deadline=started + args.wall_seconds, disk_path=output)
+            meter = Meter(worker, deadline=started + args.wall_seconds, disk_path=output,
+                          disk_floor_gib=DISK_FLOOR_GIB)
             row = {"case_id": case.case_id, "split": case.split, "policies": {}, "calibration_matrix": []}
             row["setup_forwards"] = meter.counts
             report["cases"].append(row)
