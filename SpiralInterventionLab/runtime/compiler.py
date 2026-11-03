@@ -6,7 +6,15 @@ from typing import Any, Callable, Mapping
 import torch
 
 from .adapter import ModelAdapter
-from .edit_budget import MAIN_EDIT_BUDGET_POOL, budget_metadata, classify_edit_budget_pool
+from .edit_budget import (
+    MAIN_EDIT_BUDGET_POOL,
+    NORM_RELATIVE_WRITE_CONTRACT,
+    budget_metadata,
+    classify_edit_budget_pool,
+    clip_relative_write,
+    estimate_edit_cost,
+    relative_write_cap,
+)
 from .policy import HarnessPolicy, validate_command_against_packet
 from .schema import (
     ActivationPatchOp,
@@ -315,6 +323,9 @@ def _compile_rollback(edit_id: str) -> CompiledEdit:
 def _resolved_step_size(edit: Any, surface: Any) -> float | None:
     if edit.budget.step_size is not None:
         return float(edit.budget.step_size)
+    if relative_write_cap(edit) is not None:
+        # The contract's hook-time relative cap replaces the absolute surface step.
+        return None
     surface_step_size = getattr(getattr(surface, "caps", None), "step_size", None)
     if surface_step_size is None:
         return None
@@ -350,15 +361,33 @@ def _registration_metadata(
         "controller_confidence": None if command_meta is None else command_meta.get("confidence"),
         "expected_effect": edit.meta.get("expected_effect"),
     }
-    metadata.update(
-        budget_metadata(
-            op_kind=edit.op.kind,
-            alpha=edit.op.alpha,
-            ttl_steps=edit.budget.ttl_steps,
-            step_size=runtime_budget["step_size"],
-            rank_cap=edit.budget.rank_cap,
+    contract_cap = relative_write_cap(edit)
+    if contract_cap is None:
+        metadata.update(
+            budget_metadata(
+                op_kind=edit.op.kind,
+                alpha=edit.op.alpha,
+                ttl_steps=edit.budget.ttl_steps,
+                step_size=runtime_budget["step_size"],
+                rank_cap=edit.budget.rank_cap,
+            )
         )
-    )
+    else:
+        # Spend is charged in the relative units the policy validated.
+        metadata.update(
+            alpha=contract_cap,
+            op_alpha=float(edit.op.alpha),
+            write_contract=NORM_RELATIVE_WRITE_CONTRACT,
+            relative_write_cap=contract_cap,
+            step_size=None,
+            edit_cost=estimate_edit_cost(
+                op_kind=edit.op.kind,
+                alpha=contract_cap,
+                ttl_steps=edit.budget.ttl_steps,
+                step_size=contract_cap,
+                rank_cap=edit.budget.rank_cap,
+            ),
+        )
     passthrough_fields = (
         "surface_family_key",
         "operator_recipe_id",
@@ -396,6 +425,22 @@ def _registration_metadata(
     return metadata
 
 
+def _guard_contract_write(
+    edit: Any,
+    hook_fn: Callable[..., torch.Tensor],
+    telemetry: dict[str, Any],
+) -> Callable[..., torch.Tensor]:
+    """Enforce the relative cap on the hook's output, independent of the adapter."""
+    cap = relative_write_cap(edit)
+    telemetry.update(relative_write_cap=cap, guard_call_count=0)
+
+    def guarded(act: torch.Tensor, hook: Any | None = None) -> torch.Tensor:
+        telemetry["guard_call_count"] += 1
+        return clip_relative_write(act, hook_fn(act, hook), relative_cap=cap, telemetry=telemetry)
+
+    return guarded
+
+
 def _compile_resid_add(
     edit: Any,
     surface: Any,
@@ -414,6 +459,9 @@ def _compile_resid_add(
         alpha=alpha,
         budget=budget,
     )
+    if relative_write_cap(edit) is not None:
+        metadata["write_contract_telemetry"] = {}
+        hook_fn = _guard_contract_write(edit, hook_fn, metadata["write_contract_telemetry"])
 
     def apply(step_ctx: StepContext) -> None:
         step_ctx.adapter.set_step_context(step_ctx)
@@ -464,6 +512,9 @@ def _compile_activation_patch(
         budget=budget,
         telemetry=telemetry,
     )
+    if relative_write_cap(edit) is not None:
+        # Adapter keys describe the blend before the guard; guard keys the final write.
+        hook_fn = _guard_contract_write(edit, hook_fn, telemetry)
 
     def apply(step_ctx: StepContext) -> None:
         step_ctx.adapter.set_step_context(step_ctx)

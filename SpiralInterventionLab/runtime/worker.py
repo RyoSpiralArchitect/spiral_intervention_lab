@@ -24561,6 +24561,8 @@ class HookedTransformerWorkerRuntime:
             metadata = dict(self._registration_metadata(registration))
             telemetry = metadata.get("activation_patch_telemetry")
             if not isinstance(telemetry, Mapping):
+                telemetry = metadata.get("write_contract_telemetry")
+            if not isinstance(telemetry, Mapping):
                 continue
             row: dict[str, Any] = {
                 "edit_id": str(edit_id),
@@ -24579,6 +24581,15 @@ class HookedTransformerWorkerRuntime:
                 "raw_blend_delta_norm",
                 "blend_delta_norm",
                 "step_size_clip_saturated",
+                "relative_write_cap",
+                "guard_call_count",
+                "written_positions",
+                "site_norm",
+                "write_limit_norm",
+                "raw_write_norm",
+                "write_norm",
+                "relative_write_norm",
+                "relative_clip_saturated",
             ):
                 value = telemetry.get(key)
                 if value is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 from typing import Any, Iterable, Mapping
 
 from .edit_budget import (
@@ -10,6 +11,7 @@ from .edit_budget import (
     PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
     classify_edit_budget_pool,
     estimate_edit_cost,
+    relative_write_cap,
 )
 from .schema import (
     ActivationPatchOp,
@@ -63,6 +65,29 @@ class GlobalBudget:
     max_rank_per_edit: int = 1
 
 
+WRITE_CONTRACT_OPS = ("resid_add", "activation_patch")
+WRITE_CONTRACT_SITES = ("resid_pre", "resid_post")
+_WRITE_CONTRACT_EXPR_FNS = frozenset({
+    "add", "sub", "mean", "scale", "normalize", "zero_mean", "sign", "clip_norm", "mix",
+    "project_parallel", "project_orthogonal", "readout_direction",
+})
+
+
+@dataclass(frozen=True)
+class WriteContract:
+    """Opt-in replacement of absolute caps for one structural edit per command.
+
+    The hook clips each write to relative_write_cap times the edited residual
+    norm. Readout targets and source refs are allowlisted per prompt, so names
+    and required terms can be excluded before any controller sees a recipe.
+    """
+    relative_write_cap: float = 0.08
+    readout_token_ids: tuple[int, ...] = ()
+    source_positions: tuple[int, ...] = ()
+    # Bounds the raw request so fp16 arithmetic stays finite before the guard.
+    max_resid_add_alpha: float = 1024.0
+
+
 @dataclass(frozen=True)
 class HarnessPolicy:
     version: str = "0.1"
@@ -76,6 +101,7 @@ class HarnessPolicy:
     global_budget: GlobalBudget = field(default_factory=GlobalBudget)
     max_expr_depth: int = 6
     max_expr_args: int = 4
+    write_contract: WriteContract | None = None
 
     @classmethod
     def default_v0(cls) -> "HarnessPolicy":
@@ -189,6 +215,67 @@ def _validate_trace_access(source: Source, packet: ControllerObservationPacket) 
                 raise PolicyViolation(f"trace '{trace_id}' is marked incompatible")
 
 
+def _declared_write_cap(edit: Any) -> float | None:
+    try:
+        return relative_write_cap(edit)
+    except ValueError as exc:
+        raise PolicyViolation(f"edit '{edit.id}' {exc}") from exc
+
+
+def _validate_write_contract(
+    edit: Any,
+    surface: SurfaceInfo,
+    command: ControllerCommand,
+    policy: HarnessPolicy,
+    cap: float,
+) -> None:
+    contract = policy.write_contract
+    if contract is None:
+        raise PolicyViolation(f"edit '{edit.id}' declares a write contract this policy does not enable")
+    if cap > contract.relative_write_cap:
+        raise PolicyViolation(f"edit '{edit.id}' exceeds policy relative_write_cap")
+    if len(command.edits) != 1:
+        raise PolicyViolation("write contract commands carry exactly one edit")
+    edit_meta = edit.meta if isinstance(getattr(edit, "meta", None), Mapping) else {}
+    command_meta = command.meta if isinstance(getattr(command, "meta", None), Mapping) else {}
+    apply_kind = str(edit_meta.get("apply_kind") or command_meta.get("apply_kind") or "").strip().lower()
+    if apply_kind == "production_trial":
+        raise PolicyViolation(f"edit '{edit.id}' write contract edits are not production trials")
+    target = surface.target
+    token_mode = str(getattr(getattr(target, "token", None), "mode", "") or "")
+    if (edit.op.kind not in WRITE_CONTRACT_OPS or getattr(target, "kind", None) != "activation"
+            or getattr(target, "site", None) not in WRITE_CONTRACT_SITES or token_mode != "last"):
+        raise PolicyViolation(f"edit '{edit.id}' write contract requires a last-token residual add or blend")
+    if edit.budget.ttl_steps != 1:
+        raise PolicyViolation(f"edit '{edit.id}' write contract requires ttl_steps=1")
+    if edit.budget.step_size is not None:
+        raise PolicyViolation(f"edit '{edit.id}' write contract replaces the absolute step_size")
+    alpha = float(edit.op.alpha)
+    alpha_cap = 1.0 if isinstance(edit.op, ActivationPatchOp) else float(contract.max_resid_add_alpha)
+    if not math.isfinite(alpha) or not 0 < alpha <= alpha_cap:
+        raise PolicyViolation(f"edit '{edit.id}' write contract alpha must be in (0, {alpha_cap:g}]")
+    if not isinstance(edit.source, VectorSource):
+        raise PolicyViolation(f"edit '{edit.id}' write contract requires a vector source")
+    readout_ids, positions = set(contract.readout_token_ids), set(contract.source_positions)
+    for _depth, node in _iter_expr_nodes(edit.source.expr):
+        ref = node.get("ref")
+        if ref is not None:
+            token = ref.get("token") or {}
+            index = token.get("value")
+            indexed = (token.get("mode") == "index" and isinstance(index, int)
+                       and not isinstance(index, bool) and index in positions)
+            if ref.get("scope") != "runtime" or not (token.get("mode") == "last" or indexed):
+                raise PolicyViolation(f"edit '{edit.id}' source ref is outside the structural allowlist")
+            continue
+        fn = node.get("fn")
+        if fn not in _WRITE_CONTRACT_EXPR_FNS:
+            raise PolicyViolation(f"edit '{edit.id}' write contract does not admit expression '{fn}'")
+        if fn == "readout_direction":
+            targets = {int(token_id) for token_id in node.get("target_token_ids") or ()}
+            if not targets or node.get("negative_token_ids") or not targets <= readout_ids:
+                raise PolicyViolation(f"edit '{edit.id}' readout target is outside the structural allowlist")
+
+
 def _check_deny_rules(target: Target, packet: ControllerObservationPacket, policy: HarnessPolicy) -> None:
     max_weight_layer = max(
         (surface.target.layer for surface in packet.surface_catalog if getattr(surface.target, "kind", None) == "weight"),
@@ -219,6 +306,12 @@ def validate_command_against_packet(
         if unknown:
             raise PolicyViolation(f"rollback ids are not currently revertible: {unknown}")
         return
+
+    if pol.write_contract is None:
+        # Name the missing opt-in instead of reporting the raw request as over budget.
+        for edit in cmd.edits:
+            if _declared_write_cap(edit) is not None:
+                raise PolicyViolation(f"edit '{edit.id}' declares a write contract this policy does not enable")
 
     usage = command_budget_usage(cmd, pkt, policy=pol)
     budget_reason = budget_violation_reason(cmd, pkt, policy=pol, usage=usage)
@@ -259,8 +352,11 @@ def validate_command_against_packet(
             and not bool(edit_meta.get("certified_for_apply", False))
         )
 
-        alpha = float(edit.op.alpha)
-        if alpha > surface.caps.max_alpha:
+        contract_cap = _declared_write_cap(edit)
+        if contract_cap is not None:
+            # The hook-time relative cap supersedes the absolute alpha and step caps.
+            _validate_write_contract(edit, surface, cmd, pol, contract_cap)
+        elif float(edit.op.alpha) > surface.caps.max_alpha:
             raise PolicyViolation(f"edit '{edit.id}' exceeds surface alpha cap")
         if edit.budget.norm_clip is not None and surface.caps.norm_clip is not None:
             if edit.budget.norm_clip > surface.caps.norm_clip:
@@ -314,7 +410,7 @@ def command_budget_usage(
     policy: HarnessPolicy | None = None,
 ) -> dict[str, dict[str, float]]:
     cmd, pkt = _packet_and_command(command, packet)
-    del policy
+    contract_enabled = policy is not None and policy.write_contract is not None
     usage = {
         MAIN_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
         LOOP_RESCUE_EDIT_BUDGET_POOL: {"edit_count": 0.0, "alpha": 0.0, "edit_cost": 0.0},
@@ -331,6 +427,18 @@ def command_budget_usage(
         if pool not in usage:
             pool = MAIN_EDIT_BUDGET_POOL
         usage[pool]["edit_count"] += 1.0
+        contract_cap = _declared_write_cap(edit) if contract_enabled else None
+        if contract_cap is not None:
+            # Charged in relative units: the guard writes at most cap * ||h||.
+            usage[pool]["alpha"] += contract_cap
+            usage[pool]["edit_cost"] += estimate_edit_cost(
+                op_kind=edit.op.kind,
+                alpha=contract_cap,
+                ttl_steps=edit.budget.ttl_steps,
+                step_size=contract_cap,
+                rank_cap=edit.budget.rank_cap,
+            )
+            continue
         usage[pool]["alpha"] += float(edit.op.alpha)
         effective_step_size = edit.budget.step_size if edit.budget.step_size is not None else surface.caps.step_size
         usage[pool]["edit_cost"] += estimate_edit_cost(
