@@ -27,7 +27,7 @@ from ..tasks.structural_rescue_generator import candidate_rows
 from .digit_transform_e2e import (
     build_default_activation_surface_catalog, build_hooked_transformer_worker_runtime, load_worker_model,
 )
-from .replay_orphan_blueprint_ceiling import verify_checkpoint
+from .replay_orphan_blueprint_ceiling import _release_memory, verify_checkpoint
 from .structural_rescue_benchmark import Meter, aggregate, capture_sources, choose, readout, unavailable_policies
 from .structural_rescue_screen import DISK_FLOOR_GIB, selected_cases
 
@@ -370,6 +370,9 @@ def main(argv=None) -> int:
                             [s["piece"] for s in recipe["sources"]]], "joint_success": outcome["joint_success"],
                             "output": outcome["output"]}), flush=True)
             worker.runtime_state.clear_edits()
+            # Each case's worker keeps a full activation cache on the device.
+            worker.runtime_state.last_cache = None
+            _release_memory()
         report["status"] = "complete"
     except Exception as exc:
         report.update(status="error", error_type=type(exc).__name__, error=str(exc))

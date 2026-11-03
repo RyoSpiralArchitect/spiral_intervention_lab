@@ -24,7 +24,7 @@ from ..tasks.structural_rescue_generator import (
 from .digit_transform_e2e import (
     build_default_activation_surface_catalog, build_hooked_transformer_worker_runtime, load_worker_model,
 )
-from .replay_orphan_blueprint_ceiling import verify_checkpoint
+from .replay_orphan_blueprint_ceiling import _release_memory, verify_checkpoint
 from .structural_rescue_benchmark import ForwardLimit, capture_sources
 
 
@@ -99,6 +99,8 @@ def screen_case(model: Any, catalog: list[dict], case: RescueCase) -> dict[str, 
             raise RuntimeError(worker._last_simulate_decode_error)
         text = worker.codec.decode(worker._output_token_ids() + simulated["continuation_token_ids"])
     worker.runtime_state.clear_edits()
+    # Each worker keeps a full activation cache on the device; drop it before the next one.
+    worker.runtime_state.last_cache = None
     return {"case_id": case.case_id, "boundary_found": boundary, "prefix": prefix, **task.evaluate(text)}
 
 
@@ -167,6 +169,7 @@ def main(argv=None) -> int:
             if shutil.disk_usage(output).free < DISK_FLOOR_GIB * 2**30:
                 raise ForwardLimit(f"disk_below_predeclared_{DISK_FLOOR_GIB:g}_gib_floor")
             row = screen_case(model, catalog, case)
+            _release_memory()
             report["rows"].append(row)
             persist()
             print(json.dumps({k: row[k] for k in ("case_id", "boundary_found", "joint_success",
