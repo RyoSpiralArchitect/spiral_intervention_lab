@@ -16,6 +16,7 @@ import tarfile
 from typing import Any
 
 from ..runtime import reach_datasheet
+from .run_hygiene import REPO
 from .summarize_structural_rescue import failure_type, snapshot_member
 
 
@@ -102,7 +103,7 @@ def reproduce(cases: list[dict], references: dict[str, str]) -> dict[str, Any]:
     by_id = {c["case_id"]: c for c in measured(cases)}
     checks = {"b0_logits": 0, "b0_output": 0, "pushes": 0, "outputs": 0, "mismatches": []}
     for path, expected in references.items():
-        raw = Path(path).read_bytes()
+        raw = (REPO / path).read_bytes()
         if hashlib.sha256(raw).hexdigest() != expected:
             raise ValueError("reference_receipt_changed:" + path)
         report = json.loads(raw)
@@ -424,7 +425,7 @@ def retest(choices: list[dict], reference_paths: list[str]) -> dict[str, Any]:
     """Agreement of the v2 arm with the PR #39 choice on a byte-identical packet."""
     earlier = {}
     for path in reference_paths:
-        report = json.loads(Path(path).read_text())
+        report = json.loads((REPO / path).read_text())
         for case in report.get("cases", []):
             trace = case["policies"].get("controller", {}).get("selection", {})
             if trace.get("packet_sha256"):

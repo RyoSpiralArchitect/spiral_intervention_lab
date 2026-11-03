@@ -255,7 +255,9 @@ def main(argv=None) -> int:
     cases, binding = case_set(args.case_set, screen1_dir=args.screen1_dir.expanduser().resolve(),
                               screen2_dir=args.screen2_dir and args.screen2_dir.expanduser().resolve(),
                               screen2_plan=plan)
-    references = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in args.references}
+    # Repo-relative, so the manifest does not depend on the working directory.
+    references = {p.expanduser().resolve().relative_to(run_hygiene.REPO).as_posix():
+                  hashlib.sha256(p.read_bytes()).hexdigest() for p in args.references}
     frozen = manifest_bytes(cases, binding, caps=caps, patch_caps=patch_caps, patch_scope=args.patch_scope,
                             packet_caps=packet_caps, references=references)
     digest = hashlib.sha256(frozen).hexdigest()

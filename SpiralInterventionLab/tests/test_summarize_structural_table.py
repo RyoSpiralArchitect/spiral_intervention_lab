@@ -114,6 +114,7 @@ def test_invariants_and_reproduction_flag_differences(tmp_path):
                           "readout": cases[0]["pushes"][1]["readout"]}}}]}
     path = tmp_path / "old.json"
     path.write_text(json.dumps(old))
+    # Absolute paths pass through REPO / path unchanged.
     checks = report.reproduce(cases, {str(path): hashlib.sha256(path.read_bytes()).hexdigest()})
     assert checks["b0_logits"] == 1 and checks["pushes"] == 1
     assert checks["mismatches"] == [["fail_near", "output", f"fail_near:{COMMA}@0.08"]]
