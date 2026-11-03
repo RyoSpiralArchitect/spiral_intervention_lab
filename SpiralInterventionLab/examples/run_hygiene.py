@@ -19,8 +19,10 @@ from typing import Any
 REPO = Path(__file__).resolve().parents[2]
 EVALUATOR_SOURCES = ("SpiralInterventionLab/tasks/structural_rescue.py", "SpiralInterventionLab/tasks/role_binding.py",
                      "SpiralInterventionLab/tasks/language_tasks.py")
-# The floor protects the machine; swap grows by about 5 GiB while the 3B model is loaded.
-LOAD_HEADROOM_GIB = 6
+# The floor protects the machine; swap grows by about 5 GiB while the 3B model is
+# loaded. The user set 5 GiB of launch headroom on 2026-11-03, while another
+# session's build was writing to disk; a run that reaches the floor stops cleanly.
+LOAD_HEADROOM_GIB = 5
 
 
 def evaluator_sha256() -> str:

@@ -100,7 +100,7 @@ def test_push_records_rank_gap_and_whether_the_target_won():
 
 def test_preflight_refuses_low_disk_battery_and_a_modified_tree(tmp_path):
     full = SimpleNamespace(free=20 * 2**30)
-    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=11 * 2**30)):
+    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=10.9 * 2**30)):
         with pytest.raises(RuntimeError, match="free_disk"):
             run_hygiene.preflight(tmp_path, floor_gib=6)
     with patch("shutil.disk_usage", return_value=full), patch.object(run_hygiene, "power_source", return_value="battery"):

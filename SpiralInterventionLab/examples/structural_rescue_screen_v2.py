@@ -67,7 +67,9 @@ def manifest(treatment: dict[str, Any]) -> dict[str, Any]:
             "selection_rule": SELECTION_RULE, "rescue_limit": RESCUE_LIMIT, "harm_limit": HARM_LIMIT,
             "stopping_rule": STOPPING_RULE, "recorded_per_candidate": "b0_first_token_and_eligible_source_gaps",
             "treatment": treatment, "max_words": 18, "max_generated_tokens": 64, "disk_floor_gib": DISK_FLOOR_GIB,
-            "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
+            "launch_headroom_gib": run_hygiene.LOAD_HEADROOM_GIB,
+            "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom",
+                                    "launch_headroom_5_gib_user_directed_2026_11_03_concurrent_build"],
             "production_apply_allowed": False}
 
 

@@ -95,7 +95,8 @@ def manifest(cases: tuple, binding: dict, *, caps: list[float], patch_caps: list
             "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
             "max_generated_tokens": 64, "baseline_repeats": 2, "references": references,
             "disk_floor_gib": DISK_FLOOR_GIB, "launch_headroom_gib": run_hygiene.LOAD_HEADROOM_GIB,
-            "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
+            "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom",
+                                    "launch_headroom_5_gib_user_directed_2026_11_03_concurrent_build"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 

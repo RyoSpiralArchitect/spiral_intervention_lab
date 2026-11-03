@@ -24,8 +24,9 @@ def script(commands: list[list[str]], log_dir: Path) -> str:
         out, err = log_dir / f"step_{index}.stdout.log", log_dir / f"step_{index}.stderr.log"
         lines += [f"caffeinate -i -s {shlex.join([sys.executable, '-u', *argv])} "
                   f"< /dev/null > {shlex.quote(str(out))} 2> {shlex.quote(str(err))}",
-                  "status=$?", f"echo \"step={index} exit=$status\" >> {shlex.quote(str(log_dir / 'exit_status.txt'))}",
-                  "if [ $status -ne 0 ]; then exit $status; fi"]
+                  # zsh reserves $status (read-only), so the exit code lives in rc.
+                  "rc=$?", f"echo \"step={index} exit=$rc\" >> {shlex.quote(str(log_dir / 'exit_status.txt'))}",
+                  "if [ $rc -ne 0 ]; then exit $rc; fi"]
     lines.append(f"echo done >> {shlex.quote(str(log_dir / 'exit_status.txt'))}")
     return "\n".join(lines) + "\n"
 
