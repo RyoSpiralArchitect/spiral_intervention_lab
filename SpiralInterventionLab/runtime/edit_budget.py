@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping
 
 import torch
@@ -8,6 +9,7 @@ MAIN_EDIT_BUDGET_POOL = "main"
 LOOP_RESCUE_EDIT_BUDGET_POOL = "loop_rescue"
 PRODUCTION_TRIAL_EDIT_BUDGET_POOL = "production_trial"
 PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL = "production_trial_followup"
+NORM_RELATIVE_WRITE_CONTRACT = "norm_relative_structural_v1"
 
 
 OP_COST_FACTORS: dict[str, float] = {
@@ -54,6 +56,52 @@ def prepare_direction(
 
 def clip_delta_matrix(delta: torch.Tensor, *, step_size: float | None) -> torch.Tensor:
     return clip_norm(delta, step_size)
+
+
+def clip_relative_write(
+    before: torch.Tensor,
+    after: torch.Tensor,
+    *,
+    relative_cap: float,
+    telemetry: dict[str, Any] | None = None,
+) -> torch.Tensor:
+    """Limit each position's write to relative_cap times its own pre-edit norm.
+
+    The guard sees only the hook input and output, so it holds for any adapter.
+    An unsaturated write is returned unchanged rather than recomputed. The
+    clip is exact in float32; casting back to a half-precision activation can
+    move the realized write by that dtype's rounding, which telemetry reports.
+    """
+    if before.shape != after.shape:
+        raise ValueError("relative write guard requires matching activation shapes")
+    base = before.detach().float()
+    delta = after.detach().float() - base
+    if not torch.isfinite(delta).all():
+        raise RuntimeError("non-finite write under the relative write contract")
+    base_norm = base.norm(dim=-1, keepdim=True)
+    delta_norm = delta.norm(dim=-1, keepdim=True)
+    limit = float(relative_cap) * base_norm
+    saturated = delta_norm > limit
+    result = after
+    if bool(saturated.any()):
+        scale = torch.where(saturated, limit / delta_norm.clamp_min(1e-12), torch.ones_like(delta_norm))
+        result = (base + delta * scale).to(after.dtype)
+    if telemetry is not None:
+        written = (delta_norm > 0).reshape(-1)
+        telemetry["written_positions"] = int(written.sum())
+        telemetry["relative_clip_saturated"] = bool(saturated.any())
+        if bool(written.any()):
+            # Report the position whose raw request was largest relative to its norm.
+            ratio = (delta_norm / base_norm.clamp_min(1e-12)).reshape(-1)
+            index = int(torch.argmax(torch.where(written, ratio, torch.full_like(ratio, -1.0))))
+            site = float(base_norm.reshape(-1)[index])
+            realized = float((result.detach().float() - base).norm(dim=-1).reshape(-1)[index])
+            for key, value in (("site_norm", site), ("write_limit_norm", float(limit.reshape(-1)[index])),
+                               ("raw_write_norm", float(delta_norm.reshape(-1)[index])),
+                               ("write_norm", realized),
+                               ("relative_write_norm", realized / site if site > 0 else 0.0)):
+                telemetry[key] = round(value, 8)
+    return result
 
 
 def estimate_edit_cost(
@@ -107,6 +155,24 @@ def _numeric(value: Any, default: float = 0.0) -> float:
     return float(value)
 
 
+def relative_write_cap(edit: Any) -> float | None:
+    """The cap an edit declares under the opt-in norm-relative write contract.
+
+    Either meta key opts in; a partial or unknown declaration is an error,
+    never a silent fallback to the absolute surface caps.
+    """
+    meta = _as_mapping(_field(edit, "meta")) or {}
+    if "write_contract" not in meta and "relative_write_cap" not in meta:
+        return None
+    if meta.get("write_contract") != NORM_RELATIVE_WRITE_CONTRACT:
+        raise ValueError("declares an unknown write contract")
+    cap = meta.get("relative_write_cap")
+    if (isinstance(cap, bool) or not isinstance(cap, (int, float))
+            or not math.isfinite(cap) or not 0 < cap <= 1):
+        raise ValueError("relative_write_cap must be a finite number in (0, 1]")
+    return float(cap)
+
+
 def _packet_is_looping(packet: Any) -> bool:
     telemetry = _as_mapping(_field(packet, "telemetry")) or {}
     worker_view = _as_mapping(_field(packet, "worker_view")) or {}
@@ -141,6 +207,11 @@ def classify_edit_budget_pool(
         if trial_budget_class in {"alternate_followup", "followup", "production_trial_followup"}:
             return PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL
         return PRODUCTION_TRIAL_EDIT_BUDGET_POOL
+
+    # Contract edits are charged in relative units, which the absolute
+    # loop-rescue thresholds below cannot compare against.
+    if "write_contract" in edit_meta or "relative_write_cap" in edit_meta:
+        return MAIN_EDIT_BUDGET_POOL
 
     if not _packet_is_looping(packet):
         return MAIN_EDIT_BUDGET_POOL
