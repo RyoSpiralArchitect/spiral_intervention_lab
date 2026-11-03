@@ -33,7 +33,9 @@ def summarize(report: dict) -> dict:
                 "role_status": row["role_status"], "output": row["output"],
                 "output_changed_vs_b0": row["output"] != baseline.get("output"),
                 "branch_changed": row.get("natural_branch_changed"),
-                "actual_write_norm": telemetry[0].get("blend_delta_norm") if telemetry else None,
+                # Contract rows report the realized write after the guard.
+                "actual_write_norm": telemetry[0].get("write_norm", telemetry[0].get("blend_delta_norm"))
+                if telemetry else None,
                 "relative_write_norm": telemetry[0].get("relative_write_norm") if telemetry else None,
                 "actual_forwards": sum(c["attempted"] for c in row.get("forwards", {}).values()),
                 "state_restored": row.get("state_restored"),
@@ -43,7 +45,9 @@ def summarize(report: dict) -> dict:
             if row.get("status") != "ok":
                 continue
             readout = row["readout"]
-            calibration.append({"case_id": case["case_id"], "component": row["component"],
+            label = row["component"] if "kind" not in row else (
+                f"{row['kind']} {row['component']} " + "+".join(repr(s["piece"]) for s in row["sources"]))
+            calibration.append({"case_id": case["case_id"], "component": label,
                 "raw_greedy_branch_changed": readout["raw_greedy_branch_changed"],
                 "joint_success": row["joint_success"], "role_status": row["role_status"],
                 "best_gap_closure_fraction": max((r["gap_closure_fraction"] for r in readout["rows"]
