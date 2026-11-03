@@ -131,7 +131,7 @@ class Meter:
 
 
 def choose(policy: str, packet: dict, *, provider=None, seed: int = 17,
-           fixed_recipe_id: str | None = None) -> tuple[str | None, dict]:
+           fixed_recipe_id: str | None = None, system_prompt: str = SYSTEM_PROMPT) -> tuple[str | None, dict]:
     recipes = packet["recipes"]
     if policy == "b0" or not recipes:
         return None, {"status": "noop", "provider_calls": 0}
@@ -146,11 +146,11 @@ def choose(policy: str, packet: dict, *, provider=None, seed: int = 17,
     if policy != "controller" or provider is None:
         raise ValueError("controller policy requires an explicit provider")
     started = time.monotonic()
-    request = ControllerProviderRequest(system_prompt=SYSTEM_PROMPT, payload=packet,
+    request = ControllerProviderRequest(system_prompt=system_prompt, payload=packet,
                                         max_output_tokens=1600, expect_json=True)
     trace = {"provider_calls": 1, "provider": provider.provider_name, "model": provider.model_name,
              "packet_sha256": identity("packet:", packet),
-             "system_prompt_sha256": hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest()}
+             "system_prompt_sha256": hashlib.sha256(system_prompt.encode()).hexdigest()}
     try:
         response = provider.complete(request)
         trace.update(usage=dict(response.usage), response=response.text,
@@ -272,12 +272,12 @@ def record_branch(worker, task, recipe, meter, destination: dict):
         raise
 
 
-def aggregate(rows: list[dict]) -> dict:
+def aggregate(rows: list[dict], *, policies=POLICIES, splits=("calibration", "confirmation")) -> dict:
     results = {}
-    for split in ("calibration", "confirmation"):
+    for split in splits:
         selected = [r for r in rows if r["split"] == split]
         results[split] = {}
-        for policy in POLICIES:
+        for policy in policies:
             paired = [(r["policies"].get("b0"), r["policies"].get(policy)) for r in selected]
             valid = [(a, b) for a, b in paired if a and b and a.get("status") == b.get("status") == "ok"
                      and b.get("selection", {}).get("status") != "error"]
