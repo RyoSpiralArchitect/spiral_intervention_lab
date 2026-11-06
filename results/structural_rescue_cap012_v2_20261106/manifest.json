@@ -1,0 +1,195 @@
+{
+  "apply_scope": "restored_contract_diagnostic_branch_only",
+  "baseline_repeats_before_each_branch": 2,
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
+  "case_set": {
+    "screen_manifest_sha256": "789b6d68ffbdb96221276a2aef149f7322aa835bc09958e6ff315a0f01bbfc46",
+    "screen_results_sha256": "6f4170615b26e80827855af2cfb621ea80265318cea09805aa8b07ea4670c610",
+    "selected_case_ids": [
+      "gen_011",
+      "gen_014",
+      "gen_049",
+      "gen_110"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "gen_011",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "take",
+          "roster",
+          "Stefan"
+        ],
+        [
+          "Marta",
+          "send",
+          "permit",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "6f1974c10edd1640755c70bf89c2c26310e9b51e444f5ee2be1c607d020f48f1",
+      "source": "Nikos should take the roster to Stefan, while Marta should send the permit to Edda, in order to start before lunch.",
+      "split": "rescue_v2"
+    },
+    {
+      "case_id": "gen_014",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "take",
+          "permit",
+          "Olga"
+        ],
+        [
+          "Greta",
+          "send",
+          "manual",
+          "Stefan"
+        ]
+      ],
+      "prompt_sha256": "5b670bc625116991253e3196aea09b0c451c5f8a341ee9865b99e97c77b38e34",
+      "source": "Lars should take the permit to Olga; meanwhile, Greta should send the manual to Stefan, in order to leave before dawn.",
+      "split": "rescue_v2"
+    },
+    {
+      "case_id": "gen_049",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Ugo",
+          "take",
+          "voucher",
+          "Henrik"
+        ],
+        [
+          "Vesna",
+          "send",
+          "badge",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "fa7cf84a1e1d5ad104c07d3f2b86ae7d575f0ec10ab24819fe1506b15815bbce",
+      "source": "Before midnight, Ugo should take the voucher to Henrik, while Vesna should send the badge to Celia.",
+      "split": "rescue_v2"
+    },
+    {
+      "case_id": "gen_110",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "badge",
+          "Vesna"
+        ],
+        [
+          "Boris",
+          "take",
+          "roster",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "0acd31f0ae61aafafc6fdb62c71d02b185d5acb663cf93b513014da8b904102e",
+      "source": "Rosa should bring the badge to Vesna, while Boris should take the roster to Nikos, in order to close before midnight.",
+      "split": "rescue_v2"
+    }
+  ],
+  "confirmation_status": "selected_by_preregistered_b0_screen",
+  "continuation_forward_cap_per_policy": 64,
+  "contract": {
+    "cast_tolerance": 0.002,
+    "edits_per_branch": 1,
+    "guard": "per_position_hook_output_minus_input_vs_input_norm",
+    "id": "norm_relative_structural_v1",
+    "patch_alpha": 1.0,
+    "patch_components": [
+      "common",
+      "common_parallel",
+      "common_orthogonal"
+    ],
+    "patch_layer_rule": "n_layers//2",
+    "protected_rule": "structural_lexemes_inside_required_terms",
+    "readout_alpha_rule": "cap*||h_boundary||",
+    "readout_layer_rule": "n_layers-1",
+    "relative_write_cap": 0.12,
+    "site": "resid_pre",
+    "source_rule": "first_three_eligible_source_tokens_in_source_order",
+    "structural_lexemes": [
+      ",",
+      ".",
+      ":",
+      ";",
+      "after",
+      "although",
+      "and",
+      "because",
+      "before",
+      "but",
+      "or",
+      "so",
+      "then",
+      "until",
+      "when",
+      "whereas",
+      "while"
+    ],
+    "token": "last",
+    "ttl_steps": 1
+  },
+  "controller_datasheet": {
+    "reach_basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12",
+    "readout_closure_slope": {
+      " while": {
+        "max": 54.0,
+        "mean": 51.0,
+        "min": 49.0
+      },
+      ",": {
+        "max": 26.0,
+        "mean": 22.5,
+        "min": 20.0
+      },
+      ".\n": {
+        "max": 50.0,
+        "mean": 43.0,
+        "min": 36.0
+      }
+    },
+    "unknown_pieces": "no_estimate"
+  },
+  "controller_system_prompt_sha256": "db4be2ad24615a0a9bf372218a3620ca668af1694cea79a1d89682d22243556f",
+  "diagnostic_forward_cap_per_policy": 24,
+  "disk_floor_gib": 6,
+  "evaluator": {
+    "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations",
+    "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+  },
+  "fixed_readout_rule": "readout_of_first_eligible_source_token",
+  "fixed_rule": "common_orthogonal_of_first_eligible_pair",
+  "max_controller_calls_per_case": 1,
+  "max_controller_output_tokens": 1600,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "policies": [
+    "b0",
+    "fixed",
+    "fixed_readout",
+    "random",
+    "controller"
+  ],
+  "policy_seeds": [
+    17
+  ],
+  "production_apply_allowed": false,
+  "protocol_deviations": [
+    "disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"
+  ],
+  "random_rule": "sha256(case_id,seed)_mod_catalog_size",
+  "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; readout_recipes_added; pairs_with_protected_lexemes_dropped",
+  "version": "structural_rescue_v2_norm_relative_contract_datasheet_cap0.12"
+}

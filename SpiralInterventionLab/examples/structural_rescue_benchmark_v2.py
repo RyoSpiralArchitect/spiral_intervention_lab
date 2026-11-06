@@ -36,17 +36,18 @@ POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
 RELATIVE_WRITE_CAP = structural_contract.DEFAULT_RELATIVE_WRITE_CAP
 # Half-precision rounding of the clipped write; telemetry reports the realized norm.
 CAST_TOLERANCE = 2e-3
-SYSTEM_PROMPT = f"""Select at most one bounded internal intervention recipe at this current worker prefix.
+BASE_PROMPT = """Select at most one bounded internal intervention recipe at this current worker prefix.
 Return strict JSON only: {{"decision":"noop"}} or {{"decision":"probe","recipe_id":"<offered ID>"}}.
 You receive generated text, next-token readout, and a catalog of source-bound recipes. Each recipe is
 one edit for one token: a readout push toward one source punctuation or connective token, or a blend
-toward the states of two source structural tokens. Every write is clipped to {RELATIVE_WRITE_CAP:g} of the
+toward the states of two source structural tokens. Every write is clipped to {cap:g} of the
 edited residual norm, and names and required terms are never targets.
 Choose a recipe only if it plausibly helps the worker preserve independent clauses. You may choose noop.
 Do not output an answer, a token to force, new expressions, or any other fields.
 This selects one restored diagnostic continuation, not production permission.
 Role annotations, reference continuations and candidate outcomes are unavailable.
 """
+SYSTEM_PROMPT = BASE_PROMPT.format(cap=RELATIVE_WRITE_CAP)
 DATASHEET_PROMPT_ADD = """Readout recipes whose target was measured in a calibration cap sweep also carry a
 reach_estimate: the measured winner-gap closure per unit of relative write, and its
 estimated logit closure at this cap. Recipes without a reach_estimate were not covered
@@ -55,11 +56,12 @@ gap_to_top1 cannot flip the first token; prefer a reachable recipe over an unrea
 """
 
 
-def system_prompt(datasheet: bool = False) -> str:
-    return SYSTEM_PROMPT + (DATASHEET_PROMPT_ADD if datasheet else "")
+def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP) -> str:
+    return BASE_PROMPT.format(cap=cap) + (DATASHEET_PROMPT_ADD if datasheet else "")
 
 
-def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False) -> dict[str, Any]:
+def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
+             cap: float = RELATIVE_WRITE_CAP) -> dict[str, Any]:
     """The frozen v1 cases by default; screen-selected cases carry their binding."""
     v1 = benchmark_manifest()
     cases = v1["cases"] if case_set is None else candidate_rows(case_set["cases"])
@@ -68,13 +70,14 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False) ->
                                        "reach_basis": structural_contract.REACH_BASIS,
                                        "unknown_pieces": "no_estimate"}}
              if datasheet else {})
-    return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else ""),
+    return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else "")
+                       + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""),
             "cases": cases, **sheet,
             "confirmation_status": (v1["confirmation_status"] if case_set is None
                                     else "selected_by_preregistered_b0_screen"), **selection,
             "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; "
                               "readout_recipes_added; pairs_with_protected_lexemes_dropped",
-            "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": RELATIVE_WRITE_CAP,
+            "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": cap,
                          "ttl_steps": 1, "edits_per_branch": 1, "site": "resid_pre", "token": "last",
                          "guard": "per_position_hook_output_minus_input_vs_input_norm",
                          "cast_tolerance": CAST_TOLERANCE,
@@ -95,27 +98,29 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False) ->
             "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
             "diagnostic_forward_cap_per_policy": 24, "continuation_forward_cap_per_policy": 64,
             "max_controller_calls_per_case": 1, "max_controller_output_tokens": 1600,
-            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet).encode()).hexdigest(),
+            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet, cap).encode()).hexdigest(),
             "baseline_repeats_before_each_branch": 2, "disk_floor_gib": DISK_FLOOR_GIB,
             "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 
-def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = False) -> bytes:
-    return (json.dumps(manifest(case_set, datasheet), indent=2, sort_keys=True) + "\n").encode()
+def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = False,
+                   cap: float = RELATIVE_WRITE_CAP) -> bytes:
+    return (json.dumps(manifest(case_set, datasheet, cap), indent=2, sort_keys=True) + "\n").encode()
 
 
 def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
     return tuple(task._SCENARIOS[0]["required_terms"])
 
 
-def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int) -> tuple[list[dict], Any, list[dict]]:
+def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
+                cap: float = RELATIVE_WRITE_CAP) -> tuple[list[dict], Any, list[dict]]:
     sources = structural_contract.eligible_sources(worker, required_terms(task))
-    policy = structural_contract.policy_for(worker, required_terms(task), cap=RELATIVE_WRITE_CAP)
+    policy = structural_contract.policy_for(worker, required_terms(task), cap=cap)
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
-    recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=RELATIVE_WRITE_CAP)
-               + structural_contract.readout_recipes(worker, sources, last, cap=RELATIVE_WRITE_CAP))
+    recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
+               + structural_contract.readout_recipes(worker, sources, last, cap=cap))
     return recipes, policy, sources
 
 
@@ -136,11 +141,12 @@ def reach_estimate(recipe: dict) -> dict | None:
     return {"slope_logits_per_unit_cap": dict(slope),
             "estimated_gap_closure": {"mean": slope["mean"] * cap,
                                       "min": slope["min"] * cap, "max": slope["max"] * cap},
+            "extrapolated": cap > 0.12,
             "basis": structural_contract.REACH_BASIS}
 
 
 def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict,
-                   datasheet: bool = False) -> dict:
+                   datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP) -> dict:
     keys = ("recipe_id", "kind", "component", "sources", "surface", "relative_write_cap",
             "requested_relative_write", "expected_relative_write")
     offered = []
@@ -155,21 +161,23 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
             "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
             "recipes": offered,
-            "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": RELATIVE_WRITE_CAP,
+            "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": cap,
                          "ttl_steps": 1, "max_edits": 1},
             "budget": {"max_edits": 1, "diagnostic_forwards": 24, "continuation_forwards": 64},
             "production_apply_allowed": False}
 
 
 def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None],
-           datasheet: bool = False) -> tuple[str | None, dict]:
+           datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP) -> tuple[str | None, dict]:
     if policy in fixed:
         return choose("fixed", packet, fixed_recipe_id=fixed[policy])
-    return choose(policy, packet, provider=provider, system_prompt=system_prompt(datasheet))
+    return choose(policy, packet, provider=provider, system_prompt=system_prompt(datasheet, cap))
 
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
            *, cap: float = RELATIVE_WRITE_CAP) -> tuple[dict, Any]:
+    if recipe is not None and recipe.get("relative_write_cap") != cap:
+        raise ValueError("recipe_cap_differs_from_branch_cap")
     before, caps = state_identity(worker), repr(worker.surface_catalog)
     baseline_raw = []
     meter.phase, meter.capture_edited = "branch", False
@@ -214,11 +222,12 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
             "forwards": deepcopy(meter.counts), "production_apply_allowed": False}, meter.raw_first
 
 
-def record_branch(worker, task, recipe, meter, destination: dict, policy) -> Any:
+def record_branch(worker, task, recipe, meter, destination: dict, policy,
+                  *, cap: float = RELATIVE_WRITE_CAP) -> Any:
     """Retain attempted work even if simulation or a contract check fails."""
     destination["status"] = "running"
     try:
-        outcome, raw = branch(worker, task, recipe, meter, policy)
+        outcome, raw = branch(worker, task, recipe, meter, policy, cap=cap)
         destination.update(outcome)
         return raw
     except Exception as exc:
@@ -246,6 +255,8 @@ def main(argv=None) -> int:
     parser.add_argument("--screen-dir", type=Path, help="run the cases a frozen B0 screen selected")
     parser.add_argument("--datasheet", action="store_true",
                         help="offer calibration-measured readout reach estimates to the controller")
+    parser.add_argument("--cap", type=float, default=RELATIVE_WRITE_CAP,
+                        help="relative write cap; non-default values get a separate manifest version")
     parser.add_argument("--wall-seconds", type=int, default=3600)
     parser.add_argument("--mps-memory-fraction", type=float, default=0.7)
     args = parser.parse_args(argv)
@@ -255,7 +266,9 @@ def main(argv=None) -> int:
     if args.screen_dir is not None:
         cases, binding = load_selected_cases(args.screen_dir.expanduser().resolve())
         case_set = {"cases": cases, "binding": binding}
-    frozen = manifest_bytes(case_set, datasheet=args.datasheet)
+    if not 0 < args.cap <= 0.25:
+        raise ValueError("cap must be in (0, 0.25]")
+    frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap)
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -282,7 +295,7 @@ def main(argv=None) -> int:
             raise FileExistsError(path)
     code_hashes = capture_sources(output)
     execution = {"manifest_sha256": digest, "device": args.device, "dtype": args.dtype,
-                 "datasheet": args.datasheet,
+                 "datasheet": args.datasheet, "cap": args.cap,
                  "policies": policies, "case_ids": case_ids, "wall_seconds": args.wall_seconds,
                  "mps_memory_fraction": args.mps_memory_fraction,
                  "controller_model": args.controller_model if "controller" in policies else None,
@@ -372,10 +385,10 @@ def main(argv=None) -> int:
                 observation = worker.request_controller_diagnostics(clause_structure.offer(worker)["request"])[0]
                 if observation["status"] != "ok":
                     raise RuntimeError("structure_observation_failed")
-                recipes, policy, sources = catalog_for(worker, task, n_layers)
+                recipes, policy, sources = catalog_for(worker, task, n_layers, cap=args.cap)
                 fixed = fixed_ids(recipes)
                 packet = compact_packet(worker, recipes, case.case_id, observation,
-                                        datasheet=args.datasheet)
+                                        datasheet=args.datasheet, cap=args.cap)
                 (output / (case.case_id + "_observation.json")).write_text(json.dumps(packet, indent=2))
                 row.update(comparison_eligible=True, shared_setup_forwards=deepcopy(meter.counts),
                            eligible_sources=[{k: s[k] for k in ("token_id", "piece", "source_positions")}
@@ -389,12 +402,12 @@ def main(argv=None) -> int:
                 for name in policies:
                     meter.check_limits()
                     selected_id, trace = select(name, packet, provider=provider, fixed=fixed,
-                                                datasheet=args.datasheet)
+                                                datasheet=args.datasheet, cap=args.cap)
                     recipe = next((r for r in recipes if r["recipe_id"] == selected_id), None)
                     meter.reset("diagnostic")
                     outcome = {"selection": trace, "selected_recipe_id": selected_id}
                     row["policies"][name] = outcome
-                    raw = record_branch(worker, task, recipe, meter, outcome, policy)
+                    raw = record_branch(worker, task, recipe, meter, outcome, policy, cap=args.cap)
                     if name == "b0":
                         baseline_raw = raw
                     outcome.update(selection=trace, selected_recipe_id=selected_id,
@@ -411,7 +424,7 @@ def main(argv=None) -> int:
                         outcome = {"kind": recipe["kind"], "component": recipe["component"],
                                    "sources": recipe["sources"], "recipe_id": recipe["recipe_id"]}
                         row["calibration_matrix"].append(outcome)
-                        raw = record_branch(worker, task, recipe, meter, outcome, policy)
+                        raw = record_branch(worker, task, recipe, meter, outcome, policy, cap=args.cap)
                         outcome["readout"] = readout(baseline_raw, raw, token_ids)
                         persist()
                         print(json.dumps({"case": case.case_id, "matrix": [recipe["kind"], recipe["component"],
