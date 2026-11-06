@@ -1,0 +1,4363 @@
+{
+  "status": "complete",
+  "created_at_utc": "2026-11-06T08:44:08.506114+00:00",
+  "manifest_sha256": "238c2e00a986cd052b79745d898922e821be7579a10c3eaacc94ce9f3f0a4788",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [
+    {
+      "surface_id": "s_resid_pre_l14_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 14,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    },
+    {
+      "surface_id": "s_resid_pre_l27_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 27,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    }
+  ],
+  "policies_requested": [
+    "b0",
+    "fixed",
+    "fixed_readout",
+    "random",
+    "controller"
+  ],
+  "case_ids_requested": [
+    "gen_011",
+    "gen_014",
+    "gen_049",
+    "gen_110"
+  ],
+  "cases": [
+    {
+      "case_id": "gen_011",
+      "split": "rescue_v2",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Nikos will take the roster to Stefan before lunch.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Nikos",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Stefan",
+                "bound_agent": "nikos",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "permit",
+                "recipient": "Edda",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121",
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.21875,
+                "edited_gap_to_fixed_winner": 0.21875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.34533854178951967,
+                "edited_probability": 0.34533854178951967,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.734375,
+                "edited_gap_to_fixed_winner": 3.734375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.010266644235341156,
+                "edited_probability": 0.010266644235341156,
+                "probability_delta": 0.0,
+                "rank_before": 7,
+                "rank_after": 7
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.42978075924367914,
+                "edited_probability": 0.42978075924367914,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.171875,
+                "edited_gap_to_fixed_winner": 7.171875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00033002073816881735,
+                "edited_probability": 0.00033002073816881735,
+                "probability_delta": 0.0,
+                "rank_before": 28,
+                "rank_after": 28
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:b5af6d5050a242fa9799e1b4",
+          "status": "ok",
+          "output": " Nikos will take the roster to Stefan before lunch.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Nikos",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Stefan",
+                "bound_agent": "nikos",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "permit",
+                "recipient": "Edda",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121",
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:b5af6d5050a242fa9799e1b4",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "add",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "last"
+                          }
+                        }
+                      },
+                      {
+                        "fn": "project_orthogonal",
+                        "arg": {
+                          "fn": "sub",
+                          "args": [
+                            {
+                              "fn": "mean",
+                              "args": [
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 78
+                                    }
+                                  }
+                                },
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 79
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "resid_pre",
+                                "layer": 14,
+                                "token": {
+                                  "mode": "last"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "resid_pre",
+                            "layer": 14,
+                            "token": {
+                              "mode": "last"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common_orthogonal",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:b5af6d5050a242fa9799e1b4",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 13.64606762,
+              "target_norm_before": 10.69468021,
+              "target_norm_after": 13.64606762,
+              "source_target_cosine": 0.78351796,
+              "source_target_delta_norm": 8.47926998,
+              "raw_blend_delta_norm": 8.47926998,
+              "blend_delta_norm": 8.47926998,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.69468021,
+              "write_limit_norm": 1.28336155,
+              "raw_write_norm": 8.47924614,
+              "write_norm": 1.28307188,
+              "relative_write_norm": 0.11997291,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.21875,
+                "edited_gap_to_fixed_winner": 0.109375,
+                "gap_closure_fraction": 0.5,
+                "baseline_probability": 0.34533854178951967,
+                "edited_probability": 0.37221826935184654,
+                "probability_delta": 0.02687972756232687,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.734375,
+                "edited_gap_to_fixed_winner": 3.484375,
+                "gap_closure_fraction": 0.06694560669456066,
+                "baseline_probability": 0.010266644235341156,
+                "edited_probability": 0.01273660877844506,
+                "probability_delta": 0.0024699645431039037,
+                "rank_before": 7,
+                "rank_after": 7
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.42978075924367914,
+                "edited_probability": 0.4152394857046934,
+                "probability_delta": -0.014541273538985766,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.171875,
+                "edited_gap_to_fixed_winner": 7.234375,
+                "gap_closure_fraction": -0.008714596949891068,
+                "baseline_probability": 0.00033002073816881735,
+                "edited_probability": 0.0002995363283188855,
+                "probability_delta": -3.0484409849931826e-05,
+                "rank_before": 28,
+                "rank_after": 29
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:4098b99b0ae438dc0aac91c4",
+          "status": "ok",
+          "output": " Nikos will take the roster to Stefan, while Marta will send the permit to Edda before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Nikos",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Stefan",
+                "bound_agent": "nikos",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "permit",
+                "recipient": "Edda",
+                "bound_agent": "marta",
+                "bound_recipient": "edda",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121",
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:4098b99b0ae438dc0aac91c4",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.206279753520525
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:4098b99b0ae438dc0aac91c4",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.38566589,
+              "write_limit_norm": 5.20627975,
+              "raw_write_norm": 5.20644236,
+              "write_norm": 5.2064395,
+              "relative_write_norm": 0.12000368,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 13,
+              "completed": 13
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.21875,
+                "edited_gap_to_fixed_winner": -1.953125,
+                "gap_closure_fraction": 9.928571428571429,
+                "baseline_probability": 0.34533854178951967,
+                "edited_probability": 0.774395685476305,
+                "probability_delta": 0.4290571436867853,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.734375,
+                "edited_gap_to_fixed_winner": 3.6875,
+                "gap_closure_fraction": 0.012552301255230125,
+                "baseline_probability": 0.010266644235341156,
+                "edited_probability": 0.0027496069233712895,
+                "probability_delta": -0.007517037311969867,
+                "rank_before": 7,
+                "rank_after": 9
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.42978075924367914,
+                "edited_probability": 0.109832663267656,
+                "probability_delta": -0.31994809597602314,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.171875,
+                "edited_gap_to_fixed_winner": 6.6953125,
+                "gap_closure_fraction": 0.0664488017429194,
+                "baseline_probability": 0.00033002073816881735,
+                "edited_probability": 0.00013582954356495104,
+                "probability_delta": -0.0001941911946038663,
+                "rank_before": 28,
+                "rank_after": 24
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "random": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0,
+            "seed": 17
+          },
+          "selected_recipe_id": "structural-contract:2637acc2d5b033bd0bc65ef5",
+          "status": "ok",
+          "output": " Nikos will take the roster to Stefan before lunch.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Nikos",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Stefan",
+                "bound_agent": "nikos",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "permit",
+                "recipient": "Edda",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121",
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:2637acc2d5b033bd0bc65ef5",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "add",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "last"
+                          }
+                        }
+                      },
+                      {
+                        "fn": "project_orthogonal",
+                        "arg": {
+                          "fn": "sub",
+                          "args": [
+                            {
+                              "fn": "mean",
+                              "args": [
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 79
+                                    }
+                                  }
+                                },
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 96
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "resid_pre",
+                                "layer": 14,
+                                "token": {
+                                  "mode": "last"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "resid_pre",
+                            "layer": 14,
+                            "token": {
+                              "mode": "last"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common_orthogonal",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:2637acc2d5b033bd0bc65ef5",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 13.37941933,
+              "target_norm_before": 10.69468021,
+              "target_norm_after": 13.37941933,
+              "source_target_cosine": 0.79915363,
+              "source_target_delta_norm": 8.04271507,
+              "raw_blend_delta_norm": 8.04271507,
+              "blend_delta_norm": 8.04271507,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.69468021,
+              "write_limit_norm": 1.28336155,
+              "raw_write_norm": 8.04273129,
+              "write_norm": 1.2833972,
+              "relative_write_norm": 0.12000333,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.21875,
+                "edited_gap_to_fixed_winner": 0.015625,
+                "gap_closure_fraction": 0.9285714285714286,
+                "baseline_probability": 0.34533854178951967,
+                "edited_probability": 0.3834235612291624,
+                "probability_delta": 0.03808501943964271,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.734375,
+                "edited_gap_to_fixed_winner": 3.390625,
+                "gap_closure_fraction": 0.09205020920502092,
+                "baseline_probability": 0.010266644235341156,
+                "edited_probability": 0.013120032781619804,
+                "probability_delta": 0.0028533885462786474,
+                "rank_before": 7,
+                "rank_after": 7
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.42978075924367914,
+                "edited_probability": 0.3894616037366685,
+                "probability_delta": -0.04031915550701065,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.171875,
+                "edited_gap_to_fixed_winner": 7.03125,
+                "gap_closure_fraction": 0.0196078431372549,
+                "baseline_probability": 0.00033002073816881735,
+                "edited_probability": 0.00034421641092358156,
+                "probability_delta": 1.4195672754764219e-05,
+                "rank_before": 28,
+                "rank_after": 28
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:49d8248dad88f9f7e375a6bc",
+            "system_prompt_sha256": "db4be2ad24615a0a9bf372218a3620ca668af1694cea79a1d89682d22243556f",
+            "usage": {
+              "input_tokens": 3937,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3934, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 172,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=136)",
+              "total_tokens": 4109
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:4098b99b0ae438dc0aac91c4\"}",
+            "response_metadata": {
+              "response_id": "resp_01c48e0e4c1bbe65006aed93b0a33887d1b4413fa3acac8856",
+              "status": "completed"
+            },
+            "latency_seconds": 4.56,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:4098b99b0ae438dc0aac91c4",
+          "status": "ok",
+          "output": " Nikos will take the roster to Stefan, while Marta will send the permit to Edda before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Nikos",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Stefan",
+                "bound_agent": "nikos",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "permit",
+                "recipient": "Edda",
+                "bound_agent": "marta",
+                "bound_recipient": "edda",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121",
+            "5d853cd945ff1b07ef2f21ba34419c97a214648d8af5bfacf811ab1aad71b121"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:4098b99b0ae438dc0aac91c4",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.206279753520525
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:4098b99b0ae438dc0aac91c4",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.38566589,
+              "write_limit_norm": 5.20627975,
+              "raw_write_norm": 5.20644236,
+              "write_norm": 5.2064395,
+              "relative_write_norm": 0.12000368,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 13,
+              "completed": 13
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.21875,
+                "edited_gap_to_fixed_winner": -1.953125,
+                "gap_closure_fraction": 9.928571428571429,
+                "baseline_probability": 0.34533854178951967,
+                "edited_probability": 0.774395685476305,
+                "probability_delta": 0.4290571436867853,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.734375,
+                "edited_gap_to_fixed_winner": 3.6875,
+                "gap_closure_fraction": 0.012552301255230125,
+                "baseline_probability": 0.010266644235341156,
+                "edited_probability": 0.0027496069233712895,
+                "probability_delta": -0.007517037311969867,
+                "rank_before": 7,
+                "rank_after": 9
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.42978075924367914,
+                "edited_probability": 0.109832663267656,
+                "probability_delta": -0.31994809597602314,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.171875,
+                "edited_gap_to_fixed_winner": 6.6953125,
+                "gap_closure_fraction": 0.0664488017429194,
+                "baseline_probability": 0.00033002073816881735,
+                "edited_probability": 0.00013582954356495104,
+                "probability_delta": -0.0001941911946038663,
+                "rank_before": 28,
+                "rank_after": 24
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "prefix": " Nikos will take the roster to Stefan",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          108
+        ],
+        "dtype": "torch.int64",
+        "sha256": "cb4e053c820c34fba939d147e476d64f8a7cb926453cf10e739ed15946d45456"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            78,
+            89
+          ]
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            79
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          1418,
+          627
+        ],
+        "source_positions": [
+          78,
+          89,
+          79,
+          96
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:57ce0701d9b011a2a180ed98",
+        "structural-contract:746eefbe4b491678a5c8886a",
+        "structural-contract:b5af6d5050a242fa9799e1b4",
+        "structural-contract:1521716eeb9a0f1aa2806dc4",
+        "structural-contract:ff1f011502364f9103827b15",
+        "structural-contract:bc7b2fb9dba385955edb0768",
+        "structural-contract:e3566bd5a53782fc653fea38",
+        "structural-contract:8fafc5730d8a078d57af18fd",
+        "structural-contract:2637acc2d5b033bd0bc65ef5",
+        "structural-contract:4098b99b0ae438dc0aac91c4",
+        "structural-contract:65f70b188ea2914f82efee5f",
+        "structural-contract:db6e768c71d3913602898e79"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:b5af6d5050a242fa9799e1b4",
+        "fixed_readout": "structural-contract:4098b99b0ae438dc0aac91c4"
+      }
+    },
+    {
+      "case_id": "gen_014",
+      "split": "rescue_v2",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Lars will take the permit to Olga before dawn.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "permit",
+                "recipient": "Olga",
+                "bound_agent": "lars",
+                "bound_recipient": "olga",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Greta",
+                "action": "send",
+                "theme": "manual",
+                "recipient": "Stefan",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6",
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 0.8125,
+                "edited_gap_to_fixed_winner": 0.8125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.18235130481860795,
+                "edited_probability": 0.18235130481860795,
+                "probability_delta": 0.0,
+                "rank_before": 3,
+                "rank_after": 3
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.65625,
+                "edited_gap_to_fixed_winner": 0.65625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.2131902741465126,
+                "edited_probability": 0.2131902741465126,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4109350089024526,
+                "edited_probability": 0.4109350089024526,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.421875,
+                "edited_gap_to_fixed_winner": 6.421875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0006680181553156257,
+                "edited_probability": 0.0006680181553156257,
+                "probability_delta": 0.0,
+                "rank_before": 31,
+                "rank_after": 31
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:69ab39ed701a221637dd1913",
+          "status": "ok",
+          "output": " Lars will take the permit to Olga before dawn.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "permit",
+                "recipient": "Olga",
+                "bound_agent": "lars",
+                "bound_recipient": "olga",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Greta",
+                "action": "send",
+                "theme": "manual",
+                "recipient": "Stefan",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6",
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:69ab39ed701a221637dd1913",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "add",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "last"
+                          }
+                        }
+                      },
+                      {
+                        "fn": "project_orthogonal",
+                        "arg": {
+                          "fn": "sub",
+                          "args": [
+                            {
+                              "fn": "mean",
+                              "args": [
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 77
+                                    }
+                                  }
+                                },
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 79
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "resid_pre",
+                                "layer": 14,
+                                "token": {
+                                  "mode": "last"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "resid_pre",
+                            "layer": 14,
+                            "token": {
+                              "mode": "last"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common_orthogonal",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:69ab39ed701a221637dd1913",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 13.86771393,
+              "target_norm_before": 10.84653473,
+              "target_norm_after": 13.86771393,
+              "source_target_cosine": 0.78234285,
+              "source_target_delta_norm": 8.63748074,
+              "raw_blend_delta_norm": 8.63748074,
+              "blend_delta_norm": 8.63748074,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.84653473,
+              "write_limit_norm": 1.30158412,
+              "raw_write_norm": 8.63747787,
+              "write_norm": 1.30193591,
+              "relative_write_norm": 0.12003243,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 0.8125,
+                "edited_gap_to_fixed_winner": 0.8125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.18235130481860795,
+                "edited_probability": 0.17958944979841795,
+                "probability_delta": -0.002761855020189996,
+                "rank_before": 3,
+                "rank_after": 3
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.65625,
+                "edited_gap_to_fixed_winner": 0.578125,
+                "gap_closure_fraction": 0.11904761904761904,
+                "baseline_probability": 0.2131902741465126,
+                "edited_probability": 0.22702233651207515,
+                "probability_delta": 0.013832062365562559,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4109350089024526,
+                "edited_probability": 0.404711072537215,
+                "probability_delta": -0.006223936365237603,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.421875,
+                "edited_gap_to_fixed_winner": 6.40625,
+                "gap_closure_fraction": 0.0024330900243309003,
+                "baseline_probability": 0.0006680181553156257,
+                "edited_probability": 0.0006682609161769619,
+                "probability_delta": 2.427608613361906e-07,
+                "rank_before": 31,
+                "rank_after": 31
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:fbfeadd276e32fae9b70a1ef",
+          "status": "ok",
+          "output": " Lars will take the permit to Olga; Greta will send the manual to Stefan before dawn.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "permit",
+                "recipient": "Olga",
+                "bound_agent": "lars",
+                "bound_recipient": "olga",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Greta",
+                "action": "send",
+                "theme": "manual",
+                "recipient": "Stefan",
+                "bound_agent": "greta",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6",
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:fbfeadd276e32fae9b70a1ef",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      26
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.181833187938422
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:fbfeadd276e32fae9b70a1ef",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.18194199,
+              "write_limit_norm": 5.18183279,
+              "raw_write_norm": 5.1817112,
+              "write_norm": 5.1817112,
+              "relative_write_norm": 0.11999718,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 26,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 26,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 0.8125,
+                "edited_gap_to_fixed_winner": -2.890625,
+                "gap_closure_fraction": 4.5576923076923075,
+                "baseline_probability": 0.18235130481860795,
+                "edited_probability": 0.8549564124561434,
+                "probability_delta": 0.6726051076375354,
+                "rank_before": 3,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.65625,
+                "edited_gap_to_fixed_winner": -0.296875,
+                "gap_closure_fraction": 1.4523809523809523,
+                "baseline_probability": 0.2131902741465126,
+                "edited_probability": 0.06389879400561341,
+                "probability_delta": -0.14929148014089919,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4109350089024526,
+                "edited_probability": 0.04748555160600539,
+                "probability_delta": -0.36344945729644723,
+                "rank_before": 1,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.421875,
+                "edited_gap_to_fixed_winner": 5.6796875,
+                "gap_closure_fraction": 0.11557177615571776,
+                "baseline_probability": 0.0006680181553156257,
+                "edited_probability": 0.00016214536813508165,
+                "probability_delta": -0.0005058727871805441,
+                "rank_before": 31,
+                "rank_after": 20
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "random": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0,
+            "seed": 17
+          },
+          "selected_recipe_id": "structural-contract:38c64e487d5e5f1d467045cf",
+          "status": "ok",
+          "output": " Lars will take the permit to Olga before dawn.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "permit",
+                "recipient": "Olga",
+                "bound_agent": "lars",
+                "bound_recipient": "olga",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Greta",
+                "action": "send",
+                "theme": "manual",
+                "recipient": "Stefan",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6",
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:38c64e487d5e5f1d467045cf",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "mean",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "index",
+                            "value": 77
+                          }
+                        }
+                      },
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "index",
+                            "value": 79
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:38c64e487d5e5f1d467045cf",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 9.3741312,
+              "target_norm_before": 10.84653473,
+              "target_norm_after": 9.3740921,
+              "source_target_cosine": 0.38873452,
+              "source_target_delta_norm": 11.2460537,
+              "raw_blend_delta_norm": 11.2460537,
+              "blend_delta_norm": 11.2460537,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.84653473,
+              "write_limit_norm": 1.30158412,
+              "raw_write_norm": 11.24604511,
+              "write_norm": 1.30159509,
+              "relative_write_norm": 0.12000101,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 0.8125,
+                "edited_gap_to_fixed_winner": 0.859375,
+                "gap_closure_fraction": -0.057692307692307696,
+                "baseline_probability": 0.18235130481860795,
+                "edited_probability": 0.17514071572502693,
+                "probability_delta": -0.007210589093581021,
+                "rank_before": 3,
+                "rank_after": 3
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.65625,
+                "edited_gap_to_fixed_winner": 0.625,
+                "gap_closure_fraction": 0.047619047619047616,
+                "baseline_probability": 0.2131902741465126,
+                "edited_probability": 0.22139860970075217,
+                "probability_delta": 0.008208335554239582,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4109350089024526,
+                "edited_probability": 0.41362705755454465,
+                "probability_delta": 0.0026920486520920495,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.421875,
+                "edited_gap_to_fixed_winner": 6.40625,
+                "gap_closure_fraction": 0.0024330900243309003,
+                "baseline_probability": 0.0006680181553156257,
+                "edited_probability": 0.0006829830345488355,
+                "probability_delta": 1.4964879233209799e-05,
+                "rank_before": 31,
+                "rank_after": 31
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:128ccfcf8757a5a382325eab",
+            "system_prompt_sha256": "db4be2ad24615a0a9bf372218a3620ca668af1694cea79a1d89682d22243556f",
+            "usage": {
+              "input_tokens": 3812,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3809, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 103,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=71)",
+              "total_tokens": 3915
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:f99105067fe11014f297ded9\"}",
+            "response_metadata": {
+              "response_id": "resp_04f22d761082a055006aed941dce3c87d19ff10864c4320b7a",
+              "status": "completed"
+            },
+            "latency_seconds": 2.46,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:f99105067fe11014f297ded9",
+          "status": "ok",
+          "output": " Lars will take the permit to Olga, while Greta sends the manual to Stefan before dawn.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "permit",
+                "recipient": "Olga",
+                "bound_agent": "lars",
+                "bound_recipient": "olga",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Greta",
+                "action": "send",
+                "theme": "manual",
+                "recipient": "Stefan",
+                "bound_agent": "greta",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6",
+            "dc0e5c3a6d0c303fff411e17b5855956580d260c270b410a53dae3fd08e42ed6"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:f99105067fe11014f297ded9",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.181833187938422
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:f99105067fe11014f297ded9",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.18194199,
+              "write_limit_norm": 5.18183279,
+              "raw_write_norm": 5.18203259,
+              "write_norm": 5.18202972,
+              "relative_write_norm": 0.12000455,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 0.8125,
+                "edited_gap_to_fixed_winner": 0.21875,
+                "gap_closure_fraction": 0.7307692307692307,
+                "baseline_probability": 0.18235130481860795,
+                "edited_probability": 0.10326977578268612,
+                "probability_delta": -0.07908152903592183,
+                "rank_before": 3,
+                "rank_after": 3
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.65625,
+                "edited_gap_to_fixed_winner": -1.625,
+                "gap_closure_fraction": 3.4761904761904763,
+                "baseline_probability": 0.2131902741465126,
+                "edited_probability": 0.6526850800125213,
+                "probability_delta": 0.43949480586600875,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4109350089024526,
+                "edited_probability": 0.128521312486049,
+                "probability_delta": -0.28241369641640357,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.421875,
+                "edited_gap_to_fixed_winner": 5.8984375,
+                "gap_closure_fraction": 0.08150851581508516,
+                "baseline_probability": 0.0006680181553156257,
+                "edited_probability": 0.0003526275939773081,
+                "probability_delta": -0.00031539056133831765,
+                "rank_before": 31,
+                "rank_after": 25
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "prefix": " Lars will take the permit to Olga",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          107
+        ],
+        "dtype": "torch.int64",
+        "sha256": "91e8e301ac7a0e1980ad0960303508921357a12d4508ee791d86951107d92acf"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 26,
+          "piece": ";",
+          "source_positions": [
+            77
+          ]
+        },
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            79,
+            88
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            95
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          26,
+          11,
+          627
+        ],
+        "source_positions": [
+          77,
+          79,
+          88,
+          95
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:38c64e487d5e5f1d467045cf",
+        "structural-contract:e6587271c4e12df85c911964",
+        "structural-contract:69ab39ed701a221637dd1913",
+        "structural-contract:2458ea223e10ce0ede3000e4",
+        "structural-contract:cccebfd2e91b3243ae3aba8a",
+        "structural-contract:27e875588d6c880b8db28528",
+        "structural-contract:13273f5c61f43b1cb22b6b85",
+        "structural-contract:c060c150b9cffe532bf46df3",
+        "structural-contract:96076a11be43acd045d8e4bf",
+        "structural-contract:fbfeadd276e32fae9b70a1ef",
+        "structural-contract:f99105067fe11014f297ded9",
+        "structural-contract:b637330c5d07e0e7544e2c1a"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:69ab39ed701a221637dd1913",
+        "fixed_readout": "structural-contract:fbfeadd276e32fae9b70a1ef"
+      }
+    },
+    {
+      "case_id": "gen_049",
+      "split": "rescue_v2",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Ugo must take the voucher to Henrik before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "voucher",
+                "recipient": "Henrik",
+                "bound_agent": "ugo",
+                "bound_recipient": "henrik",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Vesna",
+                "action": "send",
+                "theme": "badge",
+                "recipient": "Celia",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a",
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.75,
+                "edited_gap_to_fixed_winner": 11.75,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 5.829439847368672e-06,
+                "edited_probability": 5.829439847368672e-06,
+                "probability_delta": 0.0,
+                "rank_before": 142,
+                "rank_after": 142
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.828125,
+                "edited_gap_to_fixed_winner": 2.828125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.04368656578344002,
+                "edited_probability": 0.04368656578344002,
+                "probability_delta": 0.0,
+                "rank_before": 4,
+                "rank_after": 4
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.015625,
+                "edited_gap_to_fixed_winner": 6.015625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0018031599178194861,
+                "edited_probability": 0.0018031599178194861,
+                "probability_delta": 0.0,
+                "rank_before": 8,
+                "rank_after": 8
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.109375,
+                "edited_gap_to_fixed_winner": 8.109375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00022219289803976654,
+                "edited_probability": 0.00022219289803976654,
+                "probability_delta": 0.0,
+                "rank_before": 20,
+                "rank_after": 20
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:536fe57654c4b93a7f8b1af4",
+          "status": "ok",
+          "output": " Ugo must take the voucher to Henrik before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "voucher",
+                "recipient": "Henrik",
+                "bound_agent": "ugo",
+                "bound_recipient": "henrik",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Vesna",
+                "action": "send",
+                "theme": "badge",
+                "recipient": "Celia",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a",
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:536fe57654c4b93a7f8b1af4",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "add",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "last"
+                          }
+                        }
+                      },
+                      {
+                        "fn": "project_orthogonal",
+                        "arg": {
+                          "fn": "sub",
+                          "args": [
+                            {
+                              "fn": "mean",
+                              "args": [
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 72
+                                    }
+                                  }
+                                },
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 82
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "resid_pre",
+                                "layer": 14,
+                                "token": {
+                                  "mode": "last"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "resid_pre",
+                            "layer": 14,
+                            "token": {
+                              "mode": "last"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common_orthogonal",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:536fe57654c4b93a7f8b1af4",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 13.55599785,
+              "target_norm_before": 10.66749001,
+              "target_norm_after": 13.55599785,
+              "source_target_cosine": 0.78723311,
+              "source_target_delta_norm": 8.35962677,
+              "raw_blend_delta_norm": 8.35962677,
+              "blend_delta_norm": 8.35962677,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.66749001,
+              "write_limit_norm": 1.2800988,
+              "raw_write_norm": 8.35938072,
+              "write_norm": 1.28008759,
+              "relative_write_norm": 0.11999895,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.75,
+                "edited_gap_to_fixed_winner": 11.625,
+                "gap_closure_fraction": 0.010638297872340425,
+                "baseline_probability": 5.829439847368672e-06,
+                "edited_probability": 6.608181450687407e-06,
+                "probability_delta": 7.787416033187352e-07,
+                "rank_before": 142,
+                "rank_after": 140
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.828125,
+                "edited_gap_to_fixed_winner": 2.5,
+                "gap_closure_fraction": 0.11602209944751381,
+                "baseline_probability": 0.04368656578344002,
+                "edited_probability": 0.060676302371989316,
+                "probability_delta": 0.016989736588549298,
+                "rank_before": 4,
+                "rank_after": 3
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.015625,
+                "edited_gap_to_fixed_winner": 5.7890625,
+                "gap_closure_fraction": 0.03766233766233766,
+                "baseline_probability": 0.0018031599178194861,
+                "edited_probability": 0.002262545973363112,
+                "probability_delta": 0.0004593860555436257,
+                "rank_before": 8,
+                "rank_after": 7
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.109375,
+                "edited_gap_to_fixed_winner": 8.09375,
+                "gap_closure_fraction": 0.0019267822736030828,
+                "baseline_probability": 0.00022219289803976654,
+                "edited_probability": 0.00022577941777119438,
+                "probability_delta": 3.5865197314278465e-06,
+                "rank_before": 20,
+                "rank_after": 19
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:d72de5a34e0204283686c6e8",
+          "status": "ok",
+          "output": " Ugo must take the voucher to Henrik, while Vesna sends the badge to Celia before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "voucher",
+                "recipient": "Henrik",
+                "bound_agent": "ugo",
+                "bound_recipient": "henrik",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Vesna",
+                "action": "send",
+                "theme": "badge",
+                "recipient": "Celia",
+                "bound_agent": "vesna",
+                "bound_recipient": "celia",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a",
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:d72de5a34e0204283686c6e8",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.445234084619186
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:d72de5a34e0204283686c6e8",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 45.37695312,
+              "write_limit_norm": 5.4452343,
+              "raw_write_norm": 5.44540691,
+              "write_norm": 5.44540596,
+              "relative_write_norm": 0.12000378,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.75,
+                "edited_gap_to_fixed_winner": 12.3359375,
+                "gap_closure_fraction": -0.049867021276595744,
+                "baseline_probability": 5.829439847368672e-06,
+                "edited_probability": 1.6450616874721702e-06,
+                "probability_delta": -4.1843781598965016e-06,
+                "rank_before": 142,
+                "rank_after": 217
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.828125,
+                "edited_gap_to_fixed_winner": -0.125,
+                "gap_closure_fraction": 1.0441988950276244,
+                "baseline_probability": 0.04368656578344002,
+                "edited_probability": 0.42452041841626736,
+                "probability_delta": 0.3808338526328273,
+                "rank_before": 4,
+                "rank_after": 1
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.015625,
+                "edited_gap_to_fixed_winner": 5.84375,
+                "gap_closure_fraction": 0.02857142857142857,
+                "baseline_probability": 0.0018031599178194861,
+                "edited_probability": 0.0010856838929560238,
+                "probability_delta": -0.0007174760248634623,
+                "rank_before": 8,
+                "rank_after": 8
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.109375,
+                "edited_gap_to_fixed_winner": 7.5625,
+                "gap_closure_fraction": 0.0674373795761079,
+                "baseline_probability": 0.00022219289803976654,
+                "edited_probability": 0.00019465239604740762,
+                "probability_delta": -2.754050199235892e-05,
+                "rank_before": 20,
+                "rank_after": 17
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "random": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0,
+            "seed": 17
+          },
+          "selected_recipe_id": "structural-contract:c572d68f3bbf2b299c5e7640",
+          "status": "ok",
+          "output": " Ugo must take the voucher to Henrik before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "voucher",
+                "recipient": "Henrik",
+                "bound_agent": "ugo",
+                "bound_recipient": "henrik",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Vesna",
+                "action": "send",
+                "theme": "badge",
+                "recipient": "Celia",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a",
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:c572d68f3bbf2b299c5e7640",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "add",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "last"
+                          }
+                        }
+                      },
+                      {
+                        "fn": "project_orthogonal",
+                        "arg": {
+                          "fn": "sub",
+                          "args": [
+                            {
+                              "fn": "mean",
+                              "args": [
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 72
+                                    }
+                                  }
+                                },
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 92
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "resid_pre",
+                                "layer": 14,
+                                "token": {
+                                  "mode": "last"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "resid_pre",
+                            "layer": 14,
+                            "token": {
+                              "mode": "last"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common_orthogonal",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:c572d68f3bbf2b299c5e7640",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 13.21721268,
+              "target_norm_before": 10.66749001,
+              "target_norm_after": 13.21721268,
+              "source_target_cosine": 0.80768704,
+              "source_target_delta_norm": 7.79300833,
+              "raw_blend_delta_norm": 7.79300833,
+              "blend_delta_norm": 7.79300833,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.66749001,
+              "write_limit_norm": 1.2800988,
+              "raw_write_norm": 7.79302216,
+              "write_norm": 1.28015888,
+              "relative_write_norm": 0.12000563,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.75,
+                "edited_gap_to_fixed_winner": 11.6015625,
+                "gap_closure_fraction": 0.012632978723404254,
+                "baseline_probability": 5.829439847368672e-06,
+                "edited_probability": 6.617495934659305e-06,
+                "probability_delta": 7.880560872906329e-07,
+                "rank_before": 142,
+                "rank_after": 146
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.828125,
+                "edited_gap_to_fixed_winner": 2.578125,
+                "gap_closure_fraction": 0.08839779005524862,
+                "baseline_probability": 0.04368656578344002,
+                "edited_probability": 0.05489373699686345,
+                "probability_delta": 0.011207171213423434,
+                "rank_before": 4,
+                "rank_after": 3
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.015625,
+                "edited_gap_to_fixed_winner": 5.9453125,
+                "gap_closure_fraction": 0.011688311688311689,
+                "baseline_probability": 0.0018031599178194861,
+                "edited_probability": 0.00189309255023314,
+                "probability_delta": 8.993263241365381e-05,
+                "rank_before": 8,
+                "rank_after": 7
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.109375,
+                "edited_gap_to_fixed_winner": 7.8515625,
+                "gap_closure_fraction": 0.031791907514450865,
+                "baseline_probability": 0.00022219289803976654,
+                "edited_probability": 0.0002813830872727304,
+                "probability_delta": 5.919018923296386e-05,
+                "rank_before": 20,
+                "rank_after": 19
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:a89b2ccf7b36d2d4c7cfbec4",
+            "system_prompt_sha256": "db4be2ad24615a0a9bf372218a3620ca668af1694cea79a1d89682d22243556f",
+            "usage": {
+              "input_tokens": 3942,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3939, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 157,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=120)",
+              "total_tokens": 4099
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:dadf5153bb90b13ec9a72c8e\"}",
+            "response_metadata": {
+              "response_id": "resp_0f400e072ab7ad2d006aed949d6d3487d1aafac41ecdfdd694",
+              "status": "completed"
+            },
+            "latency_seconds": 5.063,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:dadf5153bb90b13ec9a72c8e",
+          "status": "ok",
+          "output": " Ugo must take the voucher to Henrik while Vesna sends the badge to Celia before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "voucher",
+                "recipient": "Henrik",
+                "bound_agent": "ugo",
+                "bound_recipient": "henrik",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Vesna",
+                "action": "send",
+                "theme": "badge",
+                "recipient": "Celia",
+                "bound_agent": "vesna",
+                "bound_recipient": "celia",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a",
+            "1246a8191e04785f323d12d309e4279bbf09f4788ddab08e8f0b67dd1707278a"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:dadf5153bb90b13ec9a72c8e",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      1418
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.445234084619186
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:dadf5153bb90b13ec9a72c8e",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 45.37695312,
+              "write_limit_norm": 5.4452343,
+              "raw_write_norm": 5.44540405,
+              "write_norm": 5.44540119,
+              "relative_write_norm": 0.12000368,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1418,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1418,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.75,
+                "edited_gap_to_fixed_winner": 12.65625,
+                "gap_closure_fraction": -0.07712765957446809,
+                "baseline_probability": 5.829439847368672e-06,
+                "edited_probability": 1.390460054621271e-06,
+                "probability_delta": -4.4389797927474004e-06,
+                "rank_before": 142,
+                "rank_after": 158
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.828125,
+                "edited_gap_to_fixed_winner": 3.5625,
+                "gap_closure_fraction": -0.2596685082872928,
+                "baseline_probability": 0.04368656578344002,
+                "edited_probability": 0.012374394623538522,
+                "probability_delta": -0.031312171159901495,
+                "rank_before": 4,
+                "rank_after": 5
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.015625,
+                "edited_gap_to_fixed_winner": -0.09375,
+                "gap_closure_fraction": 1.0155844155844156,
+                "baseline_probability": 0.0018031599178194861,
+                "edited_probability": 0.4790856483236608,
+                "probability_delta": 0.4772824884058413,
+                "rank_before": 8,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.109375,
+                "edited_gap_to_fixed_winner": 8.859375,
+                "gap_closure_fraction": -0.09248554913294797,
+                "baseline_probability": 0.00022219289803976654,
+                "edited_probability": 6.196127957281737e-05,
+                "probability_delta": -0.00016023161846694917,
+                "rank_before": 20,
+                "rank_after": 23
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "prefix": " Ugo must take the voucher to Henrik",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          104
+        ],
+        "dtype": "torch.int64",
+        "sha256": "0bc0e33ebf64ec40f7506f9981019e7c19b41f21682c572ed57c6d5258cd31a9"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            72,
+            81
+          ]
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            82
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            92
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          1418,
+          627
+        ],
+        "source_positions": [
+          72,
+          81,
+          82,
+          92
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:3649cf9b843466eec3e3c4ab",
+        "structural-contract:09d342595818237aab5e7b78",
+        "structural-contract:536fe57654c4b93a7f8b1af4",
+        "structural-contract:81fdf3aa41ae993110695336",
+        "structural-contract:c098bfb1b54f856a79b5a396",
+        "structural-contract:c572d68f3bbf2b299c5e7640",
+        "structural-contract:5c70be00219ae13e5eaebd39",
+        "structural-contract:cc8dedad985eac98d1b2e41c",
+        "structural-contract:0333a3082b7c85324cbe5998",
+        "structural-contract:d72de5a34e0204283686c6e8",
+        "structural-contract:dadf5153bb90b13ec9a72c8e",
+        "structural-contract:f9efc576e4ded68e903fec8e"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:536fe57654c4b93a7f8b1af4",
+        "fixed_readout": "structural-contract:d72de5a34e0204283686c6e8"
+      }
+    },
+    {
+      "case_id": "gen_110",
+      "split": "rescue_v2",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Rosa brings the badge to Vesna before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:take"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "bring",
+                "theme": "badge",
+                "recipient": "Vesna",
+                "bound_agent": "rosa",
+                "bound_recipient": "vesna",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Boris",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Nikos",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197",
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.828125,
+                "edited_gap_to_fixed_winner": 0.828125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.25855296085326607,
+                "edited_probability": 0.25855296085326607,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.25,
+                "edited_gap_to_fixed_winner": 3.25,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.02294787983999268,
+                "edited_probability": 0.02294787983999268,
+                "probability_delta": 0.0,
+                "rank_before": 5,
+                "rank_after": 5
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5918336214523132,
+                "edited_probability": 0.5918336214523132,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.4453125,
+                "edited_gap_to_fixed_winner": 6.4453125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0009398011680338424,
+                "edited_probability": 0.0009398011680338424,
+                "probability_delta": 0.0,
+                "rank_before": 15,
+                "rank_after": 15
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:3c74e07bcdbaaf20333ae03e",
+          "status": "ok",
+          "output": " Rosa brings the badge to Vesna before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:take"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "bring",
+                "theme": "badge",
+                "recipient": "Vesna",
+                "bound_agent": "rosa",
+                "bound_recipient": "vesna",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Boris",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Nikos",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197",
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:3c74e07bcdbaaf20333ae03e",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "add",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "last"
+                          }
+                        }
+                      },
+                      {
+                        "fn": "project_orthogonal",
+                        "arg": {
+                          "fn": "sub",
+                          "args": [
+                            {
+                              "fn": "mean",
+                              "args": [
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 77
+                                    }
+                                  }
+                                },
+                                {
+                                  "ref": {
+                                    "scope": "runtime",
+                                    "worker": "os_0",
+                                    "tensor": "resid_pre",
+                                    "layer": 14,
+                                    "token": {
+                                      "mode": "index",
+                                      "value": 78
+                                    }
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "ref": {
+                                "scope": "runtime",
+                                "worker": "os_0",
+                                "tensor": "resid_pre",
+                                "layer": 14,
+                                "token": {
+                                  "mode": "last"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "basis": {
+                          "ref": {
+                            "scope": "runtime",
+                            "worker": "os_0",
+                            "tensor": "resid_pre",
+                            "layer": 14,
+                            "token": {
+                              "mode": "last"
+                            }
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common_orthogonal",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:3c74e07bcdbaaf20333ae03e",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 13.04519653,
+              "target_norm_before": 10.06261349,
+              "target_norm_after": 13.04519653,
+              "source_target_cosine": 0.7712388,
+              "source_target_delta_norm": 8.30386734,
+              "raw_blend_delta_norm": 8.30386734,
+              "blend_delta_norm": 8.30386734,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.06261349,
+              "write_limit_norm": 1.20751357,
+              "raw_write_norm": 8.30386639,
+              "write_norm": 1.20737255,
+              "relative_write_norm": 0.11998598,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.828125,
+                "edited_gap_to_fixed_winner": 0.671875,
+                "gap_closure_fraction": 0.18867924528301888,
+                "baseline_probability": 0.25855296085326607,
+                "edited_probability": 0.28797192037594965,
+                "probability_delta": 0.029418959522683585,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.25,
+                "edited_gap_to_fixed_winner": 3.09375,
+                "gap_closure_fraction": 0.04807692307692308,
+                "baseline_probability": 0.02294787983999268,
+                "edited_probability": 0.025558960935007813,
+                "probability_delta": 0.0026110810950151324,
+                "rank_before": 5,
+                "rank_after": 3
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5918336214523132,
+                "edited_probability": 0.5638216492125554,
+                "probability_delta": -0.02801197223975782,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.4453125,
+                "edited_gap_to_fixed_winner": 6.5234375,
+                "gap_closure_fraction": -0.012121212121212121,
+                "baseline_probability": 0.0009398011680338424,
+                "edited_probability": 0.0008280352746152615,
+                "probability_delta": -0.00011176589341858087,
+                "rank_before": 15,
+                "rank_after": 15
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:a2a18a323273b36cb37869d6",
+          "status": "ok",
+          "output": " Rosa brings the badge to Vesna, while Boris takes the roster to Nikos before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "bring",
+                "theme": "badge",
+                "recipient": "Vesna",
+                "bound_agent": "rosa",
+                "bound_recipient": "vesna",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Boris",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Nikos",
+                "bound_agent": "boris",
+                "bound_recipient": "nikos",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197",
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:a2a18a323273b36cb37869d6",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.327384481040909
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:a2a18a323273b36cb37869d6",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.39487457,
+              "write_limit_norm": 5.32738495,
+              "raw_write_norm": 5.32700157,
+              "write_norm": 5.32700157,
+              "relative_write_norm": 0.11999136,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.828125,
+                "edited_gap_to_fixed_winner": -1.46875,
+                "gap_closure_fraction": 2.7735849056603774,
+                "baseline_probability": 0.25855296085326607,
+                "edited_probability": 0.7479094727868728,
+                "probability_delta": 0.48935651193360674,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.25,
+                "edited_gap_to_fixed_winner": 3.171875,
+                "gap_closure_fraction": 0.02403846153846154,
+                "baseline_probability": 0.02294787983999268,
+                "edited_probability": 0.00721857052419836,
+                "probability_delta": -0.01572930931579432,
+                "rank_before": 5,
+                "rank_after": 7
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5918336214523132,
+                "edited_probability": 0.17217853711921563,
+                "probability_delta": -0.4196550843330976,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.4453125,
+                "edited_gap_to_fixed_winner": 5.9296875,
+                "gap_closure_fraction": 0.08,
+                "baseline_probability": 0.0009398011680338424,
+                "edited_probability": 0.0004578766038690796,
+                "probability_delta": -0.00048192456416476276,
+                "rank_before": 15,
+                "rank_after": 15
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "random": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0,
+            "seed": 17
+          },
+          "selected_recipe_id": "structural-contract:ee715fa43080bb840515584d",
+          "status": "ok",
+          "output": " Rosa brings the badge to Vesna before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:take"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "bring",
+                "theme": "badge",
+                "recipient": "Vesna",
+                "bound_agent": "rosa",
+                "bound_recipient": "vesna",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Boris",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Nikos",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197",
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:ee715fa43080bb840515584d",
+                "target": {
+                  "surface_id": "s_resid_pre_l14_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "mean",
+                    "args": [
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "index",
+                            "value": 77
+                          }
+                        }
+                      },
+                      {
+                        "ref": {
+                          "scope": "runtime",
+                          "worker": "os_0",
+                          "tensor": "resid_pre",
+                          "layer": 14,
+                          "token": {
+                            "mode": "index",
+                            "value": 94
+                          }
+                        }
+                      }
+                    ]
+                  }
+                },
+                "op": {
+                  "kind": "activation_patch",
+                  "mode": "blend",
+                  "alpha": 1.0
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "patch",
+          "recipe_component": "common",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:ee715fa43080bb840515584d",
+              "surface_id": "s_resid_pre_l14_last",
+              "op": "activation_patch",
+              "operator_recipe_id": null,
+              "hook_call_count": 1,
+              "selected_token_count": 1,
+              "source_norm": 8.27825356,
+              "target_norm_before": 10.06261349,
+              "target_norm_after": 8.27820778,
+              "source_target_cosine": 0.35767552,
+              "source_target_delta_norm": 10.49739265,
+              "raw_blend_delta_norm": 10.49739265,
+              "blend_delta_norm": 10.49739265,
+              "step_size_clip_saturated": false,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 10.06261349,
+              "write_limit_norm": 1.20751357,
+              "raw_write_norm": 10.49736881,
+              "write_norm": 1.20749581,
+              "relative_write_norm": 0.11999823,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.828125,
+                "edited_gap_to_fixed_winner": 0.78125,
+                "gap_closure_fraction": 0.05660377358490566,
+                "baseline_probability": 0.25855296085326607,
+                "edited_probability": 0.2647058148483668,
+                "probability_delta": 0.006152853995100738,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.25,
+                "edited_gap_to_fixed_winner": 3.359375,
+                "gap_closure_fraction": -0.03365384615384615,
+                "baseline_probability": 0.02294787983999268,
+                "edited_probability": 0.020095463170646533,
+                "probability_delta": -0.002852416669346148,
+                "rank_before": 5,
+                "rank_after": 6
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5918336214523132,
+                "edited_probability": 0.5781706554194116,
+                "probability_delta": -0.013662966032901624,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.4453125,
+                "edited_gap_to_fixed_winner": 6.359375,
+                "gap_closure_fraction": 0.013333333333333334,
+                "baseline_probability": 0.0009398011680338424,
+                "edited_probability": 0.0010004941987608708,
+                "probability_delta": 6.069303072702846e-05,
+                "rank_before": 15,
+                "rank_after": 15
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:b4f9a9f266e92315d1a29d43",
+            "system_prompt_sha256": "db4be2ad24615a0a9bf372218a3620ca668af1694cea79a1d89682d22243556f",
+            "usage": {
+              "input_tokens": 3936,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3933, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 216,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=181)",
+              "total_tokens": 4152
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:a2a18a323273b36cb37869d6\"}",
+            "response_metadata": {
+              "response_id": "resp_0c866789bde2a65d006aed972d39c087d186738b14760bb739",
+              "status": "completed"
+            },
+            "latency_seconds": 3.621,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:a2a18a323273b36cb37869d6",
+          "status": "ok",
+          "output": " Rosa brings the badge to Vesna, while Boris takes the roster to Nikos before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "bring",
+                "theme": "badge",
+                "recipient": "Vesna",
+                "bound_agent": "rosa",
+                "bound_recipient": "vesna",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Boris",
+                "action": "take",
+                "theme": "roster",
+                "recipient": "Nikos",
+                "bound_agent": "boris",
+                "bound_recipient": "nikos",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197",
+            "ab2d154ee2b4d0180107799aa0c35bbd05f3bbff13ed957fe8057735cb0b1197"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:a2a18a323273b36cb37869d6",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.327384481040909
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:a2a18a323273b36cb37869d6",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.39487457,
+              "write_limit_norm": 5.32738495,
+              "raw_write_norm": 5.32700157,
+              "write_norm": 5.32700157,
+              "relative_write_norm": 0.11999136,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.828125,
+                "edited_gap_to_fixed_winner": -1.46875,
+                "gap_closure_fraction": 2.7735849056603774,
+                "baseline_probability": 0.25855296085326607,
+                "edited_probability": 0.7479094727868728,
+                "probability_delta": 0.48935651193360674,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 3.25,
+                "edited_gap_to_fixed_winner": 3.171875,
+                "gap_closure_fraction": 0.02403846153846154,
+                "baseline_probability": 0.02294787983999268,
+                "edited_probability": 0.00721857052419836,
+                "probability_delta": -0.01572930931579432,
+                "rank_before": 5,
+                "rank_after": 7
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5918336214523132,
+                "edited_probability": 0.17217853711921563,
+                "probability_delta": -0.4196550843330976,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.4453125,
+                "edited_gap_to_fixed_winner": 5.9296875,
+                "gap_closure_fraction": 0.08,
+                "baseline_probability": 0.0009398011680338424,
+                "edited_probability": 0.0004578766038690796,
+                "probability_delta": -0.00048192456416476276,
+                "rank_before": 15,
+                "rank_after": 15
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "prefix": " Rosa brings the badge to Vesna",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          105
+        ],
+        "dtype": "torch.int64",
+        "sha256": "82a4a940ba361de1346dfc0969c5f602dc6d8aee0fa705740c5612110bb3e164"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            77,
+            87
+          ]
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            78
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            94
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          1418,
+          627
+        ],
+        "source_positions": [
+          77,
+          87,
+          78,
+          94
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:acccf1ddcfc80d092c32f18f",
+        "structural-contract:12250681e2103dbcdc1e880f",
+        "structural-contract:3c74e07bcdbaaf20333ae03e",
+        "structural-contract:ee715fa43080bb840515584d",
+        "structural-contract:8befc1622e5ef52b0ba3a5f0",
+        "structural-contract:c0e68fa447ff365c59180b3e",
+        "structural-contract:0ddd9047e1a57f6820a11ad6",
+        "structural-contract:58d3bb1f8417af82d7c6b41f",
+        "structural-contract:e661b773f09aabb32876ca19",
+        "structural-contract:a2a18a323273b36cb37869d6",
+        "structural-contract:f648ab1317e7691e93a3abdc",
+        "structural-contract:e4e1292bb00adbddd6fce698"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:3c74e07bcdbaaf20333ae03e",
+        "fixed_readout": "structural-contract:a2a18a323273b36cb37869d6"
+      }
+    }
+  ],
+  "scope": "restored_contract_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 1286.013,
+  "aggregate": {
+    "rescue_v2": {
+      "b0": {
+        "completed_pairs": 4,
+        "eligible_pairs": 4,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 4,
+        "selection_errors": 0
+      },
+      "fixed": {
+        "completed_pairs": 4,
+        "eligible_pairs": 4,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 4,
+        "unknown_roles": 4,
+        "selection_errors": 0
+      },
+      "fixed_readout": {
+        "completed_pairs": 4,
+        "eligible_pairs": 4,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 4,
+        "wins_vs_b0": 4,
+        "losses_vs_b0": 0,
+        "output_changes": 4,
+        "applied_diagnostic_edits": 4,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "random": {
+        "completed_pairs": 4,
+        "eligible_pairs": 4,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 4,
+        "unknown_roles": 4,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 4,
+        "eligible_pairs": 4,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 4,
+        "wins_vs_b0": 4,
+        "losses_vs_b0": 0,
+        "output_changes": 4,
+        "applied_diagnostic_edits": 4,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    }
+  }
+}

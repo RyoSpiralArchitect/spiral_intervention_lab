@@ -362,6 +362,27 @@ The four-case split is thin and single-family, so these remain descriptive
 counts; but the datasheet controller has now matched the fixed rule on every
 reachable case across both splits (7/7 reachable) while spending fewer writes.
 
+### Cap 0.12 rerun (boundary-band verification)
+
+`--cap` now takes the relative write cap into the manifest (separate `_cap*`
+version), system prompt, catalog, packet, policy and branch check. Two datasheet
+runs at 0.12 test the band the 8% cap could not reach:
+
+- v1 rescue split (manifest `20aaa4d8…`, 1410 s): fixed readout and controller
+  both 6/7. `gen_045` (`,` gap 2.27, previously unreachable) rescued; `gen_060`
+  (gap 2.42) flipped to `, giving Yusuf the ticket` — a gerund that drops a
+  required term, so still a failure; `gen_009`/`gen_018` now pass at B0 because
+  the double-object evaluator binds their already-correct outputs.
+- rescue_v2 (manifest `238c2e00…`, 1286 s): fixed readout and controller 4/4.
+  `gen_049` (`,` gap 2.83 vs ~2.7 estimated `,` reach at 0.12) — the controller
+  correctly judged `,` unreachable and chose ` while` (estimated ~6.1), the
+  first observed case where its datasheet reasoning differed from a blind
+  first-token rule and still won.
+
+Realized writes were 0.11999-0.12001 throughout; state restored, zero drift.
+The `,`-push datasheet boundary is now covered on both sides: 1.52 won at 0.08,
+2.83 declined at 0.12 where the estimate says unreachable.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
