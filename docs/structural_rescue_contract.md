@@ -271,6 +271,70 @@ gap, and the one-shot controller's choice, not the actuator, separates it from
 the fixed rule (5 of 8 failures rescued by fixed readout, 3 of 8 by the controller,
 counting `cal_review`).
 
+### Reach curve (cap sweep, calibration only)
+
+`cap_sweep` (manifest `ebd542c5…`, 720 s): every eligible source token's
+last-layer readout push at caps 0.04-0.12 on the three calibration cases, one
+B0 branch per case, no provider. All 45 branches restored state, confirmed one
+guarded write and showed zero repeated-baseline drift; realized writes matched
+the cap (0.0400-0.1200). The environment matched the recorded pilot versions
+(torch 2.12.1, transformers 5.13.0, transformer-lens 3.5.1).
+
+Gap closure is approximately linear in the cap, slightly sublinear at the top
+of the range. The absolute closure slope differs by target: about 0.21-0.25
+logits per 1% of norm for `,`, 0.49-0.54 for ` while` and 0.36-0.50 for `.\n`.
+
+| Source | Baseline gaps | Closure slope (logits per unit cap) | First-token flip |
+| --- | --- | --- | --- |
+| `,` | 1.13-1.92 | 21-25 | 3/3 cases; at 0.06 for gap 1.13, at 0.08 for gaps 1.45-1.92 |
+| ` while` | 3.66-4.41 | 49-54 | at 0.08 for gap 3.66, at 0.10 for gaps 4.22-4.41 |
+| `.\n` | 7.20-8.42 | 36-50 | none up to 0.12 |
+
+Every first-token flip preserved joint success: the `,` flips rescued
+`cal_review` at 0.06 already (B0 gap 1.125) and moved the deadline phrase to
+the end on the two baseline successes, while ` while` flips at 0.10+ also
+produced valid conjunctions. No flip produced a failure. Pushes that did not
+flip the first token left the output byte-identical to B0.
+
+Extrapolating the `,` slope to the rescue split: its three unreached gaps
+(2.14-2.42 logits) would need roughly a 0.10-0.12 cap, inside the observed
+linear region. The `.\n` pushes the controller picked on `cal_review` and
+`gen_058` face gaps of about 7-8 logits; at the measured slope they would need
+roughly a 0.17-0.20 cap — outside the contract's tested range and far beyond
+what a modest raise of `r` could justify — consistent with those branches'
+outcomes.
+
+### Controller datasheet pilot
+
+`datasheet` (manifest `5b6e9b91…`, 331 s): the same rescue split and contract,
+with each readout recipe carrying the cap sweep's measured closure slope and its
+estimated logit closure at this cap (`structural_rescue_v2_norm_relative_contract_datasheet`).
+Three policies: b0, fixed readout, controller. All branches restored state,
+zero drift, one guarded write per edit.
+
+| Case | `,` gap | Estimated `,` reach | Controller choice | Fixed readout |
+| --- | ---: | ---: | --- | --- |
+| `gen_002` | 0.75 | ~1.8 | `,` ✓ | ✓ |
+| `gen_009` | 2.14 | ~1.8 | noop | - |
+| `gen_018` | 1.41 | ~1.8 | `,` ✓ | ✓ |
+| `gen_045` | 2.27 | ~1.8 | noop | - |
+| `gen_047` | 0.86 | ~1.8 | `,` ✓ | ✓ |
+| `gen_058` | 1.52 | ~1.8 | `,` ✓ | ✓ |
+| `gen_060` | 2.42 | ~1.8 | noop | - |
+
+The datasheet-equipped controller matched the fixed rule's 4/7 joint successes
+exactly — including `gen_058`, which it missed without the datasheet by picking
+`.` — and it selected `,` on every case whose gap was inside the estimated
+reach. On the three unreachable cases it chose noop rather than spend a write,
+so it applied 4 edits for 4 wins where the fixed rule applied 7 for the same 4.
+The measured boundary of its behaviour (does it pick `,` at a gap of exactly
+1.8, or overshoot a 1.6-2.0 estimate) is untested: no screened case sits in
+that band. Provider usage: 27,487 total tokens, one call per case.
+Post-run, review tightened the datasheet prompt wording (unmeasured pieces carry
+no estimate) and versioned the packet as `structural_rescue_choice_v2_datasheet`;
+future datasheet manifests therefore hash differently from `5b6e9b91…`, which
+remains the receipt of this run.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
@@ -282,5 +346,6 @@ counting `cal_review`).
 ### Next
 
 - Pre-register a second screen before it runs. Either extend the role check to double-object datives or restrict the verbs, to remove evaluator-only failures. Raise the candidate count to reach the selection limit.
-- The controller already sees each structural token's rank and `gap_to_top1`. What it lacks is the actuator's reach. Add a calibration-derived datasheet to each readout recipe, for example "an 8% push closes about 1.5-2.1 logits", and measure whether the controller then picks a reachable `,` push.
-- Measure the reach curve directly with a cap sweep (for example 4-12%) on calibration cases only, before choosing any cap for the next rescue split.
+- ~~Add a calibration-derived datasheet to each readout recipe~~ Done: [datasheet pilot](#controller-datasheet-pilot), `results/structural_rescue_datasheet_20261106/` (manifest `5b6e9b91…`). With reach estimates the controller matched fixed readout at 4/7 and noop'd on unreachable cases; the boundary band near the estimate (~1.6-2.0 logits) is untested.
+- ~~Measure the reach curve directly with a cap sweep~~ Done: [reach curve](#reach-curve-cap-sweep-calibration-only),
+  `results/structural_rescue_cap_sweep_20261106/` (manifest `ebd542c5…`).

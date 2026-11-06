@@ -1,0 +1,6 @@
+{
+  "torch": "2.11.0",
+  "transformers": "4.57.6",
+  "transformer-lens": null,
+  "openai": "2.45.0"
+}

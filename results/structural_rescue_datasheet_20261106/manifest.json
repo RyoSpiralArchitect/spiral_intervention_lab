@@ -1,0 +1,257 @@
+{
+  "apply_scope": "restored_contract_diagnostic_branch_only",
+  "baseline_repeats_before_each_branch": 2,
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
+  "case_set": {
+    "screen_manifest_sha256": "e018bbcc917a79513ab88e4b28f5542447a1db5d324de54df3d1a176351416cf",
+    "screen_results_sha256": "c0f0b455cc4fe09859e32aa6d38ed0b811ce918103c64026f482b90f5a279679",
+    "selected_case_ids": [
+      "gen_002",
+      "gen_009",
+      "gen_018",
+      "gen_045",
+      "gen_047",
+      "gen_058",
+      "gen_060"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "gen_002",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "send",
+          "blueprint",
+          "Pablo"
+        ],
+        [
+          "Henrik",
+          "mail",
+          "badge",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "aea49148cf2998a4e4cbfaec3439d4674d71243aef17eca04532aa8f576ff6b4",
+      "source": "Lars should send the blueprint to Pablo, whereas Henrik should mail the badge to Ilse, in order to start before lunch.",
+      "split": "rescue"
+    },
+    {
+      "case_id": "gen_009",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "send",
+          "blueprint",
+          "Celia"
+        ],
+        [
+          "Yusuf",
+          "give",
+          "badge",
+          "Wanda"
+        ]
+      ],
+      "prompt_sha256": "d598d6f318066d9787d9b5e4b9037158b43ab92bc11d6f4346cb54de663e7614",
+      "source": "In order to leave before dawn, Rosa should send the blueprint to Celia; meanwhile, Yusuf should give the badge to Wanda.",
+      "split": "rescue"
+    },
+    {
+      "case_id": "gen_018",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Kira",
+          "send",
+          "roster",
+          "Olga"
+        ],
+        [
+          "Tilda",
+          "mail",
+          "badge",
+          "Boris"
+        ]
+      ],
+      "prompt_sha256": "ac908d86b625698996b7e15686ca37c328df9b1291930e44da25caa73af2529d",
+      "source": "In order to leave before dawn, Kira should send the roster to Olga, and Tilda should mail the badge to Boris.",
+      "split": "rescue"
+    },
+    {
+      "case_id": "gen_045",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Felix",
+          "bring",
+          "permit",
+          "Nikos"
+        ],
+        [
+          "Kira",
+          "hand",
+          "roster",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "4dda66f4c957381a497f1cd25ef1e759c8cee96c9c34016a9cf2c110047db553",
+      "source": "In order to be ready before noon, Felix should bring the permit to Nikos, whereas Kira should hand the roster to Alma.",
+      "split": "rescue"
+    },
+    {
+      "case_id": "gen_047",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "take",
+          "receipt",
+          "Nikos"
+        ],
+        [
+          "Marta",
+          "send",
+          "ledger",
+          "Yusuf"
+        ]
+      ],
+      "prompt_sha256": "f60ad1ea8dd62d0620c7f31f543fad34f794e5763a9a51a7f2de0f4c43896ad2",
+      "source": "Lars should take the receipt to Nikos, whereas Marta should send the ledger to Yusuf, in order to leave before dawn.",
+      "split": "rescue"
+    },
+    {
+      "case_id": "gen_058",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "send",
+          "roster",
+          "Tilda"
+        ],
+        [
+          "Edda",
+          "give",
+          "permit",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "fd1c035c5b9370429d600c0e10c90e1075a7a240c2c2446fd58100be2d53fbb2",
+      "source": "Before midnight, Boris should send the roster to Tilda, and Edda should give the permit to Alma.",
+      "split": "rescue"
+    },
+    {
+      "case_id": "gen_060",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Ugo",
+          "bring",
+          "blueprint",
+          "Kira"
+        ],
+        [
+          "Yusuf",
+          "give",
+          "ticket",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "34177b06ca7edac0576e0f5f87c34b4958656b86a5b943bf1b59db349f6a5d5d",
+      "source": "In order to close before midnight, Ugo should bring the blueprint to Kira, while Yusuf should give the ticket to Alma.",
+      "split": "rescue"
+    }
+  ],
+  "confirmation_status": "selected_by_preregistered_b0_screen",
+  "continuation_forward_cap_per_policy": 64,
+  "contract": {
+    "cast_tolerance": 0.002,
+    "edits_per_branch": 1,
+    "guard": "per_position_hook_output_minus_input_vs_input_norm",
+    "id": "norm_relative_structural_v1",
+    "patch_alpha": 1.0,
+    "patch_components": [
+      "common",
+      "common_parallel",
+      "common_orthogonal"
+    ],
+    "patch_layer_rule": "n_layers//2",
+    "protected_rule": "structural_lexemes_inside_required_terms",
+    "readout_alpha_rule": "cap*||h_boundary||",
+    "readout_layer_rule": "n_layers-1",
+    "relative_write_cap": 0.08,
+    "site": "resid_pre",
+    "source_rule": "first_three_eligible_source_tokens_in_source_order",
+    "structural_lexemes": [
+      ",",
+      ".",
+      ":",
+      ";",
+      "after",
+      "although",
+      "and",
+      "because",
+      "before",
+      "but",
+      "or",
+      "so",
+      "then",
+      "until",
+      "when",
+      "whereas",
+      "while"
+    ],
+    "token": "last",
+    "ttl_steps": 1
+  },
+  "controller_datasheet": {
+    "reach_basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12",
+    "readout_closure_slope": {
+      " while": {
+        "max": 54.0,
+        "mean": 51.0,
+        "min": 49.0
+      },
+      ",": {
+        "max": 26.0,
+        "mean": 22.5,
+        "min": 20.0
+      },
+      ".\n": {
+        "max": 50.0,
+        "mean": 43.0,
+        "min": 36.0
+      }
+    },
+    "unknown_pieces": "no_estimate"
+  },
+  "controller_system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+  "diagnostic_forward_cap_per_policy": 24,
+  "disk_floor_gib": 6,
+  "fixed_readout_rule": "readout_of_first_eligible_source_token",
+  "fixed_rule": "common_orthogonal_of_first_eligible_pair",
+  "max_controller_calls_per_case": 1,
+  "max_controller_output_tokens": 1600,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "policies": [
+    "b0",
+    "fixed",
+    "fixed_readout",
+    "random",
+    "controller"
+  ],
+  "policy_seeds": [
+    17
+  ],
+  "production_apply_allowed": false,
+  "protocol_deviations": [
+    "disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"
+  ],
+  "random_rule": "sha256(case_id,seed)_mod_catalog_size",
+  "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; readout_recipes_added; pairs_with_protected_lexemes_dropped",
+  "version": "structural_rescue_v2_norm_relative_contract_datasheet"
+}

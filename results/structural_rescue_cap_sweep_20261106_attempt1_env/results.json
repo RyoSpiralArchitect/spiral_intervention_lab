@@ -1,0 +1,27 @@
+{
+  "status": "error",
+  "created_at_utc": "2026-11-06T05:14:04.336127+00:00",
+  "manifest_sha256": "ebd542c54dbc150f1b25df2a3f682c46d049791c41ce3f23bff397a5c22cf19f",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [],
+  "cases": [],
+  "scope": "calibration_reach_curve_not_a_rescue_or_population_efficacy_result",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 2.479,
+  "summary": {
+    "reach_rows": []
+  },
+  "error_type": "ImportError",
+  "error": "transformer_lens is not installed; install the 'tlens' extra to run the end-to-end example"
+}

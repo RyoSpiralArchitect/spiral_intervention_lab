@@ -1,0 +1,121 @@
+{
+  "apply_scope": "restored_contract_diagnostic_branch_only",
+  "baseline_branch_per_case": "b0_once; two_repeats_before_every_branch",
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "caps": [
+    0.04,
+    0.06,
+    0.08,
+    0.1,
+    0.12
+  ],
+  "cases": [
+    {
+      "case_id": "cal_delivery",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Mira",
+          "send",
+          "budget",
+          "Omar"
+        ],
+        [
+          "Leena",
+          "bring",
+          "contract",
+          "Priya"
+        ]
+      ],
+      "prompt_sha256": "18ba602700d058d8bcb4a4a5ca617de3d465998db192a064616349b104c7452c",
+      "source": "In order to be ready before noon, Mira should send the budget to Omar, while Leena should bring the contract to Priya.",
+      "split": "calibration"
+    },
+    {
+      "case_id": "cal_review",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Nora",
+          "take",
+          "sample",
+          "Ivo"
+        ],
+        [
+          "Selim",
+          "send",
+          "report",
+          "Yara"
+        ]
+      ],
+      "prompt_sha256": "2c7859bc89f38dfb0d2b361111f96b04b4043a95456d27e68cd7fa99eccae1f0",
+      "source": "In order to finish before dusk, Nora should take the sample to Ivo, while Selim should send the report to Yara.",
+      "split": "calibration"
+    },
+    {
+      "case_id": "cal_workshop",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Ada",
+          "bring",
+          "cable",
+          "Niko"
+        ],
+        [
+          "Rami",
+          "send",
+          "diagram",
+          "Vera"
+        ]
+      ],
+      "prompt_sha256": "f55f8a6b049e5ea905a8439799bc788556519e7e2a00c50fbf0d42c11e603ace",
+      "source": "In order to start before lunch, Ada should bring the cable to Niko, while Rami should send the diagram to Vera.",
+      "split": "calibration"
+    }
+  ],
+  "confirmation_status": "calibration_only_reach_measurement_not_a_rescue_split",
+  "continuation_forward_cap_per_branch": 64,
+  "contract": {
+    "cast_tolerance": 0.002,
+    "edits_per_branch": 1,
+    "guard": "per_position_hook_output_minus_input_vs_input_norm",
+    "id": "norm_relative_structural_v1",
+    "protected_rule": "structural_lexemes_inside_required_terms",
+    "readout_alpha_rule": "cap*||h_boundary||",
+    "readout_layer_rule": "n_layers-1",
+    "site": "resid_pre",
+    "source_rule": "every_eligible_source_token_in_source_order",
+    "structural_lexemes": [
+      ",",
+      ".",
+      ":",
+      ";",
+      "after",
+      "although",
+      "and",
+      "because",
+      "before",
+      "but",
+      "or",
+      "so",
+      "then",
+      "until",
+      "when",
+      "whereas",
+      "while"
+    ],
+    "token": "last",
+    "ttl_steps": 1
+  },
+  "diagnostic_forward_cap_per_branch": 24,
+  "disk_floor_gib": 6,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "production_apply_allowed": false,
+  "protocol_deviations": [
+    "disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"
+  ],
+  "relation_to_v2": "same_cases_boundary_and_readout_recipe_rule; cap_varied; no_patch_recipes_policies_or_provider",
+  "version": "structural_rescue_cap_sweep_v1"
+}
