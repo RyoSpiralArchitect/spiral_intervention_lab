@@ -66,6 +66,8 @@ def manifest_bytes() -> bytes:
 def sweep_recipes(worker: Any, task: StructuralRescueEnv, layer: int, cap: float) -> tuple[list[dict], Any]:
     """One readout recipe per eligible source token at this cap, with its policy."""
     sources = structural_contract.eligible_sources(worker, required_terms(task))
+    if len(sources) > structural_contract.MAX_SOURCES:
+        raise ValueError("sweep_covers_every_eligible_source_but_catalog_truncates_at_three")
     policy = structural_contract.policy_for(worker, required_terms(task), cap=cap)
     last = structural_contract.surface(worker, layer)
     return structural_contract.readout_recipes(worker, sources, last, cap=cap), policy
@@ -85,7 +87,9 @@ def summarize(cases: list[dict]) -> dict[str, Any]:
                            if r["token_id"] == branch["source_token_id"]), {})
             rows.append({"case_id": case["case_id"], "cap": branch["cap"],
                          "source_piece": branch["source_piece"], "recipe_id": branch["recipe_id"],
-                         "status": "ok", "first_token_changed": branch["first_token_id"] != b0.get("first_token_id"),
+                         "status": "ok",
+                         "first_token_changed": (branch["first_token_id"] != b0["first_token_id"]
+                                                 if b0.get("status") == "ok" else None),
                          "joint_success": branch["joint_success"],
                          "baseline_gap": target.get("baseline_gap_to_fixed_winner"),
                          "gap_closure": target.get("gap_closure_fraction"),
@@ -243,7 +247,8 @@ def main(argv=None) -> int:
     return 0
 
 
-def record(worker, task, recipe, meter, destination: dict, policy, *, cap: float = 0.08):
+def record(worker, task, recipe, meter, destination: dict, policy,
+           *, cap: float = structural_contract.DEFAULT_RELATIVE_WRITE_CAP):
     """Retain attempted work even if simulation or a contract check fails."""
     destination["status"] = "running"
     try:

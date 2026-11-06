@@ -330,6 +330,10 @@ so it applied 4 edits for 4 wins where the fixed rule applied 7 for the same 4.
 The measured boundary of its behaviour (does it pick `,` at a gap of exactly
 1.8, or overshoot a 1.6-2.0 estimate) is untested: no screened case sits in
 that band. Provider usage: 27,487 total tokens, one call per case.
+Post-run, review tightened the datasheet prompt wording (unmeasured pieces carry
+no estimate) and versioned the packet as `structural_rescue_choice_v2_datasheet`;
+future datasheet manifests therefore hash differently from `5b6e9b91…`, which
+remains the receipt of this run.
 
 ### Scope
 

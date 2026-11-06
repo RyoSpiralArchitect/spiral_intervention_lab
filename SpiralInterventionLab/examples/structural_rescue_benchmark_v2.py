@@ -47,10 +47,11 @@ Do not output an answer, a token to force, new expressions, or any other fields.
 This selects one restored diagnostic continuation, not production permission.
 Role annotations, reference continuations and candidate outcomes are unavailable.
 """
-DATASHEET_PROMPT_ADD = """Each readout recipe also carries a reach_estimate: the measured winner-gap closure per
-unit of relative write from a calibration cap sweep, and its estimated logit closure at
-this cap. A recipe whose estimate range tops out below its target token's gap_to_top1
-cannot flip the first token; prefer a reachable recipe over an unreachable one.
+DATASHEET_PROMPT_ADD = """Readout recipes whose target was measured in a calibration cap sweep also carry a
+reach_estimate: the measured winner-gap closure per unit of relative write, and its
+estimated logit closure at this cap. Recipes without a reach_estimate were not covered
+by that sweep. A recipe whose estimate range tops out below its target token's
+gap_to_top1 cannot flip the first token; prefer a reachable recipe over an unreachable one.
 """
 
 
@@ -147,7 +148,8 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
         if estimate is not None:
             row["reach_estimate"] = estimate
         offered.append(row)
-    return {"version": "structural_rescue_choice_v2", "case_id": case_id,
+    return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else ""),
+            "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
             "recipes": offered,
             "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": RELATIVE_WRITE_CAP,

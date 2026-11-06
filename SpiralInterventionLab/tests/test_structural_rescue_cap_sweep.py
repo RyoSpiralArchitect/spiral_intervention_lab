@@ -59,21 +59,22 @@ def test_branch_enforces_the_branch_cap_not_the_default(tmp_path):
     realized = result["runtime_telemetry"][0]["relative_write_norm"]
     assert realized <= 0.08 + v2.CAST_TOLERANCE
     # The same realized write must fail closed against a smaller declared cap.
-    if realized > 0.04 + v2.CAST_TOLERANCE:
-        worker2 = contract_worker()
-        worker2.stop_checker = lambda text: len(text) > 4
-        meter = Meter(worker2, deadline=time.monotonic() + 30, disk_path=tmp_path)
-        meter.reset("diagnostic")
-        meter.boundary_length = worker2._current_token_tensor().shape[-1]
-        with patch("shutil.disk_usage", return_value=SimpleNamespace(free=20 * 2**30)):
-            with meter.install():
-                with pytest.raises(RuntimeError, match="exceeded_cap"):
-                    v2.branch(worker2, SimpleNamespace(evaluate=lambda t: {}), recipe, meter, policy, cap=0.04)
+    # This precondition is what makes the check below non-vacuous.
+    assert realized > 0.04 + v2.CAST_TOLERANCE
+    worker2 = contract_worker()
+    worker2.stop_checker = lambda text: len(text) > 4
+    meter = Meter(worker2, deadline=time.monotonic() + 30, disk_path=tmp_path)
+    meter.reset("diagnostic")
+    meter.boundary_length = worker2._current_token_tensor().shape[-1]
+    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=20 * 2**30)):
+        with meter.install():
+            with pytest.raises(RuntimeError, match="exceeded_cap"):
+                v2.branch(worker2, SimpleNamespace(evaluate=lambda t: {}), recipe, meter, policy, cap=0.04)
 
 
 def test_summarize_keeps_error_rows_and_joins_b0():
     cases = [{"case_id": "c1", "branches": {
-        "b0": {"first_token_id": 5},
+        "b0": {"first_token_id": 5, "status": "ok"},
         "sweep": [
             {"cap": 0.04, "source_piece": ",", "source_token_id": 3, "recipe_id": "r1",
              "status": "ok", "first_token_id": 3, "joint_success": True,
