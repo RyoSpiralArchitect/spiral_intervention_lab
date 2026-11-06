@@ -1,0 +1,243 @@
+{
+  "version": "structural_rescue_choice_v2_datasheet",
+  "case_id": "gen_008",
+  "generated_tail": " Henrik will take the receipt to Ilse",
+  "structure_readout": [
+    {
+      "token_id": 1603,
+      "piece": " before",
+      "source_positions": [
+        75
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 1,
+      "prob": 0.4910087287425995,
+      "logit": 20.90625,
+      "gap_to_top1": 0.0,
+      "top20_hit": true,
+      "is_greedy_token": true
+    },
+    {
+      "token_id": 11,
+      "piece": ",",
+      "source_positions": [
+        77,
+        86
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 3,
+      "prob": 0.17507454752922058,
+      "logit": 19.875,
+      "gap_to_top1": 1.03125,
+      "top20_hit": true,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 627,
+      "piece": ".\n",
+      "source_positions": [
+        96
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 38,
+      "prob": 0.00023965902801137418,
+      "logit": 13.28125,
+      "gap_to_top1": 7.625,
+      "top20_hit": false,
+      "is_greedy_token": false
+    }
+  ],
+  "recipes": [
+    {
+      "recipe_id": "structural-contract:65c51f29537e8a0dc94c158b",
+      "kind": "patch",
+      "component": "common",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 77
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 96
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 1.090302462465212,
+      "expected_relative_write": 0.12,
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.77696982130575,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.205446830284671,
+        "parallel_norm": 7.985209903765717,
+        "orthogonal_norm": 7.861199746803198,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": 3.3306690738754696e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:36c555626fb0d2122f930012",
+      "kind": "patch",
+      "component": "common_parallel",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 77
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 96
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.7761703455658302,
+      "expected_relative_write": 0.12,
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.77696982130575,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.205446830284671,
+        "parallel_norm": 7.985209903765717,
+        "orthogonal_norm": 7.861199746803198,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": 3.3306690738754696e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:8d6d8791f206ec898471886f",
+      "kind": "patch",
+      "component": "common_orthogonal",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 77
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 96
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.764897227691871,
+      "expected_relative_write": 0.12,
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.77696982130575,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.205446830284671,
+        "parallel_norm": 7.985209903765717,
+        "orthogonal_norm": 7.861199746803198,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": 3.3306690738754696e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:49b4e318561290d6017752fd",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 77
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.12,
+      "expected_relative_write": 0.12,
+      "reach_estimate": {
+        "slope_logits_per_unit_cap": {
+          "mean": 22.5,
+          "min": 20.0,
+          "max": 26.0
+        },
+        "estimated_gap_closure": {
+          "mean": 2.6999999999999997,
+          "min": 2.4,
+          "max": 3.12
+        },
+        "extrapolated": false,
+        "basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12"
+      }
+    },
+    {
+      "recipe_id": "structural-contract:a791e2463cf45a9d4f87a97a",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 96
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.12,
+      "expected_relative_write": 0.12,
+      "reach_estimate": {
+        "slope_logits_per_unit_cap": {
+          "mean": 43.0,
+          "min": 36.0,
+          "max": 50.0
+        },
+        "estimated_gap_closure": {
+          "mean": 5.16,
+          "min": 4.32,
+          "max": 6.0
+        },
+        "extrapolated": false,
+        "basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12"
+      }
+    }
+  ],
+  "contract": {
+    "id": "norm_relative_structural_v1",
+    "relative_write_cap": 0.12,
+    "ttl_steps": 1,
+    "max_edits": 1
+  },
+  "budget": {
+    "max_edits": 1,
+    "diagnostic_forwards": 24,
+    "continuation_forwards": 64
+  },
+  "production_apply_allowed": false
+}

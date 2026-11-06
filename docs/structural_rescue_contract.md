@@ -384,6 +384,28 @@ inside the 0.002 tolerance); state restored, zero drift.
 The `,`-push datasheet boundary is now covered on both sides: 1.52 won at 0.08,
 2.83 declined at 0.12 where the estimate says unreachable.
 
+### Screen v3 and rescue_v3 split
+
+Screen v3 (manifest `f4e86bb1…`, `results/structural_rescue_screen_v3_20261107/`,
+6104 s) adds participial-second-clause and agent-relative sources plus
+`give`. 120 candidates, 6 boundary-less, **16 B0 failures** — the selection
+limit 12 was reached for the first time. Two new failure families appear:
+8 "with X -ing" participle outputs that keep both frames but drop required
+terms or the deadline, and 4 verb-substitution/possessive role-unknowns.
+
+rescue_v3 at cap 0.12 + datasheet (manifest `a0c53747…`, 1393 s): only 2/12
+rescued, all by readout pushes. `gen_017` is the **first patch success** (the
+common_orthogonal blend rescued it too). The 8 participle-family cases resisted
+every flip: pushing `,`/` while` produced `, with X -ing` continuations that
+still fail constraints — the intervention can flip the token but cannot steer
+the clause into finite form. Controller matched fixed readout on both rescued
+cases; state restored, zero drift.
+
+Bottleneck ranking after this run: (1) clause-form steering is what participle
+failures need, and a token-level readout push cannot express it; (2) verb
+substitutions (`finishes her drawing`) need a richer action surface or a
+content-preservation check beyond lexical terms.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
