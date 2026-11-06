@@ -81,7 +81,9 @@ def selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[str, 
 def load_selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[str, Any]]:
     """Dispatch on the frozen screen manifest version; v1 receipts stay readable."""
     version = json.loads((screen_dir / "manifest.json").read_text()).get("version")
-    if version == "structural_rescue_screen_v2":
+    if version == "structural_rescue_screen_v3":
+        from .structural_rescue_screen_v3 import selected_cases as pick
+    elif version == "structural_rescue_screen_v2":
         from .structural_rescue_screen_v2 import selected_cases as pick
     elif version == "structural_rescue_screen_v1":
         pick = selected_cases
@@ -137,7 +139,8 @@ def main(argv=None) -> int:
     return execute(args, seed=SEED, count=COUNT, verbs=VERBS, frozen=manifest_bytes())
 
 
-def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen: bytes) -> int:
+def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen: bytes,
+            families: tuple[str, ...] = FAMILIES) -> int:
     output = args.output_dir.expanduser().resolve()
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
@@ -180,7 +183,7 @@ def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen:
         layers = sorted({model.cfg.n_layers // 2, model.cfg.n_layers - 1})
         catalog = [s for s in build_default_activation_surface_catalog(model, layers=layers)
                    if s["target"].get("site") == "resid_pre" and s["target"]["token"]["mode"] == "last"]
-        for case in generate(seed, count, verbs):
+        for case in generate(seed, count, verbs, families):
             if shutil.disk_usage(output).free < DISK_FLOOR_GIB * 2**30:
                 raise ForwardLimit(f"disk_below_predeclared_{DISK_FLOOR_GIB:g}_gib_floor")
             row = screen_case(model, catalog, case)
