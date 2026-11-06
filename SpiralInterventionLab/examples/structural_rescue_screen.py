@@ -78,6 +78,18 @@ def selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[str, 
                    "selected_case_ids": list(results["selected_case_ids"])}
 
 
+def load_selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[str, Any]]:
+    """Dispatch on the frozen screen manifest version; v1 receipts stay readable."""
+    version = json.loads((screen_dir / "manifest.json").read_text()).get("version")
+    if version == "structural_rescue_screen_v2":
+        from .structural_rescue_screen_v2 import selected_cases as pick
+    elif version == "structural_rescue_screen_v1":
+        pick = selected_cases
+    else:
+        raise ValueError(f"unknown_screen_manifest_version: {version}")
+    return pick(screen_dir)
+
+
 def screen_case(model: Any, catalog: list[dict], case: RescueCase) -> dict[str, Any]:
     task = StructuralRescueEnv(case)
     worker = build_hooked_transformer_worker_runtime(model, task, seed=0, surface_catalog=catalog,
@@ -122,8 +134,11 @@ def main(argv=None) -> int:
     parser.add_argument("--dtype", default="float16", choices=("float16", "float32"))
     parser.add_argument("--mps-memory-fraction", type=float, default=0.85)
     args = parser.parse_args(argv)
+    return execute(args, seed=SEED, count=COUNT, verbs=VERBS, frozen=manifest_bytes())
+
+
+def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen: bytes) -> int:
     output = args.output_dir.expanduser().resolve()
-    frozen = manifest_bytes()
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -165,7 +180,7 @@ def main(argv=None) -> int:
         layers = sorted({model.cfg.n_layers // 2, model.cfg.n_layers - 1})
         catalog = [s for s in build_default_activation_surface_catalog(model, layers=layers)
                    if s["target"].get("site") == "resid_pre" and s["target"]["token"]["mode"] == "last"]
-        for case in generate(SEED, COUNT):
+        for case in generate(seed, count, verbs):
             if shutil.disk_usage(output).free < DISK_FLOOR_GIB * 2**30:
                 raise ForwardLimit(f"disk_below_predeclared_{DISK_FLOOR_GIB:g}_gib_floor")
             row = screen_case(model, catalog, case)

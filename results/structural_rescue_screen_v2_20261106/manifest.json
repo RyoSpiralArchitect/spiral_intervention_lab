@@ -1,0 +1,2633 @@
+{
+  "analysis_plan": {
+    "b0_reproduction": "a_selected_case_where_b0_succeeds_is_reported_not_dropped",
+    "comparison": "controller_vs_fixed_readout_paired_by_case",
+    "exploratory": "b0_failures_by_type_constraint_vs_role",
+    "harm_check": "losses_vs_b0_on_the_v1_confirmation_split",
+    "inference": "descriptive_counts_only_no_significance_claims_at_n_le_12",
+    "primary": "joint_success_count_per_policy_on_the_rescue_v2_split"
+  },
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "candidates": [
+    {
+      "case_id": "gen_000",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Wanda",
+          "bring",
+          "ticket",
+          "Boris"
+        ],
+        [
+          "Celia",
+          "take",
+          "ledger",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "f9edacade7a816f07119344606af0d174f88d624a1479779ba73dfa3acfa2e0e",
+      "source": "In order to close before midnight, Wanda should bring the ticket to Boris; meanwhile, Celia should take the ledger to Felix.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_001",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Yusuf",
+          "send",
+          "ticket",
+          "Alma"
+        ],
+        [
+          "Wanda",
+          "bring",
+          "voucher",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "6424571053c9b4be1336b0ab7603801c64cdbba9a4849ffb14ac80905089f4ae",
+      "source": "Before lunch, Yusuf should send the ticket to Alma; at the same time, Wanda should bring the voucher to Edda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_002",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Felix",
+          "send",
+          "ticket",
+          "Lars"
+        ],
+        [
+          "Yusuf",
+          "bring",
+          "blueprint",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "6ac15f0a6e5a6b576f2bef84b28e5f1398e3eaa0ccfe273757f21abc54cd2c5c",
+      "source": "Felix should send the ticket to Lars; at the same time, Yusuf should bring the blueprint to Alma, in order to leave before dawn.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_003",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "badge",
+          "Stefan"
+        ],
+        [
+          "Ilse",
+          "take",
+          "drawing",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "3c617e09bf6d02a9714f1ff070e2f8e2654ebd31574685d3692b052601e5edcd",
+      "source": "In order to leave before dawn, Rosa should bring the badge to Stefan, and Ilse should take the drawing to Henrik.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_004",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "bring",
+          "voucher",
+          "Greta"
+        ],
+        [
+          "Olga",
+          "take",
+          "manual",
+          "Ugo"
+        ]
+      ],
+      "prompt_sha256": "1d8743553357fe24d68e45ca1f0e2093c7d469c1cbbe48480b5410577b2aa890",
+      "source": "Before midnight, Celia should bring the voucher to Greta, whereas Olga should take the manual to Ugo.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_005",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "take",
+          "ticket",
+          "Ilse"
+        ],
+        [
+          "Lars",
+          "send",
+          "ledger",
+          "Boris"
+        ]
+      ],
+      "prompt_sha256": "7488fad667a9a079020c8b17ce1204c39ba4ef8340311d0092fca9e11b71b4f8",
+      "source": "Pablo should take the ticket to Ilse, whereas Lars should send the ledger to Boris, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_006",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Henrik",
+          "take",
+          "badge",
+          "Marta"
+        ],
+        [
+          "Wanda",
+          "send",
+          "receipt",
+          "Olga"
+        ]
+      ],
+      "prompt_sha256": "fc64d1ff27625bd2055ca6d9d1e1cd931659401b743e728ce414297dcc624deb",
+      "source": "In order to leave before dawn, Henrik should take the badge to Marta, while Wanda should send the receipt to Olga.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_007",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "send",
+          "receipt",
+          "Boris"
+        ],
+        [
+          "Celia",
+          "bring",
+          "letter",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "144675c3a7a8eaaa0ddbf3d8ced64975d0f3d7ed7104dd8ea6e5f8758eb53aa1",
+      "source": "Before dusk, Nikos should send the receipt to Boris; at the same time, Celia should bring the letter to Marta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_008",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "take",
+          "receipt",
+          "Henrik"
+        ],
+        [
+          "Kira",
+          "bring",
+          "blueprint",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "174c91e3bb3e3814d78bb2135db5c9c913ed1d6c67ad5e1e7a7016393e3afeb3",
+      "source": "Rosa should take the receipt to Henrik; meanwhile, Kira should bring the blueprint to Alma, in order to leave before dawn.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_009",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "send",
+          "proposal",
+          "Kira"
+        ],
+        [
+          "Tilda",
+          "bring",
+          "receipt",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "ba120fc7667f7cfe2aa622bec0e5a09d8e5fb3fbbe88d043bd8261626976c2bc",
+      "source": "In order to leave before dawn, Marta should send the proposal to Kira; at the same time, Tilda should bring the receipt to Alma.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_010",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "take",
+          "permit",
+          "Kira"
+        ],
+        [
+          "Rosa",
+          "send",
+          "receipt",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "c79c487f91284cbeede177c9391bda7694ddcd540c8ce82a648a2f204222c6bf",
+      "source": "Before dawn, Jonas should take the permit to Kira, and Rosa should send the receipt to Marta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_011",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "take",
+          "roster",
+          "Stefan"
+        ],
+        [
+          "Marta",
+          "send",
+          "permit",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "6f1974c10edd1640755c70bf89c2c26310e9b51e444f5ee2be1c607d020f48f1",
+      "source": "Nikos should take the roster to Stefan, while Marta should send the permit to Edda, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_012",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "take",
+          "receipt",
+          "Wanda"
+        ],
+        [
+          "Marta",
+          "bring",
+          "proposal",
+          "Kira"
+        ]
+      ],
+      "prompt_sha256": "70da856c239b9dfe23071e8516909b546273a2d1544529cd2de789513cbee884",
+      "source": "In order to eat before supper, Boris should take the receipt to Wanda, and Marta should bring the proposal to Kira.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_013",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Wanda",
+          "send",
+          "ticket",
+          "Nikos"
+        ],
+        [
+          "Olga",
+          "take",
+          "letter",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "20fa3f8363c7f418884e8082325b06ab95366af39dd53e434ea7274fa086b69e",
+      "source": "Before supper, Wanda should send the ticket to Nikos; at the same time, Olga should take the letter to Felix.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_014",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "take",
+          "permit",
+          "Olga"
+        ],
+        [
+          "Greta",
+          "send",
+          "manual",
+          "Stefan"
+        ]
+      ],
+      "prompt_sha256": "5b670bc625116991253e3196aea09b0c451c5f8a341ee9865b99e97c77b38e34",
+      "source": "Lars should take the permit to Olga; meanwhile, Greta should send the manual to Stefan, in order to leave before dawn.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_015",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "bring",
+          "roster",
+          "Yusuf"
+        ],
+        [
+          "Alma",
+          "take",
+          "letter",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "fa6ffde28f6b43630969f39e8adfe42674ddccab7646d803fe519edd4c92b5f3",
+      "source": "In order to be ready before noon, Ilse should bring the roster to Yusuf, while Alma should take the letter to Tilda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_016",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "take",
+          "drawing",
+          "Wanda"
+        ],
+        [
+          "Alma",
+          "bring",
+          "permit",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "bd5706814bc2adf0c7ffe1d59102d32bbe1e36b4bf1b7e9ad1ae4e4f91a0b87d",
+      "source": "Before supper, Boris should take the drawing to Wanda; meanwhile, Alma should bring the permit to Celia.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_017",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Kira",
+          "bring",
+          "receipt",
+          "Felix"
+        ],
+        [
+          "Yusuf",
+          "take",
+          "roster",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "fc73e05fc226f6bf156339bd26fc8b1a2b82c2e47e9943571ccdf6f3eda3e6ec",
+      "source": "Kira should bring the receipt to Felix, while Yusuf should take the roster to Marta, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_018",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "take",
+          "receipt",
+          "Rosa"
+        ],
+        [
+          "Tilda",
+          "bring",
+          "voucher",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "40360ccceeb000458b994169fdc2b202acd61b37d786abd6f27cb2917710e1b8",
+      "source": "In order to close before midnight, Olga should take the receipt to Rosa, whereas Tilda should bring the voucher to Felix.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_019",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "take",
+          "permit",
+          "Olga"
+        ],
+        [
+          "Pablo",
+          "bring",
+          "blueprint",
+          "Vesna"
+        ]
+      ],
+      "prompt_sha256": "b65558cf0c103a4caec3209ab9d5aa7a9976b87d1683ab7187232a5223a6c900",
+      "source": "Before lunch, Greta should take the permit to Olga, and Pablo should bring the blueprint to Vesna.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_020",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "bring",
+          "ledger",
+          "Lars"
+        ],
+        [
+          "Felix",
+          "take",
+          "permit",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "fa05383ca02749ced73a9ab5df1d93f2129a89a41bf6200684cc19a5fa5e37aa",
+      "source": "Edda should bring the ledger to Lars; meanwhile, Felix should take the permit to Marta, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_021",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "send",
+          "voucher",
+          "Kira"
+        ],
+        [
+          "Edda",
+          "bring",
+          "blueprint",
+          "Vesna"
+        ]
+      ],
+      "prompt_sha256": "040a65fe4eaae17a7f244f614f97058b490b190c3800053186ee764003a1be51",
+      "source": "In order to be ready before noon, Lars should send the voucher to Kira, while Edda should bring the blueprint to Vesna.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_022",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "manual",
+          "Marta"
+        ],
+        [
+          "Wanda",
+          "send",
+          "roster",
+          "Kira"
+        ]
+      ],
+      "prompt_sha256": "75018f660022580ba73bd7e83ee87135096402de5c64bec3a0ad9bc323aa2cec",
+      "source": "Before supper, Rosa should bring the manual to Marta; meanwhile, Wanda should send the roster to Kira.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_023",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "take",
+          "receipt",
+          "Alma"
+        ],
+        [
+          "Kira",
+          "bring",
+          "badge",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "7bf0ff54e2c573fec2366c6194b9935658ef61db08e7bab4f8a9ca2f942371d9",
+      "source": "Celia should take the receipt to Alma, whereas Kira should bring the badge to Ilse, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_024",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Vesna",
+          "send",
+          "roster",
+          "Felix"
+        ],
+        [
+          "Boris",
+          "bring",
+          "receipt",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "05eda66bf85f90c1460625615c4f85b73661081d813f66cbc470335d4ff1f437",
+      "source": "In order to be ready before noon, Vesna should send the roster to Felix, and Boris should bring the receipt to Jonas.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_025",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "bring",
+          "ticket",
+          "Yusuf"
+        ],
+        [
+          "Stefan",
+          "take",
+          "manual",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "945e34c6ed010f14b04a0e6b616700a1668c7f95304a7bbef78bab1a5baaf55a",
+      "source": "Before supper, Greta should bring the ticket to Yusuf, and Stefan should take the manual to Ilse.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_026",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "bring",
+          "receipt",
+          "Pablo"
+        ],
+        [
+          "Olga",
+          "take",
+          "voucher",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "ddc201ac71a90928974fed222ee483f442e85e1e379b7221245cff23956ce4f1",
+      "source": "Marta should bring the receipt to Pablo, and Olga should take the voucher to Ilse, in order to be ready before noon.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_027",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Tilda",
+          "bring",
+          "letter",
+          "Felix"
+        ],
+        [
+          "Nikos",
+          "send",
+          "manual",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "01a458ecc346737077911c0675689639087ea1e64ce030ce84289a25dfe38931",
+      "source": "In order to close before midnight, Tilda should bring the letter to Felix; meanwhile, Nikos should send the manual to Marta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_028",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Ugo",
+          "bring",
+          "roster",
+          "Tilda"
+        ],
+        [
+          "Marta",
+          "take",
+          "letter",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "cacf175aff4c511a09b81a09dfc136d3ef32ea964c3931ee37d0b8ac319cc563",
+      "source": "Before midnight, Ugo should bring the roster to Tilda, and Marta should take the letter to Nikos.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_029",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "send",
+          "drawing",
+          "Yusuf"
+        ],
+        [
+          "Lars",
+          "take",
+          "manual",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "661d914122a6e261b6fb0370dbed4dbb4421a3704c0041240e274332f7dd1bda",
+      "source": "Edda should send the drawing to Yusuf, while Lars should take the manual to Tilda, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_030",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "send",
+          "ledger",
+          "Kira"
+        ],
+        [
+          "Tilda",
+          "take",
+          "letter",
+          "Ugo"
+        ]
+      ],
+      "prompt_sha256": "10b06e25b16570fc05e9d3d7b3048be7f2cd86659e69626ecfc3ddc043fe15e9",
+      "source": "In order to eat before supper, Nikos should send the ledger to Kira; at the same time, Tilda should take the letter to Ugo.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_031",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "bring",
+          "badge",
+          "Edda"
+        ],
+        [
+          "Kira",
+          "take",
+          "ledger",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "d3bfddec72769837959d53d8a47e4405d83a583fed0014b28216093201356da5",
+      "source": "Before noon, Nikos should bring the badge to Edda; at the same time, Kira should take the ledger to Jonas.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_032",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "take",
+          "drawing",
+          "Marta"
+        ],
+        [
+          "Stefan",
+          "send",
+          "manual",
+          "Ugo"
+        ]
+      ],
+      "prompt_sha256": "eb3d5d77dd3b18f420af1d6ed0ea14e1d2afd0df96fc9ce533a8ec4b92432f74",
+      "source": "Edda should take the drawing to Marta; meanwhile, Stefan should send the manual to Ugo, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_033",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Vesna",
+          "send",
+          "receipt",
+          "Lars"
+        ],
+        [
+          "Henrik",
+          "take",
+          "badge",
+          "Stefan"
+        ]
+      ],
+      "prompt_sha256": "157126273e990eacd88c36f5baf37bd6b207329fa36025fb517d636e7644f5a9",
+      "source": "In order to leave before dawn, Vesna should send the receipt to Lars, while Henrik should take the badge to Stefan.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_034",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "bring",
+          "letter",
+          "Jonas"
+        ],
+        [
+          "Edda",
+          "take",
+          "drawing",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "0fab6fc63ba09679ab799707708b9cb42f39a20d4c16870b7556d15e1402d3c8",
+      "source": "Before midnight, Olga should bring the letter to Jonas, whereas Edda should take the drawing to Henrik.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_035",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "bring",
+          "ledger",
+          "Celia"
+        ],
+        [
+          "Greta",
+          "take",
+          "badge",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "f894a63fd725b154088551ced4016a77dfff0ad34dce9046ab25dd49e6098a20",
+      "source": "Nikos should bring the ledger to Celia; meanwhile, Greta should take the badge to Rosa, in order to leave before dawn.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_036",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "bring",
+          "blueprint",
+          "Kira"
+        ],
+        [
+          "Pablo",
+          "take",
+          "ledger",
+          "Olga"
+        ]
+      ],
+      "prompt_sha256": "27b6f9c14e7614785e17da405a9af3b12572f2d21fc13ac85de1d8443bcf6a1d",
+      "source": "In order to close before midnight, Nikos should bring the blueprint to Kira, while Pablo should take the ledger to Olga.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_037",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "send",
+          "receipt",
+          "Yusuf"
+        ],
+        [
+          "Alma",
+          "take",
+          "ticket",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "09798a564e34b5a1366ef90bd3ed6d7420708d8c23f016c7638146a15dfc14e8",
+      "source": "Before dawn, Pablo should send the receipt to Yusuf; meanwhile, Alma should take the ticket to Rosa.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_038",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "send",
+          "voucher",
+          "Jonas"
+        ],
+        [
+          "Kira",
+          "bring",
+          "drawing",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "47c86494540c762ff6c39fe4575d62e5f8666eb4a5f0afb375efb58e7b62374a",
+      "source": "Ilse should send the voucher to Jonas; meanwhile, Kira should bring the drawing to Tilda, in order to be ready before noon.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_039",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Kira",
+          "send",
+          "receipt",
+          "Wanda"
+        ],
+        [
+          "Alma",
+          "take",
+          "proposal",
+          "Lars"
+        ]
+      ],
+      "prompt_sha256": "7a4c67f987daacfe0a43713012eca0a6e21a3e7afacdf95a8632e5f62d301927",
+      "source": "In order to close before midnight, Kira should send the receipt to Wanda; at the same time, Alma should take the proposal to Lars.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_040",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "take",
+          "badge",
+          "Tilda"
+        ],
+        [
+          "Marta",
+          "bring",
+          "proposal",
+          "Pablo"
+        ]
+      ],
+      "prompt_sha256": "9ff8cbb4ec3e1d2e49d2a78bfa8245881f9d2642efd3b50122aac3a9c8ed6be2",
+      "source": "Before lunch, Rosa should take the badge to Tilda, while Marta should bring the proposal to Pablo.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_041",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "bring",
+          "drawing",
+          "Greta"
+        ],
+        [
+          "Rosa",
+          "send",
+          "receipt",
+          "Stefan"
+        ]
+      ],
+      "prompt_sha256": "ec45019811c1844e052d6c456f4e0eaa51f665572927404dc5e86959d0ea6dc4",
+      "source": "Edda should bring the drawing to Greta, while Rosa should send the receipt to Stefan, in order to finish before dusk.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_042",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "send",
+          "receipt",
+          "Kira"
+        ],
+        [
+          "Nikos",
+          "take",
+          "manual",
+          "Stefan"
+        ]
+      ],
+      "prompt_sha256": "f2d3d584bedcd01d5e54d97dd1c79d9bf2c037b1ecf2f3d3735b193df5c854b9",
+      "source": "In order to finish before dusk, Greta should send the receipt to Kira, whereas Nikos should take the manual to Stefan.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_043",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "bring",
+          "drawing",
+          "Yusuf"
+        ],
+        [
+          "Stefan",
+          "send",
+          "blueprint",
+          "Wanda"
+        ]
+      ],
+      "prompt_sha256": "1074b31d6d0beac5b8663eece93c78c4af5b48b7eb9e3b9aa2b887162489b9c4",
+      "source": "Before noon, Celia should bring the drawing to Yusuf, whereas Stefan should send the blueprint to Wanda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_044",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "send",
+          "roster",
+          "Marta"
+        ],
+        [
+          "Olga",
+          "bring",
+          "ledger",
+          "Yusuf"
+        ]
+      ],
+      "prompt_sha256": "df43502c3537d0fac9a36356d09fb2d3b5dcb4fbb914714b574d9e1243000b31",
+      "source": "Lars should send the roster to Marta, and Olga should bring the ledger to Yusuf, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_045",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "send",
+          "ticket",
+          "Vesna"
+        ],
+        [
+          "Lars",
+          "take",
+          "badge",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "802a73de2dafa9dd24320e076356fd80806804f092a29604833b2d80acfa1b42",
+      "source": "In order to leave before dawn, Celia should send the ticket to Vesna; meanwhile, Lars should take the badge to Rosa.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_046",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Alma",
+          "take",
+          "proposal",
+          "Ilse"
+        ],
+        [
+          "Stefan",
+          "send",
+          "letter",
+          "Yusuf"
+        ]
+      ],
+      "prompt_sha256": "8e38612b206b8dc2f95656faefc61371ff444a97c793cabf0a85d8591d63eafc",
+      "source": "Before lunch, Alma should take the proposal to Ilse; meanwhile, Stefan should send the letter to Yusuf.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_047",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "take",
+          "letter",
+          "Olga"
+        ],
+        [
+          "Kira",
+          "bring",
+          "ticket",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "dd175083585394286a5240fc8c7112a41860e4de576b8b7dd6e58e2a92800989",
+      "source": "Pablo should take the letter to Olga, whereas Kira should bring the ticket to Edda, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_048",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Felix",
+          "bring",
+          "proposal",
+          "Rosa"
+        ],
+        [
+          "Celia",
+          "send",
+          "blueprint",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "211677d62f18827cef6a4d85262bf97a551498a0bc4a87dc4de6e783d49a1dec",
+      "source": "In order to eat before supper, Felix should bring the proposal to Rosa; meanwhile, Celia should send the blueprint to Ilse.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_049",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Ugo",
+          "take",
+          "voucher",
+          "Henrik"
+        ],
+        [
+          "Vesna",
+          "send",
+          "badge",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "fa7cf84a1e1d5ad104c07d3f2b86ae7d575f0ec10ab24819fe1506b15815bbce",
+      "source": "Before midnight, Ugo should take the voucher to Henrik, while Vesna should send the badge to Celia.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_050",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "bring",
+          "roster",
+          "Jonas"
+        ],
+        [
+          "Celia",
+          "take",
+          "proposal",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "27dd012f3115df27bb15700d23b04afc554a5cc612b66ddd2f957ca662234a38",
+      "source": "Lars should bring the roster to Jonas; at the same time, Celia should take the proposal to Greta, in order to finish before dusk.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_051",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Tilda",
+          "take",
+          "manual",
+          "Felix"
+        ],
+        [
+          "Edda",
+          "bring",
+          "blueprint",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "24135aa28340593777f0635bb4b035948f42322620df13f3c3ff58860faa5b98",
+      "source": "In order to start before lunch, Tilda should take the manual to Felix; meanwhile, Edda should bring the blueprint to Jonas.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_052",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "take",
+          "drawing",
+          "Pablo"
+        ],
+        [
+          "Ilse",
+          "bring",
+          "proposal",
+          "Lars"
+        ]
+      ],
+      "prompt_sha256": "f5dabc2a2c3259bce82b2db3d06a389a0c30875336765c30d959b33a9b99fc28",
+      "source": "Before dawn, Jonas should take the drawing to Pablo, whereas Ilse should bring the proposal to Lars.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_053",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "bring",
+          "ticket",
+          "Rosa"
+        ],
+        [
+          "Nikos",
+          "send",
+          "voucher",
+          "Ugo"
+        ]
+      ],
+      "prompt_sha256": "0578f00492d75043c856f87a624409f8ba44f56d84991a7abd9d6d38f83dd8e6",
+      "source": "Celia should bring the ticket to Rosa, while Nikos should send the voucher to Ugo, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_054",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "send",
+          "blueprint",
+          "Felix"
+        ],
+        [
+          "Yusuf",
+          "bring",
+          "permit",
+          "Kira"
+        ]
+      ],
+      "prompt_sha256": "f2b5770dc8669239b2fecdeadc057d7c092d3f4a86eaf14845024a9de7cff02c",
+      "source": "In order to start before lunch, Nikos should send the blueprint to Felix; meanwhile, Yusuf should bring the permit to Kira.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_055",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "take",
+          "blueprint",
+          "Marta"
+        ],
+        [
+          "Ugo",
+          "send",
+          "ticket",
+          "Olga"
+        ]
+      ],
+      "prompt_sha256": "b20ea05286fea4a842a6f50ba789404bdfab855f06870b07aed273b13be4970f",
+      "source": "Before supper, Jonas should take the blueprint to Marta; at the same time, Ugo should send the ticket to Olga.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_056",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "bring",
+          "manual",
+          "Edda"
+        ],
+        [
+          "Lars",
+          "take",
+          "voucher",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "63d2e227685e864a0ef267303b756702686970d8608568938b45fbeb6be6f52e",
+      "source": "Greta should bring the manual to Edda, and Lars should take the voucher to Marta, in order to finish before dusk.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_057",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Vesna",
+          "send",
+          "roster",
+          "Henrik"
+        ],
+        [
+          "Felix",
+          "take",
+          "proposal",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "d792783b5ba2fcaa586a74b65f5575765e466d5ff4cf923f64f7bef87cacf7e6",
+      "source": "In order to start before lunch, Vesna should send the roster to Henrik; meanwhile, Felix should take the proposal to Tilda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_058",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Alma",
+          "bring",
+          "ledger",
+          "Marta"
+        ],
+        [
+          "Ilse",
+          "take",
+          "voucher",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "6271f4fcaec9d439f9265b351f263ec03a700e3a13962de069a51c1ef78d8ec5",
+      "source": "Before midnight, Alma should bring the ledger to Marta, whereas Ilse should take the voucher to Rosa.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_059",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Yusuf",
+          "send",
+          "blueprint",
+          "Stefan"
+        ],
+        [
+          "Celia",
+          "bring",
+          "voucher",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "9ecda8e9af661a3ce8d4c4dbf42a397278c852e5fd773042f9f624ebf7d3a44f",
+      "source": "Yusuf should send the blueprint to Stefan, whereas Celia should bring the voucher to Henrik, in order to be ready before noon.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_060",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "send",
+          "drawing",
+          "Boris"
+        ],
+        [
+          "Alma",
+          "bring",
+          "badge",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "fc7a2d7d7a636317030c77ecd15524e31e13f5c6297cdd22ad13dc7eb3724d48",
+      "source": "In order to start before lunch, Pablo should send the drawing to Boris, while Alma should bring the badge to Tilda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_061",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "send",
+          "drawing",
+          "Pablo"
+        ],
+        [
+          "Edda",
+          "take",
+          "voucher",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "758b2c8350f9829391d82586c1edbf283b1f80d81b599bed5879641cf505645f",
+      "source": "Before midnight, Boris should send the drawing to Pablo, and Edda should take the voucher to Felix.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_062",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "take",
+          "drawing",
+          "Boris"
+        ],
+        [
+          "Olga",
+          "send",
+          "blueprint",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "c57e83b2c0e39663a283801cd4c3c1cf119d161f8b3a056af82fc4cb8fddb479",
+      "source": "Stefan should take the drawing to Boris; meanwhile, Olga should send the blueprint to Edda, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_063",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "bring",
+          "blueprint",
+          "Olga"
+        ],
+        [
+          "Boris",
+          "take",
+          "permit",
+          "Pablo"
+        ]
+      ],
+      "prompt_sha256": "6b81766499834197c16cd9c1afca7ef799fc7fa22beae30b35502c5825f149b6",
+      "source": "In order to be ready before noon, Marta should bring the blueprint to Olga, while Boris should take the permit to Pablo.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_064",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "badge",
+          "Felix"
+        ],
+        [
+          "Vesna",
+          "take",
+          "blueprint",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "1ca5e22ff5b81471ef45fbf43adee3728105c9a9e1c89948fc349f17b19e22cd",
+      "source": "Before lunch, Rosa should bring the badge to Felix, whereas Vesna should take the blueprint to Ilse.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_065",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "bring",
+          "badge",
+          "Tilda"
+        ],
+        [
+          "Greta",
+          "send",
+          "drawing",
+          "Olga"
+        ]
+      ],
+      "prompt_sha256": "92b20ca4cbc70b0993957e9d8d28977a00c6a2e132992b82a6b1da14e813053c",
+      "source": "Jonas should bring the badge to Tilda; at the same time, Greta should send the drawing to Olga, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_066",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "bring",
+          "letter",
+          "Ilse"
+        ],
+        [
+          "Ugo",
+          "take",
+          "blueprint",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "99134340df616f7c11de2b7cbf463fcf231374c3139e8eada2a92e8e46c3612f",
+      "source": "In order to close before midnight, Lars should bring the letter to Ilse; at the same time, Ugo should take the blueprint to Henrik.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_067",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Vesna",
+          "send",
+          "ledger",
+          "Alma"
+        ],
+        [
+          "Tilda",
+          "bring",
+          "permit",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "4cb8b7284e1afed7d5cc3ae4df4d20328cef5fa1ca4a82119365fc3c53430b85",
+      "source": "Before midnight, Vesna should send the ledger to Alma, whereas Tilda should bring the permit to Henrik.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_068",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "take",
+          "badge",
+          "Tilda"
+        ],
+        [
+          "Edda",
+          "bring",
+          "blueprint",
+          "Yusuf"
+        ]
+      ],
+      "prompt_sha256": "e19952bd9a020ba22b7ac33b9a3a918b9f9ba9621fc8311c24d5d5ac16a7b28c",
+      "source": "Boris should take the badge to Tilda; at the same time, Edda should bring the blueprint to Yusuf, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_069",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "bring",
+          "letter",
+          "Nikos"
+        ],
+        [
+          "Yusuf",
+          "send",
+          "manual",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "b5dec2fd8cf4bedb57c0f7c6516ffba2ce876b92b7b65df07534961dddccf413",
+      "source": "In order to eat before supper, Jonas should bring the letter to Nikos, while Yusuf should send the manual to Felix.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_070",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Felix",
+          "bring",
+          "blueprint",
+          "Stefan"
+        ],
+        [
+          "Lars",
+          "send",
+          "voucher",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "e16b211c72590f84d50782e82f43fe80619d521e47ff800499807c7b1c35ebb7",
+      "source": "Before noon, Felix should bring the blueprint to Stefan, whereas Lars should send the voucher to Ilse.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_071",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Alma",
+          "bring",
+          "drawing",
+          "Vesna"
+        ],
+        [
+          "Felix",
+          "take",
+          "permit",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "c00762629a82d2c5dde64adfced882972deef05ba1b47c47d894eb597faeb9ab",
+      "source": "Alma should bring the drawing to Vesna, and Felix should take the permit to Celia, in order to leave before dawn.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_072",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "send",
+          "manual",
+          "Olga"
+        ],
+        [
+          "Lars",
+          "bring",
+          "letter",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "3f0795de5e05e282e908ecadc604394ad526cca9f3eb4401a326f943a30d8167",
+      "source": "In order to close before midnight, Greta should send the manual to Olga, whereas Lars should bring the letter to Celia.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_073",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "send",
+          "drawing",
+          "Ilse"
+        ],
+        [
+          "Alma",
+          "take",
+          "blueprint",
+          "Ugo"
+        ]
+      ],
+      "prompt_sha256": "2eaefbcb4a629878360c4a34b2f5eba2ce98080621a8f412be9393b0e5837ad3",
+      "source": "Before lunch, Lars should send the drawing to Ilse, while Alma should take the blueprint to Ugo.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_074",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "take",
+          "ticket",
+          "Olga"
+        ],
+        [
+          "Yusuf",
+          "send",
+          "blueprint",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "861c913592ab3c2fa3d02127ca5112e66e143040bc74e56863a9e4a61421ab13",
+      "source": "Stefan should take the ticket to Olga, while Yusuf should send the blueprint to Felix, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_075",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "take",
+          "badge",
+          "Stefan"
+        ],
+        [
+          "Pablo",
+          "send",
+          "voucher",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "0f8bd0789d3b2704df91fa7de53f6a04222216c6ee79374063a5403ac6b90fb3",
+      "source": "In order to start before lunch, Olga should take the badge to Stefan, and Pablo should send the voucher to Alma.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_076",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Vesna",
+          "send",
+          "badge",
+          "Kira"
+        ],
+        [
+          "Rosa",
+          "bring",
+          "letter",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "2e9990d19a99af1d46364f5cd86e6b29a790f959dca9023b352ddcb01d55603d",
+      "source": "Before dusk, Vesna should send the badge to Kira; meanwhile, Rosa should bring the letter to Tilda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_077",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "take",
+          "permit",
+          "Kira"
+        ],
+        [
+          "Felix",
+          "bring",
+          "blueprint",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "c378e4ae8013846b46bc5ffd80df66f24441a8e6c605ec5ddeb52afcfe6a7c0e",
+      "source": "Stefan should take the permit to Kira; at the same time, Felix should bring the blueprint to Nikos, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_078",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "take",
+          "voucher",
+          "Ugo"
+        ],
+        [
+          "Boris",
+          "send",
+          "receipt",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "280403bdd82e6e203deeee229f2560609636b86e96c1212a2f8736ee28a68e64",
+      "source": "In order to eat before supper, Rosa should take the voucher to Ugo; at the same time, Boris should send the receipt to Henrik.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_079",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Tilda",
+          "send",
+          "letter",
+          "Ilse"
+        ],
+        [
+          "Felix",
+          "take",
+          "ledger",
+          "Kira"
+        ]
+      ],
+      "prompt_sha256": "364232a9251cd1d43947512be38c5d1552aa6a973176161f80bb82fb6ad17be9",
+      "source": "Before dusk, Tilda should send the letter to Ilse, whereas Felix should take the ledger to Kira.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_080",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Tilda",
+          "send",
+          "manual",
+          "Alma"
+        ],
+        [
+          "Marta",
+          "take",
+          "proposal",
+          "Boris"
+        ]
+      ],
+      "prompt_sha256": "0471b1e5e6aa8e02c17cc66bbca552a593e0274300ef1af27fb3e0f1cfb19b60",
+      "source": "Tilda should send the manual to Alma, and Marta should take the proposal to Boris, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_081",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Tilda",
+          "take",
+          "receipt",
+          "Ilse"
+        ],
+        [
+          "Olga",
+          "send",
+          "ledger",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "31e6df9a0774d6fba618369df84f5f0e3fac0c1aab57f6d8a18f4169b15388dd",
+      "source": "In order to leave before dawn, Tilda should take the receipt to Ilse; at the same time, Olga should send the ledger to Jonas.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_082",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "take",
+          "receipt",
+          "Ugo"
+        ],
+        [
+          "Marta",
+          "send",
+          "manual",
+          "Lars"
+        ]
+      ],
+      "prompt_sha256": "d267a7d99d5946f7a874e5e23bb3924db11e349fe577d969f6b27a055063a8fa",
+      "source": "Before midnight, Ilse should take the receipt to Ugo, whereas Marta should send the manual to Lars.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_083",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "bring",
+          "roster",
+          "Kira"
+        ],
+        [
+          "Henrik",
+          "take",
+          "permit",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "b14d812e000752984dbaecb8242d7d2bf537782d6c395548dfa140161a0db6b9",
+      "source": "Stefan should bring the roster to Kira; meanwhile, Henrik should take the permit to Celia, in order to finish before dusk.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_084",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "send",
+          "roster",
+          "Nikos"
+        ],
+        [
+          "Kira",
+          "bring",
+          "permit",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "c52a52c845d6b91313d88fde472b8633b7377cd982cd0c20fe0265525beb131a",
+      "source": "In order to leave before dawn, Celia should send the roster to Nikos, whereas Kira should bring the permit to Greta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_085",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "send",
+          "drawing",
+          "Marta"
+        ],
+        [
+          "Lars",
+          "take",
+          "permit",
+          "Kira"
+        ]
+      ],
+      "prompt_sha256": "b182e047b3fe927de65f5d3a3d827a6e9a75c2468e2e11affeff783352c91940",
+      "source": "Before noon, Celia should send the drawing to Marta, and Lars should take the permit to Kira.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_086",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "send",
+          "roster",
+          "Kira"
+        ],
+        [
+          "Lars",
+          "take",
+          "ticket",
+          "Stefan"
+        ]
+      ],
+      "prompt_sha256": "a5eb810070b839ab0d41433a7cfe0fb2e4fb2eafdd58d9b0e674cb8bf71b615b",
+      "source": "Jonas should send the roster to Kira, whereas Lars should take the ticket to Stefan, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_087",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Henrik",
+          "send",
+          "manual",
+          "Yusuf"
+        ],
+        [
+          "Alma",
+          "bring",
+          "permit",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "16a133edd57f87e2f2060338196057d7da45e690b2410a57aef52b6a710c2e59",
+      "source": "In order to leave before dawn, Henrik should send the manual to Yusuf, whereas Alma should bring the permit to Ilse.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_088",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "take",
+          "roster",
+          "Stefan"
+        ],
+        [
+          "Kira",
+          "bring",
+          "proposal",
+          "Lars"
+        ]
+      ],
+      "prompt_sha256": "16b3d7acd973cebc6dac15f08da60d151fc270a4f7b3e53ff0dde5dc5639882d",
+      "source": "Before noon, Pablo should take the roster to Stefan, while Kira should bring the proposal to Lars.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_089",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "take",
+          "blueprint",
+          "Vesna"
+        ],
+        [
+          "Edda",
+          "bring",
+          "receipt",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "94d602b55754e9f3b9d42cc06fd7d4cf0d8a29a34da86597753923c7be30655c",
+      "source": "Marta should take the blueprint to Vesna; at the same time, Edda should bring the receipt to Felix, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_090",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Alma",
+          "send",
+          "blueprint",
+          "Lars"
+        ],
+        [
+          "Kira",
+          "bring",
+          "receipt",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "b250cac150396c2c530b914f519bdf65671c1a1d3ff09c65df50a045ef0947a8",
+      "source": "In order to eat before supper, Alma should send the blueprint to Lars; at the same time, Kira should bring the receipt to Marta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_091",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "blueprint",
+          "Greta"
+        ],
+        [
+          "Yusuf",
+          "send",
+          "badge",
+          "Pablo"
+        ]
+      ],
+      "prompt_sha256": "763f37760110ec9c81fa5a3f94e6135477f4d4da3d1e51d7dc8eff6bafa4611a",
+      "source": "Before dusk, Rosa should bring the blueprint to Greta, and Yusuf should send the badge to Pablo.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_092",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "take",
+          "permit",
+          "Henrik"
+        ],
+        [
+          "Ilse",
+          "bring",
+          "proposal",
+          "Vesna"
+        ]
+      ],
+      "prompt_sha256": "d47e0983017ed0928e3c69359a6ee62b45372f5fd8d50a1aef4bd358605e7dfd",
+      "source": "Boris should take the permit to Henrik, and Ilse should bring the proposal to Vesna, in order to finish before dusk.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_093",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Kira",
+          "bring",
+          "roster",
+          "Ilse"
+        ],
+        [
+          "Pablo",
+          "send",
+          "proposal",
+          "Vesna"
+        ]
+      ],
+      "prompt_sha256": "0248fe181084d02bbf3dab2958d057d5d06ea2b76b7490c952ee35040e5505ce",
+      "source": "In order to close before midnight, Kira should bring the roster to Ilse; meanwhile, Pablo should send the proposal to Vesna.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_094",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "send",
+          "proposal",
+          "Wanda"
+        ],
+        [
+          "Ilse",
+          "take",
+          "manual",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "0d3fd1a9848c0866134ff3640ea25928af8ffb80c2fa65d23857a703f44bc86d",
+      "source": "Before lunch, Nikos should send the proposal to Wanda; at the same time, Ilse should take the manual to Celia.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_095",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "take",
+          "manual",
+          "Olga"
+        ],
+        [
+          "Celia",
+          "send",
+          "ledger",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "9d863956102b7a705ed24871870d96179d17e31dde1e86d8494d7d087f8c8918",
+      "source": "Greta should take the manual to Olga, and Celia should send the ledger to Alma, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_096",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "take",
+          "drawing",
+          "Jonas"
+        ],
+        [
+          "Vesna",
+          "send",
+          "badge",
+          "Wanda"
+        ]
+      ],
+      "prompt_sha256": "5b9c5acc51325cf2f90cc1765e845f7d777c0b47a11f18c54c9f0ebd32a21083",
+      "source": "In order to be ready before noon, Marta should take the drawing to Jonas; meanwhile, Vesna should send the badge to Wanda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_097",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Lars",
+          "take",
+          "voucher",
+          "Rosa"
+        ],
+        [
+          "Celia",
+          "bring",
+          "receipt",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "2ad390b434985e305a60d90b5ec10d53cd3746f54643fa1af6ea210f43ef1033",
+      "source": "Before lunch, Lars should take the voucher to Rosa, whereas Celia should bring the receipt to Greta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_098",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Nikos",
+          "send",
+          "letter",
+          "Wanda"
+        ],
+        [
+          "Felix",
+          "take",
+          "ledger",
+          "Yusuf"
+        ]
+      ],
+      "prompt_sha256": "87c60b4fab82dc4435b7692f107bff159f928a6547be1362e08b3d2513a06192",
+      "source": "Nikos should send the letter to Wanda; meanwhile, Felix should take the ledger to Yusuf, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_099",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "bring",
+          "voucher",
+          "Boris"
+        ],
+        [
+          "Alma",
+          "take",
+          "permit",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "727b0b498db19daf6643521bb7347613938aaded5f718434eede0365f14c3b53",
+      "source": "In order to finish before dusk, Edda should bring the voucher to Boris; meanwhile, Alma should take the permit to Jonas.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_100",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "take",
+          "permit",
+          "Kira"
+        ],
+        [
+          "Yusuf",
+          "send",
+          "proposal",
+          "Lars"
+        ]
+      ],
+      "prompt_sha256": "d9a8450e4302f5e318308d6c3efae3eee5123e180abbc5a0f2d62015bb657331",
+      "source": "Before midnight, Olga should take the permit to Kira, and Yusuf should send the proposal to Lars.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_101",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "bring",
+          "receipt",
+          "Alma"
+        ],
+        [
+          "Jonas",
+          "send",
+          "letter",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "765a0002583a8dd350baeb6405f1fb875bfee4e5c328ade50a97497ac61eeed9",
+      "source": "Edda should bring the receipt to Alma, whereas Jonas should send the letter to Rosa, in order to start before lunch.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_102",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "bring",
+          "roster",
+          "Olga"
+        ],
+        [
+          "Pablo",
+          "send",
+          "drawing",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "67435c0e820bbca2be57d4d960ced61677ef00c7eabe70e1bae1e90e3ea25c76",
+      "source": "In order to start before lunch, Celia should bring the roster to Olga; meanwhile, Pablo should send the drawing to Greta.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_103",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Henrik",
+          "bring",
+          "roster",
+          "Boris"
+        ],
+        [
+          "Celia",
+          "take",
+          "badge",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "085cf1b820c8117ffc4e65813e6f0c050f116cb932459e44b071673b50c5f571",
+      "source": "Before noon, Henrik should bring the roster to Boris, whereas Celia should take the badge to Alma.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_104",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Tilda",
+          "bring",
+          "ledger",
+          "Henrik"
+        ],
+        [
+          "Vesna",
+          "take",
+          "ticket",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "7ee8426f6ccc4880b4733f96614713fb0e584f56b4b5b81197d179cf61e3d663",
+      "source": "Tilda should bring the ledger to Henrik; at the same time, Vesna should take the ticket to Nikos, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_105",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "take",
+          "drawing",
+          "Ugo"
+        ],
+        [
+          "Boris",
+          "send",
+          "manual",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "597ae6ded5db996442e6171e5e39313ac998787ab1da5c3d6ce03556221a4108",
+      "source": "In order to start before lunch, Marta should take the drawing to Ugo, whereas Boris should send the manual to Celia.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_106",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "send",
+          "badge",
+          "Yusuf"
+        ],
+        [
+          "Rosa",
+          "bring",
+          "manual",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "a039f847264699090141a9bb75d3edbcbe5adc8baef1fc235d80bb22ef315971",
+      "source": "Before lunch, Greta should send the badge to Yusuf, and Rosa should bring the manual to Edda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_107",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "bring",
+          "voucher",
+          "Marta"
+        ],
+        [
+          "Felix",
+          "take",
+          "badge",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "0947a049273db115a884686ace0d2ea919d27a9865c1237a7ecb2519d4a13c2b",
+      "source": "Ilse should bring the voucher to Marta; at the same time, Felix should take the badge to Nikos, in order to eat before supper.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_108",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "bring",
+          "drawing",
+          "Felix"
+        ],
+        [
+          "Pablo",
+          "take",
+          "letter",
+          "Olga"
+        ]
+      ],
+      "prompt_sha256": "d856d933ef153fce5cd83402213d3b98b94e3efab098321626a045140d762801",
+      "source": "In order to leave before dawn, Ilse should bring the drawing to Felix, whereas Pablo should take the letter to Olga.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_109",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "take",
+          "receipt",
+          "Rosa"
+        ],
+        [
+          "Vesna",
+          "send",
+          "ticket",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "83a3dc873dd10636f1494d957ca0613cedd6c5100d5a98fa807e48daa613d96a",
+      "source": "Before dawn, Boris should take the receipt to Rosa; at the same time, Vesna should send the ticket to Jonas.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_110",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "badge",
+          "Vesna"
+        ],
+        [
+          "Boris",
+          "take",
+          "roster",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "0acd31f0ae61aafafc6fdb62c71d02b185d5acb663cf93b513014da8b904102e",
+      "source": "Rosa should bring the badge to Vesna, while Boris should take the roster to Nikos, in order to close before midnight.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_111",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "take",
+          "ticket",
+          "Ugo"
+        ],
+        [
+          "Alma",
+          "bring",
+          "proposal",
+          "Lars"
+        ]
+      ],
+      "prompt_sha256": "1efa515a53a3e5ef0c6ca0350dc9658a446904962fd257587b0541f1188b84e2",
+      "source": "In order to be ready before noon, Olga should take the ticket to Ugo, whereas Alma should bring the proposal to Lars.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_112",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "take",
+          "permit",
+          "Ilse"
+        ],
+        [
+          "Nikos",
+          "send",
+          "proposal",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "907ec74a08355024988c5d9c28d3afd81e8ce64d97659c2248c8c313baf53236",
+      "source": "Before lunch, Greta should take the permit to Ilse; meanwhile, Nikos should send the proposal to Edda.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_113",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Yusuf",
+          "bring",
+          "badge",
+          "Wanda"
+        ],
+        [
+          "Marta",
+          "take",
+          "ticket",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "b8b050503d709d70e75eb0886f2a8648d9ccba9d3c9b6484a697563c7a2c0c18",
+      "source": "Yusuf should bring the badge to Wanda, and Marta should take the ticket to Celia, in order to be ready before noon.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_114",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "send",
+          "roster",
+          "Wanda"
+        ],
+        [
+          "Rosa",
+          "take",
+          "proposal",
+          "Henrik"
+        ]
+      ],
+      "prompt_sha256": "ebc67747f379a1bfecb780fd64e73fa8386299002b35efd81843c593c86595ef",
+      "source": "In order to leave before dawn, Stefan should send the roster to Wanda, and Rosa should take the proposal to Henrik.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_115",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "take",
+          "roster",
+          "Tilda"
+        ],
+        [
+          "Jonas",
+          "send",
+          "blueprint",
+          "Boris"
+        ]
+      ],
+      "prompt_sha256": "08ed4cc3a42a68cde533942619d7380d674175a22af76caa15670c449ff14a22",
+      "source": "Before midnight, Celia should take the roster to Tilda; at the same time, Jonas should send the blueprint to Boris.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_116",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Ugo",
+          "send",
+          "receipt",
+          "Wanda"
+        ],
+        [
+          "Tilda",
+          "bring",
+          "manual",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "19eb7d5dccbd9e67f92721161bcbbd538e68bb0ee59199dee3b9eeed4707be28",
+      "source": "Ugo should send the receipt to Wanda; meanwhile, Tilda should bring the manual to Rosa, in order to leave before dawn.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_117",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Vesna",
+          "bring",
+          "drawing",
+          "Marta"
+        ],
+        [
+          "Jonas",
+          "send",
+          "manual",
+          "Yusuf"
+        ]
+      ],
+      "prompt_sha256": "411e99db3327ebce4df2f855bdf53dbb1046b7836b8a005486b94412355c5748",
+      "source": "In order to leave before dawn, Vesna should bring the drawing to Marta, whereas Jonas should send the manual to Yusuf.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_118",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Wanda",
+          "take",
+          "blueprint",
+          "Edda"
+        ],
+        [
+          "Stefan",
+          "send",
+          "letter",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "5473d2162ec2e4eead070ad8d637cbc7c9dfc40fbc1d8a70206ae589c82c5a33",
+      "source": "Before midnight, Wanda should take the blueprint to Edda, whereas Stefan should send the letter to Ilse.",
+      "split": "rescue_candidate"
+    },
+    {
+      "case_id": "gen_119",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Henrik",
+          "bring",
+          "voucher",
+          "Jonas"
+        ],
+        [
+          "Pablo",
+          "take",
+          "blueprint",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "d940828e332bb2450cb061e47d817a88d4036117e3e37ea49993149fdbf769de",
+      "source": "Henrik should bring the voucher to Jonas, while Pablo should take the blueprint to Ilse, in order to eat before supper.",
+      "split": "rescue_candidate"
+    }
+  ],
+  "count": 120,
+  "disk_floor_gib": 6,
+  "evaluator_changes_since_screen_v1": [
+    "role_check_binds_double_object_dative_recipients",
+    "generator_verbs_restricted_to_send_take_bring"
+  ],
+  "follow_up": "structural_rescue_v2_norm_relative_contract_datasheet_or_unchanged_contract_on_selected_cases",
+  "generator": "structural_rescue_generator_v2",
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "pools": {
+    "connectives": [
+      ", while",
+      ", whereas",
+      "; meanwhile,",
+      ", and",
+      "; at the same time,"
+    ],
+    "deadlines": [
+      [
+        "finish",
+        "before dusk"
+      ],
+      [
+        "be ready",
+        "before noon"
+      ],
+      [
+        "start",
+        "before lunch"
+      ],
+      [
+        "close",
+        "before midnight"
+      ],
+      [
+        "leave",
+        "before dawn"
+      ],
+      [
+        "eat",
+        "before supper"
+      ]
+    ],
+    "families": [
+      "purpose_first",
+      "deadline_first",
+      "purpose_last"
+    ],
+    "names": [
+      "Alma",
+      "Boris",
+      "Celia",
+      "Edda",
+      "Felix",
+      "Greta",
+      "Henrik",
+      "Ilse",
+      "Jonas",
+      "Kira",
+      "Lars",
+      "Marta",
+      "Nikos",
+      "Olga",
+      "Pablo",
+      "Rosa",
+      "Stefan",
+      "Tilda",
+      "Ugo",
+      "Vesna",
+      "Wanda",
+      "Yusuf"
+    ],
+    "objects": [
+      "ledger",
+      "badge",
+      "manual",
+      "ticket",
+      "voucher",
+      "drawing",
+      "proposal",
+      "receipt",
+      "blueprint",
+      "letter",
+      "permit",
+      "roster"
+    ],
+    "verbs": [
+      "send",
+      "take",
+      "bring"
+    ]
+  },
+  "production_apply_allowed": false,
+  "screen": "greedy_b0_from_the_v2_boundary_no_edits_no_controller",
+  "seed": 20261106,
+  "selected_split": "rescue_v2",
+  "selection_limit": 12,
+  "selection_rule": "b0_joint_failure_with_natural_boundary_first_12_in_generation_order",
+  "version": "structural_rescue_screen_v2"
+}

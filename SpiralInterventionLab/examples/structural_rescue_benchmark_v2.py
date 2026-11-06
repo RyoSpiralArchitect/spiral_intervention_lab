@@ -29,7 +29,7 @@ from .digit_transform_e2e import (
 )
 from .replay_orphan_blueprint_ceiling import _release_memory, verify_checkpoint
 from .structural_rescue_benchmark import Meter, aggregate, capture_sources, choose, readout, unavailable_policies
-from .structural_rescue_screen import DISK_FLOOR_GIB, selected_cases
+from .structural_rescue_screen import DISK_FLOOR_GIB, load_selected_cases
 
 
 POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
@@ -86,6 +86,9 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False) ->
                          "readout_layer_rule": "n_layers-1", "readout_alpha_rule": "cap*||h_boundary||"},
             "max_words": v1["max_words"], "max_generated_tokens": v1["max_generated_tokens"],
             "boundary_rule": v1["boundary_rule"], "policies": list(POLICIES), "policy_seeds": [17],
+            "evaluator": {"role_check_scope":
+                          "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar",
+                          "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations"},
             "fixed_rule": "common_orthogonal_of_first_eligible_pair",
             "fixed_readout_rule": "readout_of_first_eligible_source_token",
             "random_rule": "sha256(case_id,seed)_mod_catalog_size",
@@ -250,7 +253,7 @@ def main(argv=None) -> int:
     case_set = None
     cases = CASES
     if args.screen_dir is not None:
-        cases, binding = selected_cases(args.screen_dir.expanduser().resolve())
+        cases, binding = load_selected_cases(args.screen_dir.expanduser().resolve())
         case_set = {"cases": cases, "binding": binding}
     frozen = manifest_bytes(case_set, datasheet=args.datasheet)
     digest = hashlib.sha256(frozen).hexdigest()
