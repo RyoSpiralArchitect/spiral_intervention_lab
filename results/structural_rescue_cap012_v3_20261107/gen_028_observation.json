@@ -1,0 +1,243 @@
+{
+  "version": "structural_rescue_choice_v2_datasheet",
+  "case_id": "gen_028",
+  "generated_tail": " Boris gives the proposal to Alma",
+  "structure_readout": [
+    {
+      "token_id": 1603,
+      "piece": " before",
+      "source_positions": [
+        72
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 1,
+      "prob": 0.6751732230186462,
+      "logit": 21.046875,
+      "gap_to_top1": 0.0,
+      "top20_hit": true,
+      "is_greedy_token": true
+    },
+    {
+      "token_id": 11,
+      "piece": ",",
+      "source_positions": [
+        74,
+        82
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 2,
+      "prob": 0.15302392840385437,
+      "logit": 19.5625,
+      "gap_to_top1": 1.484375,
+      "top20_hit": true,
+      "is_greedy_token": false
+    },
+    {
+      "token_id": 627,
+      "piece": ".\n",
+      "source_positions": [
+        91
+      ],
+      "source_provenance": "source_body",
+      "status": "measured",
+      "rank": 34,
+      "prob": 0.00014063417620491236,
+      "logit": 12.5703125,
+      "gap_to_top1": 8.4765625,
+      "top20_hit": false,
+      "is_greedy_token": false
+    }
+  ],
+  "recipes": [
+    {
+      "recipe_id": "structural-contract:77d0c48111cdd892de4567f2",
+      "kind": "patch",
+      "component": "common",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 74
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 91
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 1.0985746100143805,
+      "expected_relative_write": 0.12,
+      "dsl_formula": "C = mean(S_left, S_right); source = C; displacement = C - T",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.8004794031931216,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.554026600288685,
+        "parallel_norm": 8.41887317726692,
+        "orthogonal_norm": 7.9131602476680545,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": 1.3322676295501878e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:d89773b50d2a2a6e98bf1cb9",
+      "kind": "patch",
+      "component": "common_parallel",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 74
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 91
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.8008632544265719,
+      "expected_relative_write": 0.12,
+      "dsl_formula": "source = T + project_parallel(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.8004794031931216,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.554026600288685,
+        "parallel_norm": 8.41887317726692,
+        "orthogonal_norm": 7.9131602476680545,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": 1.3322676295501878e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:f63523f98a37a4912a636806",
+      "kind": "patch",
+      "component": "common_orthogonal",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 74
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 91
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l14_last",
+        "site": "resid_pre",
+        "layer": 14
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.7524183770336667,
+      "expected_relative_write": 0.12,
+      "dsl_formula": "source = T + project_orthogonal(C - T, T)",
+      "geometry": {
+        "reference": "current_last_activation_not_semantic_basis",
+        "radial_coefficient": -0.8004794031931216,
+        "radial_direction": "shrink",
+        "common_displacement_norm": 11.554026600288685,
+        "parallel_norm": 8.41887317726692,
+        "orthogonal_norm": 7.9131602476680545,
+        "raw_reconstruction_error_norm": 0.0,
+        "parallel_orthogonal_dot": 1.3322676295501878e-15
+      }
+    },
+    {
+      "recipe_id": "structural-contract:a6d95c4c7a00c3864a23d402",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "position": 74
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.12,
+      "expected_relative_write": 0.12,
+      "reach_estimate": {
+        "slope_logits_per_unit_cap": {
+          "mean": 22.5,
+          "min": 20.0,
+          "max": 26.0
+        },
+        "estimated_gap_closure": {
+          "mean": 2.6999999999999997,
+          "min": 2.4,
+          "max": 3.12
+        },
+        "extrapolated": false,
+        "basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12"
+      }
+    },
+    {
+      "recipe_id": "structural-contract:d43226b3728fa46e549c5199",
+      "kind": "readout",
+      "component": "readout",
+      "sources": [
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "position": 91
+        }
+      ],
+      "surface": {
+        "surface_id": "s_resid_pre_l27_last",
+        "site": "resid_pre",
+        "layer": 27
+      },
+      "relative_write_cap": 0.12,
+      "requested_relative_write": 0.12,
+      "expected_relative_write": 0.12,
+      "reach_estimate": {
+        "slope_logits_per_unit_cap": {
+          "mean": 43.0,
+          "min": 36.0,
+          "max": 50.0
+        },
+        "estimated_gap_closure": {
+          "mean": 5.16,
+          "min": 4.32,
+          "max": 6.0
+        },
+        "extrapolated": false,
+        "basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12"
+      }
+    }
+  ],
+  "contract": {
+    "id": "norm_relative_structural_v1",
+    "relative_write_cap": 0.12,
+    "ttl_steps": 1,
+    "max_edits": 1
+  },
+  "budget": {
+    "max_edits": 1,
+    "diagnostic_forwards": 24,
+    "continuation_forwards": 64
+  },
+  "production_apply_allowed": false
+}
