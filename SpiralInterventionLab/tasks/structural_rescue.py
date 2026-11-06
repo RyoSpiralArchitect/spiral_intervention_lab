@@ -110,6 +110,7 @@ class StructuralRescueEnv(SpiralConstrainedRewriteEnv):
         constraints_ok = bool(self.done(output)) and sentence_ok
         return {"output": output, "legacy_score": self.score(output),
                 "constraint_violations": feedback["constraint_violations"],
+                "missing_terms_lexical": feedback.get("missing_terms_lexical", []),
                 "constraints_ok": constraints_ok, "single_sentence_ok": sentence_ok,
                 "role_status": status, "role_unknown_reasons": unknown,
                 "role_report": roles, "joint_success": constraints_ok and status == "pass",
