@@ -1,11 +1,10 @@
 """Third pre-registered B0 screen: extended role check plus restricted verbs.
 
 Two v1-screen lessons are applied, both pre-registered before any model call:
-the role check now binds double-object datives (role_binding change), and the
-generator draws only verbs whose natural greedy output keeps the
-`to <recipient>` boundary (send/take/bring; v1's give/hand/mail drifted to
-double objects and never formed a boundary). The candidate count rises from 72
-to 120 so the selection limit of 12 is reachable. --prepare freezes the
+the generator gains participial-second-clause and agent-relative source
+families, and `give` returns now that the evaluator binds double-object
+datives. The candidate count stays 120 so the selection limit of 12 is
+reachable if harder sources fail more often. --prepare freezes the
 generator version, seed, count, selection rule and follow-up; --run decodes
 each candidate once at the v2 boundary without edits.
 """
@@ -38,9 +37,10 @@ def manifest() -> dict[str, Any]:
             "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
             "selection_rule": SELECTION_RULE, "selection_limit": SELECTION_LIMIT,
             "selected_split": "rescue_v3",
-            "evaluator_changes_since_screen_v1":
-                ["role_check_binds_double_object_dative_recipients",
-                 "generator_verbs_restricted_to_send_take_bring"],
+            "evaluator_changes_since_screen_v2":
+                ["required_action_terms_covered_by_action_forms_inflections",
+                 "regular_and_irregular_past_tense_action_forms",
+                 "generator_adds_participial_and_relative_families_and_restores_give"],
             "follow_up": "structural_rescue_v2_norm_relative_contract_datasheet_or_unchanged_contract_on_selected_cases",
             "analysis_plan": {"primary": "joint_success_count_per_policy_on_the_rescue_v3_split",
                               "comparison": "controller_vs_fixed_readout_paired_by_case",
