@@ -29,7 +29,7 @@ from .digit_transform_e2e import (
 )
 from .replay_orphan_blueprint_ceiling import _release_memory, verify_checkpoint
 from .structural_rescue_benchmark import Meter, aggregate, capture_sources, choose, readout, unavailable_policies
-from .structural_rescue_screen import DISK_FLOOR_GIB, selected_cases
+from .structural_rescue_screen import DISK_FLOOR_GIB, load_selected_cases
 
 
 POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
@@ -250,7 +250,7 @@ def main(argv=None) -> int:
     case_set = None
     cases = CASES
     if args.screen_dir is not None:
-        cases, binding = selected_cases(args.screen_dir.expanduser().resolve())
+        cases, binding = load_selected_cases(args.screen_dir.expanduser().resolve())
         case_set = {"cases": cases, "binding": binding}
     frozen = manifest_bytes(case_set, datasheet=args.datasheet)
     digest = hashlib.sha256(frozen).hexdigest()

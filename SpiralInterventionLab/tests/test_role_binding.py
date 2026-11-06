@@ -64,6 +64,51 @@ def test_missing_action_is_unbound_not_a_violation():
     assert not report["role_binding_ok"]
 
 
+def test_double_object_dative_binds_the_indirect_object():
+    report = check_role_frames(
+        "Nora will take the sample to Ivo before dusk, while Selim sends Yara the report.", REVIEW)
+
+    assert report["role_binding_ok"], report
+    row = report["frames"][1]
+    assert row["bound_recipient"] == "yara" and row["bound_recipient_mode"] == "double_object"
+
+
+def test_double_object_dative_still_catches_a_wrong_recipient():
+    report = check_role_frames(
+        "Nora will take the sample to Yara, while Selim sends Ivo the report.", REVIEW)
+
+    assert report["role_violations"] == ["sample: recipient yara, expected ivo",
+                                       "report: recipient ivo, expected yara"]
+
+
+def test_another_frames_agent_after_the_action_still_closes_the_clause():
+    # "sends Nora the report" is ambiguous; the check stays conservative rather
+    # than binding an agent name into the dative slot.
+    report = check_role_frames(
+        "Nora will take the sample to Ivo, while Selim sends Nora the report.", REVIEW)
+
+    row = report["frames"][1]
+    assert row["bound_recipient"] is None and row["theme_in_action_clause"] is False
+
+
+def test_a_possessive_between_action_and_theme_is_not_a_dative_recipient():
+    report = check_role_frames(
+        "Nora will take the sample to Ivo, while Selim sends Nora's report to Yara.", REVIEW)
+
+    row = report["frames"][1]
+    assert row["bound_recipient"] == "yara" and row["bound_recipient_mode"] == "to_dative"
+
+
+def test_to_dative_is_preferred_over_a_pre_theme_name():
+    # "sends Ivo the report to Yara" is odd English, but the explicit to-form wins.
+    report = check_role_frames(
+        "Nora will take the sample to Ivo, while Selim sends Ivo the report to Yara.", REVIEW)
+
+    row = report["frames"][1]
+    assert row["bound_recipient"] == "yara" and row["bound_recipient_mode"] == "to_dative"
+    assert report["role_violations"] == []
+
+
 def test_action_forms_cover_inflections_and_irregular_pasts():
     assert {"take", "takes", "taking", "took", "taken"} <= action_forms("take")
     assert {"send", "sends", "sending", "sent"} <= action_forms("send")

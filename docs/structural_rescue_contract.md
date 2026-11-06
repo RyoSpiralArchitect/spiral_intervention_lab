@@ -335,6 +335,33 @@ no estimate) and versioned the packet as `structural_rescue_choice_v2_datasheet`
 future datasheet manifests therefore hash differently from `5b6e9b91…`, which
 remains the receipt of this run.
 
+### Second screen and rescue_v2 split
+
+`screen_v2` (manifest `789b6d68…`, 4157 s, 120 candidates, generator v2) applied
+both pre-registered mitigations: the role check binds double-object datives
+("gives Wanda the badge") and the generator draws only send/take/bring, whose
+natural output keeps the `to` boundary. Effect: boundary-less candidates fell
+from 13/72 to 2/120, and evaluator-only role-unknown candidates from 2/7 to 0 —
+but joint B0 failures also fell, from 7/72 to 4/120. All four selected
+failures are the same failure family: a dropped second clause scored
+role-unknown (`incomplete_frame`), never a constraint failure alone.
+`attempt1_disk` kept 38 rows before the 6 GiB floor; the rerun's first 38 rows
+are identical.
+
+`datasheet_v2` (manifest `0aad3f4e…`, 553 s): all five policies on the four
+selected cases, controller with the datasheet. B0 0/4 by construction; fixed
+patch and random 0/4; fixed readout 3/4; controller 3/4 with the same wins —
+and on `gen_049` (`,` gap 2.83 vs ~1.8 estimate) it chose noop rather than a
+doomed write. On `gen_011`/`gen_110` it picked ` while` (gaps 3.73/3.25 inside
+the measured ` while` reach of ~4.1) instead of `,`, a choice the fixed
+first-token rule cannot express — the controller used the slope table, not
+just a threshold. Provider usage: 16,088 total tokens. All branches restored
+state, zero drift, one guarded write per edit.
+
+The four-case split is thin and single-family, so these remain descriptive
+counts; but the datasheet controller has now matched the fixed rule on every
+reachable case across both splits (7/7 reachable) while spending fewer writes.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
@@ -345,7 +372,7 @@ remains the receipt of this run.
 
 ### Next
 
-- Pre-register a second screen before it runs. Either extend the role check to double-object datives or restrict the verbs, to remove evaluator-only failures. Raise the candidate count to reach the selection limit.
+- ~~Pre-register a second screen~~ Done: [screen v2 and rescue_v2](#second-screen-and-rescue_v2-split), `results/structural_rescue_screen_v2_20261106/` + `results/structural_rescue_datasheet_v2_20261106/`. Both mitigations were applied; failures are now rare (4/120) and single-family, so a next screen needs a harder candidate generator, not more of the same.
 - ~~Add a calibration-derived datasheet to each readout recipe~~ Done: [datasheet pilot](#controller-datasheet-pilot), `results/structural_rescue_datasheet_20261106/` (manifest `5b6e9b91…`). With reach estimates the controller matched fixed readout at 4/7 and noop'd on unreachable cases; the boundary band near the estimate (~1.6-2.0 logits) is untested.
 - ~~Measure the reach curve directly with a cap sweep~~ Done: [reach curve](#reach-curve-cap-sweep-calibration-only),
   `results/structural_rescue_cap_sweep_20261106/` (manifest `ebd542c5…`).

@@ -4,8 +4,9 @@ A frame says who does what to which object for whom, e.g. Selim sends the report
 to Yara. The check binds each frame's action to the nearest preceding agent name
 (possessives such as ``Selim's`` own an object, they do not act), its theme to the
 first mention after the action, and its recipient to the first ``to <name>``
-after the theme. It does not parse grammar or score fluency; a role-correct
-sentence can still be ungrammatical.
+after the theme or to a non-possessive name between the action and the theme
+(the double-object dative ``gives Wanda the badge``). It does not parse grammar
+or score fluency; a role-correct sentence can still be ungrammatical.
 """
 from __future__ import annotations
 
@@ -71,13 +72,21 @@ def check_role_frames(output: str, frames: Sequence[Sequence[str]]) -> dict[str,
                             if word in agents and not possessive), None)
         clause_end = _clause_end(words, action_index, agents=agents, other_actions=other_actions)
         theme_index = next((i for i in range(action_index + 1, clause_end) if words[i][0] == theme_key), None)
-        bound_recipient = None
+        bound_recipient, recipient_mode = None, None
         if theme_index is not None:
             for i in range(theme_index + 1, min(clause_end, len(words) - 1)):
                 if words[i][0] == "to" and words[i + 1][0] in names:
-                    bound_recipient = words[i + 1][0]
+                    bound_recipient, recipient_mode = words[i + 1][0], "to_dative"
                     break
+            if bound_recipient is None:
+                # Double-object dative: a non-possessive name between the action
+                # and the theme is the indirect object ("gives Wanda the badge").
+                for i in range(action_index + 1, theme_index):
+                    if words[i][0] in names and not words[i][1]:
+                        bound_recipient, recipient_mode = words[i][0], "double_object"
+                        break
         report.update(bound_agent=bound_agent, bound_recipient=bound_recipient,
+                      bound_recipient_mode=recipient_mode,
                       theme_in_action_clause=theme_index is not None)
         problems = []
         if bound_agent is not None and bound_agent != agent_key:
@@ -92,5 +101,5 @@ def check_role_frames(output: str, frames: Sequence[Sequence[str]]) -> dict[str,
         "frames": reports,
         "role_violations": violations,
         "role_binding_ok": not violations and all(row["status"] == "bound" for row in reports),
-        "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar",
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar",
     }

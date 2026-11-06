@@ -21,6 +21,11 @@ OBJECTS = ("ledger", "badge", "manual", "ticket", "voucher", "drawing", "proposa
            "blueprint", "letter", "permit", "roster")
 # Verbs whose surface forms the role check recognizes, so roles stay checkable.
 VERBS = ("send", "take", "bring", "hand", "give", "mail")
+# v1 showed give/hand/mail drifting to double-object outputs ("Wanda gives Lars
+# the roster"), which never forms the `to <recipient>` boundary. v2 restricts
+# the pool to verbs whose natural greedy output keeps that boundary.
+GENERATOR_VERSION_V2 = "structural_rescue_generator_v2"
+VERBS_V2 = ("send", "take", "bring")
 DEADLINES = (("finish", "before dusk"), ("be ready", "before noon"), ("start", "before lunch"),
              ("close", "before midnight"), ("leave", "before dawn"), ("eat", "before supper"))
 CONNECTIVES = (", while", ", whereas", "; meanwhile,", ", and", "; at the same time,")
@@ -39,7 +44,7 @@ def _source(family: str, goal: str, deadline: str, first: str, connective: str, 
     return f"{first}{connective} {second}, in order to {goal} {deadline}."
 
 
-def generate(seed: int, count: int) -> tuple[RescueCase, ...]:
+def generate(seed: int, count: int, verbs: tuple[str, ...] = VERBS) -> tuple[RescueCase, ...]:
     """Families rotate in order; every other slot is drawn from one seeded stream."""
     used = {word for case in CASES for frame in case.frames for word in frame}
     if used & set(NAMES) or used & set(OBJECTS):
@@ -50,7 +55,7 @@ def generate(seed: int, count: int) -> tuple[RescueCase, ...]:
         family = FAMILIES[index % len(FAMILIES)]
         agent_a, recipient_b, agent_c, recipient_d = rng.sample(NAMES, 4)
         object_a, object_c = rng.sample(OBJECTS, 2)
-        verb_a, verb_c = rng.sample(VERBS, 2)
+        verb_a, verb_c = rng.sample(verbs, 2)
         goal, deadline = rng.choice(DEADLINES)
         connective = rng.choice(CONNECTIVES)
         source = _source(family, goal, deadline, _clause(agent_a, verb_a, object_a, recipient_b),
