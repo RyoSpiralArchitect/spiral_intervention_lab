@@ -21,11 +21,11 @@ _IRREGULAR_FORMS = {"send": ("sent",), "take": ("took", "taken"), "bring": ("bro
 
 def action_forms(action: str) -> set[str]:
     base = action.casefold()
-    # Regular past is base+"ed" (consonant-final) or base+"d" (e-final); any
-    # coincidental non-word forms like "gived" simply never match real text.
-    forms = {base, base + "s", base + "es", base + "ing",
-             (base + "d") if base.endswith("e") else (base + "ed"),
-             *_IRREGULAR_FORMS.get(base, ())}
+    # Regular past is base+"ed"/"d"; verbs with attested irregulars take only
+    # those, so "taked"/"gived"/"sended" can never satisfy the check.
+    forms = {base, base + "s", base + "es", base + "ing", *_IRREGULAR_FORMS.get(base, ())}
+    if base not in _IRREGULAR_FORMS:
+        forms.add((base + "d") if base.endswith("e") else (base + "ed"))
     if base.endswith("e"):
         forms.add(base[:-1] + "ing")
     return forms
