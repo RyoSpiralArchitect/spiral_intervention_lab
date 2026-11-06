@@ -7,7 +7,7 @@ import json
 import re
 from typing import Any
 
-from .language_tasks import SpiralConstrainedRewriteEnv, _strip_output, _word_count
+from .language_tasks import SpiralConstrainedRewriteEnv, _contains_term, _strip_output, _word_count
 from .role_binding import action_forms, check_role_frames
 
 
@@ -71,6 +71,20 @@ class StructuralRescueEnv(SpiralConstrainedRewriteEnv):
 
     def evaluate(self, output: str) -> dict[str, Any]:
         feedback = self.task_feedback(output)
+        # A required action term counts when any recognized inflection appears:
+        # "giving Yusuf the ticket" satisfies "give". Coverage is recorded so a
+        # lexical-pass-through-inflection stays visible in receipts.
+        action_terms = {str(frame[1]) for frame in self.case.frames}
+        required = tuple(self._SCENARIOS[0]["required_terms"])
+        uncovered = [term for term in required if not _contains_term(output, term)
+                     and not (term in action_terms
+                              and any(_contains_term(output, form) for form in action_forms(term)))]
+        inflected = sorted(term for term in required
+                           if term in action_terms and not _contains_term(output, term)
+                           and term not in uncovered)
+        if inflected and not uncovered and "missing_required_terms" in feedback["constraint_violations"]:
+            violations = [v for v in feedback["constraint_violations"] if v != "missing_required_terms"]
+            feedback = {**feedback, "constraint_violations": violations}
         roles = check_role_frames(output, self.case.frames)
         words = re.findall(r"[A-Za-z]+(?:'s)?", output.casefold())
         unknown = []
@@ -85,6 +99,11 @@ class StructuralRescueEnv(SpiralConstrainedRewriteEnv):
             unknown.append("unsupported_clause_or_voice")
         status = "fail" if roles["role_violations"] else "unknown" if unknown else "pass"
         text = output.strip()
+        surface_notes = []
+        if inflected:
+            surface_notes.append("required_action_covered_by_inflection:" + ",".join(inflected))
+        if re.search(r"[a-z]+\s+(while|whereas|and)\s+[A-Z]", text):
+            surface_notes.append("asyndetic_connective_no_comma")
         sentence_ok = (text.endswith((".", "!", "?"))
                        and len(re.findall(r"[.!?](?:\s|$)", text)) == 1
                        and "\n" not in text)
@@ -94,6 +113,7 @@ class StructuralRescueEnv(SpiralConstrainedRewriteEnv):
                 "constraints_ok": constraints_ok, "single_sentence_ok": sentence_ok,
                 "role_status": status, "role_unknown_reasons": unknown,
                 "role_report": roles, "joint_success": constraints_ok and status == "pass",
+                "surface_notes": surface_notes,
                 "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"}
 
 
