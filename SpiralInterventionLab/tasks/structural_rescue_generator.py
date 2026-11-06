@@ -30,6 +30,11 @@ DEADLINES = (("finish", "before dusk"), ("be ready", "before noon"), ("start", "
              ("close", "before midnight"), ("leave", "before dawn"), ("eat", "before supper"))
 CONNECTIVES = (", while", ", whereas", "; meanwhile,", ", and", "; at the same time,")
 FAMILIES = ("purpose_first", "deadline_first", "purpose_last")
+# v3 adds families whose source syntax the simple screen outputs struggle to
+# compress into one sentence: a participial second clause and an agent-relative.
+GENERATOR_VERSION_V3 = "structural_rescue_generator_v3"
+VERBS_V3 = ("send", "take", "bring", "give")
+FAMILIES_V3 = FAMILIES + ("participle_second", "relative_agent")
 
 
 def _clause(agent: str, verb: str, obj: str, recipient: str) -> str:
@@ -44,7 +49,23 @@ def _source(family: str, goal: str, deadline: str, first: str, connective: str, 
     return f"{first}{connective} {second}, in order to {goal} {deadline}."
 
 
-def generate(seed: int, count: int, verbs: tuple[str, ...] = VERBS) -> tuple[RescueCase, ...]:
+def _gerund(verb: str) -> str:
+    return verb[:-1] + "ing" if verb.endswith("e") else verb + "ing"
+
+
+def _source_v3(family: str, goal: str, deadline: str, first: str, connective: str,
+               second: tuple[str, str, str, str]) -> str:
+    agent_c, verb_c, object_c, recipient_d = second
+    if family == "participle_second":
+        return (f"In order to {goal} {deadline}, {first}, "
+                f"with {agent_c} {_gerund(verb_c)} the {object_c} to {recipient_d}.")
+    # relative_agent
+    return (f"{deadline[0].upper() + deadline[1:]}, {first}{connective} "
+            f"{agent_c}, who should {verb_c} the {object_c} to {recipient_d}, also finishes.")
+
+
+def generate(seed: int, count: int, verbs: tuple[str, ...] = VERBS,
+             families: tuple[str, ...] = FAMILIES) -> tuple[RescueCase, ...]:
     """Families rotate in order; every other slot is drawn from one seeded stream."""
     used = {word for case in CASES for frame in case.frames for word in frame}
     if used & set(NAMES) or used & set(OBJECTS):
@@ -54,14 +75,19 @@ def generate(seed: int, count: int, verbs: tuple[str, ...] = VERBS) -> tuple[Res
     rng = random.Random(seed)
     cases = []
     for index in range(count):
-        family = FAMILIES[index % len(FAMILIES)]
+        family = families[index % len(families)]
         agent_a, recipient_b, agent_c, recipient_d = rng.sample(NAMES, 4)
         object_a, object_c = rng.sample(OBJECTS, 2)
         verb_a, verb_c = rng.sample(verbs, 2)
         goal, deadline = rng.choice(DEADLINES)
         connective = rng.choice(CONNECTIVES)
-        source = _source(family, goal, deadline, _clause(agent_a, verb_a, object_a, recipient_b),
-                         connective, _clause(agent_c, verb_c, object_c, recipient_d))
+        if family in ("participle_second", "relative_agent"):
+            source = _source_v3(family, goal, deadline,
+                                _clause(agent_a, verb_a, object_a, recipient_b), connective,
+                                (agent_c, verb_c, object_c, recipient_d))
+        else:
+            source = _source(family, goal, deadline, _clause(agent_a, verb_a, object_a, recipient_b),
+                             connective, _clause(agent_c, verb_c, object_c, recipient_d))
         cases.append(RescueCase(f"gen_{index:03d}", "rescue_candidate", source,
                                 ((agent_a, verb_a, object_a, recipient_b), (agent_c, verb_c, object_c, recipient_d)),
                                 deadline))

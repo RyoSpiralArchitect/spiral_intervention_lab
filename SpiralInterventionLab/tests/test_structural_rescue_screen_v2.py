@@ -80,7 +80,7 @@ def test_load_selected_cases_dispatches_on_the_screen_manifest_version(tmp_path)
 
 
 def test_load_selected_cases_rejects_an_unknown_version(tmp_path):
-    (tmp_path / "manifest.json").write_text(json.dumps({"version": "structural_rescue_screen_v3"}))
+    (tmp_path / "manifest.json").write_text(json.dumps({"version": "structural_rescue_screen_v99"}))
     with pytest.raises(ValueError, match="unknown_screen_manifest_version"):
         screen.load_selected_cases(tmp_path)
 
