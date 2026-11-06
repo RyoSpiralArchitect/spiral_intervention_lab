@@ -141,6 +141,7 @@ def reach_estimate(recipe: dict) -> dict | None:
     return {"slope_logits_per_unit_cap": dict(slope),
             "estimated_gap_closure": {"mean": slope["mean"] * cap,
                                       "min": slope["min"] * cap, "max": slope["max"] * cap},
+            "extrapolated": cap > 0.12,
             "basis": structural_contract.REACH_BASIS}
 
 
@@ -175,6 +176,8 @@ def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | N
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
            *, cap: float = RELATIVE_WRITE_CAP) -> tuple[dict, Any]:
+    if recipe is not None and recipe.get("relative_write_cap") != cap:
+        raise ValueError("recipe_cap_differs_from_branch_cap")
     before, caps = state_identity(worker), repr(worker.surface_catalog)
     baseline_raw = []
     meter.phase, meter.capture_edited = "branch", False

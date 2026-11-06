@@ -58,9 +58,7 @@ def test_branch_enforces_the_branch_cap_not_the_default(tmp_path):
     result, _ = run_branch(worker, recipe, policy, tmp_path)
     realized = result["runtime_telemetry"][0]["relative_write_norm"]
     assert realized <= 0.08 + v2.CAST_TOLERANCE
-    # The same realized write must fail closed against a smaller declared cap.
-    # This precondition is what makes the check below non-vacuous.
-    assert realized > 0.04 + v2.CAST_TOLERANCE
+    # A recipe built at one cap must not execute under a branch declared at another.
     worker2 = contract_worker()
     worker2.stop_checker = lambda text: len(text) > 4
     meter = Meter(worker2, deadline=time.monotonic() + 30, disk_path=tmp_path)
@@ -68,8 +66,21 @@ def test_branch_enforces_the_branch_cap_not_the_default(tmp_path):
     meter.boundary_length = worker2._current_token_tensor().shape[-1]
     with patch("shutil.disk_usage", return_value=SimpleNamespace(free=20 * 2**30)):
         with meter.install():
-            with pytest.raises(RuntimeError, match="exceeded_cap"):
+            with pytest.raises(ValueError, match="cap_differs"):
                 v2.branch(worker2, SimpleNamespace(evaluate=lambda t: {}), recipe, meter, policy, cap=0.04)
+    # And a recipe/policy at a smaller cap both run and stay within that cap.
+    worker3 = contract_worker()
+    worker3.stop_checker = lambda text: len(text) > 4
+    small_recipe = structural_contract.readout_recipes(worker3, sources, where, cap=0.04)[0]
+    small_policy = structural_contract.policy_for(worker3, TERMS, cap=0.04)
+    meter3 = Meter(worker3, deadline=time.monotonic() + 30, disk_path=tmp_path)
+    meter3.reset("diagnostic")
+    meter3.boundary_length = worker3._current_token_tensor().shape[-1]
+    with patch("shutil.disk_usage", return_value=SimpleNamespace(free=20 * 2**30)):
+        with meter3.install():
+            result3, _ = v2.branch(worker3, SimpleNamespace(evaluate=lambda t: {}),
+                                   small_recipe, meter3, small_policy, cap=0.04)
+    assert result3["runtime_telemetry"][0]["relative_write_norm"] <= 0.04 + v2.CAST_TOLERANCE
 
 
 def test_summarize_keeps_error_rows_and_joins_b0():

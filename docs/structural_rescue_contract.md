@@ -379,7 +379,8 @@ runs at 0.12 test the band the 8% cap could not reach:
   first observed case where its datasheet reasoning differed from a blind
   first-token rule and still won.
 
-Realized writes were 0.11999-0.12001 throughout; state restored, zero drift.
+Realized writes were 0.11999-0.12004 throughout (cap plus float16 rounding,
+inside the 0.002 tolerance); state restored, zero drift.
 The `,`-push datasheet boundary is now covered on both sides: 1.52 won at 0.08,
 2.83 declined at 0.12 where the estimate says unreachable.
 
