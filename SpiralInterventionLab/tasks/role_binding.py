@@ -15,12 +15,17 @@ import re
 from typing import Any
 
 _WORD = re.compile(r"[A-Za-z]+(?:'s)?")
-_IRREGULAR_FORMS = {"send": ("sent",), "take": ("took", "taken"), "bring": ("brought",)}
+_IRREGULAR_FORMS = {"send": ("sent",), "take": ("took", "taken"), "bring": ("brought",),
+                    "give": ("gave", "given"), "eat": ("ate", "eaten")}
 
 
 def action_forms(action: str) -> set[str]:
     base = action.casefold()
+    # Regular past is base+"ed"/"d"; verbs with attested irregulars take only
+    # those, so "taked"/"gived"/"sended" can never satisfy the check.
     forms = {base, base + "s", base + "es", base + "ing", *_IRREGULAR_FORMS.get(base, ())}
+    if base not in _IRREGULAR_FORMS:
+        forms.add((base + "d") if base.endswith("e") else (base + "ed"))
     if base.endswith("e"):
         forms.add(base[:-1] + "ing")
     return forms
