@@ -86,6 +86,9 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False) ->
                          "readout_layer_rule": "n_layers-1", "readout_alpha_rule": "cap*||h_boundary||"},
             "max_words": v1["max_words"], "max_generated_tokens": v1["max_generated_tokens"],
             "boundary_rule": v1["boundary_rule"], "policies": list(POLICIES), "policy_seeds": [17],
+            "evaluator": {"role_check_scope":
+                          "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar",
+                          "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations"},
             "fixed_rule": "common_orthogonal_of_first_eligible_pair",
             "fixed_readout_rule": "readout_of_first_eligible_source_token",
             "random_rule": "sha256(case_id,seed)_mod_catalog_size",

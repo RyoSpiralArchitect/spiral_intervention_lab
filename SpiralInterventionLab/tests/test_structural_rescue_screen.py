@@ -49,7 +49,8 @@ def test_selected_cases_are_rebuilt_from_the_generator_and_bound_to_receipts(tmp
     frozen = v2.manifest({"cases": cases, "binding": binding})
     assert frozen["case_set"] == binding and [c["case_id"] for c in frozen["cases"]] == ["gen_001", "gen_004"]
     assert v2.manifest_bytes({"cases": cases, "binding": binding}) != v2.manifest_bytes()
-    assert hashlib.sha256(v2.manifest_bytes()).hexdigest().startswith("92f1138a7015ed0c")
+    # The evaluator field added 2026-11-06 intentionally moved the digest off 92f1138a.
+    assert hashlib.sha256(v2.manifest_bytes()).hexdigest().startswith("9df274ca19caf621")
 
 
 def test_selected_cases_refuse_incomplete_or_tampered_screens(tmp_path):

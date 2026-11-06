@@ -49,6 +49,8 @@ def generate(seed: int, count: int, verbs: tuple[str, ...] = VERBS) -> tuple[Res
     used = {word for case in CASES for frame in case.frames for word in frame}
     if used & set(NAMES) or used & set(OBJECTS):
         raise ValueError("generator_pools_overlap_frozen_cases")
+    if len(verbs) < 2 or set(verbs) - set(VERBS):
+        raise ValueError("verbs_must_be_at_least_two_forms_the_role_check_recognizes")
     rng = random.Random(seed)
     cases = []
     for index in range(count):

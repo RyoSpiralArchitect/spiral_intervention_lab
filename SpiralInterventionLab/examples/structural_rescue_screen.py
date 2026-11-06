@@ -83,8 +83,10 @@ def load_selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[
     version = json.loads((screen_dir / "manifest.json").read_text()).get("version")
     if version == "structural_rescue_screen_v2":
         from .structural_rescue_screen_v2 import selected_cases as pick
-    else:
+    elif version == "structural_rescue_screen_v1":
         pick = selected_cases
+    else:
+        raise ValueError(f"unknown_screen_manifest_version: {version}")
     return pick(screen_dir)
 
 

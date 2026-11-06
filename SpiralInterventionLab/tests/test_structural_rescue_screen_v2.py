@@ -32,9 +32,19 @@ def test_screen_v2_manifest_is_separate_stable_and_frozen_before_running():
     assert len(frozen["candidates"]) == screen_v2.COUNT
     assert all("prompt_sha256" in row for row in frozen["candidates"])
     assert frozen["evaluator_changes_since_screen_v1"]
-    # The v1 manifest is unchanged so its receipts stay readable.
-    assert screen.manifest_bytes() == screen.manifest_bytes()
+    # The v1 manifest is unchanged so its receipts stay readable; pin its
+    # digest so a silent pool or wording drift fails here, not at load time.
     assert screen.manifest()["version"] == "structural_rescue_screen_v1"
+    assert (hashlib.sha256(screen.manifest_bytes()).hexdigest()
+            == "e018bbcc917a79513ab88e4b28f5542447a1db5d324de54df3d1a176351416cf")
+
+
+def test_generator_rejects_verb_pools_the_check_cannot_recognize():
+    with pytest.raises(ValueError, match="verbs"):
+        generate(1, 1, ("give",))
+    with pytest.raises(ValueError, match="verbs"):
+        generate(1, 1, ("send", "teleport"))
+    assert generate(1, 1, VERBS_V2[:2])
 
 
 def write_screen_v2(tmp_path, *, status="complete", selected=("gen_002", "gen_005")):
@@ -67,3 +77,18 @@ def test_load_selected_cases_dispatches_on_the_screen_manifest_version(tmp_path)
     with pytest.raises(ValueError, match="incomplete"):
         write_screen_v2(v2_dir, status="running")
         screen_v2.selected_cases(v2_dir)
+
+
+def test_load_selected_cases_rejects_an_unknown_version(tmp_path):
+    (tmp_path / "manifest.json").write_text(json.dumps({"version": "structural_rescue_screen_v3"}))
+    with pytest.raises(ValueError, match="unknown_screen_manifest_version"):
+        screen.load_selected_cases(tmp_path)
+
+
+def test_double_object_names_after_to_are_not_dative_recipients():
+    from SpiralInterventionLab.tasks.role_binding import check_role_frames
+    report = check_role_frames(
+        "Nora will take the sample to Ivo, while Selim sends to Yara the report.",
+        (("Nora", "take", "sample", "Ivo"), ("Selim", "send", "report", "Yara")))
+    row = report["frames"][1]
+    assert row["bound_recipient"] is None or row["bound_recipient_mode"] != "double_object"

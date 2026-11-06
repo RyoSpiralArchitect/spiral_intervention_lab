@@ -44,7 +44,7 @@ def manifest() -> dict[str, Any]:
             "follow_up": "structural_rescue_v2_norm_relative_contract_datasheet_or_unchanged_contract_on_selected_cases",
             "analysis_plan": {"primary": "joint_success_count_per_policy_on_the_rescue_v2_split",
                               "comparison": "controller_vs_fixed_readout_paired_by_case",
-                              "harm_check": "losses_vs_b0_on_the_v1_confirmation_split",
+                              "harm_check": "losses_vs_b0_within_the_selected_rescue_v2_split",
                               "b0_reproduction": "a_selected_case_where_b0_succeeds_is_reported_not_dropped",
                               "exploratory": "b0_failures_by_type_constraint_vs_role",
                               "inference": "descriptive_counts_only_no_significance_claims_at_n_le_12"},

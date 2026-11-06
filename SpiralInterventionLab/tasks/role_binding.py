@@ -82,7 +82,7 @@ def check_role_frames(output: str, frames: Sequence[Sequence[str]]) -> dict[str,
                 # Double-object dative: a non-possessive name between the action
                 # and the theme is the indirect object ("gives Wanda the badge").
                 for i in range(action_index + 1, theme_index):
-                    if words[i][0] in names and not words[i][1]:
+                    if words[i][0] in names and not words[i][1] and words[i - 1][0] != "to":
                         bound_recipient, recipient_mode = words[i][0], "double_object"
                         break
         report.update(bound_agent=bound_agent, bound_recipient=bound_recipient,
