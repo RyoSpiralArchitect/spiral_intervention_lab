@@ -1,0 +1,3965 @@
+{
+  "status": "complete",
+  "created_at_utc": "2026-11-06T05:51:39.691927+00:00",
+  "manifest_sha256": "5b6e9b9106e4447fd0950459e1efeae22fd594b3cc960bd73de62f8638939d18",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [
+    {
+      "surface_id": "s_resid_pre_l14_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 14,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    },
+    {
+      "surface_id": "s_resid_pre_l27_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 27,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    }
+  ],
+  "policies_requested": [
+    "b0",
+    "fixed_readout",
+    "controller"
+  ],
+  "case_ids_requested": [
+    "gen_002",
+    "gen_009",
+    "gen_018",
+    "gen_045",
+    "gen_047",
+    "gen_058",
+    "gen_060"
+  ],
+  "cases": [
+    {
+      "case_id": "gen_002",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Lars will send the blueprint to Pablo before lunch.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:mail"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "send",
+                "theme": "blueprint",
+                "recipient": "Pablo",
+                "bound_agent": "lars",
+                "bound_recipient": "pablo",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Henrik",
+                "action": "mail",
+                "theme": "badge",
+                "recipient": "Ilse",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "a72317bd6cfa78d3b51978be99ef986ad7e255160ad8376b50e4994e6b1651a9",
+            "a72317bd6cfa78d3b51978be99ef986ad7e255160ad8376b50e4994e6b1651a9"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.75,
+                "edited_gap_to_fixed_winner": 0.75,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.24951857213253958,
+                "edited_probability": 0.24951857213253958,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 8.3984375,
+                "edited_gap_to_fixed_winner": 8.3984375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00011896759306136892,
+                "edited_probability": 0.00011896759306136892,
+                "probability_delta": 0.0,
+                "rank_before": 51,
+                "rank_after": 51
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5282308213497572,
+                "edited_probability": 0.5282308213497572,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.1953125,
+                "edited_gap_to_fixed_winner": 7.1953125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0003962225818818099,
+                "edited_probability": 0.0003962225818818099,
+                "probability_delta": 0.0,
+                "rank_before": 30,
+                "rank_after": 30
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:ce09841cbbf88782df7bfe57",
+          "status": "ok",
+          "output": " Lars will send the blueprint to Pablo, while Henrik will mail the badge to Ilse before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "send",
+                "theme": "blueprint",
+                "recipient": "Pablo",
+                "bound_agent": "lars",
+                "bound_recipient": "pablo",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Henrik",
+                "action": "mail",
+                "theme": "badge",
+                "recipient": "Ilse",
+                "bound_agent": "henrik",
+                "bound_recipient": "ilse",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "a72317bd6cfa78d3b51978be99ef986ad7e255160ad8376b50e4994e6b1651a9",
+            "a72317bd6cfa78d3b51978be99ef986ad7e255160ad8376b50e4994e6b1651a9"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:ce09841cbbf88782df7bfe57",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.518789146821691
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:ce09841cbbf88782df7bfe57",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.9848671,
+              "write_limit_norm": 3.51878929,
+              "raw_write_norm": 3.51874971,
+              "write_norm": 3.51874971,
+              "relative_write_norm": 0.0799991,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.75,
+                "edited_gap_to_fixed_winner": -0.921875,
+                "gap_closure_fraction": 2.2291666666666665,
+                "baseline_probability": 0.24951857213253958,
+                "edited_probability": 0.5975906621883065,
+                "probability_delta": 0.3480720900557669,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 8.3984375,
+                "edited_gap_to_fixed_winner": 8.4375,
+                "gap_closure_fraction": -0.004651162790697674,
+                "baseline_probability": 0.00011896759306136892,
+                "edited_probability": 5.148478294218815e-05,
+                "probability_delta": -6.748281011918078e-05,
+                "rank_before": 51,
+                "rank_after": 58
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5282308213497572,
+                "edited_probability": 0.23770514241197752,
+                "probability_delta": -0.2905256789377797,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.1953125,
+                "edited_gap_to_fixed_winner": 6.7890625,
+                "gap_closure_fraction": 0.05646036916395222,
+                "baseline_probability": 0.0003962225818818099,
+                "edited_probability": 0.00026766167790928577,
+                "probability_delta": -0.00012856090397252412,
+                "rank_before": 30,
+                "rank_after": 27
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:fc564bfaa5dbded72540be3f",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3824,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3821, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 81,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=46)",
+              "total_tokens": 3905
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:ce09841cbbf88782df7bfe57\"}",
+            "response_metadata": {
+              "response_id": "resp_05463f7f64ee41d4006aed6b1cbfac87d2b2afd65fc8a2b4ce",
+              "status": "completed"
+            },
+            "latency_seconds": 7.981,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:ce09841cbbf88782df7bfe57",
+          "status": "ok",
+          "output": " Lars will send the blueprint to Pablo, while Henrik will mail the badge to Ilse before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "send",
+                "theme": "blueprint",
+                "recipient": "Pablo",
+                "bound_agent": "lars",
+                "bound_recipient": "pablo",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Henrik",
+                "action": "mail",
+                "theme": "badge",
+                "recipient": "Ilse",
+                "bound_agent": "henrik",
+                "bound_recipient": "ilse",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "a72317bd6cfa78d3b51978be99ef986ad7e255160ad8376b50e4994e6b1651a9",
+            "a72317bd6cfa78d3b51978be99ef986ad7e255160ad8376b50e4994e6b1651a9"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:ce09841cbbf88782df7bfe57",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.518789146821691
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:ce09841cbbf88782df7bfe57",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.9848671,
+              "write_limit_norm": 3.51878929,
+              "raw_write_norm": 3.51874971,
+              "write_norm": 3.51874971,
+              "relative_write_norm": 0.0799991,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.75,
+                "edited_gap_to_fixed_winner": -0.921875,
+                "gap_closure_fraction": 2.2291666666666665,
+                "baseline_probability": 0.24951857213253958,
+                "edited_probability": 0.5975906621883065,
+                "probability_delta": 0.3480720900557669,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 8.3984375,
+                "edited_gap_to_fixed_winner": 8.4375,
+                "gap_closure_fraction": -0.004651162790697674,
+                "baseline_probability": 0.00011896759306136892,
+                "edited_probability": 5.148478294218815e-05,
+                "probability_delta": -6.748281011918078e-05,
+                "rank_before": 51,
+                "rank_after": 58
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5282308213497572,
+                "edited_probability": 0.23770514241197752,
+                "probability_delta": -0.2905256789377797,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.1953125,
+                "edited_gap_to_fixed_winner": 6.7890625,
+                "gap_closure_fraction": 0.05646036916395222,
+                "baseline_probability": 0.0003962225818818099,
+                "edited_probability": 0.00026766167790928577,
+                "probability_delta": -0.00012856090397252412,
+                "rank_before": 30,
+                "rank_after": 27
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "prefix": " Lars will send the blueprint to Pablo",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          103
+        ],
+        "dtype": "torch.int64",
+        "sha256": "b1b9046a3f504cfe2dcb9f6e861485a2f5dc0dbdd959316154f32651a1c7b721"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            75,
+            85
+          ]
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "source_positions": [
+            76
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            92
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          20444,
+          627
+        ],
+        "source_positions": [
+          75,
+          85,
+          76,
+          92
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:2a6cf9be346c4d90e925e914",
+        "structural-contract:03e94855ed8e51284b438d5d",
+        "structural-contract:4cbfc225b1dfc02a99d26893",
+        "structural-contract:45c0ded3909fbc7ca92ae26c",
+        "structural-contract:41fd68133c5cbd8242d5df5e",
+        "structural-contract:14a65ba77b2e5747e3b7eb16",
+        "structural-contract:9c197e5f33240542f910e10a",
+        "structural-contract:2d94b4068a4352e8b22eaf2e",
+        "structural-contract:e15eea2798c8343ee7d42f28",
+        "structural-contract:ce09841cbbf88782df7bfe57",
+        "structural-contract:b03523ea7ab15711df123a2a",
+        "structural-contract:6b6ececb5fb503d12e530a31"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:4cbfc225b1dfc02a99d26893",
+        "fixed_readout": "structural-contract:ce09841cbbf88782df7bfe57"
+      }
+    },
+    {
+      "case_id": "gen_009",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Rosa sends the blueprint to Celia before dawn, while Yusuf gives Wanda the badge.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "send",
+                "theme": "blueprint",
+                "recipient": "Celia",
+                "bound_agent": "rosa",
+                "bound_recipient": "celia",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "badge",
+                "recipient": "Wanda",
+                "bound_agent": "yusuf",
+                "bound_recipient": null,
+                "theme_in_action_clause": true,
+                "status": "partially_bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "7ba935cbb81daf26da2c23d315600bf09dc208e9b36f9ea9d8fc8517bb217dcf",
+            "7ba935cbb81daf26da2c23d315600bf09dc208e9b36f9ea9d8fc8517bb217dcf"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7575921663048586,
+                "edited_probability": 0.7575921663048586,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.140625,
+                "edited_gap_to_fixed_winner": 2.140625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0890786958144358,
+                "edited_probability": 0.0890786958144358,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 3.9375,
+                "edited_gap_to_fixed_winner": 3.9375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.014770695759133522,
+                "edited_probability": 0.014770695759133522,
+                "probability_delta": 0.0,
+                "rank_before": 6,
+                "rank_after": 6
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.015625,
+                "edited_gap_to_fixed_winner": 8.015625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00025020372365949133,
+                "edited_probability": 0.00025020372365949133,
+                "probability_delta": 0.0,
+                "rank_before": 36,
+                "rank_after": 36
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:45cb9cf0a5455d5af3413613",
+          "status": "ok",
+          "output": " Rosa sends the blueprint to Celia before dawn, while Yusuf gives Wanda the badge.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "send",
+                "theme": "blueprint",
+                "recipient": "Celia",
+                "bound_agent": "rosa",
+                "bound_recipient": "celia",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "badge",
+                "recipient": "Wanda",
+                "bound_agent": "yusuf",
+                "bound_recipient": null,
+                "theme_in_action_clause": true,
+                "status": "partially_bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "7ba935cbb81daf26da2c23d315600bf09dc208e9b36f9ea9d8fc8517bb217dcf",
+            "7ba935cbb81daf26da2c23d315600bf09dc208e9b36f9ea9d8fc8517bb217dcf"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:45cb9cf0a5455d5af3413613",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.6145969530751665
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:45cb9cf0a5455d5af3413613",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 45.18246078,
+              "write_limit_norm": 3.61459684,
+              "raw_write_norm": 3.61480403,
+              "write_norm": 3.61479974,
+              "relative_write_norm": 0.08000449,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7575921663048586,
+                "edited_probability": 0.47564028145854154,
+                "probability_delta": -0.28195188484631706,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.140625,
+                "edited_gap_to_fixed_winner": 0.21875,
+                "gap_closure_fraction": 0.8978102189781022,
+                "baseline_probability": 0.0890786958144358,
+                "edited_probability": 0.38218770310775657,
+                "probability_delta": 0.2931090072933208,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 3.9375,
+                "edited_gap_to_fixed_winner": 3.5,
+                "gap_closure_fraction": 0.1111111111111111,
+                "baseline_probability": 0.014770695759133522,
+                "edited_probability": 0.014363091950303069,
+                "probability_delta": -0.00040760380883045344,
+                "rank_before": 6,
+                "rank_after": 5
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.015625,
+                "edited_gap_to_fixed_winner": 7.625,
+                "gap_closure_fraction": 0.04873294346978557,
+                "baseline_probability": 0.00025020372365949133,
+                "edited_probability": 0.0002321577590080525,
+                "probability_delta": -1.804596465143884e-05,
+                "rank_before": 36,
+                "rank_after": 36
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:34924130709b8191845e14c2",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3809,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3806, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 132,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=118)",
+              "total_tokens": 3941
+            },
+            "response": "{\"decision\":\"noop\"}",
+            "response_metadata": {
+              "response_id": "resp_08e63598c6361321006aed6b5052d487d2bbb624fed4e3161d",
+              "status": "completed"
+            },
+            "latency_seconds": 4.912,
+            "status": "noop"
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Rosa sends the blueprint to Celia before dawn, while Yusuf gives Wanda the badge.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Rosa",
+                "action": "send",
+                "theme": "blueprint",
+                "recipient": "Celia",
+                "bound_agent": "rosa",
+                "bound_recipient": "celia",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "badge",
+                "recipient": "Wanda",
+                "bound_agent": "yusuf",
+                "bound_recipient": null,
+                "theme_in_action_clause": true,
+                "status": "partially_bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "7ba935cbb81daf26da2c23d315600bf09dc208e9b36f9ea9d8fc8517bb217dcf",
+            "7ba935cbb81daf26da2c23d315600bf09dc208e9b36f9ea9d8fc8517bb217dcf"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7575921663048586,
+                "edited_probability": 0.7575921663048586,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.140625,
+                "edited_gap_to_fixed_winner": 2.140625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0890786958144358,
+                "edited_probability": 0.0890786958144358,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 26,
+                "baseline_gap_to_fixed_winner": 3.9375,
+                "edited_gap_to_fixed_winner": 3.9375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.014770695759133522,
+                "edited_probability": 0.014770695759133522,
+                "probability_delta": 0.0,
+                "rank_before": 6,
+                "rank_after": 6
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.015625,
+                "edited_gap_to_fixed_winner": 8.015625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00025020372365949133,
+                "edited_probability": 0.00025020372365949133,
+                "probability_delta": 0.0,
+                "rank_before": 36,
+                "rank_after": 36
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "prefix": " Rosa sends the blueprint to Celia",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          108
+        ],
+        "dtype": "torch.int64",
+        "sha256": "30399346eefa39d52124310f69580383a18f7e51fb547d54f5ef4c6cb94f0564"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            87
+          ]
+        },
+        {
+          "token_id": 26,
+          "piece": ";",
+          "source_positions": [
+            85
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            97
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          26,
+          627
+        ],
+        "source_positions": [
+          76,
+          87,
+          85,
+          97
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:5c9f7ce5f4f2c2cc0b7d810a",
+        "structural-contract:cb122f63adc091a5c7dd4ade",
+        "structural-contract:be00d138839d6c06eaaf75cd",
+        "structural-contract:1516c60628b13c00402417d5",
+        "structural-contract:33fdd6221d0079f6d8e0550c",
+        "structural-contract:503415ca472333437e175321",
+        "structural-contract:d6dd50ea25a906c6e17d9f6e",
+        "structural-contract:90f5356e4ce26994d024392f",
+        "structural-contract:b0a0f55bdcca25a18cac9437",
+        "structural-contract:45cb9cf0a5455d5af3413613",
+        "structural-contract:c1716bd7693de8e58e8f5d8b",
+        "structural-contract:556f2efab2e1d34de2aad2e9"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:be00d138839d6c06eaaf75cd",
+        "fixed_readout": "structural-contract:45cb9cf0a5455d5af3413613"
+      }
+    },
+    {
+      "case_id": "gen_018",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Kira sends the roster to Olga before dawn; Tilda mails Boris the badge.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:mail"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Kira",
+                "action": "send",
+                "theme": "roster",
+                "recipient": "Olga",
+                "bound_agent": "kira",
+                "bound_recipient": "olga",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Tilda",
+                "action": "mail",
+                "theme": "badge",
+                "recipient": "Boris",
+                "bound_agent": "tilda",
+                "bound_recipient": null,
+                "theme_in_action_clause": true,
+                "status": "partially_bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "158cc5813e71be591f7bffe3ae935ac39e5e30354c85c4476ee19d9d66e35a84",
+            "158cc5813e71be591f7bffe3ae935ac39e5e30354c85c4476ee19d9d66e35a84"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 9,
+              "completed": 9
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5644408965712603,
+                "edited_probability": 0.5644408965712603,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.40625,
+                "edited_gap_to_fixed_winner": 1.40625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.13832219048598116,
+                "edited_probability": 0.13832219048598116,
+                "probability_delta": 0.0,
+                "rank_before": 3,
+                "rank_after": 3
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 1.34375,
+                "edited_gap_to_fixed_winner": 1.34375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.1472432053177076,
+                "edited_probability": 0.1472432053177076,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.2734375,
+                "edited_gap_to_fixed_winner": 8.2734375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00014404899094279947,
+                "edited_probability": 0.00014404899094279947,
+                "probability_delta": 0.0,
+                "rank_before": 39,
+                "rank_after": 39
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:c6c0fde830991eeff655136c",
+          "status": "ok",
+          "output": " Kira sends the roster to Olga, and Tilda mails the badge to Boris before dawn.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Kira",
+                "action": "send",
+                "theme": "roster",
+                "recipient": "Olga",
+                "bound_agent": "kira",
+                "bound_recipient": "olga",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Tilda",
+                "action": "mail",
+                "theme": "badge",
+                "recipient": "Boris",
+                "bound_agent": "tilda",
+                "bound_recipient": "boris",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "158cc5813e71be591f7bffe3ae935ac39e5e30354c85c4476ee19d9d66e35a84",
+            "158cc5813e71be591f7bffe3ae935ac39e5e30354c85c4476ee19d9d66e35a84"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:c6c0fde830991eeff655136c",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.5290658834334754
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:c6c0fde830991eeff655136c",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.11332321,
+              "write_limit_norm": 3.52906585,
+              "raw_write_norm": 3.52966285,
+              "write_norm": 3.5296073,
+              "relative_write_norm": 0.08001227,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5644408965712603,
+                "edited_probability": 0.2919350544298915,
+                "probability_delta": -0.2725058421413688,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.40625,
+                "edited_gap_to_fixed_winner": -0.4375,
+                "gap_closure_fraction": 1.3111111111111111,
+                "baseline_probability": 0.13832219048598116,
+                "edited_probability": 0.45215785753442067,
+                "probability_delta": 0.3138356670484395,
+                "rank_before": 3,
+                "rank_after": 1
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 1.34375,
+                "edited_gap_to_fixed_winner": 0.703125,
+                "gap_closure_fraction": 0.47674418604651164,
+                "baseline_probability": 0.1472432053177076,
+                "edited_probability": 0.14451833151389992,
+                "probability_delta": -0.002724873803807676,
+                "rank_before": 2,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.2734375,
+                "edited_gap_to_fixed_winner": 7.828125,
+                "gap_closure_fraction": 0.053824362606232294,
+                "baseline_probability": 0.00014404899094279947,
+                "edited_probability": 0.00011629867193736744,
+                "probability_delta": -2.7750319005432025e-05,
+                "rank_before": 39,
+                "rank_after": 37
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:cec44ba09f8fe0a243101aa5",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3801,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3798, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 116,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=83)",
+              "total_tokens": 3917
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:c6c0fde830991eeff655136c\"}",
+            "response_metadata": {
+              "response_id": "resp_05ae4ea5aef99cfd006aed6b85c83c87d28ae5d6e59eeff7a9",
+              "status": "completed"
+            },
+            "latency_seconds": 7.448,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:c6c0fde830991eeff655136c",
+          "status": "ok",
+          "output": " Kira sends the roster to Olga, and Tilda mails the badge to Boris before dawn.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Kira",
+                "action": "send",
+                "theme": "roster",
+                "recipient": "Olga",
+                "bound_agent": "kira",
+                "bound_recipient": "olga",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Tilda",
+                "action": "mail",
+                "theme": "badge",
+                "recipient": "Boris",
+                "bound_agent": "tilda",
+                "bound_recipient": "boris",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "158cc5813e71be591f7bffe3ae935ac39e5e30354c85c4476ee19d9d66e35a84",
+            "158cc5813e71be591f7bffe3ae935ac39e5e30354c85c4476ee19d9d66e35a84"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:c6c0fde830991eeff655136c",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.5290658834334754
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:c6c0fde830991eeff655136c",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.11332321,
+              "write_limit_norm": 3.52906585,
+              "raw_write_norm": 3.52966285,
+              "write_norm": 3.5296073,
+              "relative_write_norm": 0.08001227,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5644408965712603,
+                "edited_probability": 0.2919350544298915,
+                "probability_delta": -0.2725058421413688,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.40625,
+                "edited_gap_to_fixed_winner": -0.4375,
+                "gap_closure_fraction": 1.3111111111111111,
+                "baseline_probability": 0.13832219048598116,
+                "edited_probability": 0.45215785753442067,
+                "probability_delta": 0.3138356670484395,
+                "rank_before": 3,
+                "rank_after": 1
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 1.34375,
+                "edited_gap_to_fixed_winner": 0.703125,
+                "gap_closure_fraction": 0.47674418604651164,
+                "baseline_probability": 0.1472432053177076,
+                "edited_probability": 0.14451833151389992,
+                "probability_delta": -0.002724873803807676,
+                "rank_before": 2,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.2734375,
+                "edited_gap_to_fixed_winner": 7.828125,
+                "gap_closure_fraction": 0.053824362606232294,
+                "baseline_probability": 0.00014404899094279947,
+                "edited_probability": 0.00011629867193736744,
+                "probability_delta": -2.7750319005432025e-05,
+                "rank_before": 39,
+                "rank_after": 37
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "prefix": " Kira sends the roster to Olga",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          108
+        ],
+        "dtype": "torch.int64",
+        "sha256": "d9dd2544a0235f740745258af3261c0e8f2a093bae0e9ba0e1dc9cddf8b6873b"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            86
+          ]
+        },
+        {
+          "token_id": 323,
+          "piece": " and",
+          "source_positions": [
+            87
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          323,
+          627
+        ],
+        "source_positions": [
+          76,
+          86,
+          87,
+          96
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:69185eb81ffe6a6ba4d7598a",
+        "structural-contract:ac45a1f7602f71935a983c2d",
+        "structural-contract:5ea1d6aa45d91e74587621d2",
+        "structural-contract:c1d825895d7cf655cc9120ff",
+        "structural-contract:859abad36d09e646a179b554",
+        "structural-contract:b5df55b9be42cfdaa616b43d",
+        "structural-contract:2e4ecbdc496acd304d5f84d1",
+        "structural-contract:5836d0634ba73ab101fec4ce",
+        "structural-contract:124ff5bacc7cd2cd29d339c6",
+        "structural-contract:c6c0fde830991eeff655136c",
+        "structural-contract:58acfc68e901a0c5ba8eb6b8",
+        "structural-contract:105a5a6ff53406732e050322"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:5ea1d6aa45d91e74587621d2",
+        "fixed_readout": "structural-contract:c6c0fde830991eeff655136c"
+      }
+    },
+    {
+      "case_id": "gen_045",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Felix brings the permit to Nikos before noon.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:hand"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Felix",
+                "action": "bring",
+                "theme": "permit",
+                "recipient": "Nikos",
+                "bound_agent": "felix",
+                "bound_recipient": "nikos",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Kira",
+                "action": "hand",
+                "theme": "roster",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "28912293c838bf641ee0febca5380f276b3378a2721ff2018d27b41194689ff4",
+            "28912293c838bf641ee0febca5380f276b3378a2721ff2018d27b41194689ff4"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7736537154590105,
+                "edited_probability": 0.7736537154590105,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.265625,
+                "edited_gap_to_fixed_winner": 2.265625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.08027830237711628,
+                "edited_probability": 0.08027830237711628,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 8.359375,
+                "edited_gap_to_fixed_winner": 8.359375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0001811824720678497,
+                "edited_probability": 0.0001811824720678497,
+                "probability_delta": 0.0,
+                "rank_before": 34,
+                "rank_after": 34
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.5703125,
+                "edited_gap_to_fixed_winner": 6.5703125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0010841669211141636,
+                "edited_probability": 0.0010841669211141636,
+                "probability_delta": 0.0,
+                "rank_before": 14,
+                "rank_after": 14
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:eb7165d975a6f283bcf894b4",
+          "status": "ok",
+          "output": " Felix brings the permit to Nikos before noon.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:hand"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Felix",
+                "action": "bring",
+                "theme": "permit",
+                "recipient": "Nikos",
+                "bound_agent": "felix",
+                "bound_recipient": "nikos",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Kira",
+                "action": "hand",
+                "theme": "roster",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "28912293c838bf641ee0febca5380f276b3378a2721ff2018d27b41194689ff4",
+            "28912293c838bf641ee0febca5380f276b3378a2721ff2018d27b41194689ff4"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:eb7165d975a6f283bcf894b4",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.5617139428154543
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:eb7165d975a6f283bcf894b4",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.52142334,
+              "write_limit_norm": 3.5617137,
+              "raw_write_norm": 3.56199026,
+              "write_norm": 3.5619812,
+              "relative_write_norm": 0.080006,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7736537154590105,
+                "edited_probability": 0.5150066736902202,
+                "probability_delta": -0.2586470417687903,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.265625,
+                "edited_gap_to_fixed_winner": 0.40625,
+                "gap_closure_fraction": 0.8206896551724138,
+                "baseline_probability": 0.08027830237711628,
+                "edited_probability": 0.3430684051483962,
+                "probability_delta": 0.2627901027712799,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 8.359375,
+                "edited_gap_to_fixed_winner": 8.40625,
+                "gap_closure_fraction": -0.005607476635514018,
+                "baseline_probability": 0.0001811824720678497,
+                "edited_probability": 0.00011508662874140463,
+                "probability_delta": -6.609584332644508e-05,
+                "rank_before": 34,
+                "rank_after": 41
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.5703125,
+                "edited_gap_to_fixed_winner": 6.171875,
+                "gap_closure_fraction": 0.06064209274673008,
+                "baseline_probability": 0.0010841669211141636,
+                "edited_probability": 0.001074983012577801,
+                "probability_delta": -9.183908536362527e-06,
+                "rank_before": 14,
+                "rank_after": 13
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:e36ae67c5303554b2be0965b",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3793,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3790, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 114,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=100)",
+              "total_tokens": 3907
+            },
+            "response": "{\"decision\":\"noop\"}",
+            "response_metadata": {
+              "response_id": "resp_055a3e62f1dbb5ec006aed6bad501c87d2a904da5d4194389d",
+              "status": "completed"
+            },
+            "latency_seconds": 4.173,
+            "status": "noop"
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Felix brings the permit to Nikos before noon.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:hand"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Felix",
+                "action": "bring",
+                "theme": "permit",
+                "recipient": "Nikos",
+                "bound_agent": "felix",
+                "bound_recipient": "nikos",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Kira",
+                "action": "hand",
+                "theme": "roster",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "28912293c838bf641ee0febca5380f276b3378a2721ff2018d27b41194689ff4",
+            "28912293c838bf641ee0febca5380f276b3378a2721ff2018d27b41194689ff4"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7736537154590105,
+                "edited_probability": 0.7736537154590105,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.265625,
+                "edited_gap_to_fixed_winner": 2.265625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.08027830237711628,
+                "edited_probability": 0.08027830237711628,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 8.359375,
+                "edited_gap_to_fixed_winner": 8.359375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0001811824720678497,
+                "edited_probability": 0.0001811824720678497,
+                "probability_delta": 0.0,
+                "rank_before": 34,
+                "rank_after": 34
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.5703125,
+                "edited_gap_to_fixed_winner": 6.5703125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0010841669211141636,
+                "edited_probability": 0.0010841669211141636,
+                "probability_delta": 0.0,
+                "rank_before": 14,
+                "rank_after": 14
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "prefix": " Felix brings the permit to Nikos",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          106
+        ],
+        "dtype": "torch.int64",
+        "sha256": "07df4d9b3838b15f945174620a5ebf4fa9a9a432fa344865ebe1168f0da3d0bb"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            85
+          ]
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "source_positions": [
+            86
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            95
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          20444,
+          627
+        ],
+        "source_positions": [
+          76,
+          85,
+          86,
+          95
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:754fe9b5c0f4ab7031136edb",
+        "structural-contract:d5991879f4d9974ae0179991",
+        "structural-contract:cfb889d59d5aa5026afeb3ca",
+        "structural-contract:479d5144d609083d6f5a6992",
+        "structural-contract:ceb24112b42d227a3ba94205",
+        "structural-contract:1af9abd79d4e948a5b440bb1",
+        "structural-contract:b9ccc0d3c9aae8b9fd170a7b",
+        "structural-contract:cfcf283f0641e2ae486c22a7",
+        "structural-contract:171a1de2da223e73c46bc0b5",
+        "structural-contract:eb7165d975a6f283bcf894b4",
+        "structural-contract:97af6ee96ad9c70d71143c95",
+        "structural-contract:1c971994de9efb2eb00b2b9c"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:cfb889d59d5aa5026afeb3ca",
+        "fixed_readout": "structural-contract:eb7165d975a6f283bcf894b4"
+      }
+    },
+    {
+      "case_id": "gen_047",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Lars will take the receipt to Nikos before dawn.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:send"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "receipt",
+                "recipient": "Nikos",
+                "bound_agent": "lars",
+                "bound_recipient": "nikos",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Yusuf",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "411cd13c1c3132adc645bed5bf0645b920f3dc864e4920c8f31f54f07cf40061",
+            "411cd13c1c3132adc645bed5bf0645b920f3dc864e4920c8f31f54f07cf40061"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.859375,
+                "edited_gap_to_fixed_winner": 0.859375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.23493624042052116,
+                "edited_probability": 0.23493624042052116,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.671875,
+                "edited_gap_to_fixed_winner": 7.671875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.000258415676839996,
+                "edited_probability": 0.000258415676839996,
+                "probability_delta": 0.0,
+                "rank_before": 39,
+                "rank_after": 39
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5548452022466023,
+                "edited_probability": 0.5548452022466023,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.9453125,
+                "edited_gap_to_fixed_winner": 6.9453125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.000534393222104116,
+                "edited_probability": 0.000534393222104116,
+                "probability_delta": 0.0,
+                "rank_before": 29,
+                "rank_after": 29
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:d2f698fb0608b3cfb36f6f4c",
+          "status": "ok",
+          "output": " Lars will take the receipt to Nikos, while Marta sends the ledger to Yusuf before dawn.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "receipt",
+                "recipient": "Nikos",
+                "bound_agent": "lars",
+                "bound_recipient": "nikos",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Yusuf",
+                "bound_agent": "marta",
+                "bound_recipient": "yusuf",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "411cd13c1c3132adc645bed5bf0645b920f3dc864e4920c8f31f54f07cf40061",
+            "411cd13c1c3132adc645bed5bf0645b920f3dc864e4920c8f31f54f07cf40061"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:d2f698fb0608b3cfb36f6f4c",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.430058347725067
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:d2f698fb0608b3cfb36f6f4c",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 42.87573242,
+              "write_limit_norm": 3.43005848,
+              "raw_write_norm": 3.43066859,
+              "write_norm": 3.43061781,
+              "relative_write_norm": 0.08001304,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.859375,
+                "edited_gap_to_fixed_winner": -0.671875,
+                "gap_closure_fraction": 1.7818181818181817,
+                "baseline_probability": 0.23493624042052116,
+                "edited_probability": 0.5553004145713214,
+                "probability_delta": 0.3203641741508002,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.671875,
+                "edited_gap_to_fixed_winner": 7.7578125,
+                "gap_closure_fraction": -0.01120162932790224,
+                "baseline_probability": 0.000258415676839996,
+                "edited_probability": 0.00012121635827595308,
+                "probability_delta": -0.00013719931856404294,
+                "rank_before": 39,
+                "rank_after": 41
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5548452022466023,
+                "edited_probability": 0.28361969958585165,
+                "probability_delta": -0.27122550266075063,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.9453125,
+                "edited_gap_to_fixed_winner": 6.6015625,
+                "gap_closure_fraction": 0.049493813273340834,
+                "baseline_probability": 0.000534393222104116,
+                "edited_probability": 0.00038522478991117194,
+                "probability_delta": -0.00014916843219294406,
+                "rank_before": 29,
+                "rank_after": 25
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:7751a912fa77258a9a06ebaf",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3826,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3823, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 80,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=42)",
+              "total_tokens": 3906
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:d2f698fb0608b3cfb36f6f4c\"}",
+            "response_metadata": {
+              "response_id": "resp_06ee3ad5dad97578006aed6bd511a487d29aadc46a64aed805",
+              "status": "completed"
+            },
+            "latency_seconds": 5.434,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:d2f698fb0608b3cfb36f6f4c",
+          "status": "ok",
+          "output": " Lars will take the receipt to Nikos, while Marta sends the ledger to Yusuf before dawn.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Lars",
+                "action": "take",
+                "theme": "receipt",
+                "recipient": "Nikos",
+                "bound_agent": "lars",
+                "bound_recipient": "nikos",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Yusuf",
+                "bound_agent": "marta",
+                "bound_recipient": "yusuf",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "411cd13c1c3132adc645bed5bf0645b920f3dc864e4920c8f31f54f07cf40061",
+            "411cd13c1c3132adc645bed5bf0645b920f3dc864e4920c8f31f54f07cf40061"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:d2f698fb0608b3cfb36f6f4c",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.430058347725067
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:d2f698fb0608b3cfb36f6f4c",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 42.87573242,
+              "write_limit_norm": 3.43005848,
+              "raw_write_norm": 3.43066859,
+              "write_norm": 3.43061781,
+              "relative_write_norm": 0.08001304,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.859375,
+                "edited_gap_to_fixed_winner": -0.671875,
+                "gap_closure_fraction": 1.7818181818181817,
+                "baseline_probability": 0.23493624042052116,
+                "edited_probability": 0.5553004145713214,
+                "probability_delta": 0.3203641741508002,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.671875,
+                "edited_gap_to_fixed_winner": 7.7578125,
+                "gap_closure_fraction": -0.01120162932790224,
+                "baseline_probability": 0.000258415676839996,
+                "edited_probability": 0.00012121635827595308,
+                "probability_delta": -0.00013719931856404294,
+                "rank_before": 39,
+                "rank_after": 41
+              },
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.5548452022466023,
+                "edited_probability": 0.28361969958585165,
+                "probability_delta": -0.27122550266075063,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.9453125,
+                "edited_gap_to_fixed_winner": 6.6015625,
+                "gap_closure_fraction": 0.049493813273340834,
+                "baseline_probability": 0.000534393222104116,
+                "edited_probability": 0.00038522478991117194,
+                "probability_delta": -0.00014916843219294406,
+                "rank_before": 29,
+                "rank_after": 25
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "prefix": " Lars will take the receipt to Nikos",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          108
+        ],
+        "dtype": "torch.int64",
+        "sha256": "530572f3562b2ff80981bc256d4520a95dc5f1e99daaf656f34ad3b9eecb581b"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            78,
+            89
+          ]
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "source_positions": [
+            79
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          20444,
+          627
+        ],
+        "source_positions": [
+          78,
+          89,
+          79,
+          96
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:55acf6267e2b564da1b4fc38",
+        "structural-contract:ffa0207f690851aa5643ef4d",
+        "structural-contract:e57635fea3b84e6a19505a3f",
+        "structural-contract:13a1bbff29ce1b9a5f24dd90",
+        "structural-contract:e88a91f7a8ccb0a84bbb70c0",
+        "structural-contract:86c7ab50309eed7dbb31a9f3",
+        "structural-contract:eb61b1af80c703e4e6194897",
+        "structural-contract:8faacdb10de569b52d18b64a",
+        "structural-contract:ce7a6d4c2762cf8855131431",
+        "structural-contract:d2f698fb0608b3cfb36f6f4c",
+        "structural-contract:83b2719d15e1eb589146a400",
+        "structural-contract:18b98a04cb272b88b7ab1abb"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:e57635fea3b84e6a19505a3f",
+        "fixed_readout": "structural-contract:d2f698fb0608b3cfb36f6f4c"
+      }
+    },
+    {
+      "case_id": "gen_058",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Boris sends the roster to Tilda before midnight, with Edda giving Alma the permit afterwards.",
+          "legacy_score": 0.938889,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Boris",
+                "action": "send",
+                "theme": "roster",
+                "recipient": "Tilda",
+                "bound_agent": "boris",
+                "bound_recipient": "tilda",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Edda",
+                "action": "give",
+                "theme": "permit",
+                "recipient": "Alma",
+                "bound_agent": "edda",
+                "bound_recipient": null,
+                "theme_in_action_clause": true,
+                "status": "partially_bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b2fe344586dd306976ac5a6644df252800de29518b9343fac8c707ab2957dd22",
+            "b2fe344586dd306976ac5a6644df252800de29518b9343fac8c707ab2957dd22"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 10.4765625,
+                "edited_gap_to_fixed_winner": 10.4765625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 1.7985245429229682e-05,
+                "edited_probability": 1.7985245429229682e-05,
+                "probability_delta": 0.0,
+                "rank_before": 94,
+                "rank_after": 94
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.515625,
+                "edited_gap_to_fixed_winner": 1.515625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.14015289648064533,
+                "edited_probability": 0.14015289648064533,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 2.03125,
+                "edited_gap_to_fixed_winner": 2.03125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.08368911693763134,
+                "edited_probability": 0.08368911693763134,
+                "probability_delta": 0.0,
+                "rank_before": 4,
+                "rank_after": 4
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.2578125,
+                "edited_gap_to_fixed_winner": 8.2578125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00016538923955736955,
+                "edited_probability": 0.00016538923955736955,
+                "probability_delta": 0.0,
+                "rank_before": 29,
+                "rank_after": 29
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:e501f4ac6fdac65e97a7c22d",
+          "status": "ok",
+          "output": " Boris sends the roster to Tilda, Edda gives the permit to Alma before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Boris",
+                "action": "send",
+                "theme": "roster",
+                "recipient": "Tilda",
+                "bound_agent": "boris",
+                "bound_recipient": "tilda",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Edda",
+                "action": "give",
+                "theme": "permit",
+                "recipient": "Alma",
+                "bound_agent": "edda",
+                "bound_recipient": "alma",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b2fe344586dd306976ac5a6644df252800de29518b9343fac8c707ab2957dd22",
+            "b2fe344586dd306976ac5a6644df252800de29518b9343fac8c707ab2957dd22"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:e501f4ac6fdac65e97a7c22d",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.5587318183533445
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:e501f4ac6fdac65e97a7c22d",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.48414993,
+              "write_limit_norm": 3.55873203,
+              "raw_write_norm": 3.55868602,
+              "write_norm": 3.55868602,
+              "relative_write_norm": 0.07999897,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 10,
+              "completed": 10
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 10.4765625,
+                "edited_gap_to_fixed_winner": 10.9296875,
+                "gap_closure_fraction": -0.04325130499627144,
+                "baseline_probability": 1.7985245429229682e-05,
+                "edited_probability": 6.087739145622718e-06,
+                "probability_delta": -1.1897506283606965e-05,
+                "rank_before": 94,
+                "rank_after": 115
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.515625,
+                "edited_gap_to_fixed_winner": -0.328125,
+                "gap_closure_fraction": 1.2164948453608246,
+                "baseline_probability": 0.14015289648064533,
+                "edited_probability": 0.4716956618264714,
+                "probability_delta": 0.33154276534582605,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 2.03125,
+                "edited_gap_to_fixed_winner": 1.375,
+                "gap_closure_fraction": 0.3230769230769231,
+                "baseline_probability": 0.08368911693763134,
+                "edited_probability": 0.08590216164629091,
+                "probability_delta": 0.002213044708659573,
+                "rank_before": 4,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.2578125,
+                "edited_gap_to_fixed_winner": 7.828125,
+                "gap_closure_fraction": 0.05203405865657521,
+                "baseline_probability": 0.00016538923955736955,
+                "edited_probability": 0.00013534665097875015,
+                "probability_delta": -3.004258857861939e-05,
+                "rank_before": 29,
+                "rank_after": 28
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:d6bb67cf3dbd418d3fc1fe25",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3826,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3823, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 112,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=75)",
+              "total_tokens": 3938
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:e501f4ac6fdac65e97a7c22d\"}",
+            "response_metadata": {
+              "response_id": "resp_0fb439dc6a35d074006aed6c07530487d29a7afffee3b0d16f",
+              "status": "completed"
+            },
+            "latency_seconds": 4.018,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:e501f4ac6fdac65e97a7c22d",
+          "status": "ok",
+          "output": " Boris sends the roster to Tilda, Edda gives the permit to Alma before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Boris",
+                "action": "send",
+                "theme": "roster",
+                "recipient": "Tilda",
+                "bound_agent": "boris",
+                "bound_recipient": "tilda",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Edda",
+                "action": "give",
+                "theme": "permit",
+                "recipient": "Alma",
+                "bound_agent": "edda",
+                "bound_recipient": "alma",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b2fe344586dd306976ac5a6644df252800de29518b9343fac8c707ab2957dd22",
+            "b2fe344586dd306976ac5a6644df252800de29518b9343fac8c707ab2957dd22"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:e501f4ac6fdac65e97a7c22d",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.5587318183533445
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:e501f4ac6fdac65e97a7c22d",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.48414993,
+              "write_limit_norm": 3.55873203,
+              "raw_write_norm": 3.55868602,
+              "write_norm": 3.55868602,
+              "relative_write_norm": 0.07999897,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 10,
+              "completed": 10
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 10.4765625,
+                "edited_gap_to_fixed_winner": 10.9296875,
+                "gap_closure_fraction": -0.04325130499627144,
+                "baseline_probability": 1.7985245429229682e-05,
+                "edited_probability": 6.087739145622718e-06,
+                "probability_delta": -1.1897506283606965e-05,
+                "rank_before": 94,
+                "rank_after": 115
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.515625,
+                "edited_gap_to_fixed_winner": -0.328125,
+                "gap_closure_fraction": 1.2164948453608246,
+                "baseline_probability": 0.14015289648064533,
+                "edited_probability": 0.4716956618264714,
+                "probability_delta": 0.33154276534582605,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 2.03125,
+                "edited_gap_to_fixed_winner": 1.375,
+                "gap_closure_fraction": 0.3230769230769231,
+                "baseline_probability": 0.08368911693763134,
+                "edited_probability": 0.08590216164629091,
+                "probability_delta": 0.002213044708659573,
+                "rank_before": 4,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.2578125,
+                "edited_gap_to_fixed_winner": 7.828125,
+                "gap_closure_fraction": 0.05203405865657521,
+                "baseline_probability": 0.00016538923955736955,
+                "edited_probability": 0.00013534665097875015,
+                "probability_delta": -3.004258857861939e-05,
+                "rank_before": 29,
+                "rank_after": 28
+              }
+            ]
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "prefix": " Boris sends the roster to Tilda",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          101
+        ],
+        "dtype": "torch.int64",
+        "sha256": "25e63e6e79374a2d8eadeef45a0ae35d1e146b8521bbe073a48287d7643d3226"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            71,
+            80
+          ]
+        },
+        {
+          "token_id": 323,
+          "piece": " and",
+          "source_positions": [
+            81
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            90
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          323,
+          627
+        ],
+        "source_positions": [
+          71,
+          80,
+          81,
+          90
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:1cb72aa2d9c9d39c0d13800b",
+        "structural-contract:d9b7e3960b8dfa062837bffe",
+        "structural-contract:b5b832dce4735293c64504d5",
+        "structural-contract:c5a6347ffb816a90cac4d319",
+        "structural-contract:f8fe769f8bd7ce00e781df91",
+        "structural-contract:d1e8141ebfbbc0778f9da2f1",
+        "structural-contract:3cb21b6cddebcefb3af7ff7c",
+        "structural-contract:3ea105d0423fc3eb6ecd8d51",
+        "structural-contract:33b720d1f8c5fee859a76847",
+        "structural-contract:e501f4ac6fdac65e97a7c22d",
+        "structural-contract:859d15c48e82b254099b4f2c",
+        "structural-contract:89c3fb50ad311c3f1979d016"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:b5b832dce4735293c64504d5",
+        "fixed_readout": "structural-contract:e501f4ac6fdac65e97a7c22d"
+      }
+    },
+    {
+      "case_id": "gen_060",
+      "split": "rescue",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Ugo must bring the blueprint to Kira before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "bring",
+                "theme": "blueprint",
+                "recipient": "Kira",
+                "bound_agent": "ugo",
+                "bound_recipient": "kira",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "ticket",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "908fe640da17d3729ffc728eecf8b002d1a307194b25d141ae23b00234f7b67d",
+            "908fe640da17d3729ffc728eecf8b002d1a307194b25d141ae23b00234f7b67d"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.6778219189093226,
+                "edited_probability": 0.6778219189093226,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.421875,
+                "edited_gap_to_fixed_winner": 2.421875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.06016011534624015,
+                "edited_probability": 0.06016011534624015,
+                "probability_delta": 0.0,
+                "rank_before": 4,
+                "rank_after": 4
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.578125,
+                "edited_gap_to_fixed_winner": 6.578125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0009424801668269765,
+                "edited_probability": 0.0009424801668269765,
+                "probability_delta": 0.0,
+                "rank_before": 13,
+                "rank_after": 13
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.7421875,
+                "edited_gap_to_fixed_winner": 7.7421875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00029425665889575047,
+                "edited_probability": 0.00029425665889575047,
+                "probability_delta": 0.0,
+                "rank_before": 29,
+                "rank_after": 29
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_readout": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:180b3231cac2af5d2e4f5be2",
+          "status": "ok",
+          "output": " Ugo must bring the blueprint to Kira before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "bring",
+                "theme": "blueprint",
+                "recipient": "Kira",
+                "bound_agent": "ugo",
+                "bound_recipient": "kira",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "ticket",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "908fe640da17d3729ffc728eecf8b002d1a307194b25d141ae23b00234f7b67d",
+            "908fe640da17d3729ffc728eecf8b002d1a307194b25d141ae23b00234f7b67d"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:180b3231cac2af5d2e4f5be2",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 3.617143083095197
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.08,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:180b3231cac2af5d2e4f5be2",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.08,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 45.2142868,
+              "write_limit_norm": 3.61714292,
+              "raw_write_norm": 3.61747169,
+              "write_norm": 3.61746001,
+              "relative_write_norm": 0.08000701,
+              "relative_clip_saturated": true
+            }
+          ],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.6778219189093226,
+                "edited_probability": 0.43414772920891476,
+                "probability_delta": -0.24367418970040788,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.421875,
+                "edited_gap_to_fixed_winner": 0.34375,
+                "gap_closure_fraction": 0.8580645161290322,
+                "baseline_probability": 0.06016011534624015,
+                "edited_probability": 0.307856838873199,
+                "probability_delta": 0.24769672352695882,
+                "rank_before": 4,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.578125,
+                "edited_gap_to_fixed_winner": 6.4453125,
+                "gap_closure_fraction": 0.020190023752969122,
+                "baseline_probability": 0.0009424801668269765,
+                "edited_probability": 0.0006894041301819719,
+                "probability_delta": -0.0002530760366450046,
+                "rank_before": 13,
+                "rank_after": 13
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.7421875,
+                "edited_gap_to_fixed_winner": 7.3515625,
+                "gap_closure_fraction": 0.050454086781029264,
+                "baseline_probability": 0.00029425665889575047,
+                "edited_probability": 0.0002785444481578741,
+                "probability_delta": -1.5712210737876397e-05,
+                "rank_before": 29,
+                "rank_after": 24
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:18a1cc843c9d8a0ea9164a5a",
+            "system_prompt_sha256": "cee3314b268116cec7f358d77c63f608ab8fc6255a448d74dbad1b541838ea10",
+            "usage": {
+              "input_tokens": 3901,
+              "input_tokens_details": "InputTokensDetails(cache_write_tokens=3898, cached_tokens=0, cache_write_tokens_details=None)",
+              "output_tokens": 72,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=58)",
+              "total_tokens": 3973
+            },
+            "response": "{\"decision\":\"noop\"}",
+            "response_metadata": {
+              "response_id": "resp_0c68245e6f0271dc006aed6c2ed5f487d2b87c0230f5711d5d",
+              "status": "completed"
+            },
+            "latency_seconds": 5.965,
+            "status": "noop"
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Ugo must bring the blueprint to Kira before midnight.",
+          "legacy_score": 0.755556,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:give"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ugo",
+                "action": "bring",
+                "theme": "blueprint",
+                "recipient": "Kira",
+                "bound_agent": "ugo",
+                "bound_recipient": "kira",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "ticket",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_and_to_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "908fe640da17d3729ffc728eecf8b002d1a307194b25d141ae23b00234f7b67d",
+            "908fe640da17d3729ffc728eecf8b002d1a307194b25d141ae23b00234f7b67d"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 2
+            }
+          },
+          "production_apply_allowed": false,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.6778219189093226,
+                "edited_probability": 0.6778219189093226,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.421875,
+                "edited_gap_to_fixed_winner": 2.421875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.06016011534624015,
+                "edited_probability": 0.06016011534624015,
+                "probability_delta": 0.0,
+                "rank_before": 4,
+                "rank_after": 4
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 6.578125,
+                "edited_gap_to_fixed_winner": 6.578125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0009424801668269765,
+                "edited_probability": 0.0009424801668269765,
+                "probability_delta": 0.0,
+                "rank_before": 13,
+                "rank_after": 13
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.7421875,
+                "edited_gap_to_fixed_winner": 7.7421875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00029425665889575047,
+                "edited_probability": 0.00029425665889575047,
+                "probability_delta": 0.0,
+                "rank_before": 29,
+                "rank_after": 29
+              }
+            ]
+          },
+          "natural_branch_changed": false
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "prefix": " Ugo must bring the blueprint to Kira",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          109
+        ],
+        "dtype": "torch.int64",
+        "sha256": "80f215cd8a4ecf07ffea83ea7c401ae65d754cbdc189fe72442b77682626c677"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            76,
+            86
+          ]
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            87
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            96
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          1418,
+          627
+        ],
+        "source_positions": [
+          76,
+          86,
+          87,
+          96
+        ]
+      },
+      "eligible_recipe_count": 12,
+      "recipe_ids": [
+        "structural-contract:219eb2e79bfa0432b99084ca",
+        "structural-contract:048d91009863d891c391f02b",
+        "structural-contract:b99052eaf8ece76eb481379b",
+        "structural-contract:dd3070d17879869b9b04f1fb",
+        "structural-contract:c648e7daa759081a67210972",
+        "structural-contract:49347377c5e560862615e692",
+        "structural-contract:53357c6b36dbdf5bd8345e41",
+        "structural-contract:0323b67d441345de741b0b9f",
+        "structural-contract:d4f6b8077959ff8797629f15",
+        "structural-contract:180b3231cac2af5d2e4f5be2",
+        "structural-contract:ff9ee9a986acf803639f1caf",
+        "structural-contract:fe56e4ec97540861ce760aab"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:b99052eaf8ece76eb481379b",
+        "fixed_readout": "structural-contract:180b3231cac2af5d2e4f5be2"
+      }
+    }
+  ],
+  "scope": "restored_contract_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 330.898,
+  "aggregate": {
+    "rescue": {
+      "b0": {
+        "completed_pairs": 7,
+        "eligible_pairs": 7,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 7,
+        "selection_errors": 0
+      },
+      "fixed": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed_readout": {
+        "completed_pairs": 7,
+        "eligible_pairs": 7,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 4,
+        "wins_vs_b0": 4,
+        "losses_vs_b0": 0,
+        "output_changes": 4,
+        "applied_diagnostic_edits": 7,
+        "unknown_roles": 3,
+        "selection_errors": 0
+      },
+      "random": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 7,
+        "eligible_pairs": 7,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 4,
+        "wins_vs_b0": 4,
+        "losses_vs_b0": 0,
+        "output_changes": 4,
+        "applied_diagnostic_edits": 4,
+        "unknown_roles": 3,
+        "selection_errors": 0
+      }
+    }
+  }
+}

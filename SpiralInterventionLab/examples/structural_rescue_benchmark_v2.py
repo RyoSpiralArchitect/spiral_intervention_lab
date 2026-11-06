@@ -47,14 +47,28 @@ Do not output an answer, a token to force, new expressions, or any other fields.
 This selects one restored diagnostic continuation, not production permission.
 Role annotations, reference continuations and candidate outcomes are unavailable.
 """
+DATASHEET_PROMPT_ADD = """Each readout recipe also carries a reach_estimate: the measured winner-gap closure per
+unit of relative write from a calibration cap sweep, and its estimated logit closure at
+this cap. A recipe whose estimate range tops out below its target token's gap_to_top1
+cannot flip the first token; prefer a reachable recipe over an unreachable one.
+"""
 
 
-def manifest(case_set: dict[str, Any] | None = None) -> dict[str, Any]:
+def system_prompt(datasheet: bool = False) -> str:
+    return SYSTEM_PROMPT + (DATASHEET_PROMPT_ADD if datasheet else "")
+
+
+def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False) -> dict[str, Any]:
     """The frozen v1 cases by default; screen-selected cases carry their binding."""
     v1 = benchmark_manifest()
     cases = v1["cases"] if case_set is None else candidate_rows(case_set["cases"])
     selection = {} if case_set is None else {"case_set": case_set["binding"]}
-    return {"version": "structural_rescue_v2_norm_relative_contract", "cases": cases,
+    sheet = ({"controller_datasheet": {"readout_closure_slope": dict(structural_contract.READOUT_CLOSURE_SLOPE),
+                                       "reach_basis": structural_contract.REACH_BASIS,
+                                       "unknown_pieces": "no_estimate"}}
+             if datasheet else {})
+    return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else ""),
+            "cases": cases, **sheet,
             "confirmation_status": (v1["confirmation_status"] if case_set is None
                                     else "selected_by_preregistered_b0_screen"), **selection,
             "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; "
@@ -77,14 +91,14 @@ def manifest(case_set: dict[str, Any] | None = None) -> dict[str, Any]:
             "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
             "diagnostic_forward_cap_per_policy": 24, "continuation_forward_cap_per_policy": 64,
             "max_controller_calls_per_case": 1, "max_controller_output_tokens": 1600,
-            "controller_system_prompt_sha256": hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(),
+            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet).encode()).hexdigest(),
             "baseline_repeats_before_each_branch": 2, "disk_floor_gib": DISK_FLOOR_GIB,
             "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 
-def manifest_bytes(case_set: dict[str, Any] | None = None) -> bytes:
-    return (json.dumps(manifest(case_set), indent=2, sort_keys=True) + "\n").encode()
+def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = False) -> bytes:
+    return (json.dumps(manifest(case_set, datasheet), indent=2, sort_keys=True) + "\n").encode()
 
 
 def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
@@ -107,23 +121,46 @@ def fixed_ids(recipes: list[dict]) -> dict[str, str | None]:
     return {"fixed": patch and patch["recipe_id"], "fixed_readout": push and push["recipe_id"]}
 
 
-def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict) -> dict:
+def reach_estimate(recipe: dict) -> dict | None:
+    """Calibration-measured gap closure for a readout target, or None if unmeasured."""
+    if recipe["kind"] != "readout":
+        return None
+    slope = structural_contract.READOUT_CLOSURE_SLOPE.get(recipe["sources"][0]["piece"])
+    if slope is None:
+        return None
+    cap = recipe["relative_write_cap"]
+    return {"slope_logits_per_unit_cap": dict(slope),
+            "estimated_gap_closure": {"mean": slope["mean"] * cap,
+                                      "min": slope["min"] * cap, "max": slope["max"] * cap},
+            "basis": structural_contract.REACH_BASIS}
+
+
+def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict,
+                   datasheet: bool = False) -> dict:
     keys = ("recipe_id", "kind", "component", "sources", "surface", "relative_write_cap",
             "requested_relative_write", "expected_relative_write")
+    offered = []
+    for r in recipes:
+        row = {**{k: r[k] for k in keys}, **({"dsl_formula": r["dsl_formula"], "geometry": r["geometry"]}
+                                             if r["kind"] == "patch" else {})}
+        estimate = reach_estimate(r) if datasheet else None
+        if estimate is not None:
+            row["reach_estimate"] = estimate
+        offered.append(row)
     return {"version": "structural_rescue_choice_v2", "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
-            "recipes": [{**{k: r[k] for k in keys}, **({"dsl_formula": r["dsl_formula"], "geometry": r["geometry"]}
-                                                     if r["kind"] == "patch" else {})} for r in recipes],
+            "recipes": offered,
             "contract": {"id": structural_contract.CONTRACT, "relative_write_cap": RELATIVE_WRITE_CAP,
                          "ttl_steps": 1, "max_edits": 1},
             "budget": {"max_edits": 1, "diagnostic_forwards": 24, "continuation_forwards": 64},
             "production_apply_allowed": False}
 
 
-def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None]) -> tuple[str | None, dict]:
+def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None],
+           datasheet: bool = False) -> tuple[str | None, dict]:
     if policy in fixed:
         return choose("fixed", packet, fixed_recipe_id=fixed[policy])
-    return choose(policy, packet, provider=provider, system_prompt=SYSTEM_PROMPT)
+    return choose(policy, packet, provider=provider, system_prompt=system_prompt(datasheet))
 
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
@@ -202,6 +239,8 @@ def main(argv=None) -> int:
     parser.add_argument("--policies", default=",".join(POLICIES))
     parser.add_argument("--case-ids")
     parser.add_argument("--screen-dir", type=Path, help="run the cases a frozen B0 screen selected")
+    parser.add_argument("--datasheet", action="store_true",
+                        help="offer calibration-measured readout reach estimates to the controller")
     parser.add_argument("--wall-seconds", type=int, default=3600)
     parser.add_argument("--mps-memory-fraction", type=float, default=0.7)
     args = parser.parse_args(argv)
@@ -211,7 +250,7 @@ def main(argv=None) -> int:
     if args.screen_dir is not None:
         cases, binding = selected_cases(args.screen_dir.expanduser().resolve())
         case_set = {"cases": cases, "binding": binding}
-    frozen = manifest_bytes(case_set)
+    frozen = manifest_bytes(case_set, datasheet=args.datasheet)
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -238,6 +277,7 @@ def main(argv=None) -> int:
             raise FileExistsError(path)
     code_hashes = capture_sources(output)
     execution = {"manifest_sha256": digest, "device": args.device, "dtype": args.dtype,
+                 "datasheet": args.datasheet,
                  "policies": policies, "case_ids": case_ids, "wall_seconds": args.wall_seconds,
                  "mps_memory_fraction": args.mps_memory_fraction,
                  "controller_model": args.controller_model if "controller" in policies else None,
@@ -329,7 +369,8 @@ def main(argv=None) -> int:
                     raise RuntimeError("structure_observation_failed")
                 recipes, policy, sources = catalog_for(worker, task, n_layers)
                 fixed = fixed_ids(recipes)
-                packet = compact_packet(worker, recipes, case.case_id, observation)
+                packet = compact_packet(worker, recipes, case.case_id, observation,
+                                        datasheet=args.datasheet)
                 (output / (case.case_id + "_observation.json")).write_text(json.dumps(packet, indent=2))
                 row.update(comparison_eligible=True, shared_setup_forwards=deepcopy(meter.counts),
                            eligible_sources=[{k: s[k] for k in ("token_id", "piece", "source_positions")}
@@ -342,7 +383,8 @@ def main(argv=None) -> int:
                 token_ids = [r["token_id"] for r in observation["structure_readout_rows"]]
                 for name in policies:
                     meter.check_limits()
-                    selected_id, trace = select(name, packet, provider=provider, fixed=fixed)
+                    selected_id, trace = select(name, packet, provider=provider, fixed=fixed,
+                                                datasheet=args.datasheet)
                     recipe = next((r for r in recipes if r["recipe_id"] == selected_id), None)
                     meter.reset("diagnostic")
                     outcome = {"selection": trace, "selected_recipe_id": selected_id}

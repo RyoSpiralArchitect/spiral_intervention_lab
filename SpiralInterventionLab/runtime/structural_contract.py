@@ -29,6 +29,17 @@ PATCH_COMPONENTS = ("common", "common_parallel", "common_orthogonal")
 # Blend all the way toward the source; the guard keeps the write within the cap.
 PATCH_ALPHA = 1.0
 
+# Absolute winner-gap closure per unit of relative write, measured by the
+# calibration-only cap sweep of 2026-11-06 (manifest ebd542c5…, three v1
+# calibration cases, caps 0.04-0.12). Coverage is these three lexemes at these
+# three boundaries only; unlisted pieces carry no estimate.
+READOUT_CLOSURE_SLOPE: Mapping[str, dict[str, float]] = {
+    ",": {"mean": 22.5, "min": 20.0, "max": 26.0},
+    " while": {"mean": 51.0, "min": 49.0, "max": 54.0},
+    ".\n": {"mean": 43.0, "min": 36.0, "max": 50.0},
+}
+REACH_BASIS = "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12"
+
 
 def protected_lexemes(required_terms: Sequence[str]) -> frozenset[str]:
     """Structural lexemes that also occur in a required term, such as 'before dusk'."""

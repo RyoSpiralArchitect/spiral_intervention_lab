@@ -304,6 +304,33 @@ roughly a 0.17-0.20 cap — outside the contract's tested range and far beyond
 what a modest raise of `r` could justify — consistent with those branches'
 outcomes.
 
+### Controller datasheet pilot
+
+`datasheet` (manifest `5b6e9b91…`, 331 s): the same rescue split and contract,
+with each readout recipe carrying the cap sweep's measured closure slope and its
+estimated logit closure at this cap (`structural_rescue_v2_norm_relative_contract_datasheet`).
+Three policies: b0, fixed readout, controller. All branches restored state,
+zero drift, one guarded write per edit.
+
+| Case | `,` gap | Estimated `,` reach | Controller choice | Fixed readout |
+| --- | ---: | ---: | --- | --- |
+| `gen_002` | 0.75 | ~1.8 | `,` ✓ | ✓ |
+| `gen_009` | 2.14 | ~1.8 | noop | - |
+| `gen_018` | 1.41 | ~1.8 | `,` ✓ | ✓ |
+| `gen_045` | 2.27 | ~1.8 | noop | - |
+| `gen_047` | 0.86 | ~1.8 | `,` ✓ | ✓ |
+| `gen_058` | 1.52 | ~1.8 | `,` ✓ | ✓ |
+| `gen_060` | 2.42 | ~1.8 | noop | - |
+
+The datasheet-equipped controller matched the fixed rule's 4/7 joint successes
+exactly — including `gen_058`, which it missed without the datasheet by picking
+`.` — and it selected `,` on every case whose gap was inside the estimated
+reach. On the three unreachable cases it chose noop rather than spend a write,
+so it applied 4 edits for 4 wins where the fixed rule applied 7 for the same 4.
+The measured boundary of its behaviour (does it pick `,` at a gap of exactly
+1.8, or overshoot a 1.6-2.0 estimate) is untested: no screened case sits in
+that band. Provider usage: 27,487 total tokens, one call per case.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
@@ -315,6 +342,6 @@ outcomes.
 ### Next
 
 - Pre-register a second screen before it runs. Either extend the role check to double-object datives or restrict the verbs, to remove evaluator-only failures. Raise the candidate count to reach the selection limit.
-- The controller already sees each structural token's rank and `gap_to_top1`. What it lacks is the actuator's reach. Add a calibration-derived datasheet to each readout recipe, for example "an 8% push closes about 1.5-2.1 logits", and measure whether the controller then picks a reachable `,` push.
+- ~~Add a calibration-derived datasheet to each readout recipe~~ Done: [datasheet pilot](#controller-datasheet-pilot), `results/structural_rescue_datasheet_20261106/` (manifest `5b6e9b91…`). With reach estimates the controller matched fixed readout at 4/7 and noop'd on unreachable cases; the boundary band near the estimate (~1.6-2.0 logits) is untested.
 - ~~Measure the reach curve directly with a cap sweep~~ Done: [reach curve](#reach-curve-cap-sweep-calibration-only),
   `results/structural_rescue_cap_sweep_20261106/` (manifest `ebd542c5…`).

@@ -73,6 +73,50 @@ def test_fixed_rules_pick_first_pair_orthogonal_and_first_source_readout():
     assert v2.fixed_ids([]) == {"fixed": None, "fixed_readout": None}
 
 
+def test_datasheet_manifest_is_a_separate_frozen_version():
+    base, sheet = v2.manifest(), v2.manifest(datasheet=True)
+    assert sheet["version"] == base["version"] + "_datasheet"
+    assert {k: v for k, v in sheet.items() if k not in {"version", "controller_datasheet",
+                                                      "controller_system_prompt_sha256"}} == {
+        k: v for k, v in base.items() if k not in {"version", "controller_system_prompt_sha256"}}
+    slopes = sheet["controller_datasheet"]["readout_closure_slope"]
+    assert set(slopes) == set(structural_contract.READOUT_CLOSURE_SLOPE)
+    assert (sheet["controller_system_prompt_sha256"]
+            == hashlib.sha256(v2.system_prompt(True).encode()).hexdigest()
+            != base["controller_system_prompt_sha256"])
+    assert v2.manifest_bytes(datasheet=True) == v2.manifest_bytes(datasheet=True)
+
+
+def test_datasheet_packet_adds_reach_only_to_measured_readout_recipes():
+    worker = contract_worker()
+    recipes, _policy = toy_catalog(worker)
+    plain = v2.compact_packet(worker, recipes, "case", {"structure_readout_rows": []})
+    assert all("reach_estimate" not in r for r in plain["recipes"])
+    packet = v2.compact_packet(worker, recipes, "case", {"structure_readout_rows": []},
+                               datasheet=True)
+    by_id = {r["recipe_id"]: r for r in recipes}
+    for row in packet["recipes"]:
+        recipe = by_id[row["recipe_id"]]
+        estimate = row.get("reach_estimate")
+        slope = structural_contract.READOUT_CLOSURE_SLOPE.get(recipe["sources"][0]["piece"])
+        if recipe["kind"] != "readout" or slope is None:
+            assert estimate is None
+            continue
+        assert estimate["slope_logits_per_unit_cap"] == slope
+        assert estimate["estimated_gap_closure"]["min"] == slope["min"] * 0.08
+        assert estimate["basis"] == structural_contract.REACH_BASIS
+
+
+def test_controller_selection_uses_the_datasheet_prompt_when_enabled():
+    packet = {"case_id": "case", "recipes": [{"recipe_id": "r1"}]}
+    provider = SimpleNamespace(provider_name="fake", model_name="fake", complete=Mock(return_value=
+        SimpleNamespace(text='{"decision":"noop"}', usage={}, metadata={})))
+    _chosen, trace = v2.select("controller", packet, provider=provider,
+                               fixed={"fixed": None, "fixed_readout": None}, datasheet=True)
+    assert "reach_estimate" in v2.system_prompt(True)
+    assert trace["system_prompt_sha256"] == hashlib.sha256(v2.system_prompt(True).encode()).hexdigest()
+
+
 def test_controller_selection_uses_the_contract_prompt():
     packet = {"case_id": "case", "recipes": [{"recipe_id": "r1"}]}
     provider = SimpleNamespace(provider_name="fake", model_name="fake", complete=Mock(return_value=
