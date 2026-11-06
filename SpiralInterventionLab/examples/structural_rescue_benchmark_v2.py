@@ -126,7 +126,8 @@ def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | N
     return choose(policy, packet, provider=provider, system_prompt=SYSTEM_PROMPT)
 
 
-def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any) -> tuple[dict, Any]:
+def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
+           *, cap: float = RELATIVE_WRITE_CAP) -> tuple[dict, Any]:
     before, caps = state_identity(worker), repr(worker.surface_catalog)
     baseline_raw = []
     meter.phase, meter.capture_edited = "branch", False
@@ -160,7 +161,7 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
     if command:
         if len(telemetry) != 1 or telemetry[0].get("guard_call_count") != 1:
             raise RuntimeError("one_token_contract_hook_not_confirmed")
-        if not telemetry[0].get("relative_write_norm", float("inf")) <= RELATIVE_WRITE_CAP + CAST_TOLERANCE:
+        if not telemetry[0].get("relative_write_norm", float("inf")) <= cap + CAST_TOLERANCE:
             raise RuntimeError("contract_write_exceeded_cap")
     return {"status": "ok", **task.evaluate(text), "state_restored": restored,
             "baseline_repeat_max_abs_logit_delta": float((baseline_raw[0] - baseline_raw[1]).abs().max()),
