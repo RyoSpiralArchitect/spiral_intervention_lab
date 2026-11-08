@@ -85,11 +85,13 @@
     "generator": "structural_rescue_generator_v3",
     "input_selection": "all_120_in_generator_order_no_outcome_screening",
     "prior_screen_manifest_sha256": {
+      "results/structural_rescue_contract_20261103/screen/manifest.json": "e018bbcc917a79513ab88e4b28f5542447a1db5d324de54df3d1a176351416cf",
+      "results/structural_rescue_contract_20261103/screen_r2/manifest.json": "e018bbcc917a79513ab88e4b28f5542447a1db5d324de54df3d1a176351416cf",
       "results/structural_rescue_screen_v2_20261106/manifest.json": "789b6d68ffbdb96221276a2aef149f7322aa835bc09958e6ff315a0f01bbfc46",
       "results/structural_rescue_screen_v2_20261106_attempt1_disk/manifest.json": "789b6d68ffbdb96221276a2aef149f7322aa835bc09958e6ff315a0f01bbfc46",
       "results/structural_rescue_screen_v3_20261107/manifest.json": "f4e86bb18d47071fced61bb58bba35ccbddc045ad04fc2c034a2e19d7f72627f"
     },
-    "prior_unique_sources_checked": 250,
+    "prior_unique_sources_checked": 321,
     "role": "prospective_same_generator_verification",
     "seed": 2026110901,
     "split": "gate_independent_v1",

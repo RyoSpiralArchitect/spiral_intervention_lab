@@ -212,7 +212,8 @@ with source, evaluator, prompt and checkpoint hashes. Its independent inputs
 are fixed by generator version, seed, ordered IDs and the candidate-row hash
 `07b7bedf62166cd2545a235ab34d3c1589a648f4015cbdb3645dbfbcc6aa5343`.
 Generating those inputs required no model. All 120 are distinct and have no
-exact source overlap with the 250 distinct inputs in existing manifests.
+exact source overlap with the 321 distinct inputs in existing manifests,
+including the earlier screens in nested result directories.
 This is new input combinations within the same generator, not a test of
 arbitrary English or a different model population.
 
