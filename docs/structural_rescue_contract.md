@@ -428,6 +428,16 @@ A `clause_form`-aware datasheet line (e.g., "starters bias toward finite
 clauses where the generated tail already ends in `with`") is the smallest
 honest probe; claiming a selection rule from 8 cases is not.
 
+That probe ran: with `form_hint` on the starter row and a clause-form prompt
+addendum (manifest `76fc0dd0…`,
+`results/structural_rescue_clauseform_ds_v3_20261108/`, 985 s) the controller
+picked the starter on 9/12 cases and scored **6/12** — wins `gen_017`,
+`gen_018`, `gen_058`, `gen_068`, `gen_073`, `gen_088` — versus the
+starter-less datasheet run's 2/12. It lost `gen_059` where a plain comma was
+the winning recipe, and on `gen_078` picked `,` anyway. The form hint moved
+selection, and the participle-family mechanism now goes through the
+controller, not just the fixed rule.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
