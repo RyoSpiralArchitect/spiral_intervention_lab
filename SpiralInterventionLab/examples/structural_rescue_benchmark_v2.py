@@ -59,6 +59,10 @@ gap_to_top1 cannot flip the first token; prefer a reachable recipe over an unrea
 
 CLAUSE_FORM_PROMPT_ADD = """The catalog may also offer clause_form recipes: a readout push toward a
 finite-clause starter token that is not required to appear in the source.
+A clause_form starter biases the continuation toward a finite clause ("while X
+verbs") where a plain comma invites a participle ("with X -ing"); prefer it
+when the generated tail already ends in a clause-final word and a comma push
+would leave the next clause non-finite.
 """
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
                   clause_form: bool = False) -> str:
@@ -173,6 +177,9 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
         estimate = reach_estimate(r) if datasheet else None
         if estimate is not None:
             row["reach_estimate"] = estimate
+        if r["kind"] == "clause_form":
+            row["form_hint"] = ("finite_clause_starter: biases the continuation toward a "
+                                "finite verb clause where a comma push leaves 'with <name> -ing'")
         offered.append(row)
     return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else "")
                        + ("_clauseform" if clause_form else ""),
