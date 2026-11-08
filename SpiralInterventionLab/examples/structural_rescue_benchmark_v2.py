@@ -18,7 +18,7 @@ import time
 from typing import Any
 
 from ..controllers.factory import create_controller_provider
-from ..runtime import clause_specificity, clause_structure, structural_contract
+from ..runtime import clause_form_gate as syntax_gate, clause_specificity, clause_structure, structural_contract
 from ..runtime.compiler import StepContext, compile_expr
 from ..runtime.policy import validate_command_against_packet
 from ..runtime.response_probe import state_identity, tensor_identity
@@ -65,14 +65,38 @@ applies_to_this_case=true only when the source's second clause is participial
 or relative. Prefer it only when applies_to_this_case is true and a comma push
 would leave the next clause non-finite.
 """
+CLAUSE_FORM_SYNTAX_PROMPT_ADD = """The catalog may also offer clause_form recipes: a bounded readout push
+toward a finite-clause starter. The syntax_v1 controller gate admits these only
+at a complete, source-aligned first delivery clause with a recognized direct
+finite or participial second source clause. Embedded-relative actions with a
+competing matrix predicate and unknown constructions are outside this policy.
+Their starter and equivalent source-readout recipes have been excluded from
+recipes. Choose only an ID in recipes. Applicability describes supported source
+syntax, not a predicted comma continuation, target reach, or content success.
+If the starter target has no measured current gap, its reach is unknown even
+when a calibration reach_estimate is present. You may choose noop.
+"""
+
+
+def check_gate_mode(clause_form: bool, clause_form_gate: str) -> None:
+    if clause_form_gate not in ("legacy", syntax_gate.RULE):
+        raise ValueError("unknown_clause_form_gate")
+    if clause_form_gate != "legacy" and not clause_form:
+        raise ValueError("clause_form_gate_requires_clause_form")
+
+
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-                  clause_form: bool = False) -> str:
+                  clause_form: bool = False, clause_form_gate: str = "legacy") -> str:
+    check_gate_mode(clause_form, clause_form_gate)
+    addendum = (CLAUSE_FORM_SYNTAX_PROMPT_ADD if clause_form_gate == syntax_gate.RULE
+                else CLAUSE_FORM_PROMPT_ADD)
     return (BASE_PROMPT.format(cap=cap) + (DATASHEET_PROMPT_ADD if datasheet else "")
-            + (CLAUSE_FORM_PROMPT_ADD if clause_form else ""))
+            + (addendum if clause_form else ""))
 
 
 def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
-             cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> dict[str, Any]:
+             cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
+             clause_form_gate: str = "legacy") -> dict[str, Any]:
     """The frozen v1 cases by default; screen-selected cases carry their binding."""
     v1 = benchmark_manifest()
     cases = v1["cases"] if case_set is None else candidate_rows(case_set["cases"])
@@ -82,10 +106,16 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
                                        "unknown_pieces": "no_estimate"}}
              if datasheet else {})
     cf = {"clause_form_starters": [" while_finite_clause_starter"]} if clause_form else {}
+    gate = ({"controller_clause_form_gate": {
+        "rule": syntax_gate.RULE, "inputs": ["source_text", "current_generated_tail"],
+        "unknown": "exclude", "scope": "controller_only_including_equivalent_readout_aliases",
+        "control_catalog": "unchanged", "efficacy": "unvalidated_development_policy"}}
+        if clause_form_gate == syntax_gate.RULE else {})
     return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else "")
                        + ("_clauseform" if clause_form else "")
+                       + ("_" + syntax_gate.RULE if gate else "")
                        + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""), **cf,
-            "cases": cases, **sheet,
+            "cases": cases, **sheet, **gate,
             "confirmation_status": (v1["confirmation_status"] if case_set is None
                                     else "selected_by_preregistered_b0_screen"), **selection,
             "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; "
@@ -113,15 +143,18 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
             "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
             "diagnostic_forward_cap_per_policy": 24, "continuation_forward_cap_per_policy": 64,
             "max_controller_calls_per_case": 1, "max_controller_output_tokens": 1600,
-            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet, cap, clause_form).encode()).hexdigest(),
+            "controller_system_prompt_sha256": hashlib.sha256(
+                system_prompt(datasheet, cap, clause_form, clause_form_gate).encode()).hexdigest(),
             "baseline_repeats_before_each_branch": 2, "disk_floor_gib": DISK_FLOOR_GIB,
             "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 
 def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = False,
-                   cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> bytes:
-    return (json.dumps(manifest(case_set, datasheet, cap, clause_form), indent=2, sort_keys=True) + "\n").encode()
+                   cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
+                   clause_form_gate: str = "legacy") -> bytes:
+    return (json.dumps(manifest(case_set, datasheet, cap, clause_form, clause_form_gate),
+                       indent=2, sort_keys=True) + "\n").encode()
 
 
 def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
@@ -129,7 +162,9 @@ def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
 
 
 def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
-                cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> tuple[list[dict], Any, list[dict]]:
+                cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
+                clause_form_gate: str = "legacy") -> tuple[list[dict], Any, list[dict]]:
+    check_gate_mode(clause_form, clause_form_gate)
     sources = structural_contract.eligible_sources(worker, required_terms(task))
     starters = (structural_contract.clause_form_recipes(worker, structural_contract.surface(worker, n_layers - 1), cap=cap)
                 if clause_form else [])
@@ -138,9 +173,15 @@ def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
         extra_readout_token_ids=[r["sources"][0]["token_id"] for r in starters])
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
-    participial = bool(re.search(r"\bwith\b|\bwho\b", task.case.source))
-    for r in starters:
-        r["applies_to_this_case"] = participial
+    if clause_form_gate == syntax_gate.RULE:
+        applicability = syntax_gate.assess(task.case.source, worker.final_text())
+        for r in starters:
+            r.update(applies_to_this_case=applicability["applies"], applicability=deepcopy(applicability))
+    else:
+        # Historical advisory path retained for paired development comparisons.
+        participial = bool(re.search(r"\bwith\b|\bwho\b", task.case.source))
+        for r in starters:
+            r["applies_to_this_case"] = participial
     recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
                + structural_contract.readout_recipes(worker, sources, last, cap=cap) + starters)
     return recipes, policy, sources
@@ -171,7 +212,8 @@ def reach_estimate(recipe: dict) -> dict | None:
 
 def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict,
                    datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-                   clause_form: bool = False) -> dict:
+                   clause_form: bool = False, clause_form_gate: str = "legacy") -> dict:
+    check_gate_mode(clause_form, clause_form_gate)
     keys = ("recipe_id", "kind", "component", "sources", "surface", "relative_write_cap",
             "requested_relative_write", "expected_relative_write")
     offered = []
@@ -185,9 +227,15 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
             row["form_hint"] = ("finite_clause_starter: biases the continuation toward a "
                                 "finite verb clause where a comma push leaves 'with <name> -ing'")
             row["applies_to_this_case"] = r.get("applies_to_this_case", False)
+            if clause_form_gate == syntax_gate.RULE:
+                row["applicability"] = deepcopy(r.get("applicability"))
+                row["form_hint"] = "finite_clause_starter: syntax eligibility does not predict reach or success"
         offered.append(row)
+    gate = ({"controller_gate": controller_gate_record(offered)}
+            if clause_form_gate == syntax_gate.RULE else {})
     return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else "")
-                       + ("_clauseform" if clause_form else ""),
+                       + ("_clauseform" if clause_form else "")
+                       + ("_" + syntax_gate.RULE if gate else ""), **gate,
             "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
             "recipes": offered,
@@ -197,13 +245,34 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
             "production_apply_allowed": False}
 
 
+def controller_gate_record(recipes: list[dict]) -> dict:
+    offered, excluded = syntax_gate.filter_recipes(recipes)
+    return {"rule": syntax_gate.RULE, "scope": "controller_only",
+            "offered_recipe_ids": [r["recipe_id"] for r in offered], "excluded": excluded}
+
+
 def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None],
            datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-           clause_form: bool = False) -> tuple[str | None, dict]:
+           clause_form: bool = False, clause_form_gate: str = "legacy") -> tuple[str | None, dict]:
+    check_gate_mode(clause_form, clause_form_gate)
     if policy in fixed:
         return choose("fixed", packet, fixed_recipe_id=fixed[policy])
-    return choose(policy, packet, provider=provider,
-                  system_prompt=system_prompt(datasheet, cap, clause_form))
+    gate = None
+    if policy == "controller" and clause_form_gate == "legacy" and "controller_gate" in packet:
+        raise ValueError("controller_packet_gate_mismatch")
+    if policy == "controller" and clause_form_gate == syntax_gate.RULE:
+        metadata = packet.get("controller_gate")
+        if not isinstance(metadata, dict) or metadata.get("rule") != syntax_gate.RULE:
+            raise ValueError("controller_packet_gate_mismatch")
+        # Fixed/random comparators retain the canonical catalog. The controller's
+        # schema validation now checks only this filtered payload, before dispatch.
+        packet = deepcopy(packet)
+        gate = controller_gate_record(packet["recipes"])
+        packet["recipes"], _ = syntax_gate.filter_recipes(packet["recipes"])
+        packet["controller_gate"] = gate
+    selected, trace = choose(policy, packet, provider=provider,
+                             system_prompt=system_prompt(datasheet, cap, clause_form, clause_form_gate))
+    return selected, {**trace, **({"controller_gate": gate} if gate is not None else {})}
 
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
@@ -291,6 +360,8 @@ def main(argv=None) -> int:
                         help="relative write cap; non-default values get a separate manifest version")
     parser.add_argument("--clause-form", action="store_true",
                         help="offer a finite-clause starter recipe even when absent from the source")
+    parser.add_argument("--clause-form-gate", choices=("legacy", syntax_gate.RULE), default="legacy",
+                        help="opt-in controller-only syntax gate; legacy preserves the advisory protocol")
     parser.add_argument("--wall-seconds", type=int, default=3600)
     parser.add_argument("--mps-memory-fraction", type=float, default=0.7)
     args = parser.parse_args(argv)
@@ -303,7 +374,7 @@ def main(argv=None) -> int:
     if not 0 < args.cap <= 0.25:
         raise ValueError("cap must be in (0, 0.25]")
     frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap,
-                            clause_form=args.clause_form)
+                            clause_form=args.clause_form, clause_form_gate=args.clause_form_gate)
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -333,6 +404,7 @@ def main(argv=None) -> int:
     code_hashes = capture_sources(output)
     execution = {"manifest_sha256": digest, "device": args.device, "dtype": args.dtype,
                  "datasheet": args.datasheet, "cap": args.cap, "clause_form": args.clause_form,
+                 "clause_form_gate": args.clause_form_gate,
                  "policies": policies, "case_ids": case_ids, "wall_seconds": args.wall_seconds,
                  "mps_memory_fraction": args.mps_memory_fraction,
                  "controller_model": args.controller_model if "controller" in policies else None,
@@ -423,11 +495,12 @@ def main(argv=None) -> int:
                 if observation["status"] != "ok":
                     raise RuntimeError("structure_observation_failed")
                 recipes, policy, sources = catalog_for(worker, task, n_layers, cap=args.cap,
-                                                       clause_form=args.clause_form)
+                                                       clause_form=args.clause_form,
+                                                       clause_form_gate=args.clause_form_gate)
                 fixed = fixed_ids(recipes)
                 packet = compact_packet(worker, recipes, case.case_id, observation,
                                         datasheet=args.datasheet, cap=args.cap,
-                                        clause_form=args.clause_form)
+                                        clause_form=args.clause_form, clause_form_gate=args.clause_form_gate)
                 (output / (case.case_id + "_observation.json")).write_text(json.dumps(packet, indent=2))
                 row.update(comparison_eligible=True, shared_setup_forwards=deepcopy(meter.counts),
                            eligible_sources=[{k: s[k] for k in ("token_id", "piece", "source_positions")}
@@ -442,7 +515,8 @@ def main(argv=None) -> int:
                     meter.check_limits()
                     selected_id, trace = select(name, packet, provider=provider, fixed=fixed,
                                                 datasheet=args.datasheet, cap=args.cap,
-                                                clause_form=args.clause_form)
+                                                clause_form=args.clause_form,
+                                                clause_form_gate=args.clause_form_gate)
                     recipe = next((r for r in recipes if r["recipe_id"] == selected_id), None)
                     meter.reset("diagnostic")
                     outcome = {"selection": trace, "selected_recipe_id": selected_id}
