@@ -406,6 +406,28 @@ failures need, and a token-level readout push cannot express it; (2) verb
 substitutions (`finishes her drawing`) need a richer action surface or a
 content-preservation check beyond lexical terms.
 
+### Clause-form starter (rescue_v3 rerun)
+
+`--clause-form` adds one bounded readout push toward ` while`, provenance
+`clause_form_starter`, offered even when the lexeme is absent from the source,
+plus a `fixed_clause_form` policy. Rerun at cap 0.12 + datasheet (manifest
+`4ef1be4a…`, `results/structural_rescue_clauseform_v3_20261108/`, 1000 s):
+
+- **fixed_clause_form: 7/12** — every win is a participle-family case flipped
+  from `with X -ing` to `while X <finite>` (`gen_018`, `gen_058`, `gen_068`,
+  `gen_073`, `gen_078`, `gen_088`, plus `gen_017`). Clause-form steering works.
+- Controller: 2/12, identical to the readout-only run. It never picked the
+  starter — the datasheet reach estimate tells it `,` flips the first token
+  (true), but nothing in the packet distinguishes "flips and keeps the
+  clause non-finite" from "flips into a finite clause".
+- Random hit the starter once by chance (`gen_088`); patch only `gen_017`.
+
+So the next bottleneck is **controller information**: the starter's advantage
+is about the *form* of the continuation, which reach estimates do not encode.
+A `clause_form`-aware datasheet line (e.g., "starters bias toward finite
+clauses where the generated tail already ends in `with`") is the smallest
+honest probe; claiming a selection rule from 8 cases is not.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
