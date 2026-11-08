@@ -60,8 +60,9 @@ gap_to_top1 cannot flip the first token; prefer a reachable recipe over an unrea
 CLAUSE_FORM_PROMPT_ADD = """The catalog may also offer clause_form recipes: a readout push toward a
 finite-clause starter token that is not required to appear in the source.
 A clause_form starter biases the continuation toward a finite clause ("while X
-verbs") where a plain comma invites a participle ("with X -ing"); prefer it
-when the generated tail already ends in a clause-final word and a comma push
+verbs") where a plain comma invites a participle ("with X -ing"); it carries
+applies_to_this_case=true only when the source's second clause is participial
+or relative. Prefer it only when applies_to_this_case is true and a comma push
 would leave the next clause non-finite.
 """
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
@@ -137,6 +138,9 @@ def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
         extra_readout_token_ids=[r["sources"][0]["token_id"] for r in starters])
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
+    participial = bool(re.search(r"\bwith\b|\bwho\b", task.case.source))
+    for r in starters:
+        r["applies_to_this_case"] = participial
     recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
                + structural_contract.readout_recipes(worker, sources, last, cap=cap) + starters)
     return recipes, policy, sources
@@ -180,6 +184,7 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
         if r["kind"] == "clause_form":
             row["form_hint"] = ("finite_clause_starter: biases the continuation toward a "
                                 "finite verb clause where a comma push leaves 'with <name> -ing'")
+            row["applies_to_this_case"] = r.get("applies_to_this_case", False)
         offered.append(row)
     return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else "")
                        + ("_clauseform" if clause_form else ""),

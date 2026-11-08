@@ -10,6 +10,14 @@ from typing import Any
 from .language_tasks import SpiralConstrainedRewriteEnv, _contains_term, _strip_output, _word_count
 from .role_binding import action_forms, check_role_frames
 
+# Substitution evidence: common verbs a 3B model substitutes for the required
+# action. Small closed list — anything else stays a plain incomplete_frame.
+_COMMON_ENGLISH_VERBS = frozenset({
+    "finish", "finishes", "finished", "complete", "completes", "completed",
+    "make", "makes", "made", "do", "does", "done", "get", "gets", "got",
+    "handle", "handles", "handled", "fix", "fixes", "fixed", "prepare", "prepares",
+})
+
 
 @dataclass(frozen=True)
 class RescueCase:
@@ -93,6 +101,19 @@ class StructuralRescueEnv(SpiralConstrainedRewriteEnv):
                 unknown.append("repeated_action:" + frame[1])
             if report["status"] in {"action_missing", "partially_bound"}:
                 unknown.append("incomplete_frame:" + frame[1])
+            # Name the substitution when a different verb occupies the slot
+            # ("finishes her drawing"), and a possessive when the recipient
+            # is folded into the theme ("Felix's permit").
+            if report["status"] in {"action_missing", "partially_bound"} and re.search(
+                    re.escape(str(frame[3]).casefold()) + r"'s\b", output.casefold()):
+                unknown.append("recipient_possessive:" + frame[3])
+        # Substituted actions are tagged even when the frame binds a wrong
+        # action ("finishes roster" reads as a send of roster by the checker).
+        window = re.findall(r"[a-z]+", re.sub(r"'s\b", "", output.casefold()))
+        alien = sorted({w for w in window if w in _COMMON_ENGLISH_VERBS
+                        and all(w not in action_forms(str(f[1])) for f in self.case.frames)})
+        if alien and (roles["role_violations"] or unknown):
+            unknown.append("action_substituted:" + ",".join(alien))
         # The nearest-agent heuristic cannot establish subjects of passives or
         # relative clauses. Preserve uncertainty instead of promoting a lexical pass.
         if re.search(r"\b(who|whom|whose|which|by)\b", output, re.I):
