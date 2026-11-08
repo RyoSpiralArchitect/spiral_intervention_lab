@@ -33,6 +33,7 @@ from .structural_rescue_screen import DISK_FLOOR_GIB, load_selected_cases
 
 
 POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
+CLAUSE_FORM_POLICIES = ("b0", "fixed", "fixed_readout", "fixed_clause_form", "random", "controller")
 RELATIVE_WRITE_CAP = structural_contract.DEFAULT_RELATIVE_WRITE_CAP
 # Half-precision rounding of the clipped write; telemetry reports the realized norm.
 CAST_TOLERANCE = 2e-3
@@ -56,12 +57,17 @@ gap_to_top1 cannot flip the first token; prefer a reachable recipe over an unrea
 """
 
 
-def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP) -> str:
-    return BASE_PROMPT.format(cap=cap) + (DATASHEET_PROMPT_ADD if datasheet else "")
+CLAUSE_FORM_PROMPT_ADD = """The catalog may also offer clause_form recipes: a readout push toward a
+finite-clause starter token that is not required to appear in the source.
+"""
+def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
+                  clause_form: bool = False) -> str:
+    return (BASE_PROMPT.format(cap=cap) + (DATASHEET_PROMPT_ADD if datasheet else "")
+            + (CLAUSE_FORM_PROMPT_ADD if clause_form else ""))
 
 
 def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
-             cap: float = RELATIVE_WRITE_CAP) -> dict[str, Any]:
+             cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> dict[str, Any]:
     """The frozen v1 cases by default; screen-selected cases carry their binding."""
     v1 = benchmark_manifest()
     cases = v1["cases"] if case_set is None else candidate_rows(case_set["cases"])
@@ -70,8 +76,10 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
                                        "reach_basis": structural_contract.REACH_BASIS,
                                        "unknown_pieces": "no_estimate"}}
              if datasheet else {})
+    cf = {"clause_form_starters": [" while_finite_clause_starter"]} if clause_form else {}
     return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else "")
-                       + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""),
+                       + ("_clauseform" if clause_form else "")
+                       + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""), **cf,
             "cases": cases, **sheet,
             "confirmation_status": (v1["confirmation_status"] if case_set is None
                                     else "selected_by_preregistered_b0_screen"), **selection,
@@ -83,12 +91,14 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
                          "cast_tolerance": CAST_TOLERANCE,
                          "structural_lexemes": sorted(clause_structure.SOURCE_LEXEMES),
                          "protected_rule": "structural_lexemes_inside_required_terms",
-                         "source_rule": "first_three_eligible_source_tokens_in_source_order",
+                         "source_rule": "first_three_eligible_source_tokens_in_source_order"
+                           + ("_plus_clause_form_starters" if clause_form else ""),
                          "patch_layer_rule": "n_layers//2", "patch_components": list(structural_contract.PATCH_COMPONENTS),
                          "patch_alpha": structural_contract.PATCH_ALPHA,
                          "readout_layer_rule": "n_layers-1", "readout_alpha_rule": "cap*||h_boundary||"},
             "max_words": v1["max_words"], "max_generated_tokens": v1["max_generated_tokens"],
-            "boundary_rule": v1["boundary_rule"], "policies": list(POLICIES), "policy_seeds": [17],
+            "boundary_rule": v1["boundary_rule"],
+            "policies": list(CLAUSE_FORM_POLICIES if clause_form else POLICIES), "policy_seeds": [17],
             "evaluator": {"role_check_scope":
                           "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar",
                           "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations"},
@@ -98,15 +108,15 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
             "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
             "diagnostic_forward_cap_per_policy": 24, "continuation_forward_cap_per_policy": 64,
             "max_controller_calls_per_case": 1, "max_controller_output_tokens": 1600,
-            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet, cap).encode()).hexdigest(),
+            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet, cap, clause_form).encode()).hexdigest(),
             "baseline_repeats_before_each_branch": 2, "disk_floor_gib": DISK_FLOOR_GIB,
             "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 
 def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = False,
-                   cap: float = RELATIVE_WRITE_CAP) -> bytes:
-    return (json.dumps(manifest(case_set, datasheet, cap), indent=2, sort_keys=True) + "\n").encode()
+                   cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> bytes:
+    return (json.dumps(manifest(case_set, datasheet, cap, clause_form), indent=2, sort_keys=True) + "\n").encode()
 
 
 def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
@@ -114,25 +124,31 @@ def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
 
 
 def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
-                cap: float = RELATIVE_WRITE_CAP) -> tuple[list[dict], Any, list[dict]]:
+                cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> tuple[list[dict], Any, list[dict]]:
     sources = structural_contract.eligible_sources(worker, required_terms(task))
-    policy = structural_contract.policy_for(worker, required_terms(task), cap=cap)
+    starters = (structural_contract.clause_form_recipes(worker, structural_contract.surface(worker, n_layers - 1), cap=cap)
+                if clause_form else [])
+    policy = structural_contract.policy_for(
+        worker, required_terms(task), cap=cap,
+        extra_readout_token_ids=[r["sources"][0]["token_id"] for r in starters])
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
     recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
-               + structural_contract.readout_recipes(worker, sources, last, cap=cap))
+               + structural_contract.readout_recipes(worker, sources, last, cap=cap) + starters)
     return recipes, policy, sources
 
 
 def fixed_ids(recipes: list[dict]) -> dict[str, str | None]:
     patch = next((r for r in recipes if r["kind"] == "patch" and r["component"] == "common_orthogonal"), None)
     push = next((r for r in recipes if r["kind"] == "readout"), None)
-    return {"fixed": patch and patch["recipe_id"], "fixed_readout": push and push["recipe_id"]}
+    starter = next((r for r in recipes if r["kind"] == "clause_form"), None)
+    return {"fixed": patch and patch["recipe_id"], "fixed_readout": push and push["recipe_id"],
+            "fixed_clause_form": starter and starter["recipe_id"]}
 
 
 def reach_estimate(recipe: dict) -> dict | None:
     """Calibration-measured gap closure for a readout target, or None if unmeasured."""
-    if recipe["kind"] != "readout":
+    if recipe["kind"] not in ("readout", "clause_form"):
         return None
     slope = structural_contract.READOUT_CLOSURE_SLOPE.get(recipe["sources"][0]["piece"])
     if slope is None:
@@ -146,7 +162,8 @@ def reach_estimate(recipe: dict) -> dict | None:
 
 
 def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict,
-                   datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP) -> dict:
+                   datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
+                   clause_form: bool = False) -> dict:
     keys = ("recipe_id", "kind", "component", "sources", "surface", "relative_write_cap",
             "requested_relative_write", "expected_relative_write")
     offered = []
@@ -157,7 +174,8 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
         if estimate is not None:
             row["reach_estimate"] = estimate
         offered.append(row)
-    return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else ""),
+    return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else "")
+                       + ("_clauseform" if clause_form else ""),
             "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
             "recipes": offered,
@@ -168,10 +186,12 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
 
 
 def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None],
-           datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP) -> tuple[str | None, dict]:
+           datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
+           clause_form: bool = False) -> tuple[str | None, dict]:
     if policy in fixed:
         return choose("fixed", packet, fixed_recipe_id=fixed[policy])
-    return choose(policy, packet, provider=provider, system_prompt=system_prompt(datasheet, cap))
+    return choose(policy, packet, provider=provider,
+                  system_prompt=system_prompt(datasheet, cap, clause_form))
 
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
@@ -250,13 +270,15 @@ def main(argv=None) -> int:
     parser.add_argument("--dtype", default="float16", choices=("float16", "float32"))
     parser.add_argument("--controller-provider", choices=("openai",), default="openai")
     parser.add_argument("--controller-model", default="gpt-5.6-luna")
-    parser.add_argument("--policies", default=",".join(POLICIES))
+    parser.add_argument("--policies", default=None)
     parser.add_argument("--case-ids")
     parser.add_argument("--screen-dir", type=Path, help="run the cases a frozen B0 screen selected")
     parser.add_argument("--datasheet", action="store_true",
                         help="offer calibration-measured readout reach estimates to the controller")
     parser.add_argument("--cap", type=float, default=RELATIVE_WRITE_CAP,
                         help="relative write cap; non-default values get a separate manifest version")
+    parser.add_argument("--clause-form", action="store_true",
+                        help="offer a finite-clause starter recipe even when absent from the source")
     parser.add_argument("--wall-seconds", type=int, default=3600)
     parser.add_argument("--mps-memory-fraction", type=float, default=0.7)
     args = parser.parse_args(argv)
@@ -268,7 +290,8 @@ def main(argv=None) -> int:
         case_set = {"cases": cases, "binding": binding}
     if not 0 < args.cap <= 0.25:
         raise ValueError("cap must be in (0, 0.25]")
-    frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap)
+    frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap,
+                            clause_form=args.clause_form)
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -279,9 +302,11 @@ def main(argv=None) -> int:
         raise ValueError("predeclared_manifest_hash_required_and_must_match")
     if args.worker_model_path is None or args.checkpoint_manifest is None:
         parser.error("--run requires local model and checkpoint manifest")
-    policies = args.policies.split(",")
+    policies = (args.policies
+                or ",".join(CLAUSE_FORM_POLICIES if args.clause_form else POLICIES)).split(",")
     case_ids = args.case_ids.split(",") if args.case_ids else [c.case_id for c in cases]
-    if (set(policies) - set(POLICIES) or policies[0] != "b0"
+    allowed = set(CLAUSE_FORM_POLICIES if args.clause_form else POLICIES)
+    if (set(policies) - allowed or policies[0] != "b0"
             or len(set(policies)) != len(policies) or len(set(case_ids)) != len(case_ids)
             or set(case_ids) - {c.case_id for c in cases}):
         raise ValueError("unknown or duplicate policy/case, or missing b0")
@@ -295,7 +320,7 @@ def main(argv=None) -> int:
             raise FileExistsError(path)
     code_hashes = capture_sources(output)
     execution = {"manifest_sha256": digest, "device": args.device, "dtype": args.dtype,
-                 "datasheet": args.datasheet, "cap": args.cap,
+                 "datasheet": args.datasheet, "cap": args.cap, "clause_form": args.clause_form,
                  "policies": policies, "case_ids": case_ids, "wall_seconds": args.wall_seconds,
                  "mps_memory_fraction": args.mps_memory_fraction,
                  "controller_model": args.controller_model if "controller" in policies else None,
@@ -312,7 +337,7 @@ def main(argv=None) -> int:
 
     def persist():
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
-        report["aggregate"] = aggregate(report["cases"], policies=POLICIES, splits=splits)
+        report["aggregate"] = aggregate(report["cases"], policies=policies, splits=splits)
         temp = result_path.with_suffix(".tmp")
         temp.write_text(json.dumps(report, indent=2, default=str) + "\n")
         temp.replace(result_path)
@@ -385,10 +410,12 @@ def main(argv=None) -> int:
                 observation = worker.request_controller_diagnostics(clause_structure.offer(worker)["request"])[0]
                 if observation["status"] != "ok":
                     raise RuntimeError("structure_observation_failed")
-                recipes, policy, sources = catalog_for(worker, task, n_layers, cap=args.cap)
+                recipes, policy, sources = catalog_for(worker, task, n_layers, cap=args.cap,
+                                                       clause_form=args.clause_form)
                 fixed = fixed_ids(recipes)
                 packet = compact_packet(worker, recipes, case.case_id, observation,
-                                        datasheet=args.datasheet, cap=args.cap)
+                                        datasheet=args.datasheet, cap=args.cap,
+                                        clause_form=args.clause_form)
                 (output / (case.case_id + "_observation.json")).write_text(json.dumps(packet, indent=2))
                 row.update(comparison_eligible=True, shared_setup_forwards=deepcopy(meter.counts),
                            eligible_sources=[{k: s[k] for k in ("token_id", "piece", "source_positions")}
@@ -402,7 +429,8 @@ def main(argv=None) -> int:
                 for name in policies:
                     meter.check_limits()
                     selected_id, trace = select(name, packet, provider=provider, fixed=fixed,
-                                                datasheet=args.datasheet, cap=args.cap)
+                                                datasheet=args.datasheet, cap=args.cap,
+                                                clause_form=args.clause_form)
                     recipe = next((r for r in recipes if r["recipe_id"] == selected_id), None)
                     meter.reset("diagnostic")
                     outcome = {"selection": trace, "selected_recipe_id": selected_id}

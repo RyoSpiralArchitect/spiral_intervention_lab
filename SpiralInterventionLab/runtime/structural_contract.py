@@ -63,12 +63,14 @@ def eligible_sources(worker: Any, required_terms: Sequence[str]) -> list[dict[st
 
 
 def policy_for(worker: Any, required_terms: Sequence[str], *,
-               cap: float = DEFAULT_RELATIVE_WRITE_CAP) -> HarnessPolicy:
+               cap: float = DEFAULT_RELATIVE_WRITE_CAP,
+               extra_readout_token_ids: Sequence[int] = ()) -> HarnessPolicy:
     """Default policy plus a contract whose allowlist is this prompt's structure."""
     sources = eligible_sources(worker, required_terms)
     return HarnessPolicy(write_contract=WriteContract(
         relative_write_cap=float(cap),
-        readout_token_ids=tuple(int(c["token_id"]) for c in sources),
+        readout_token_ids=tuple(int(c["token_id"]) for c in sources)
+                          + tuple(int(t) for t in extra_readout_token_ids),
         source_positions=tuple(int(p) for c in sources for p in c["source_positions"]),
     ))
 
@@ -147,6 +149,26 @@ def readout_recipes(worker: Any, sources: Sequence[Mapping[str, Any]], where: Ma
             "requested_relative_write": float(cap), "expected_relative_write": float(cap),
             "input_identity": tensor_identity(compile_expr(expression)(ctx).detach().cpu())}))
     return recipes
+
+
+def clause_form_recipes(worker: Any, where: Mapping[str, Any], *,
+                        cap: float = DEFAULT_RELATIVE_WRITE_CAP) -> list[dict[str, Any]]:
+    """Finite-clause starters absent from the source: a push toward ` while`
+    that asks for a finite continuation where a comma invites `with X -ing`."""
+    ctx = _context(worker)
+    site_norm = float(compile_expr(_ref(worker, where, {"mode": "last"}))(ctx).detach().cpu().double().norm())
+    token_ids = worker.codec.encode(" while").detach().reshape(-1).tolist()
+    if len(token_ids) != 1:
+        raise ValueError("clause_form_starter_not_one_token")
+    view = {"token_id": int(token_ids[0]), "piece": " while", "source_positions": [],
+            "provenance": "clause_form_starter"}
+    expression = {"fn": "readout_direction", "target_token_ids": [view["token_id"]], "normalize": True}
+    return [_finish({
+        "contract": CONTRACT, "kind": "clause_form", "component": "readout", "surface": dict(where),
+        "sources": [view], "source_expression": expression, "op": "resid_add",
+        "alpha": float(cap) * site_norm, "relative_write_cap": float(cap), "site_norm": site_norm,
+        "requested_relative_write": float(cap), "expected_relative_write": float(cap),
+        "input_identity": tensor_identity(compile_expr(expression)(ctx).detach().cpu())})]
 
 
 def command(recipe: Mapping[str, Any]) -> dict[str, Any]:
