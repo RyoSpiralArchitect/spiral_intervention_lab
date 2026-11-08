@@ -1,0 +1,162 @@
+{
+  "comparison": {
+    "analysis": "paired_descriptive_counts_by_case_and_source_construction; report_gains_losses_and_unavailable_cases",
+    "arm_order": [
+      "legacy",
+      "syntax_v1"
+    ],
+    "control_catalog": "unchanged_complete_catalog_in_both_arms",
+    "controller_arms": [
+      "legacy",
+      "syntax_v1"
+    ],
+    "controller_calls_per_case_per_arm": 1,
+    "mechanism_measures": [
+      "requested_recipe",
+      "gate_exclusions_or_rejection",
+      "first_token_target_reach",
+      "role_status_and_action_preservation",
+      "joint_success"
+    ],
+    "no_retuning_after_verification": true,
+    "primary": "original_evaluator_joint_success",
+    "retry_policy": "zero_retries; record_errors_without_outcome_based_replacement",
+    "shared_controls": [
+      "b0",
+      "fixed",
+      "fixed_readout",
+      "fixed_clause_form",
+      "random"
+    ]
+  },
+  "controller": {
+    "max_output_tokens": 1600,
+    "max_retries": 0,
+    "model": "gpt-5.6-luna",
+    "provider": "openai",
+    "record_provider_revision_metadata": true,
+    "snapshot_alias_unavailable": "stop_and_version_deviation_before_running; no_silent_model_substitution",
+    "system_prompt_sha256": {
+      "legacy": "7a1b54a892f892a3f00aeb7ea898b36a366c3db60bb2a678ea8bbe1663c63697",
+      "syntax_v1": "e7e43b4c6c8394bcd139d3ac25beae4a2b1fd2ab6993a2799ef66450df8512bf"
+    },
+    "timeout_seconds": 90
+  },
+  "development": {
+    "case_ids": [
+      "gen_008",
+      "gen_017",
+      "gen_018",
+      "gen_028",
+      "gen_039",
+      "gen_058",
+      "gen_059",
+      "gen_068",
+      "gen_073",
+      "gen_074",
+      "gen_078",
+      "gen_088"
+    ],
+    "manifest_path": "results/structural_rescue_clauseform_ds_v3_20261108/manifest.json",
+    "manifest_sha256": "76fc0dd072500512e2add5ac678f0450b17ec35329c64963b396eb00246cd252",
+    "role": "inspected_regression_and_development_only"
+  },
+  "execution_requirements": [
+    "Prepare both exact benchmark manifests and execution plans from these fixed inputs before any model call.",
+    "Use separate output directories; never overwrite historical receipts.",
+    "Save the complete source archive and verify all source, prompt, checkpoint and input hashes.",
+    "The existing CLI screen selector must not be used to screen these 120 independent cases by B0 outcome; an all-case input adapter is required before execution.",
+    "If code, evaluator, prompts, inputs, or model settings need changing, version the protocol before looking at new continuations."
+  ],
+  "independent": {
+    "boundary_unavailable": "retain_in_coverage_and_full_denominator; record_available_boundary_paired_analysis_separately",
+    "candidate_digest_serialization": "json.dumps(candidate_rows, indent=2, sort_keys=True) + newline; utf-8",
+    "candidate_rows_sha256": "07b7bedf62166cd2545a235ab34d3c1589a648f4015cbdb3645dbfbcc6aa5343",
+    "case_id_rule": "gate_independent_{index:03d}",
+    "count": 120,
+    "exact_source_overlap_count": 0,
+    "families": [
+      "purpose_first",
+      "deadline_first",
+      "purpose_last",
+      "participle_second",
+      "relative_agent"
+    ],
+    "generator": "structural_rescue_generator_v3",
+    "input_selection": "all_120_in_generator_order_no_outcome_screening",
+    "prior_screen_manifest_sha256": {
+      "results/structural_rescue_contract_20261103/screen/manifest.json": "e018bbcc917a79513ab88e4b28f5542447a1db5d324de54df3d1a176351416cf",
+      "results/structural_rescue_contract_20261103/screen_r2/manifest.json": "e018bbcc917a79513ab88e4b28f5542447a1db5d324de54df3d1a176351416cf",
+      "results/structural_rescue_screen_v2_20261106/manifest.json": "789b6d68ffbdb96221276a2aef149f7322aa835bc09958e6ff315a0f01bbfc46",
+      "results/structural_rescue_screen_v2_20261106_attempt1_disk/manifest.json": "789b6d68ffbdb96221276a2aef149f7322aa835bc09958e6ff315a0f01bbfc46",
+      "results/structural_rescue_screen_v3_20261107/manifest.json": "f4e86bb18d47071fced61bb58bba35ccbddc045ad04fc2c034a2e19d7f72627f"
+    },
+    "prior_unique_sources_checked": 321,
+    "role": "prospective_same_generator_verification",
+    "seed": 2026110901,
+    "split": "gate_independent_v1",
+    "verbs": [
+      "send",
+      "take",
+      "bring",
+      "give"
+    ]
+  },
+  "model_experiment_calls": 0,
+  "prepared_on": "2026-11-09",
+  "required_model_run_environment": {
+    "openai": "3.46.0",
+    "torch": "2.12.1",
+    "transformer-lens": "3.5.1",
+    "transformers": "5.13.0"
+  },
+  "resources": {
+    "case_shard_size": 12,
+    "disk_floor_gib": 6,
+    "incomplete_shard": "retain_attempts_and_report_incomplete; any_rerun_has_a_new_receipt_and_keeps_prior_attempts",
+    "mps_memory_fraction": 0.85,
+    "shard_rule": "consecutive_generator_order_chunks_of_12; development_one_shard, independent_ten_shards; no_outcome_based_reordering",
+    "wall_seconds_per_shard": 7200
+  },
+  "scope": "no_new_success_rate; same_template_input_generalization_only; shared_worker_and_model_alias_limit_reproducibility",
+  "source_sha256": {
+    "SpiralInterventionLab/examples/structural_rescue_benchmark.py": "80678e550245a13ed07d99f6136217dc199e80706b2c80b02687e13c65205901",
+    "SpiralInterventionLab/examples/structural_rescue_benchmark_v2.py": "de68a69b95e2cccbf3839d40b37df4e246457a3c6ed0b6a73ee2a9e1e89ee1f9",
+    "SpiralInterventionLab/runtime/clause_form_gate.py": "3e3732510d6445e921d348d08b7fa7bf6d23bfcbcfc8210101e22fb592ffd4ed",
+    "SpiralInterventionLab/runtime/structural_contract.py": "2195b51f7724d385a2fbc174f76f403f7ebb23d190d6568360b096f6b1e4f34e",
+    "SpiralInterventionLab/tasks/language_tasks.py": "e64a44a72a2b8aa5361c8035d93e872a7376a2ed2dc1da3c39a5f977d3b289d6",
+    "SpiralInterventionLab/tasks/role_binding.py": "4fbb4880394dc63f90b765ed8c239ad0d11a70ac6e8b42d4266941713fcf6cca",
+    "SpiralInterventionLab/tasks/structural_rescue.py": "a0602034d7d34ba185bd08ffdac41d7cf9087b94913407c003f2bfc790215826",
+    "SpiralInterventionLab/tasks/structural_rescue_generator.py": "8bc411f27a80122d71a07e462a6bf55e427fbbce3ce27922c1f94f5598d4df8e"
+  },
+  "status": "frozen_specification_not_executed",
+  "version": "clause_form_gate_validation_v1",
+  "worker": {
+    "baseline_repeats": 2,
+    "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+    "checkpoint_sha256": {
+      "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+      "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+      "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+      "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+      "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+      "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+      "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+      "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+    },
+    "continuation_forwards_per_policy": 64,
+    "decoding": "greedy",
+    "device": "mps",
+    "diagnostic_forwards_per_policy": 24,
+    "dtype": "float16",
+    "edits_per_branch": 1,
+    "max_case_setup_tokens": 32,
+    "max_generated_tokens": 64,
+    "max_words": 18,
+    "model": "meta-llama/Llama-3.2-3B-Instruct",
+    "policy_seed": 17,
+    "relative_write_cap": 0.12,
+    "ttl_steps": 1,
+    "worker_seed": 0
+  }
+}
