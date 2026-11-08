@@ -70,7 +70,7 @@ def test_fixed_rules_pick_first_pair_orthogonal_and_first_source_readout():
     assert patch_recipe["component"] == "common_orthogonal"
     assert [s["piece"] for s in patch_recipe["sources"]] == [",", " while"]
     assert push["kind"] == "readout" and push["sources"][0]["piece"] == ","
-    assert v2.fixed_ids([]) == {"fixed": None, "fixed_readout": None}
+    assert v2.fixed_ids([]) == {"fixed": None, "fixed_readout": None, "fixed_clause_form": None}
 
 
 def test_datasheet_manifest_is_a_separate_frozen_version():
