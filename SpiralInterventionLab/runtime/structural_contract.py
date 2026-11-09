@@ -171,6 +171,32 @@ def clause_form_recipes(worker: Any, where: Mapping[str, Any], *,
         "input_identity": tensor_identity(compile_expr(expression)(ctx).detach().cpu())})]
 
 
+def verb_slot_recipe(worker: Any, where: Mapping[str, Any], *,
+                     cap: float = DEFAULT_RELATIVE_WRITE_CAP,
+                     token_id: int, piece: str, apply_at_step: int,
+                     pre_roll_token_ids: Sequence[int],
+                     substituted_piece: str) -> list[dict[str, Any]]:
+    """Readout push toward an inflected required-action token, applied at the
+    b0 continuation's substituted-verb slot instead of at the boundary. The
+    pre-roll replays the observed b0 prefix so the push lands on the same
+    residual position the substitution occupied."""
+    ctx = _context(worker)
+    site_norm = float(compile_expr(_ref(worker, where, {"mode": "last"}))(ctx).detach().cpu().double().norm())
+    view = {"token_id": int(token_id), "piece": piece, "source_positions": [],
+            "provenance": "verb_slot_required_action"}
+    expression = {"fn": "readout_direction", "target_token_ids": [view["token_id"]], "normalize": True}
+    return [_finish({
+        "contract": CONTRACT, "kind": "verb_slot", "component": "readout", "surface": dict(where),
+        "sources": [view], "source_expression": expression, "op": "resid_add",
+        "alpha": float(cap) * site_norm, "relative_write_cap": float(cap), "site_norm": site_norm,
+        "requested_relative_write": float(cap), "expected_relative_write": float(cap),
+        "apply_at_step": int(apply_at_step),
+        "pre_roll_token_ids": [int(t) for t in pre_roll_token_ids],
+        "verb_slot": {"substituted_piece": substituted_piece},
+        "applies_to_this_case": True,
+        "input_identity": tensor_identity(compile_expr(expression)(ctx).detach().cpu())})]
+
+
 def command(recipe: Mapping[str, Any]) -> dict[str, Any]:
     """One revertible, one-token edit; no absolute step, so the guard is the cap."""
     op = ({"kind": "activation_patch", "mode": "blend", "alpha": recipe["alpha"]}

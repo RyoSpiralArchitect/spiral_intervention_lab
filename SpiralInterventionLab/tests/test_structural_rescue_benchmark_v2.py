@@ -70,7 +70,8 @@ def test_fixed_rules_pick_first_pair_orthogonal_and_first_source_readout():
     assert patch_recipe["component"] == "common_orthogonal"
     assert [s["piece"] for s in patch_recipe["sources"]] == [",", " while"]
     assert push["kind"] == "readout" and push["sources"][0]["piece"] == ","
-    assert v2.fixed_ids([]) == {"fixed": None, "fixed_readout": None, "fixed_clause_form": None}
+    assert v2.fixed_ids([]) == {"fixed": None, "fixed_readout": None, "fixed_clause_form": None,
+                                "fixed_verb_slot": None}
 
 
 def test_clause_form_gate_is_recorded_and_matches_only_the_participial_template():
@@ -83,6 +84,29 @@ def test_clause_form_gate_is_recorded_and_matches_only_the_participial_template(
                 "who should give the drawing to Tilda, also finishes.")
     assert v2.clause_form_applies(participial) and not v2.clause_form_applies(relative)
     assert v2.manifest_bytes(clause_form=True) == v2.manifest_bytes(clause_form=True)
+
+
+def test_verb_slot_plan_locates_the_substituted_verb_and_inflected_target():
+    import torch
+    pieces = {1: " before", 2: " Boris", 3: " finishes", 4: " roster"}
+    codec = SimpleNamespace(decode=lambda ids: pieces.get(ids[0], " ?"),
+                            encode=lambda s: torch.tensor([5097]))
+    worker = SimpleNamespace(codec=codec, _simulate_decode=lambda **kw: {
+        "continuation_token_ids": [1, 2, 3, 4]})
+    task = SimpleNamespace(case=SimpleNamespace(
+        frames=[("Pablo", "send", "receipt", "Nikos"), ("Boris", "take", "roster", "Edda")]))
+    plan = v2.verb_slot_plan(worker, task)
+    assert plan["apply_at_step"] == 2 and plan["pre_roll_token_ids"] == [1, 2]
+    assert plan["substituted_piece"] == " finishes" and plan["target_piece"] == " takes"
+    worker._simulate_decode = lambda **kw: {"continuation_token_ids": [1, 2, 4]}
+    assert v2.verb_slot_plan(worker, task) is None
+
+
+def test_verb_slot_manifest_records_the_rule_and_its_own_policy():
+    vs = v2.manifest(verb_slot=True)
+    assert vs["verb_slot_rule"] == v2.VERB_SLOT_RULE and "fixed_verb_slot" in vs["policies"]
+    assert vs["version"].endswith("_clauseform_verbslot")
+    assert "verb_slot_rule" not in v2.manifest(clause_form=True)
 
 
 def test_datasheet_manifest_is_a_separate_frozen_version():

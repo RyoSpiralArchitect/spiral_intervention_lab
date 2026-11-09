@@ -19095,10 +19095,25 @@ class HookedTransformerWorkerRuntime:
         top_k: int,
         command: Mapping[str, Any] | None = None,
         policy_override: HarnessPolicy | None = None,
+        apply_at_step: int = 0,
+        pre_roll_token_ids: Sequence[int] | None = None,
         score_candidate_text: bool = True,
         score_observer_check: bool = True,
     ) -> dict[str, Any] | None:
         if max_new_tokens <= 0:
+            return None
+        apply_at_step = int(apply_at_step)
+        pre_roll = [int(t) for t in (pre_roll_token_ids or ())]
+        if apply_at_step < 0 or apply_at_step > len(pre_roll):
+            self._last_simulate_decode_error = "apply_at_step_outside_pre_roll"
+            return None
+        if command is not None and apply_at_step != len(pre_roll):
+            # A scheduled edit must land exactly where the replay ends; forcing
+            # tokens past that point would smuggle output the model never chose.
+            self._last_simulate_decode_error = "apply_at_step_must_equal_pre_roll_length_when_commanded"
+            return None
+        if command is not None and apply_at_step >= max_new_tokens:
+            self._last_simulate_decode_error = "apply_at_step_beyond_decode_budget"
             return None
         self._last_simulate_decode_error = None
         saved_segments = [_TokenSegment(kind=segment.kind, token_ids=list(segment.token_ids)) for segment in self._segments]
@@ -19112,7 +19127,7 @@ class HookedTransformerWorkerRuntime:
         temporary_edits = []
         expired_telemetry = []
         try:
-            if command is not None:
+            def _apply_command(applied_at: int) -> None:
                 if getattr(self.runtime_state, "last_cache", None) is None:
                     primer_tokens = self._current_token_tensor()
                     self.runtime_state.run_with_cache(primer_tokens, return_type="logits")
@@ -19146,7 +19161,10 @@ class HookedTransformerWorkerRuntime:
                 compiled = compile_command(command, packet, ctx, policy=policy_override)
                 for item in compiled:
                     item.apply(ctx)
-                    temporary_edits.append((item, ctx))
+                    temporary_edits.append((item, ctx, applied_at))
+
+            if command is not None and apply_at_step == 0:
+                _apply_command(0)
 
             baseline_output_len = len(self._output_token_ids())
             first_logits: torch.Tensor | None = None
@@ -19154,6 +19172,8 @@ class HookedTransformerWorkerRuntime:
             first_top1_margin = 0.0
             first_repetition_score = 0.0
             for decode_index in range(max_new_tokens):
+                if command is not None and decode_index == apply_at_step and apply_at_step > 0:
+                    _apply_command(decode_index)
                 tokens = self._current_token_tensor()
                 logits, _cache = self.runtime_state.run_with_cache(tokens, return_type="logits")
                 next_logits = self._apply_token_constraints(logits[0, -1].detach())
@@ -19164,17 +19184,18 @@ class HookedTransformerWorkerRuntime:
                     first_entropy = float(first_metrics["entropy"])
                     first_top1_margin = float(first_metrics["top1_margin"])
                     first_repetition_score = float(first_metrics["repetition_score"])
-                next_token = int(torch.argmax(next_logits).item())
+                next_token = (pre_roll[decode_index] if decode_index < len(pre_roll)
+                              else int(torch.argmax(next_logits).item()))
                 self._append_output_token(next_token)
-                expiring = [(item, ctx) for item, ctx in temporary_edits
-                            if decode_index + 1 >= item.ttl_steps]
+                expiring = [(item, ctx, at) for item, ctx, at in temporary_edits
+                            if decode_index + 1 >= at + item.ttl_steps]
                 if expiring:
                     telemetry = self._collect_active_edit_runtime_telemetry()
-                    expiring_ids = {item.edit_id for item, _ctx in expiring}
+                    expiring_ids = {item.edit_id for item, _ctx, _at in expiring}
                     expired_telemetry.extend(row for row in telemetry if row.get("edit_id") in expiring_ids)
-                    for item, ctx in reversed(expiring):
+                    for item, ctx, _at in reversed(expiring):
                         item.rollback(ctx)
-                        temporary_edits.remove((item, ctx))
+                        temporary_edits.remove((item, ctx, _at))
                 continuation_ids = self._output_token_ids()[baseline_output_len:]
                 if continuation_ids and continuation_ids[-1] in self.stop_token_ids:
                     break
@@ -19208,7 +19229,7 @@ class HookedTransformerWorkerRuntime:
             self._last_simulate_decode_error = f"{type(exc).__name__}: {exc}"
             return None
         finally:
-            for compiled, ctx in reversed(temporary_edits):
+            for compiled, ctx, _at in reversed(temporary_edits):
                 try:
                     compiled.rollback(ctx)
                 except Exception:
