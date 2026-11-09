@@ -438,6 +438,35 @@ the winning recipe, and on `gen_078` picked `,` anyway. The form hint moved
 selection, and the participle-family mechanism now goes through the
 controller, not just the fixed rule.
 
+### Applicability gate on the starter
+
+`applies_to_this_case` was added to the starter row, meant to be true only for
+participial-second-clause sources. A first rerun (manifest `787833c5…`,
+`results/structural_rescue_clauseform_gated_ds_v3_20261109_r2/`, 1171 s)
+scored 5/12 — and the packet shows why: the gate regex matched `with` *or*
+`who`, so 11/12 cases read as applicable. `who` catches the relative-clause
+substitution family (`gen_039`, `gen_059`, `gen_074`: "X, who should V, also
+finishes"), where the model swaps the required verb for a common one and a
+clause-form flip cannot restore it. The controller re-lost `gen_059` under a
+gate that was supposed to exclude it.
+
+Restricting the gate to `with` (manifest `6137df71…`,
+`results/structural_rescue_clauseform_withonly_ds_v3_20261109/`, 1265 s): the
+controller scored **8/12** — wins `gen_017` (readout), `gen_018`, `gen_058`,
+`gen_068`, `gen_073`, `gen_078`, `gen_088` (starter), `gen_059` (readout).
+That equals the union ceiling of the catalog: every case a fixed policy can
+win, the controller now wins too. With a discriminative applicability flag,
+controller selection is optimal at this recipe granularity; the
+controller-information bottleneck is closed for this split.
+
+The four remaining cases have no winning recipe in the catalog:
+
+- `gen_008`, `gen_028`: participial sources, but even the starter leaves the
+  output unchanged — a reach/strength problem, not a selection problem.
+- `gen_039`, `gen_074`: the substitution family (`finishes` occupies the
+  required-verb slot). Rescuing these needs content-level steering —
+  multi-token or multi-step intervention — not another single-token push.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.

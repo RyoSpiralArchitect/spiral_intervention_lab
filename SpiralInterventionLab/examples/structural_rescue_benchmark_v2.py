@@ -62,8 +62,8 @@ finite-clause starter token that is not required to appear in the source.
 A clause_form starter biases the continuation toward a finite clause ("while X
 verbs") where a plain comma invites a participle ("with X -ing"); it carries
 applies_to_this_case=true only when the source's second clause is participial
-or relative. Prefer it only when applies_to_this_case is true and a comma push
-would leave the next clause non-finite.
+("with X -ing"). Prefer it only when applies_to_this_case is true and a comma
+push would leave the next clause non-finite.
 """
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
                   clause_form: bool = False) -> str:
@@ -138,7 +138,7 @@ def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
         extra_readout_token_ids=[r["sources"][0]["token_id"] for r in starters])
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
-    participial = bool(re.search(r"\bwith\b|\bwho\b", task.case.source))
+    participial = bool(re.search(r"\bwith\b", task.case.source))
     for r in starters:
         r["applies_to_this_case"] = participial
     recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
