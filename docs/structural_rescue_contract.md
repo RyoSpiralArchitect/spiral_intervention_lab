@@ -438,13 +438,65 @@ the winning recipe, and on `gen_078` picked `,` anyway. The form hint moved
 selection, and the participle-family mechanism now goes through the
 controller, not just the fixed rule.
 
+### Applicability gate on the starter
+
+`applies_to_this_case` was added to the starter row, meant to be true only for
+participial-second-clause sources. A first rerun (manifest `787833c5…`,
+`results/structural_rescue_clauseform_gated_ds_v3_20261109_r2/`, 1171 s)
+scored 5/12 — and the packet shows why: the gate regex matched `with` *or*
+`who`, so 11/12 cases read as applicable. `who` catches the relative-clause
+substitution family (`gen_039`, `gen_059`, `gen_074`: "X, who should V, also
+finishes"), where the model swaps the required verb for a common one and a
+clause-form flip cannot restore it. The controller re-lost `gen_059` under a
+gate that was supposed to exclude it.
+
+Restricting the gate to `with` (manifest `6137df71…` — the manifests differ
+only in `controller_system_prompt_sha256`, since the prompt text was updated;
+the regex itself is not manifest-recorded),
+`results/structural_rescue_clauseform_withonly_ds_v3_20261109/`, 1265 s): the
+controller scored **8/12** — wins `gen_017` (readout), `gen_018`, `gen_058`,
+`gen_068`, `gen_073`, `gen_078`, `gen_088` (starter), `gen_059` (readout).
+That equals the union of the policies actually evaluated — though not all
+catalog recipes were run (`calibration_matrix` is empty on the rescue split),
+so this is a policy-union score, not a proven catalog ceiling.
+
+Attribution needs care: the gate clearly caused `gen_059` (identical intent,
+flag now false, readout selected and won). But `gen_068` and `gen_078` flipped
+on *byte-identical packets* — only the system prompt hash differed — so those
+gains are prompt-wording or controller sampling noise, not the gate. The
+controller is nondeterministic and this is one run per variant; treat the +3
+as "+1 attributable, +2 uncontrolled". A trivial hand-rule
+("applies ? fixed_clause_form : fixed_readout") would also score 8/12 here, so
+the honest claim is narrower: a discriminative applicability flag is
+sufficient for the controller to avoid the observed over-selection, not that
+controller selection is optimal. The gate was also fit to this split after
+seeing `gen_059` fail — the same warning this doc raised about claiming
+selection rules from few cases applies.
+
+The four remaining cases had no win under any evaluated policy:
+
+- `gen_008`, `gen_028`: participial sources, but even the starter leaves the
+  output unchanged — a reach/strength problem, not a selection problem.
+- `gen_039`, `gen_074`: the substitution family (`finishes` occupies the
+  required-verb slot). `gen_059` shows the same failure is rescuable when the
+  worker happens to emit the required verb under a comma push — content-level
+  steering (multi-token or multi-step intervention) is the missing mechanism,
+  not another single-token push.
+
+Caveats on the gate itself: `\bwith\b` is a word match that identifies the
+case-generator's participial template, not the grammar — a prepositional
+"with" or a bare participle would mislabel it, and the flag is invisible to
+the controller's own input (the packet omits the source). It also excludes
+`gen_017`, where the starter happens to win anyway.
+
 ### Scope
 
 - One worker model, one boundary rule, greedy decoding.
-- Seven selected failures and one calibration failure, so all counts are descriptive.
+- Twelve selected failures on rescue_v3, so all counts are descriptive.
 - The role check is a conservative surface heuristic. `gen_018` shows a success that only reflects the evaluator, and `gen_058` a comma splice it accepts.
 - Restored diagnostic branches only; no production permission, certificate or new authority.
-- The 8% cap and the last-layer readout site were chosen from the earlier dose study, not tuned on the rescue split.
+- The cap (8% early, 12% on rescue_v3) and the last-layer readout site were chosen from the earlier dose study, not tuned on the rescue split.
+- The controller (`gpt-5.6-luna`) samples nondeterministically; single-run score deltas of ±1-2 are within noise.
 
 ### Next
 

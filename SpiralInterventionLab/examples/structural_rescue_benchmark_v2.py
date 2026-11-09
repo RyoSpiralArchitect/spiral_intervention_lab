@@ -57,13 +57,21 @@ gap_to_top1 cannot flip the first token; prefer a reachable recipe over an unrea
 """
 
 
+# Gate for clause_form starters: true only when the source's second clause is
+# the generator's participial template ("with X -ing"). A word match, not a
+# grammar check - prepositional "with" or bare participles would mislabel.
+CLAUSE_FORM_APPLICABILITY_RULE = r"regex:\bwith\b"
+
+
+def clause_form_applies(source: str) -> bool:
+    return bool(re.search(CLAUSE_FORM_APPLICABILITY_RULE.removeprefix("regex:"), source))
 CLAUSE_FORM_PROMPT_ADD = """The catalog may also offer clause_form recipes: a readout push toward a
 finite-clause starter token that is not required to appear in the source.
 A clause_form starter biases the continuation toward a finite clause ("while X
 verbs") where a plain comma invites a participle ("with X -ing"); it carries
 applies_to_this_case=true only when the source's second clause is participial
-or relative. Prefer it only when applies_to_this_case is true and a comma push
-would leave the next clause non-finite.
+("with X -ing"). Prefer it only when applies_to_this_case is true and a comma
+push would leave the next clause non-finite.
 """
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
                   clause_form: bool = False) -> str:
@@ -81,7 +89,8 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
                                        "reach_basis": structural_contract.REACH_BASIS,
                                        "unknown_pieces": "no_estimate"}}
              if datasheet else {})
-    cf = {"clause_form_starters": [" while_finite_clause_starter"]} if clause_form else {}
+    cf = {"clause_form_starters": [" while_finite_clause_starter"],
+          "clause_form_applicability_rule": CLAUSE_FORM_APPLICABILITY_RULE} if clause_form else {}
     return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else "")
                        + ("_clauseform" if clause_form else "")
                        + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""), **cf,
@@ -138,7 +147,7 @@ def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
         extra_readout_token_ids=[r["sources"][0]["token_id"] for r in starters])
     middle = structural_contract.surface(worker, n_layers // 2)
     last = structural_contract.surface(worker, n_layers - 1)
-    participial = bool(re.search(r"\bwith\b|\bwho\b", task.case.source))
+    participial = clause_form_applies(task.case.source)
     for r in starters:
         r["applies_to_this_case"] = participial
     recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
