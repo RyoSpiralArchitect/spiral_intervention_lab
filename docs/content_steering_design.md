@@ -50,6 +50,16 @@ Llama-3.2-3B tokens (verified). Same `resid_add` at `cap * ||h||` on
 family (b0 role-unknown with `action_substituted` or `incomplete_frame` on
 frame 2); for the frozen split this is the `who`-template cases.
 
+**Applicability (as implemented).** The recipe is offered only when the
+simulated b0 continuation contains a generic verb (the
+`_COMMON_ENGLISH_VERBS` list) after the second frame's agent — a lexical
+scan, not the substitution receipt. It does not consult role bindings, so it
+can in principle fire on cases where the verb is legitimately generic;
+on this split it fired exactly on the two receipt-family cases
+(`gen_039`, `gen_074`). "Offered where the substitution is observed" is the
+honest description — the gate is an observed-failure heuristic, not a
+predictive one.
+
 **Catalog phase.** `verb_slot` recipes are added to `catalog_for` behind a
 `--verb-slot` flag (new manifest version suffix `_verbslot`), the inflected
 token ids are appended to `policy_for(extra_readout_token_ids=...)`, and the

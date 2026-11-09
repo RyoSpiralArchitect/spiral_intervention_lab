@@ -19107,6 +19107,14 @@ class HookedTransformerWorkerRuntime:
         if apply_at_step < 0 or apply_at_step > len(pre_roll):
             self._last_simulate_decode_error = "apply_at_step_outside_pre_roll"
             return None
+        if command is not None and apply_at_step != len(pre_roll):
+            # A scheduled edit must land exactly where the replay ends; forcing
+            # tokens past that point would smuggle output the model never chose.
+            self._last_simulate_decode_error = "apply_at_step_must_equal_pre_roll_length_when_commanded"
+            return None
+        if command is not None and apply_at_step >= max_new_tokens:
+            self._last_simulate_decode_error = "apply_at_step_beyond_decode_budget"
+            return None
         self._last_simulate_decode_error = None
         saved_segments = [_TokenSegment(kind=segment.kind, token_ids=list(segment.token_ids)) for segment in self._segments]
         saved_last_packet = self._last_packet

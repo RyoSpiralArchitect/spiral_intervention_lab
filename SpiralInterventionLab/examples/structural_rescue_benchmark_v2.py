@@ -304,16 +304,27 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
     if recipe is not None and recipe.get("relative_write_cap") != cap:
         raise ValueError("recipe_cap_differs_from_branch_cap")
     before, caps = state_identity(worker), repr(worker.surface_catalog)
+    verb_recipe = recipe is not None and recipe.get("kind") == "verb_slot"
     baseline_raw = []
-    meter.phase, meter.capture_edited = "branch", False
-    for _ in range(2):
-        meter.raw_first = None
-        baseline = worker._simulate_decode(max_new_tokens=1, top_k=6,
-            score_candidate_text=False, score_observer_check=False)
-        if baseline is None or meter.raw_first is None:
-            # Name the cause (a forward or disk limit, a runtime error) instead of hiding it.
-            raise RuntimeError(f"repeated_baseline_failed: {worker._last_simulate_decode_error}")
-        baseline_raw.append(meter.raw_first)
+    # For a delayed edit the baseline logits must sit at the same position:
+    # replay the b0 prefix unedited so baseline and edited vectors align.
+    if verb_recipe:
+        meter.boundary_length += recipe["apply_at_step"]
+    try:
+        meter.phase, meter.capture_edited = "branch", False
+        for _ in range(2):
+            meter.raw_first = None
+            baseline = worker._simulate_decode(
+                max_new_tokens=recipe["apply_at_step"] + 1 if verb_recipe else 1, top_k=6,
+                pre_roll_token_ids=recipe["pre_roll_token_ids"] if verb_recipe else None,
+                score_candidate_text=False, score_observer_check=False)
+            if baseline is None or meter.raw_first is None:
+                # Name the cause (a forward or disk limit, a runtime error) instead of hiding it.
+                raise RuntimeError(f"repeated_baseline_failed: {worker._last_simulate_decode_error}")
+            baseline_raw.append(meter.raw_first)
+    finally:
+        if verb_recipe:
+            meter.boundary_length -= recipe["apply_at_step"]
     command = structural_contract.command(recipe) if recipe is not None else None
     if command:
         packet = worker.build_controller_packet()
@@ -323,7 +334,6 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
         if tensor_identity(compile_expr(command["edits"][0]["source"]["expr"])(ctx)) != recipe["input_identity"]:
             raise ValueError("recipe_source_changed_before_branch")
     meter.phase, meter.capture_edited, meter.raw_first = "branch", command is not None, None
-    verb_recipe = recipe is not None and recipe.get("kind") == "verb_slot"
     simulated = worker._simulate_decode(max_new_tokens=64 - len(worker._output_token_ids()), top_k=6,
         command=command, policy_override=policy if command else None,
         apply_at_step=recipe["apply_at_step"] if verb_recipe else 0,
@@ -342,6 +352,7 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
         if not telemetry[0].get("relative_write_norm", float("inf")) <= cap + CAST_TOLERANCE:
             raise RuntimeError("contract_write_exceeded_cap")
     return {"status": "ok", **task.evaluate(text), "state_restored": restored,
+            "scheduled_apply_at_step": recipe["apply_at_step"] if verb_recipe else 0,
             "baseline_repeat_max_abs_logit_delta": float((baseline_raw[0] - baseline_raw[1]).abs().max()),
             "baseline_logits_sha256": [tensor_identity(v)["sha256"] for v in baseline_raw],
             "command": command, "recipe_kind": recipe and recipe["kind"],
@@ -553,7 +564,10 @@ def main(argv=None) -> int:
                         baseline_raw = raw
                     outcome.update(selection=trace, selected_recipe_id=selected_id,
                                    readout=readout(baseline_raw, raw, token_ids))
-                    outcome["natural_branch_changed"] = outcome["first_token_id"] != row["policies"]["b0"]["first_token_id"]
+                    outcome["natural_branch_changed"] = (
+                        outcome["output"] != row["policies"]["b0"]["output"]
+                        if outcome.get("scheduled_apply_at_step")
+                        else outcome["first_token_id"] != row["policies"]["b0"]["first_token_id"])
                     persist()
                     print(json.dumps({"case": case.case_id, "policy": name, "joint_success": outcome["joint_success"],
                         "score": outcome["legacy_score"], "selection": trace["status"],

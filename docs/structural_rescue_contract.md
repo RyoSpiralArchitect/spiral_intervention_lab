@@ -510,18 +510,30 @@ Rerun at cap 0.12 + datasheet (manifest `d2bff070…`,
   it noop'd elsewhere. First content-token intervention under the contract:
   `relative_write_norm` 0.11999 within cap, one guarded write, state restored.
 - **controller: 10/12** — it picked `verb_slot` on both substitution cases
-  unprompted and matched the previous wins. `unknown_roles` dropped to 0 for
-  the controller. The two losses (`gen_008`, `gen_028`) are cases where even
+  and matched the previous wins. `unknown_roles` dropped to 0 for the
+  controller. The two losses (`gen_008`, `gen_028`) are cases where even
   the starter cannot flip the first token — no evaluated policy wins there.
 - `gen_059` got no `verb_slot` recipe: the agent locator matches the name in
   single token pieces and "Celia" tokenizes into two pieces. It was rescued
   by readout anyway; the locator is the known gap.
-- Protocol note: the first attempt
+- Protocol notes: the first attempt
   (`results/structural_rescue_verbslot_ds_v3_20261109/`) exposed a meter bug —
   `raw_first` was only captured at boundary-length forwards, so delayed
   edits had no logits. The capture condition is now "first forward matching
   the capture mode" (edited forward for edited branches); `edited_winner`
-  5097 (` takes`) confirms the capture landed at the slot.
+  5097 (` takes`) confirms the capture landed at the slot. A second review
+  pass then aligned the baseline: for delayed branches the unedited baseline
+  repeats replay the same pre-roll, so `readout` compares logits at the
+  *same* position (slot vs slot), `scheduled_apply_at_step` is recorded per
+  outcome, and `_simulate_decode` now requires
+  `apply_at_step == len(pre_roll)` whenever a command is present — forced
+  tokens can never extend past the scheduled edit step.
+
+The gate is a lexical heuristic, not a receipt rule: it scans the simulated
+b0 continuation for a generic verb after the frame-2 agent (substring match
+on single token pieces), so it is blind to multi-token agent names and could
+mis-fire if a common verb legitimately follows the agent. It is frozen as
+`verb_slot_rule` in the manifest and treated as exploratory, not learned.
 
 The substitution family is now reachable by a bounded one-token push — the
 mechanism exists (N=2, no efficacy claim). `gen_008`/`gen_028` remain the
