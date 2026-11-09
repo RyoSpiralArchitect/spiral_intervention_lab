@@ -73,6 +73,18 @@ def test_fixed_rules_pick_first_pair_orthogonal_and_first_source_readout():
     assert v2.fixed_ids([]) == {"fixed": None, "fixed_readout": None, "fixed_clause_form": None}
 
 
+def test_clause_form_gate_is_recorded_and_matches_only_the_participial_template():
+    assert v2.manifest(clause_form=True)["clause_form_applicability_rule"] == \
+        v2.CLAUSE_FORM_APPLICABILITY_RULE
+    assert "clause_form_applicability_rule" not in v2.manifest()
+    participial = ("In order to start before lunch, Olga should bring the drawing to Nikos, "
+                   "with Stefan giving the voucher to Ilse.")
+    relative = ("Before lunch, Stefan should bring the manual to Pablo; meanwhile, Celia, "
+                "who should give the drawing to Tilda, also finishes.")
+    assert v2.clause_form_applies(participial) and not v2.clause_form_applies(relative)
+    assert v2.manifest_bytes(clause_form=True) == v2.manifest_bytes(clause_form=True)
+
+
 def test_datasheet_manifest_is_a_separate_frozen_version():
     base, sheet = v2.manifest(), v2.manifest(datasheet=True)
     assert sheet["version"] == base["version"] + "_datasheet"
