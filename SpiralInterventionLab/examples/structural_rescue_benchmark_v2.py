@@ -22,7 +22,8 @@ from ..runtime import clause_specificity, clause_structure, structural_contract
 from ..runtime.compiler import StepContext, compile_expr
 from ..runtime.policy import validate_command_against_packet
 from ..runtime.response_probe import state_identity, tensor_identity
-from ..tasks.structural_rescue import CASES, StructuralRescueEnv, benchmark_manifest
+from ..tasks.structural_rescue import (
+    CASES, StructuralRescueEnv, _COMMON_ENGLISH_VERBS, benchmark_manifest)
 from ..tasks.structural_rescue_generator import candidate_rows
 from .digit_transform_e2e import (
     build_default_activation_surface_catalog, build_hooked_transformer_worker_runtime, load_worker_model,
@@ -34,6 +35,8 @@ from .structural_rescue_screen import DISK_FLOOR_GIB, load_selected_cases
 
 POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
 CLAUSE_FORM_POLICIES = ("b0", "fixed", "fixed_readout", "fixed_clause_form", "random", "controller")
+VERB_SLOT_POLICIES = ("b0", "fixed", "fixed_readout", "fixed_clause_form",
+                      "fixed_verb_slot", "random", "controller")
 RELATIVE_WRITE_CAP = structural_contract.DEFAULT_RELATIVE_WRITE_CAP
 # Half-precision rounding of the clipped write; telemetry reports the realized norm.
 CAST_TOLERANCE = 2e-3
@@ -73,15 +76,35 @@ applies_to_this_case=true only when the source's second clause is participial
 ("with X -ing"). Prefer it only when applies_to_this_case is true and a comma
 push would leave the next clause non-finite.
 """
+VERB_SLOT_PROMPT_ADD = """The catalog may also offer verb_slot recipes: a readout push toward the
+inflected required-action token, applied not at the boundary but at the b0
+continuation's substituted-verb slot (the recipe replays the observed b0
+prefix first, then pushes one token). It is offered only where the b0
+continuation already shows a generic verb occupying the required-action
+slot; prefer it there over a boundary push, which cannot reach the slot.
+"""
+
+
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-                  clause_form: bool = False) -> str:
+                  clause_form: bool = False, verb_slot: bool = False) -> str:
     return (BASE_PROMPT.format(cap=cap) + (DATASHEET_PROMPT_ADD if datasheet else "")
-            + (CLAUSE_FORM_PROMPT_ADD if clause_form else ""))
+            + (CLAUSE_FORM_PROMPT_ADD if clause_form else "")
+            + (VERB_SLOT_PROMPT_ADD if verb_slot else ""))
+
+
+# How a verb_slot recipe is located: simulate the b0 continuation, find the
+# first generic verb token after the second frame's agent, replay the b0
+# prefix up to it, and push the inflected required action for one token.
+VERB_SLOT_RULE = ("simulate_b0_continuation__first_common_verb_after_frame2_agent__"
+                  "pre_roll_b0_prefix__push_<action>s_single_token_ttl1")
+VERB_SLOT_ACTION_FORMS = ("action_forms_lemma_plus_s_inflection_only")
 
 
 def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
-             cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> dict[str, Any]:
+             cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
+             verb_slot: bool = False) -> dict[str, Any]:
     """The frozen v1 cases by default; screen-selected cases carry their binding."""
+    clause_form = clause_form or verb_slot
     v1 = benchmark_manifest()
     cases = v1["cases"] if case_set is None else candidate_rows(case_set["cases"])
     selection = {} if case_set is None else {"case_set": case_set["binding"]}
@@ -91,9 +114,13 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
              if datasheet else {})
     cf = {"clause_form_starters": [" while_finite_clause_starter"],
           "clause_form_applicability_rule": CLAUSE_FORM_APPLICABILITY_RULE} if clause_form else {}
+    vs = ({"verb_slot_rule": VERB_SLOT_RULE,
+          "verb_slot_action_forms": list(VERB_SLOT_ACTION_FORMS),
+          "verb_slot_allowlist": "inflected_required_action_token_ids_added_to_readout_token_ids"}
+          if verb_slot else {})
     return {"version": "structural_rescue_v2_norm_relative_contract" + ("_datasheet" if datasheet else "")
-                       + ("_clauseform" if clause_form else "")
-                       + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""), **cf,
+                       + ("_clauseform" if clause_form else "") + ("_verbslot" if verb_slot else "")
+                       + (f"_cap{cap:g}" if cap != RELATIVE_WRITE_CAP else ""), **cf, **vs,
             "cases": cases, **sheet,
             "confirmation_status": (v1["confirmation_status"] if case_set is None
                                     else "selected_by_preregistered_b0_screen"), **selection,
@@ -112,7 +139,8 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
                          "readout_layer_rule": "n_layers-1", "readout_alpha_rule": "cap*||h_boundary||"},
             "max_words": v1["max_words"], "max_generated_tokens": v1["max_generated_tokens"],
             "boundary_rule": v1["boundary_rule"],
-            "policies": list(CLAUSE_FORM_POLICIES if clause_form else POLICIES), "policy_seeds": [17],
+            "policies": list(VERB_SLOT_POLICIES if verb_slot
+                             else CLAUSE_FORM_POLICIES if clause_form else POLICIES), "policy_seeds": [17],
             "evaluator": {"role_check_scope":
                           "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar",
                           "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations"},
@@ -122,36 +150,85 @@ def manifest(case_set: dict[str, Any] | None = None, datasheet: bool = False,
             "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
             "diagnostic_forward_cap_per_policy": 24, "continuation_forward_cap_per_policy": 64,
             "max_controller_calls_per_case": 1, "max_controller_output_tokens": 1600,
-            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet, cap, clause_form).encode()).hexdigest(),
+            "controller_system_prompt_sha256": hashlib.sha256(system_prompt(datasheet, cap, clause_form, verb_slot).encode()).hexdigest(),
             "baseline_repeats_before_each_branch": 2, "disk_floor_gib": DISK_FLOOR_GIB,
             "protocol_deviations": ["disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"],
             "apply_scope": "restored_contract_diagnostic_branch_only", "production_apply_allowed": False}
 
 
 def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = False,
-                   cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> bytes:
-    return (json.dumps(manifest(case_set, datasheet, cap, clause_form), indent=2, sort_keys=True) + "\n").encode()
+                   cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
+                   verb_slot: bool = False) -> bytes:
+    return (json.dumps(manifest(case_set, datasheet, cap, clause_form, verb_slot),
+                       indent=2, sort_keys=True) + "\n").encode()
 
 
 def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
     return tuple(task._SCENARIOS[0]["required_terms"])
 
 
+def verb_slot_plan(worker: Any, task: StructuralRescueEnv,
+                   max_new_tokens: int = 40) -> dict[str, Any] | None:
+    """Simulate the free (b0) continuation and locate the substituted verb.
+
+    Returns the slot index inside the continuation, the b0 prefix token ids up
+    to it, the substituted piece, and the required-action target token, or None
+    when the continuation shows no generic verb after the second frame's agent.
+    """
+    sim = worker._simulate_decode(max_new_tokens=max_new_tokens, top_k=6,
+                                  score_candidate_text=False, score_observer_check=False)
+    if sim is None:
+        return None
+    cont_ids = sim["continuation_token_ids"]
+    agent = str(task.case.frames[1][0])
+    agent_idx = next((i for i, t in enumerate(cont_ids)
+                      if agent in worker.codec.decode([t])), None)
+    if agent_idx is None:
+        return None
+    slot = next((i for i in range(agent_idx + 1, len(cont_ids))
+                 if worker.codec.decode([cont_ids[i]]).strip().casefold()
+                 in _COMMON_ENGLISH_VERBS), None)
+    if slot is None:
+        return None
+    lemma = str(task.case.frames[1][1])
+    piece = " " + lemma + "s"
+    target_ids = worker.codec.encode(piece).detach().reshape(-1).tolist()
+    if len(target_ids) != 1:
+        return None
+    return {"apply_at_step": slot, "pre_roll_token_ids": cont_ids[:slot],
+            "substituted_piece": worker.codec.decode([cont_ids[slot]]),
+            "target_piece": piece, "target_token_id": int(target_ids[0])}
+
+
 def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
-                cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False) -> tuple[list[dict], Any, list[dict]]:
+                cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
+                verb_slot: bool = False) -> tuple[list[dict], Any, list[dict]]:
     sources = structural_contract.eligible_sources(worker, required_terms(task))
-    starters = (structural_contract.clause_form_recipes(worker, structural_contract.surface(worker, n_layers - 1), cap=cap)
+    last = structural_contract.surface(worker, n_layers - 1)
+    starters = (structural_contract.clause_form_recipes(worker, last, cap=cap)
                 if clause_form else [])
+    verb_recipes = []
+    if verb_slot:
+        plan = verb_slot_plan(worker, task)
+        if plan is not None:
+            verb_recipes = structural_contract.verb_slot_recipe(
+                worker, last, cap=cap, token_id=plan["target_token_id"],
+                piece=plan["target_piece"], apply_at_step=plan["apply_at_step"],
+                pre_roll_token_ids=plan["pre_roll_token_ids"],
+                substituted_piece=plan["substituted_piece"])
+            for r in verb_recipes:
+                r["verb_slot"].update(target_piece=plan["target_piece"])
     policy = structural_contract.policy_for(
         worker, required_terms(task), cap=cap,
-        extra_readout_token_ids=[r["sources"][0]["token_id"] for r in starters])
+        extra_readout_token_ids=([r["sources"][0]["token_id"] for r in starters]
+                                 + [r["sources"][0]["token_id"] for r in verb_recipes]))
     middle = structural_contract.surface(worker, n_layers // 2)
-    last = structural_contract.surface(worker, n_layers - 1)
     participial = clause_form_applies(task.case.source)
     for r in starters:
         r["applies_to_this_case"] = participial
     recipes = (structural_contract.patch_recipes(worker, sources, middle, cap=cap)
-               + structural_contract.readout_recipes(worker, sources, last, cap=cap) + starters)
+               + structural_contract.readout_recipes(worker, sources, last, cap=cap)
+               + starters + verb_recipes)
     return recipes, policy, sources
 
 
@@ -159,8 +236,10 @@ def fixed_ids(recipes: list[dict]) -> dict[str, str | None]:
     patch = next((r for r in recipes if r["kind"] == "patch" and r["component"] == "common_orthogonal"), None)
     push = next((r for r in recipes if r["kind"] == "readout"), None)
     starter = next((r for r in recipes if r["kind"] == "clause_form"), None)
+    verb = next((r for r in recipes if r["kind"] == "verb_slot"), None)
     return {"fixed": patch and patch["recipe_id"], "fixed_readout": push and push["recipe_id"],
-            "fixed_clause_form": starter and starter["recipe_id"]}
+            "fixed_clause_form": starter and starter["recipe_id"],
+            "fixed_verb_slot": verb and verb["recipe_id"]}
 
 
 def reach_estimate(recipe: dict) -> dict | None:
@@ -180,7 +259,7 @@ def reach_estimate(recipe: dict) -> dict | None:
 
 def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: dict,
                    datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-                   clause_form: bool = False) -> dict:
+                   clause_form: bool = False, verb_slot: bool = False) -> dict:
     keys = ("recipe_id", "kind", "component", "sources", "surface", "relative_write_cap",
             "requested_relative_write", "expected_relative_write")
     offered = []
@@ -194,9 +273,14 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
             row["form_hint"] = ("finite_clause_starter: biases the continuation toward a "
                                 "finite verb clause where a comma push leaves 'with <name> -ing'")
             row["applies_to_this_case"] = r.get("applies_to_this_case", False)
+        if r["kind"] == "verb_slot":
+            row["verb_slot"] = dict(r["verb_slot"])
+            row["apply_at_step"] = r["apply_at_step"]
+            row["applies_to_this_case"] = r.get("applies_to_this_case", True)
         offered.append(row)
     return {"version": "structural_rescue_choice_v2" + ("_datasheet" if datasheet else "")
-                       + ("_clauseform" if clause_form else ""),
+                       + ("_clauseform" if clause_form else "")
+                       + ("_verbslot" if verb_slot else ""),
             "case_id": case_id,
             "generated_tail": worker.final_text(), "structure_readout": observation["structure_readout_rows"],
             "recipes": offered,
@@ -208,11 +292,11 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
 
 def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None],
            datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-           clause_form: bool = False) -> tuple[str | None, dict]:
+           clause_form: bool = False, verb_slot: bool = False) -> tuple[str | None, dict]:
     if policy in fixed:
         return choose("fixed", packet, fixed_recipe_id=fixed[policy])
     return choose(policy, packet, provider=provider,
-                  system_prompt=system_prompt(datasheet, cap, clause_form))
+                  system_prompt=system_prompt(datasheet, cap, clause_form, verb_slot))
 
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
@@ -239,8 +323,11 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
         if tensor_identity(compile_expr(command["edits"][0]["source"]["expr"])(ctx)) != recipe["input_identity"]:
             raise ValueError("recipe_source_changed_before_branch")
     meter.phase, meter.capture_edited, meter.raw_first = "branch", command is not None, None
+    verb_recipe = recipe is not None and recipe.get("kind") == "verb_slot"
     simulated = worker._simulate_decode(max_new_tokens=64 - len(worker._output_token_ids()), top_k=6,
         command=command, policy_override=policy if command else None,
+        apply_at_step=recipe["apply_at_step"] if verb_recipe else 0,
+        pre_roll_token_ids=recipe["pre_roll_token_ids"] if verb_recipe else None,
         score_candidate_text=False, score_observer_check=False)
     if simulated is None:
         raise RuntimeError(worker._last_simulate_decode_error)
@@ -298,6 +385,8 @@ def main(argv=None) -> int:
                         help="offer calibration-measured readout reach estimates to the controller")
     parser.add_argument("--cap", type=float, default=RELATIVE_WRITE_CAP,
                         help="relative write cap; non-default values get a separate manifest version")
+    parser.add_argument("--verb-slot", action="store_true",
+                        help="also offer b0-located substituted-verb pushes; implies --clause-form")
     parser.add_argument("--clause-form", action="store_true",
                         help="offer a finite-clause starter recipe even when absent from the source")
     parser.add_argument("--wall-seconds", type=int, default=3600)
@@ -311,8 +400,9 @@ def main(argv=None) -> int:
         case_set = {"cases": cases, "binding": binding}
     if not 0 < args.cap <= 0.25:
         raise ValueError("cap must be in (0, 0.25]")
+    clause_form = args.clause_form or args.verb_slot
     frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap,
-                            clause_form=args.clause_form)
+                            clause_form=clause_form, verb_slot=args.verb_slot)
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -323,10 +413,11 @@ def main(argv=None) -> int:
         raise ValueError("predeclared_manifest_hash_required_and_must_match")
     if args.worker_model_path is None or args.checkpoint_manifest is None:
         parser.error("--run requires local model and checkpoint manifest")
-    policies = (args.policies
-                or ",".join(CLAUSE_FORM_POLICIES if args.clause_form else POLICIES)).split(",")
+    default_policies = (VERB_SLOT_POLICIES if args.verb_slot
+                        else CLAUSE_FORM_POLICIES if clause_form else POLICIES)
+    policies = (args.policies or ",".join(default_policies)).split(",")
     case_ids = args.case_ids.split(",") if args.case_ids else [c.case_id for c in cases]
-    allowed = set(CLAUSE_FORM_POLICIES if args.clause_form else POLICIES)
+    allowed = set(default_policies)
     if (set(policies) - allowed or policies[0] != "b0"
             or len(set(policies)) != len(policies) or len(set(case_ids)) != len(case_ids)
             or set(case_ids) - {c.case_id for c in cases}):
@@ -341,7 +432,8 @@ def main(argv=None) -> int:
             raise FileExistsError(path)
     code_hashes = capture_sources(output)
     execution = {"manifest_sha256": digest, "device": args.device, "dtype": args.dtype,
-                 "datasheet": args.datasheet, "cap": args.cap, "clause_form": args.clause_form,
+                 "datasheet": args.datasheet, "cap": args.cap, "clause_form": clause_form,
+                 "verb_slot": args.verb_slot,
                  "policies": policies, "case_ids": case_ids, "wall_seconds": args.wall_seconds,
                  "mps_memory_fraction": args.mps_memory_fraction,
                  "controller_model": args.controller_model if "controller" in policies else None,
@@ -432,11 +524,11 @@ def main(argv=None) -> int:
                 if observation["status"] != "ok":
                     raise RuntimeError("structure_observation_failed")
                 recipes, policy, sources = catalog_for(worker, task, n_layers, cap=args.cap,
-                                                       clause_form=args.clause_form)
+                                                       clause_form=clause_form, verb_slot=args.verb_slot)
                 fixed = fixed_ids(recipes)
                 packet = compact_packet(worker, recipes, case.case_id, observation,
                                         datasheet=args.datasheet, cap=args.cap,
-                                        clause_form=args.clause_form)
+                                        clause_form=clause_form, verb_slot=args.verb_slot)
                 (output / (case.case_id + "_observation.json")).write_text(json.dumps(packet, indent=2))
                 row.update(comparison_eligible=True, shared_setup_forwards=deepcopy(meter.counts),
                            eligible_sources=[{k: s[k] for k in ("token_id", "piece", "source_positions")}
@@ -451,7 +543,7 @@ def main(argv=None) -> int:
                     meter.check_limits()
                     selected_id, trace = select(name, packet, provider=provider, fixed=fixed,
                                                 datasheet=args.datasheet, cap=args.cap,
-                                                clause_form=args.clause_form)
+                                                clause_form=clause_form, verb_slot=args.verb_slot)
                     recipe = next((r for r in recipes if r["recipe_id"] == selected_id), None)
                     meter.reset("diagnostic")
                     outcome = {"selection": trace, "selected_recipe_id": selected_id}

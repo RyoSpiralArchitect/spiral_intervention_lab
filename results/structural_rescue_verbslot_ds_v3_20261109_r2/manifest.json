@@ -1,0 +1,422 @@
+{
+  "apply_scope": "restored_contract_diagnostic_branch_only",
+  "baseline_repeats_before_each_branch": 2,
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
+  "case_set": {
+    "screen_manifest_sha256": "f4e86bb18d47071fced61bb58bba35ccbddc045ad04fc2c034a2e19d7f72627f",
+    "screen_results_sha256": "58475eb4070215a07d531b3864ad51231caba881d775d2a2bbbf450b04eea538",
+    "selected_case_ids": [
+      "gen_008",
+      "gen_017",
+      "gen_018",
+      "gen_028",
+      "gen_039",
+      "gen_058",
+      "gen_059",
+      "gen_068",
+      "gen_073",
+      "gen_074",
+      "gen_078",
+      "gen_088"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "gen_008",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Henrik",
+          "take",
+          "receipt",
+          "Ilse"
+        ],
+        [
+          "Wanda",
+          "give",
+          "proposal",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "adbdd51039de43865d41e43431919d97b5d909db46267bcf5b454660b27b7a89",
+      "source": "In order to be ready before noon, Henrik should take the receipt to Ilse, with Wanda giving the proposal to Greta.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_017",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Alma",
+          "take",
+          "manual",
+          "Vesna"
+        ],
+        [
+          "Yusuf",
+          "bring",
+          "voucher",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "111e10aaa68d49d6fba70f3553b5763d0519e277a9046d704df44488a04f4212",
+      "source": "Alma should take the manual to Vesna, while Yusuf should bring the voucher to Nikos, in order to close before midnight.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_018",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "bring",
+          "drawing",
+          "Nikos"
+        ],
+        [
+          "Stefan",
+          "give",
+          "voucher",
+          "Ilse"
+        ]
+      ],
+      "prompt_sha256": "33738618a5c68d66288e1b41a32c17c3e9b97999ec7c76de419344e575962877",
+      "source": "In order to start before lunch, Olga should bring the drawing to Nikos, with Stefan giving the voucher to Ilse.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_028",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Boris",
+          "give",
+          "proposal",
+          "Alma"
+        ],
+        [
+          "Rosa",
+          "take",
+          "permit",
+          "Vesna"
+        ]
+      ],
+      "prompt_sha256": "a9c2de8a668049899f7a740627d504676563e6b192f8448d7cce1b396f3c6a6f",
+      "source": "In order to close before midnight, Boris should give the proposal to Alma, with Rosa taking the permit to Vesna.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_039",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "send",
+          "receipt",
+          "Nikos"
+        ],
+        [
+          "Boris",
+          "take",
+          "roster",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "1d5bbd1f2a68cfae76e4b5e88e0aef83696f561ef82d1c55d3eadcb57f33f6f0",
+      "source": "Before midnight, Pablo should send the receipt to Nikos; at the same time, Boris, who should take the roster to Edda, also finishes.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_058",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "bring",
+          "ticket",
+          "Edda"
+        ],
+        [
+          "Celia",
+          "take",
+          "permit",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "ce59cedeac8075f84e081586a991bc93700a05d41d73bf0a7e9e4cbb03b720ca",
+      "source": "In order to leave before dawn, Stefan should bring the ticket to Edda, with Celia taking the permit to Greta.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_059",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "bring",
+          "manual",
+          "Pablo"
+        ],
+        [
+          "Celia",
+          "give",
+          "drawing",
+          "Tilda"
+        ]
+      ],
+      "prompt_sha256": "f818876970a149a1eb38e6bcd8121d75992dc2ffa21afdab54ddca0a3c22cb1e",
+      "source": "Before lunch, Stefan should bring the manual to Pablo; meanwhile, Celia, who should give the drawing to Tilda, also finishes.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_068",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Stefan",
+          "send",
+          "blueprint",
+          "Greta"
+        ],
+        [
+          "Marta",
+          "take",
+          "roster",
+          "Olga"
+        ]
+      ],
+      "prompt_sha256": "7685b8c55c33dc18d40f2f3c50e956c3e0bda783f244c6955ac16eceaeea4ee5",
+      "source": "In order to close before midnight, Stefan should send the blueprint to Greta, with Marta taking the roster to Olga.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_073",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "give",
+          "proposal",
+          "Ugo"
+        ],
+        [
+          "Marta",
+          "take",
+          "badge",
+          "Celia"
+        ]
+      ],
+      "prompt_sha256": "dfeafbb944bbd4b0fa49d455ce7e1d06be0d219be0999d56d0d8e1a59a48f7cb",
+      "source": "In order to leave before dawn, Pablo should give the proposal to Ugo, with Marta taking the badge to Celia.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_074",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Edda",
+          "send",
+          "manual",
+          "Celia"
+        ],
+        [
+          "Boris",
+          "bring",
+          "blueprint",
+          "Nikos"
+        ]
+      ],
+      "prompt_sha256": "db5bf7990514bd43342ae8b035134f703bada5acb64b05e5cdbb798cf719e43e",
+      "source": "Before dusk, Edda should send the manual to Celia; at the same time, Boris, who should bring the blueprint to Nikos, also finishes.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_078",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "send",
+          "blueprint",
+          "Olga"
+        ],
+        [
+          "Kira",
+          "take",
+          "ledger",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "531cd0605e811e0291237d5e74033ba331b1cb9e88434f09eea76fbcabc9c3b6",
+      "source": "In order to leave before dawn, Marta should send the blueprint to Olga, with Kira taking the ledger to Felix.",
+      "split": "rescue_v3"
+    },
+    {
+      "case_id": "gen_088",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Celia",
+          "send",
+          "voucher",
+          "Stefan"
+        ],
+        [
+          "Henrik",
+          "take",
+          "drawing",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "9d0b74f4d70783d44a60e11f52fea3abcf4baab5dc66da1edd4ae27ae3fd9d24",
+      "source": "In order to start before lunch, Celia should send the voucher to Stefan, with Henrik taking the drawing to Greta.",
+      "split": "rescue_v3"
+    }
+  ],
+  "clause_form_applicability_rule": "regex:\\bwith\\b",
+  "clause_form_starters": [
+    " while_finite_clause_starter"
+  ],
+  "confirmation_status": "selected_by_preregistered_b0_screen",
+  "continuation_forward_cap_per_policy": 64,
+  "contract": {
+    "cast_tolerance": 0.002,
+    "edits_per_branch": 1,
+    "guard": "per_position_hook_output_minus_input_vs_input_norm",
+    "id": "norm_relative_structural_v1",
+    "patch_alpha": 1.0,
+    "patch_components": [
+      "common",
+      "common_parallel",
+      "common_orthogonal"
+    ],
+    "patch_layer_rule": "n_layers//2",
+    "protected_rule": "structural_lexemes_inside_required_terms",
+    "readout_alpha_rule": "cap*||h_boundary||",
+    "readout_layer_rule": "n_layers-1",
+    "relative_write_cap": 0.12,
+    "site": "resid_pre",
+    "source_rule": "first_three_eligible_source_tokens_in_source_order_plus_clause_form_starters",
+    "structural_lexemes": [
+      ",",
+      ".",
+      ":",
+      ";",
+      "after",
+      "although",
+      "and",
+      "because",
+      "before",
+      "but",
+      "or",
+      "so",
+      "then",
+      "until",
+      "when",
+      "whereas",
+      "while"
+    ],
+    "token": "last",
+    "ttl_steps": 1
+  },
+  "controller_datasheet": {
+    "reach_basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12",
+    "readout_closure_slope": {
+      " while": {
+        "max": 54.0,
+        "mean": 51.0,
+        "min": 49.0
+      },
+      ",": {
+        "max": 26.0,
+        "mean": 22.5,
+        "min": 20.0
+      },
+      ".\n": {
+        "max": 50.0,
+        "mean": 43.0,
+        "min": 36.0
+      }
+    },
+    "unknown_pieces": "no_estimate"
+  },
+  "controller_system_prompt_sha256": "c7c80a8b893bac2bb4bf4adfba2d4d76b420d2a50b81b8f769c9d119c2b1cd4d",
+  "diagnostic_forward_cap_per_policy": 24,
+  "disk_floor_gib": 6,
+  "evaluator": {
+    "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations",
+    "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+  },
+  "fixed_readout_rule": "readout_of_first_eligible_source_token",
+  "fixed_rule": "common_orthogonal_of_first_eligible_pair",
+  "max_controller_calls_per_case": 1,
+  "max_controller_output_tokens": 1600,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "policies": [
+    "b0",
+    "fixed",
+    "fixed_readout",
+    "fixed_clause_form",
+    "fixed_verb_slot",
+    "random",
+    "controller"
+  ],
+  "policy_seeds": [
+    17
+  ],
+  "production_apply_allowed": false,
+  "protocol_deviations": [
+    "disk_floor_6_gib_not_v1_10_gib_user_directed_2026_11_03_swap_headroom"
+  ],
+  "random_rule": "sha256(case_id,seed)_mod_catalog_size",
+  "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; readout_recipes_added; pairs_with_protected_lexemes_dropped",
+  "verb_slot_action_forms": [
+    "a",
+    "c",
+    "t",
+    "i",
+    "o",
+    "n",
+    "_",
+    "f",
+    "o",
+    "r",
+    "m",
+    "s",
+    "_",
+    "l",
+    "e",
+    "m",
+    "m",
+    "a",
+    "_",
+    "p",
+    "l",
+    "u",
+    "s",
+    "_",
+    "s",
+    "_",
+    "i",
+    "n",
+    "f",
+    "l",
+    "e",
+    "c",
+    "t",
+    "i",
+    "o",
+    "n",
+    "_",
+    "o",
+    "n",
+    "l",
+    "y"
+  ],
+  "verb_slot_allowlist": "inflected_required_action_token_ids_added_to_readout_token_ids",
+  "verb_slot_rule": "simulate_b0_continuation__first_common_verb_after_frame2_agent__pre_roll_b0_prefix__push_<action>s_single_token_ttl1",
+  "version": "structural_rescue_v2_norm_relative_contract_datasheet_clauseform_verbslot_cap0.12"
+}

@@ -116,8 +116,10 @@ class Meter:
             active = bool(self.worker._collect_active_edits())
             value = original(tokens, *args, **kwargs)
             count["completed"] += 1
-            if (self.phase == "branch" and tokens.shape[-1] == self.boundary_length
-                    and active == self.capture_edited and self.raw_first is None):
+            if (self.phase == "branch" and active == self.capture_edited
+                    and self.raw_first is None
+                    and (tokens.shape[-1] == self.boundary_length
+                         or (self.capture_edited and active))):
                 self.raw_first = value[0][0, -1].detach().cpu().double()
             return value
 
