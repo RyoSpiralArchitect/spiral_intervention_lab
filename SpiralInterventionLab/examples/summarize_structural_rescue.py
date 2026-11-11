@@ -7,6 +7,11 @@ import json
 from pathlib import Path
 import tarfile
 
+if __package__:
+    from .structural_rescue_selection import B0_PREVIEW_POLICY, compare_selectors, constraint_consistency
+else:
+    from structural_rescue_selection import B0_PREVIEW_POLICY, compare_selectors, constraint_consistency
+
 
 def snapshot_member(path: str) -> str:
     if "SpiralInterventionLab/" in path:
@@ -89,8 +94,13 @@ def summarize(report: dict) -> dict:
             for key, value in row.get("selection", {}).get("usage", {}).items():
                 if isinstance(value, (int, float)):
                     usage[key] = usage.get(key, 0) + value
+    pairs = [compare_selectors(report, left, right) for left, right in
+             (("fixed_routed", "controller"), ("controller", B0_PREVIEW_POLICY))
+             if {"b0", left, right} <= set(policies)]
     return {"status": report["status"], "manifest_sha256": report["manifest_sha256"],
             "aggregate": aggregates, "conditions": summaries, "calibration_matrix": calibration,
+            "selector_pairs": pairs,
+            "constraint_consistency_findings": constraint_consistency(report),
             "b0_failure_breakdown": failure_breakdown(report),
             "policy_actual_forward_totals": {p: sum(sum(v["attempted"] for v in
                 c["policies"].get(p, {}).get("forwards", {}).values()) for c in report["cases"]) for p in policies},
@@ -106,7 +116,7 @@ def summarize(report: dict) -> dict:
                 for c in report["cases"] for row in c["calibration_matrix"]),
             "production_apply_allowed": False,
             "limitations": ["one worker and one predeclared boundary per case",
-                "six related confirmation variants, not independent population samples",
+                "predeclared generated or related cases, not a population sample",
                 "role check is conservative surface analysis, not semantic ground truth",
                 "one-shot recipe selection, not a multi-step adaptive controller",
                 "restored diagnostic branches, not certified production applies",
@@ -128,6 +138,24 @@ def markdown(summary: dict) -> str:
               "Provider errors are excluded from paired efficacy estimates; noop is retained as a decision.",
               "Unavailable-boundary cases remain in overall policy outcomes, not eligible intervention comparisons.",
               ""]
+    for pair in summary.get("selector_pairs", []):
+        lines += [f"## Selector Pair: {pair['challenger']} vs {pair['reference']}", "",
+                  "| B0 outcome | Eligible pairs | Different choices | Reference only | Challenger only |",
+                  "| --- | ---: | ---: | ---: | ---: |"]
+        for key, counts in pair["strata"].items():
+            lines.append(f"| {key} | {counts['paired']} | {counts['different_choice']} | "
+                         f"{counts['reference_only']} | {counts['challenger_only']} |")
+        lines += ["", f"Expected cases: {pair['expected']}; unavailable boundaries: "
+                  f"{len(pair['unavailable_boundary'])}; unpaired: {len(pair['unpaired'])}.",
+                  "A challenger-only win on a B0 pass avoids a regression; only a B0 fail can be rescued.", ""]
+    findings = summary.get("constraint_consistency_findings", [])
+    if findings:
+        lines += ["## Recorded Constraint Inconsistencies", "",
+                  "These rows report no constraint violations and a valid sentence but fail constraints.",
+                  "Recorded labels are retained. Do not treat these as established rescue opportunities.", "",
+                  "| Case | Policy | Reason |", "| --- | --- | --- |"]
+        lines += [f"| {row['case_id']} | {row['policy']} | {row['reason']} |" for row in findings]
+        lines += [""]
     if summary.get("b0_failure_breakdown"):
         lines += ["## B0 Failures by Type (exploratory)", "",
                   "| Split | B0 failure | Cases | Joint successes by policy |", "| --- | --- | ---: | --- |"]

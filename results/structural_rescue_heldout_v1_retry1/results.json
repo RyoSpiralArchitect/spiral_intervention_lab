@@ -1,0 +1,159 @@
+{
+  "status": "error",
+  "created_at_utc": "2026-11-11T01:01:45.411543+00:00",
+  "manifest_sha256": "af946393433bfd059e310e7123c867feebe350616418201f9f484e02f39a4ca2",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [
+    {
+      "surface_id": "s_resid_pre_l14_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 14,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    },
+    {
+      "surface_id": "s_resid_pre_l27_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 27,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    }
+  ],
+  "policies_requested": [
+    "b0",
+    "fixed_routed",
+    "controller"
+  ],
+  "case_ids_requested": [
+    "heldout_000",
+    "heldout_001",
+    "heldout_002",
+    "heldout_003",
+    "heldout_004",
+    "heldout_005",
+    "heldout_006",
+    "heldout_007",
+    "heldout_008",
+    "heldout_009"
+  ],
+  "cases": [
+    {
+      "case_id": "heldout_000",
+      "split": "heldout_v1",
+      "policies": {},
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 13,
+          "completed": 12
+        }
+      },
+      "prefix": " Pablo will send the receipt to Jonas",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          105
+        ],
+        "dtype": "torch.int64",
+        "sha256": "3d724f8b6267ce97cf3a4f03c4e4938726f4c39cc6d40bc87560d0c99daba3f6"
+      }
+    }
+  ],
+  "scope": "restored_contract_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 27.49,
+  "aggregate": {
+    "heldout_v1": {
+      "b0": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed_routed": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    }
+  },
+  "paired_heldout": {
+    "expected": 10,
+    "paired": 0,
+    "both_pass": 0,
+    "both_fail": 0,
+    "controller_only": 0,
+    "fixed_routed_only": 0
+  },
+  "error_type": "RuntimeError",
+  "error": "verb_slot_lookahead_failed: RuntimeError: MPS backend out of memory (MPS allocated: 12.23 GiB, other allocations: 53.89 MiB, max allowed: 12.43 GiB). Tried to allocate 751.50 MiB on shared pool. Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit for memory allocations (may cause system failure)."
+}

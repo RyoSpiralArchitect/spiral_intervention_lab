@@ -1,0 +1,2694 @@
+{
+  "status": "complete",
+  "created_at_utc": "2026-11-11T01:50:25.818507+00:00",
+  "manifest_sha256": "f2a71c4b28f936abdd041b50c227d3421781a59c3550084f975d266c87a6c3b4",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [
+    {
+      "surface_id": "s_resid_pre_l14_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 14,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    },
+    {
+      "surface_id": "s_resid_pre_l27_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 27,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    }
+  ],
+  "policies_requested": [
+    "b0",
+    "fixed_routed",
+    "controller",
+    "controller_b0_preview"
+  ],
+  "case_ids_requested": [
+    "gen_008",
+    "gen_019",
+    "gen_024"
+  ],
+  "cases": [
+    {
+      "case_id": "gen_008",
+      "split": "rescue_v4",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Marta brings the proposal to Ugo before lunch, with Yusuf giving the manual to Edda.",
+          "legacy_score": 0.938889,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "bring",
+                "theme": "proposal",
+                "recipient": "Ugo",
+                "bound_agent": "marta",
+                "bound_recipient": "ugo",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "manual",
+                "recipient": "Edda",
+                "bound_agent": "yusuf",
+                "bound_recipient": "edda",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "surface_notes": [
+            "required_action_covered_by_inflection:give"
+          ],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4806505507053734,
+                "edited_probability": 0.4806505507053734,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.59375,
+                "edited_gap_to_fixed_winner": 0.59375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.2654404442992475,
+                "edited_probability": 0.2654404442992475,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.265625,
+                "edited_gap_to_fixed_winner": 7.265625,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00033605363635914333,
+                "edited_probability": 0.00033605363635914333,
+                "probability_delta": 0.0,
+                "rank_before": 29,
+                "rank_after": 29
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "aa7f9de460e348a88d26f445e40a781754fefbd990e072ccf9530d839014639a"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f",
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_routed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:7490c4edb1b5796a3267c7a1",
+          "status": "ok",
+          "output": " Marta brings the proposal to Ugo while Yusuf gives Edda the manual before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "bring",
+                "theme": "proposal",
+                "recipient": "Ugo",
+                "bound_agent": "marta",
+                "bound_recipient": "ugo",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "manual",
+                "recipient": "Edda",
+                "bound_agent": "yusuf",
+                "bound_recipient": "edda",
+                "bound_recipient_mode": "double_object",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [
+            "asyndetic_connective_no_comma"
+          ],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1418,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4806505507053734,
+                "edited_probability": 0.27462499625607445,
+                "probability_delta": -0.20602555444929893,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.59375,
+                "edited_gap_to_fixed_winner": 1.328125,
+                "gap_closure_fraction": -1.236842105263158,
+                "baseline_probability": 0.2654404442992475,
+                "edited_probability": 0.07276837977309623,
+                "probability_delta": -0.19267206452615127,
+                "rank_before": 2,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.265625,
+                "edited_gap_to_fixed_winner": 8.0,
+                "gap_closure_fraction": -0.1010752688172043,
+                "baseline_probability": 0.00033605363635914333,
+                "edited_probability": 9.212642293178019e-05,
+                "probability_delta": -0.00024392721342736314,
+                "rank_before": 29,
+                "rank_after": 29
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 5.890625,
+                "edited_gap_to_fixed_winner": -0.703125,
+                "gap_closure_fraction": 1.1193633952254642,
+                "baseline_probability": 0.001329117914816864,
+                "edited_probability": 0.5547577417340632,
+                "probability_delta": 0.5534286238192464,
+                "rank_before": 16,
+                "rank_after": 1
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "aa7f9de460e348a88d26f445e40a781754fefbd990e072ccf9530d839014639a"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f",
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:7490c4edb1b5796a3267c7a1",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      1418
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.26421394862635
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "clause_form",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:7490c4edb1b5796a3267c7a1",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.86845016,
+              "write_limit_norm": 5.26421404,
+              "raw_write_norm": 5.26392317,
+              "write_norm": 5.26392317,
+              "relative_write_norm": 0.11999337,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 1418,
+          "token_id_at_comparison": 1418,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 10,
+              "completed": 10
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:5b5f9885138a3eafd18dfff1",
+            "system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+            "usage": {
+              "input_tokens": 2514,
+              "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=2511)",
+              "output_tokens": 168,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=129)",
+              "total_tokens": 2682
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:7490c4edb1b5796a3267c7a1\"}",
+            "response_metadata": {
+              "response_id": "resp_09c665084d070c21006af3ca38a4f487d29c191f4729749efd",
+              "status": "completed"
+            },
+            "latency_seconds": 5.771,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:7490c4edb1b5796a3267c7a1",
+          "status": "ok",
+          "output": " Marta brings the proposal to Ugo while Yusuf gives Edda the manual before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "bring",
+                "theme": "proposal",
+                "recipient": "Ugo",
+                "bound_agent": "marta",
+                "bound_recipient": "ugo",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "manual",
+                "recipient": "Edda",
+                "bound_agent": "yusuf",
+                "bound_recipient": "edda",
+                "bound_recipient_mode": "double_object",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [
+            "asyndetic_connective_no_comma"
+          ],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1418,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4806505507053734,
+                "edited_probability": 0.27462499625607445,
+                "probability_delta": -0.20602555444929893,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.59375,
+                "edited_gap_to_fixed_winner": 1.328125,
+                "gap_closure_fraction": -1.236842105263158,
+                "baseline_probability": 0.2654404442992475,
+                "edited_probability": 0.07276837977309623,
+                "probability_delta": -0.19267206452615127,
+                "rank_before": 2,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.265625,
+                "edited_gap_to_fixed_winner": 8.0,
+                "gap_closure_fraction": -0.1010752688172043,
+                "baseline_probability": 0.00033605363635914333,
+                "edited_probability": 9.212642293178019e-05,
+                "probability_delta": -0.00024392721342736314,
+                "rank_before": 29,
+                "rank_after": 29
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 5.890625,
+                "edited_gap_to_fixed_winner": -0.703125,
+                "gap_closure_fraction": 1.1193633952254642,
+                "baseline_probability": 0.001329117914816864,
+                "edited_probability": 0.5547577417340632,
+                "probability_delta": 0.5534286238192464,
+                "rank_before": 16,
+                "rank_after": 1
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "aa7f9de460e348a88d26f445e40a781754fefbd990e072ccf9530d839014639a"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f",
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:7490c4edb1b5796a3267c7a1",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      1418
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.26421394862635
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "clause_form",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:7490c4edb1b5796a3267c7a1",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.86845016,
+              "write_limit_norm": 5.26421404,
+              "raw_write_norm": 5.26392317,
+              "write_norm": 5.26392317,
+              "relative_write_norm": 0.11999337,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 1418,
+          "token_id_at_comparison": 1418,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 10,
+              "completed": 10
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": true
+        },
+        "controller_b0_preview": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:3125d10c047d5083fa1f8171",
+            "system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+            "usage": {
+              "input_tokens": 2559,
+              "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=2556)",
+              "output_tokens": 106,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=67)",
+              "total_tokens": 2665
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:7490c4edb1b5796a3267c7a1\"}",
+            "response_metadata": {
+              "response_id": "resp_0610f0705b5afa9a006af3ca50794887d28dfc7f8a1410c536",
+              "status": "completed"
+            },
+            "latency_seconds": 3.613,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:7490c4edb1b5796a3267c7a1",
+          "status": "ok",
+          "output": " Marta brings the proposal to Ugo while Yusuf gives Edda the manual before lunch.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "bring",
+                "theme": "proposal",
+                "recipient": "Ugo",
+                "bound_agent": "marta",
+                "bound_recipient": "ugo",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Yusuf",
+                "action": "give",
+                "theme": "manual",
+                "recipient": "Edda",
+                "bound_agent": "yusuf",
+                "bound_recipient": "edda",
+                "bound_recipient_mode": "double_object",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [
+            "asyndetic_connective_no_comma"
+          ],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1418,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.4806505507053734,
+                "edited_probability": 0.27462499625607445,
+                "probability_delta": -0.20602555444929893,
+                "rank_before": 1,
+                "rank_after": 2
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.59375,
+                "edited_gap_to_fixed_winner": 1.328125,
+                "gap_closure_fraction": -1.236842105263158,
+                "baseline_probability": 0.2654404442992475,
+                "edited_probability": 0.07276837977309623,
+                "probability_delta": -0.19267206452615127,
+                "rank_before": 2,
+                "rank_after": 3
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 7.265625,
+                "edited_gap_to_fixed_winner": 8.0,
+                "gap_closure_fraction": -0.1010752688172043,
+                "baseline_probability": 0.00033605363635914333,
+                "edited_probability": 9.212642293178019e-05,
+                "probability_delta": -0.00024392721342736314,
+                "rank_before": 29,
+                "rank_after": 29
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 5.890625,
+                "edited_gap_to_fixed_winner": -0.703125,
+                "gap_closure_fraction": 1.1193633952254642,
+                "baseline_probability": 0.001329117914816864,
+                "edited_probability": 0.5547577417340632,
+                "probability_delta": 0.5534286238192464,
+                "rank_before": 16,
+                "rank_after": 1
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "aa7f9de460e348a88d26f445e40a781754fefbd990e072ccf9530d839014639a"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f",
+            "6aa6c091feaebee21fa254028fb2a0d42940a41c79cf9319076a75033da6449f"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:7490c4edb1b5796a3267c7a1",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      1418
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.26421394862635
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "clause_form",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:7490c4edb1b5796a3267c7a1",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.86845016,
+              "write_limit_norm": 5.26421404,
+              "raw_write_norm": 5.26392317,
+              "write_norm": 5.26392317,
+              "relative_write_norm": 0.11999337,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 1418,
+          "token_id_at_comparison": 1418,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 10,
+              "completed": 10
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 23,
+          "completed": 23
+        }
+      },
+      "prefix": " Marta brings the proposal to Ugo",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          109
+        ],
+        "dtype": "torch.int64",
+        "sha256": "aa7f9de460e348a88d26f445e40a781754fefbd990e072ccf9530d839014639a"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 23,
+          "completed": 23
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            77,
+            87
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            97
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          627,
+          1418
+        ],
+        "source_positions": [
+          77,
+          87,
+          97
+        ]
+      },
+      "eligible_recipe_count": 6,
+      "recipe_ids": [
+        "structural-contract:6659fb2c058df35ab7dd4233",
+        "structural-contract:4bfb09b608ba4a81f4a80472",
+        "structural-contract:8913710b929951fb7c7d08dc",
+        "structural-contract:7819130345975f0b0d58ad36",
+        "structural-contract:53340e1d5b4eb603dbc98c50",
+        "structural-contract:7490c4edb1b5796a3267c7a1"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:8913710b929951fb7c7d08dc",
+        "fixed_readout": "structural-contract:7819130345975f0b0d58ad36",
+        "fixed_clause_form": "structural-contract:7490c4edb1b5796a3267c7a1",
+        "fixed_verb_slot": null
+      }
+    },
+    {
+      "case_id": "gen_019",
+      "split": "rescue_v4",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Ilse sends the ledger to Stefan before supper, and Felix finishes the proposal for Alma.",
+          "legacy_score": 0.938889,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "missing_terms_lexical": [],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:take",
+            "action_substituted:finishes"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ilse",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Stefan",
+                "bound_agent": "ilse",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Felix",
+                "action": "take",
+                "theme": "proposal",
+                "recipient": "Alma",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 10.6171875,
+                "edited_gap_to_fixed_winner": 10.6171875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 1.1892192644583813e-05,
+                "edited_probability": 1.1892192644583813e-05,
+                "probability_delta": 0.0,
+                "rank_before": 103,
+                "rank_after": 103
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 0.8125,
+                "edited_gap_to_fixed_winner": 0.8125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.21546841346085985,
+                "edited_probability": 0.21546841346085985,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 1.796875,
+                "edited_gap_to_fixed_winner": 1.796875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.08051466369465686,
+                "edited_probability": 0.08051466369465686,
+                "probability_delta": 0.0,
+                "rank_before": 4,
+                "rank_after": 4
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.8828125,
+                "edited_gap_to_fixed_winner": 6.8828125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0004978292289770272,
+                "edited_probability": 0.0004978292289770272,
+                "probability_delta": 0.0,
+                "rank_before": 20,
+                "rank_after": 20
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                104
+              ],
+              "dtype": "torch.int64",
+              "sha256": "72d93442725a613b46c7941bf4bd44742ce16c5a083a9aed748ccefe8021f9af"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "08f1527c301115031ca773cc2291491d863aaf7709c554eb4f707677bcba3dba",
+            "08f1527c301115031ca773cc2291491d863aaf7709c554eb4f707677bcba3dba"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 10,
+              "completed": 10
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 33,
+            "completed": 33
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_routed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:b475b8b278e2fe65add35438",
+          "status": "ok",
+          "output": " Ilse sends the ledger to Stefan before supper, and Felix takes the proposal to Alma afterwards.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ilse",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Stefan",
+                "bound_agent": "ilse",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Felix",
+                "action": "take",
+                "theme": "proposal",
+                "recipient": "Alma",
+                "bound_agent": "felix",
+                "bound_recipient": "alma",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 5,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 34136,
+            "edited_winner": 5097,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 16.5234375,
+                "edited_gap_to_fixed_winner": 16.470703125,
+                "gap_closure_fraction": 0.0031914893617021275,
+                "baseline_probability": 2.3806989650078185e-08,
+                "edited_probability": 5.885671556741735e-10,
+                "probability_delta": -2.321842249440401e-08,
+                "rank_before": 7645,
+                "rank_after": 7598
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 4.921875,
+                "edited_gap_to_fixed_winner": 5.1484375,
+                "gap_closure_fraction": -0.046031746031746035,
+                "baseline_probability": 0.00260135161629779,
+                "edited_probability": 4.863999332964857e-05,
+                "probability_delta": -0.0025527116229681415,
+                "rank_before": 22,
+                "rank_after": 25
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 6.7265625,
+                "edited_gap_to_fixed_winner": 6.6171875,
+                "gap_closure_fraction": 0.016260162601626018,
+                "baseline_probability": 0.0004279896193169652,
+                "edited_probability": 1.1197562274189568e-05,
+                "probability_delta": -0.00041679205704277564,
+                "rank_before": 49,
+                "rank_after": 54
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 9.859375,
+                "edited_gap_to_fixed_winner": 10.1171875,
+                "gap_closure_fraction": -0.026148969889064975,
+                "baseline_probability": 1.8658213314710988e-05,
+                "edited_probability": 3.3813708138899113e-07,
+                "probability_delta": -1.8320076233321997e-05,
+                "rank_before": 305,
+                "rank_after": 384
+              },
+              {
+                "token_id": 5097,
+                "baseline_gap_to_fixed_winner": 0.09375,
+                "edited_gap_to_fixed_winner": -4.765625,
+                "gap_closure_fraction": 51.833333333333336,
+                "baseline_probability": 0.3251075863176065,
+                "edited_probability": 0.9831417601885473,
+                "probability_delta": 0.6580341738709408,
+                "rank_before": 2,
+                "rank_after": 1
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "e26fd8825b104f5194277b871567258cb5e22b06ea895b034d2852fefd4370e7"
+            },
+            "decode_step": 5
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "539d1cf6da0a55691c32ebf725ba8834e489b0f450ab5b24f82da01edebbc387",
+            "539d1cf6da0a55691c32ebf725ba8834e489b0f450ab5b24f82da01edebbc387"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:b475b8b278e2fe65add35438",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      5097
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.158258522796313
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "verb_slot",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:b475b8b278e2fe65add35438",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.69895554,
+              "write_limit_norm": 5.36387444,
+              "raw_write_norm": 5.15810156,
+              "write_norm": 5.15810156,
+              "relative_write_norm": 0.11539647,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 5097,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 21,
+              "completed": 21
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 46,
+            "completed": 46
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:1eefc3c3434709cb29eac037",
+            "system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+            "usage": {
+              "input_tokens": 4567,
+              "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4564)",
+              "output_tokens": 194,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=160)",
+              "total_tokens": 4761
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:b475b8b278e2fe65add35438\"}",
+            "response_metadata": {
+              "response_id": "resp_0ed25bb89e265876006af3cab242fc87d2ac5ab58a72e642e2",
+              "status": "completed"
+            },
+            "latency_seconds": 6.541,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:b475b8b278e2fe65add35438",
+          "status": "ok",
+          "output": " Ilse sends the ledger to Stefan before supper, and Felix takes the proposal to Alma afterwards.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ilse",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Stefan",
+                "bound_agent": "ilse",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Felix",
+                "action": "take",
+                "theme": "proposal",
+                "recipient": "Alma",
+                "bound_agent": "felix",
+                "bound_recipient": "alma",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 5,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 34136,
+            "edited_winner": 5097,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 16.5234375,
+                "edited_gap_to_fixed_winner": 16.470703125,
+                "gap_closure_fraction": 0.0031914893617021275,
+                "baseline_probability": 2.3806989650078185e-08,
+                "edited_probability": 5.885671556741735e-10,
+                "probability_delta": -2.321842249440401e-08,
+                "rank_before": 7645,
+                "rank_after": 7598
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 4.921875,
+                "edited_gap_to_fixed_winner": 5.1484375,
+                "gap_closure_fraction": -0.046031746031746035,
+                "baseline_probability": 0.00260135161629779,
+                "edited_probability": 4.863999332964857e-05,
+                "probability_delta": -0.0025527116229681415,
+                "rank_before": 22,
+                "rank_after": 25
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 6.7265625,
+                "edited_gap_to_fixed_winner": 6.6171875,
+                "gap_closure_fraction": 0.016260162601626018,
+                "baseline_probability": 0.0004279896193169652,
+                "edited_probability": 1.1197562274189568e-05,
+                "probability_delta": -0.00041679205704277564,
+                "rank_before": 49,
+                "rank_after": 54
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 9.859375,
+                "edited_gap_to_fixed_winner": 10.1171875,
+                "gap_closure_fraction": -0.026148969889064975,
+                "baseline_probability": 1.8658213314710988e-05,
+                "edited_probability": 3.3813708138899113e-07,
+                "probability_delta": -1.8320076233321997e-05,
+                "rank_before": 305,
+                "rank_after": 384
+              },
+              {
+                "token_id": 5097,
+                "baseline_gap_to_fixed_winner": 0.09375,
+                "edited_gap_to_fixed_winner": -4.765625,
+                "gap_closure_fraction": 51.833333333333336,
+                "baseline_probability": 0.3251075863176065,
+                "edited_probability": 0.9831417601885473,
+                "probability_delta": 0.6580341738709408,
+                "rank_before": 2,
+                "rank_after": 1
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "e26fd8825b104f5194277b871567258cb5e22b06ea895b034d2852fefd4370e7"
+            },
+            "decode_step": 5
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "539d1cf6da0a55691c32ebf725ba8834e489b0f450ab5b24f82da01edebbc387",
+            "539d1cf6da0a55691c32ebf725ba8834e489b0f450ab5b24f82da01edebbc387"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:b475b8b278e2fe65add35438",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      5097
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.158258522796313
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "verb_slot",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:b475b8b278e2fe65add35438",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.69895554,
+              "write_limit_norm": 5.36387444,
+              "raw_write_norm": 5.15810156,
+              "write_norm": 5.15810156,
+              "relative_write_norm": 0.11539647,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 5097,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 21,
+              "completed": 21
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 46,
+            "completed": 46
+          },
+          "natural_branch_changed": true
+        },
+        "controller_b0_preview": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:0b636461e9977fb49814098f",
+            "system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+            "usage": {
+              "input_tokens": 4611,
+              "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4608)",
+              "output_tokens": 136,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=102)",
+              "total_tokens": 4747
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:b475b8b278e2fe65add35438\"}",
+            "response_metadata": {
+              "response_id": "resp_02e3da3bfa252c5f006af3cad8a90887d2b0e883cdb6ff6b41",
+              "status": "completed"
+            },
+            "latency_seconds": 5.08,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:b475b8b278e2fe65add35438",
+          "status": "ok",
+          "output": " Ilse sends the ledger to Stefan before supper, and Felix takes the proposal to Alma afterwards.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Ilse",
+                "action": "send",
+                "theme": "ledger",
+                "recipient": "Stefan",
+                "bound_agent": "ilse",
+                "bound_recipient": "stefan",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Felix",
+                "action": "take",
+                "theme": "proposal",
+                "recipient": "Alma",
+                "bound_agent": "felix",
+                "bound_recipient": "alma",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 5,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 34136,
+            "edited_winner": 5097,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 16.5234375,
+                "edited_gap_to_fixed_winner": 16.470703125,
+                "gap_closure_fraction": 0.0031914893617021275,
+                "baseline_probability": 2.3806989650078185e-08,
+                "edited_probability": 5.885671556741735e-10,
+                "probability_delta": -2.321842249440401e-08,
+                "rank_before": 7645,
+                "rank_after": 7598
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 4.921875,
+                "edited_gap_to_fixed_winner": 5.1484375,
+                "gap_closure_fraction": -0.046031746031746035,
+                "baseline_probability": 0.00260135161629779,
+                "edited_probability": 4.863999332964857e-05,
+                "probability_delta": -0.0025527116229681415,
+                "rank_before": 22,
+                "rank_after": 25
+              },
+              {
+                "token_id": 323,
+                "baseline_gap_to_fixed_winner": 6.7265625,
+                "edited_gap_to_fixed_winner": 6.6171875,
+                "gap_closure_fraction": 0.016260162601626018,
+                "baseline_probability": 0.0004279896193169652,
+                "edited_probability": 1.1197562274189568e-05,
+                "probability_delta": -0.00041679205704277564,
+                "rank_before": 49,
+                "rank_after": 54
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 9.859375,
+                "edited_gap_to_fixed_winner": 10.1171875,
+                "gap_closure_fraction": -0.026148969889064975,
+                "baseline_probability": 1.8658213314710988e-05,
+                "edited_probability": 3.3813708138899113e-07,
+                "probability_delta": -1.8320076233321997e-05,
+                "rank_before": 305,
+                "rank_after": 384
+              },
+              {
+                "token_id": 5097,
+                "baseline_gap_to_fixed_winner": 0.09375,
+                "edited_gap_to_fixed_winner": -4.765625,
+                "gap_closure_fraction": 51.833333333333336,
+                "baseline_probability": 0.3251075863176065,
+                "edited_probability": 0.9831417601885473,
+                "probability_delta": 0.6580341738709408,
+                "rank_before": 2,
+                "rank_after": 1
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "e26fd8825b104f5194277b871567258cb5e22b06ea895b034d2852fefd4370e7"
+            },
+            "decode_step": 5
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "539d1cf6da0a55691c32ebf725ba8834e489b0f450ab5b24f82da01edebbc387",
+            "539d1cf6da0a55691c32ebf725ba8834e489b0f450ab5b24f82da01edebbc387"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:b475b8b278e2fe65add35438",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      5097
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.158258522796313
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "verb_slot",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:b475b8b278e2fe65add35438",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 44.69895554,
+              "write_limit_norm": 5.36387444,
+              "raw_write_norm": 5.15810156,
+              "write_norm": 5.15810156,
+              "relative_write_norm": 0.11539647,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 5097,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 21,
+              "completed": 21
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 46,
+            "completed": 46
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 20,
+          "completed": 20
+        }
+      },
+      "prefix": " Ilse sends the ledger to Stefan",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          104
+        ],
+        "dtype": "torch.int64",
+        "sha256": "72d93442725a613b46c7941bf4bd44742ce16c5a083a9aed748ccefe8021f9af"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 20,
+          "completed": 20
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            70,
+            79,
+            82,
+            90
+          ]
+        },
+        {
+          "token_id": 323,
+          "piece": " and",
+          "source_positions": [
+            80
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            93
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          323,
+          627,
+          1418,
+          5097
+        ],
+        "source_positions": [
+          70,
+          79,
+          82,
+          90,
+          80,
+          93
+        ]
+      },
+      "eligible_recipe_count": 14,
+      "recipe_ids": [
+        "structural-contract:0207f534e530733b2d09f440",
+        "structural-contract:20497db1516b6133951dcb7d",
+        "structural-contract:0ad074ad9573b2eebdf35b71",
+        "structural-contract:06f09b8f7e7434768c00a35b",
+        "structural-contract:db702433fedb53ea2c4a8848",
+        "structural-contract:c4d7842ddae3c1c661de8486",
+        "structural-contract:8ca0325a2e834ee121014c88",
+        "structural-contract:fa83bc016d3c399a4fd802e3",
+        "structural-contract:c10fda6557c0c0ce61525154",
+        "structural-contract:11ead5c73df4565108c73384",
+        "structural-contract:c22a1118fe0aba78cf380ffa",
+        "structural-contract:51a28eb5db6847eb5cfbaff8",
+        "structural-contract:f67d77d1771a53286f91d7fd",
+        "structural-contract:b475b8b278e2fe65add35438"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:0ad074ad9573b2eebdf35b71",
+        "fixed_readout": "structural-contract:11ead5c73df4565108c73384",
+        "fixed_clause_form": "structural-contract:f67d77d1771a53286f91d7fd",
+        "fixed_verb_slot": "structural-contract:b475b8b278e2fe65add35438"
+      }
+    },
+    {
+      "case_id": "gen_024",
+      "split": "rescue_v4",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Marta gives the proposal to Kira before midnight, while Ugo finishes the blueprint for Jonas.",
+          "legacy_score": 0.938889,
+          "constraint_violations": [
+            "missing_required_terms"
+          ],
+          "missing_terms_lexical": [],
+          "constraints_ok": false,
+          "single_sentence_ok": true,
+          "role_status": "unknown",
+          "role_unknown_reasons": [
+            "incomplete_frame:take",
+            "action_substituted:finishes"
+          ],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "give",
+                "theme": "proposal",
+                "recipient": "Kira",
+                "bound_agent": "marta",
+                "bound_recipient": "kira",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "blueprint",
+                "recipient": "Jonas",
+                "bound_agent": null,
+                "bound_recipient": null,
+                "status": "action_missing"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": false,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": false,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.125,
+                "edited_gap_to_fixed_winner": 11.125,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 9.843694467920332e-06,
+                "edited_probability": 9.843694467920332e-06,
+                "probability_delta": 0.0,
+                "rank_before": 155,
+                "rank_after": 155
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.234375,
+                "edited_gap_to_fixed_winner": 1.234375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.19435780493699412,
+                "edited_probability": 0.19435780493699412,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.7109375,
+                "edited_gap_to_fixed_winner": 7.7109375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0002991345866394431,
+                "edited_probability": 0.0002991345866394431,
+                "probability_delta": 0.0,
+                "rank_before": 24,
+                "rank_after": 24
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.7421875,
+                "edited_gap_to_fixed_winner": 6.7421875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.0007881146661228493,
+                "edited_probability": 0.0007881146661228493,
+                "probability_delta": 0.0,
+                "rank_before": 15,
+                "rank_after": 15
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "3fee4347b748bc819233d0c85c003df7be291b068ce5841708d9394252c81bdb"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f",
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 36,
+            "completed": 36
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_routed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:a50a698dcff0b74e1bb8099f",
+          "status": "ok",
+          "output": " Marta gives the proposal to Kira, while Ugo takes the blueprint to Jonas before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "give",
+                "theme": "proposal",
+                "recipient": "Kira",
+                "bound_agent": "marta",
+                "bound_recipient": "kira",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "blueprint",
+                "recipient": "Jonas",
+                "bound_agent": "ugo",
+                "bound_recipient": "jonas",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.125,
+                "edited_gap_to_fixed_winner": 11.7578125,
+                "gap_closure_fraction": -0.05688202247191011,
+                "baseline_probability": 9.843694467920332e-06,
+                "edited_probability": 1.7459736530500926e-06,
+                "probability_delta": -8.097720814870239e-06,
+                "rank_before": 155,
+                "rank_after": 221
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.234375,
+                "edited_gap_to_fixed_winner": -1.140625,
+                "gap_closure_fraction": 1.9240506329113924,
+                "baseline_probability": 0.19435780493699412,
+                "edited_probability": 0.6978433065868253,
+                "probability_delta": 0.5034855016498312,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.7109375,
+                "edited_gap_to_fixed_winner": 7.8984375,
+                "gap_closure_fraction": -0.0243161094224924,
+                "baseline_probability": 0.0002991345866394431,
+                "edited_probability": 8.282147332251729e-05,
+                "probability_delta": -0.0002163131133169258,
+                "rank_before": 24,
+                "rank_after": 30
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.7421875,
+                "edited_gap_to_fixed_winner": 6.2109375,
+                "gap_closure_fraction": 0.07879490150637311,
+                "baseline_probability": 0.0007881146661228493,
+                "edited_probability": 0.0004477286546864702,
+                "probability_delta": -0.0003403860114363791,
+                "rank_before": 15,
+                "rank_after": 14
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "3fee4347b748bc819233d0c85c003df7be291b068ce5841708d9394252c81bdb"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f",
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:a50a698dcff0b74e1bb8099f",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.258970970003029
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:a50a698dcff0b74e1bb8099f",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.82476425,
+              "write_limit_norm": 5.25897169,
+              "raw_write_norm": 5.25866461,
+              "write_norm": 5.25866461,
+              "relative_write_norm": 0.11999299,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "token_id_at_comparison": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": true
+        },
+        "controller": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:eb2ba708d857e3d95dc005b6",
+            "system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+            "usage": {
+              "input_tokens": 4385,
+              "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4382)",
+              "output_tokens": 117,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=81)",
+              "total_tokens": 4502
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:a50a698dcff0b74e1bb8099f\"}",
+            "response_metadata": {
+              "response_id": "resp_00c9742a66c02a21006af3cb416df887d287435dbdffe47a80",
+              "status": "completed"
+            },
+            "latency_seconds": 4.536,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:a50a698dcff0b74e1bb8099f",
+          "status": "ok",
+          "output": " Marta gives the proposal to Kira, while Ugo takes the blueprint to Jonas before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "give",
+                "theme": "proposal",
+                "recipient": "Kira",
+                "bound_agent": "marta",
+                "bound_recipient": "kira",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "blueprint",
+                "recipient": "Jonas",
+                "bound_agent": "ugo",
+                "bound_recipient": "jonas",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.125,
+                "edited_gap_to_fixed_winner": 11.7578125,
+                "gap_closure_fraction": -0.05688202247191011,
+                "baseline_probability": 9.843694467920332e-06,
+                "edited_probability": 1.7459736530500926e-06,
+                "probability_delta": -8.097720814870239e-06,
+                "rank_before": 155,
+                "rank_after": 221
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.234375,
+                "edited_gap_to_fixed_winner": -1.140625,
+                "gap_closure_fraction": 1.9240506329113924,
+                "baseline_probability": 0.19435780493699412,
+                "edited_probability": 0.6978433065868253,
+                "probability_delta": 0.5034855016498312,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.7109375,
+                "edited_gap_to_fixed_winner": 7.8984375,
+                "gap_closure_fraction": -0.0243161094224924,
+                "baseline_probability": 0.0002991345866394431,
+                "edited_probability": 8.282147332251729e-05,
+                "probability_delta": -0.0002163131133169258,
+                "rank_before": 24,
+                "rank_after": 30
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.7421875,
+                "edited_gap_to_fixed_winner": 6.2109375,
+                "gap_closure_fraction": 0.07879490150637311,
+                "baseline_probability": 0.0007881146661228493,
+                "edited_probability": 0.0004477286546864702,
+                "probability_delta": -0.0003403860114363791,
+                "rank_before": 15,
+                "rank_after": 14
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "3fee4347b748bc819233d0c85c003df7be291b068ce5841708d9394252c81bdb"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f",
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:a50a698dcff0b74e1bb8099f",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.258970970003029
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:a50a698dcff0b74e1bb8099f",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.82476425,
+              "write_limit_norm": 5.25897169,
+              "raw_write_norm": 5.25866461,
+              "write_norm": 5.25866461,
+              "relative_write_norm": 0.11999299,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "token_id_at_comparison": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": true
+        },
+        "controller_b0_preview": {
+          "selection": {
+            "provider_calls": 1,
+            "provider": "openai",
+            "model": "gpt-5.6-luna",
+            "packet_sha256": "packet:9bc10735881f13de75bdba92",
+            "system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+            "usage": {
+              "input_tokens": 4430,
+              "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4427)",
+              "output_tokens": 110,
+              "output_tokens_details": "OutputTokensDetails(reasoning_tokens=74)",
+              "total_tokens": 4540
+            },
+            "response": "{\"decision\":\"probe\",\"recipe_id\":\"structural-contract:a50a698dcff0b74e1bb8099f\"}",
+            "response_metadata": {
+              "response_id": "resp_06bfed6aaf108e1d006af3cb59781087d2bc90ca6a21256068",
+              "status": "completed"
+            },
+            "latency_seconds": 4.822,
+            "status": "selected"
+          },
+          "selected_recipe_id": "structural-contract:a50a698dcff0b74e1bb8099f",
+          "status": "ok",
+          "output": " Marta gives the proposal to Kira, while Ugo takes the blueprint to Jonas before midnight.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Marta",
+                "action": "give",
+                "theme": "proposal",
+                "recipient": "Kira",
+                "bound_agent": "marta",
+                "bound_recipient": "kira",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Ugo",
+                "action": "take",
+                "theme": "blueprint",
+                "recipient": "Jonas",
+                "bound_agent": "ugo",
+                "bound_recipient": "jonas",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 11,
+            "raw_greedy_branch_changed": true,
+            "rows": [
+              {
+                "token_id": 13538,
+                "baseline_gap_to_fixed_winner": 11.125,
+                "edited_gap_to_fixed_winner": 11.7578125,
+                "gap_closure_fraction": -0.05688202247191011,
+                "baseline_probability": 9.843694467920332e-06,
+                "edited_probability": 1.7459736530500926e-06,
+                "probability_delta": -8.097720814870239e-06,
+                "rank_before": 155,
+                "rank_after": 221
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 1.234375,
+                "edited_gap_to_fixed_winner": -1.140625,
+                "gap_closure_fraction": 1.9240506329113924,
+                "baseline_probability": 0.19435780493699412,
+                "edited_probability": 0.6978433065868253,
+                "probability_delta": 0.5034855016498312,
+                "rank_before": 2,
+                "rank_after": 1
+              },
+              {
+                "token_id": 20444,
+                "baseline_gap_to_fixed_winner": 7.7109375,
+                "edited_gap_to_fixed_winner": 7.8984375,
+                "gap_closure_fraction": -0.0243161094224924,
+                "baseline_probability": 0.0002991345866394431,
+                "edited_probability": 8.282147332251729e-05,
+                "probability_delta": -0.0002163131133169258,
+                "rank_before": 24,
+                "rank_after": 30
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 6.7421875,
+                "edited_gap_to_fixed_winner": 6.2109375,
+                "gap_closure_fraction": 0.07879490150637311,
+                "baseline_probability": 0.0007881146661228493,
+                "edited_probability": 0.0004477286546864702,
+                "probability_delta": -0.0003403860114363791,
+                "rank_before": 15,
+                "rank_after": 14
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                109
+              ],
+              "dtype": "torch.int64",
+              "sha256": "3fee4347b748bc819233d0c85c003df7be291b068ce5841708d9394252c81bdb"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f",
+            "b98153bc90a86259dfb0539913864cd18d0282814724a7c5cf242e04fdef500f"
+          ],
+          "command": {
+            "version": "0.1",
+            "decision": "apply",
+            "edits": [
+              {
+                "id": "structural-contract:a50a698dcff0b74e1bb8099f",
+                "target": {
+                  "surface_id": "s_resid_pre_l27_last"
+                },
+                "source": {
+                  "dtype": "vector",
+                  "expr": {
+                    "fn": "readout_direction",
+                    "target_token_ids": [
+                      11
+                    ],
+                    "normalize": true
+                  }
+                },
+                "op": {
+                  "kind": "resid_add",
+                  "alpha": 5.258970970003029
+                },
+                "budget": {
+                  "ttl_steps": 1,
+                  "revertible": true
+                },
+                "meta": {
+                  "write_contract": "norm_relative_structural_v1",
+                  "relative_write_cap": 0.12,
+                  "diagnostic_only": true,
+                  "production_apply_allowed": false
+                }
+              }
+            ]
+          },
+          "recipe_kind": "readout",
+          "recipe_component": "readout",
+          "runtime_telemetry": [
+            {
+              "edit_id": "structural-contract:a50a698dcff0b74e1bb8099f",
+              "surface_id": "s_resid_pre_l27_last",
+              "op": "resid_add",
+              "operator_recipe_id": null,
+              "relative_write_cap": 0.12,
+              "guard_call_count": 1,
+              "written_positions": 1,
+              "site_norm": 43.82476425,
+              "write_limit_norm": 5.25897169,
+              "raw_write_norm": 5.25866461,
+              "write_norm": 5.25866461,
+              "relative_write_norm": 0.11999299,
+              "relative_clip_saturated": false
+            }
+          ],
+          "first_token_id": 11,
+          "token_id_at_comparison": 11,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 11,
+              "completed": 11
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 38,
+            "completed": 38
+          },
+          "natural_branch_changed": true
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 22,
+          "completed": 22
+        }
+      },
+      "prefix": " Marta gives the proposal to Kira",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          109
+        ],
+        "dtype": "torch.int64",
+        "sha256": "3fee4347b748bc819233d0c85c003df7be291b068ce5841708d9394252c81bdb"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 22,
+          "completed": 22
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            72,
+            82,
+            86,
+            94
+          ]
+        },
+        {
+          "token_id": 20444,
+          "piece": " whereas",
+          "source_positions": [
+            83
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            97
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          20444,
+          627,
+          1418
+        ],
+        "source_positions": [
+          72,
+          82,
+          86,
+          94,
+          83,
+          97
+        ]
+      },
+      "eligible_recipe_count": 13,
+      "recipe_ids": [
+        "structural-contract:57696460e8ece4a8e9616d6c",
+        "structural-contract:3f4a6cc08a8b97494b40bea8",
+        "structural-contract:ef60546448d649de29e9ec72",
+        "structural-contract:fb84e8ae708be991a2941828",
+        "structural-contract:a2edcd6ff2cbc914d91831c5",
+        "structural-contract:b0e86bc9bba7cc7178c524d5",
+        "structural-contract:1852c0cda9e85a731bc839e5",
+        "structural-contract:afcc1327eb21ab22820399e5",
+        "structural-contract:c6cb1e3336275590afd9d78d",
+        "structural-contract:a50a698dcff0b74e1bb8099f",
+        "structural-contract:33736f0ffc4c0b96bb6b4668",
+        "structural-contract:f00d2411eded1f16d60eabc6",
+        "structural-contract:8d79995f97faa5438136348b"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:ef60546448d649de29e9ec72",
+        "fixed_readout": "structural-contract:a50a698dcff0b74e1bb8099f",
+        "fixed_clause_form": "structural-contract:8d79995f97faa5438136348b",
+        "fixed_verb_slot": null
+      }
+    }
+  ],
+  "scope": "restored_contract_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 402.858,
+  "aggregate": {
+    "rescue_v4": {
+      "b0": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 2,
+        "selection_errors": 0
+      },
+      "fixed_routed": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 3,
+        "wins_vs_b0": 3,
+        "losses_vs_b0": 0,
+        "output_changes": 3,
+        "applied_diagnostic_edits": 3,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 3,
+        "wins_vs_b0": 3,
+        "losses_vs_b0": 0,
+        "output_changes": 3,
+        "applied_diagnostic_edits": 3,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller_b0_preview": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 3,
+        "wins_vs_b0": 3,
+        "losses_vs_b0": 0,
+        "output_changes": 3,
+        "applied_diagnostic_edits": 3,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    }
+  },
+  "paired_b0_preview": {
+    "reference": "controller",
+    "challenger": "controller_b0_preview",
+    "expected": 3,
+    "unavailable_boundary": [],
+    "unpaired": [],
+    "strata": {
+      "b0_pass": {
+        "paired": 0,
+        "same_choice": 0,
+        "different_choice": 0,
+        "both_pass": 0,
+        "both_fail": 0,
+        "reference_only": 0,
+        "challenger_only": 0,
+        "reference_provider_noop": 0,
+        "challenger_provider_noop": 0
+      },
+      "b0_fail": {
+        "paired": 3,
+        "same_choice": 3,
+        "different_choice": 0,
+        "both_pass": 3,
+        "both_fail": 0,
+        "reference_only": 0,
+        "challenger_only": 0,
+        "reference_provider_noop": 0,
+        "challenger_provider_noop": 0
+      }
+    },
+    "discordant_cases": []
+  }
+}

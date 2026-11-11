@@ -10,7 +10,7 @@ import torch
 from SpiralInterventionLab.runtime.adapter import BoundSurface, HookedTransformerAdapter, ModelAdapter
 from SpiralInterventionLab.runtime.baselines import activation_only_policy, run_b0, run_b1, run_c1, run_minimal_baseline_suite
 from SpiralInterventionLab.runtime.codecs import CharacterCodec
-from SpiralInterventionLab.runtime.compiler import StepContext, compile_command
+from SpiralInterventionLab.runtime.compiler import StepContext, _readout_matrix, compile_command, compile_expr
 from SpiralInterventionLab.runtime.edit_budget import (
     PRODUCTION_TRIAL_FOLLOWUP_EDIT_BUDGET_POOL,
     prepare_direction,
@@ -948,6 +948,28 @@ class TestCompiler(unittest.TestCase):
         out = hook_fn(torch.zeros(1, 4, 3), None)
         expected_direction = torch.nn.functional.normalize(torch.tensor([0.0, 1.0, -1.0]), dim=0)
         self.assertTrue(torch.allclose(out[0, -1], 0.2 * expected_direction, atol=1e-6))
+
+    def test_readout_direction_gathers_before_fp32_conversion(self):
+        runtime_state = FakeRuntimeState()
+        ctx = StepContext(packet=parse_observation_packet(_make_packet()), runtime_state=runtime_state,
+                          traces={}, stats={}, adapter=FakeAdapter())
+        expr = {"fn": "readout_direction", "target_token_ids": [1, 4],
+                "negative_token_ids": [3, 6], "negative_scale": 0.25, "normalize": False}
+        for dtype in (torch.float16, torch.bfloat16):
+            for transposed in (False, True):
+                with self.subTest(dtype=dtype, transposed=transposed):
+                    weights = (torch.arange(24, dtype=torch.float32, device="cpu") / 7).reshape(3, 8).to(dtype)
+                    matrix = weights.T.contiguous() if transposed else weights
+                    runtime_state.model = type("ReadoutModel", (), {"W_U": torch.nn.Parameter(matrix)})()
+                    source = _readout_matrix(ctx)
+                    self.assertEqual(source.data_ptr(), matrix.data_ptr())
+                    self.assertEqual(source.dtype, dtype)
+                    full_fp32 = weights.float()
+                    target = full_fp32[:, [1, 4]].T.contiguous().mean(dim=0)
+                    negative = full_fp32[:, [3, 6]].T.contiguous().mean(dim=0)
+                    actual = compile_expr(expr)(ctx)
+                    self.assertEqual(actual.dtype, torch.float32)
+                    self.assertTrue(torch.equal(actual, target - 0.25 * negative))
 
     def test_readout_direction_rejects_unsafe_payloads(self):
         command = _resid_command()

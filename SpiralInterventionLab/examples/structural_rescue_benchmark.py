@@ -48,6 +48,16 @@ class ForwardLimit(RuntimeError):
     pass
 
 
+def prepare_unembed_storage(model: Any) -> None:
+    """Retain the linear-input layout without a full weight copy per forward."""
+    import torch
+
+    weight = model.unembed.W_U
+    if not weight.T.is_contiguous():
+        model.unembed.W_U = torch.nn.Parameter(
+            weight.detach().T.contiguous().T, requires_grad=weight.requires_grad)
+
+
 def capture_sources(output: Path) -> dict[str, str]:
     """Save the source bytes and versions before loading a model or provider."""
     root = Path(__file__).resolve().parents[2]
@@ -79,6 +89,8 @@ def unavailable_policies(baseline: dict, policies: list[str]) -> dict:
 
 class Meter:
     """Count and cap actual calls, including packet preparation and failed calls."""
+    FORWARD_CAPS = {"setup": 40, "diagnostic": 24, "continuation": 64}
+
     def __init__(self, worker: Any, *, deadline: float, disk_path: Path, disk_floor_gib: float = 10):
         self.worker, self.deadline, self.disk_path = worker, deadline, disk_path
         self.disk_floor_gib = disk_floor_gib
@@ -86,10 +98,12 @@ class Meter:
         self.boundary_length: int | None = None
         self.counts: dict[str, dict[str, int]] = {}
         self.raw_first: Any = None
+        self.raw_prefix_identity: dict | None = None
         self.capture_edited = False
 
     def reset(self, phase: str) -> None:
         self.phase, self.counts, self.raw_first = phase, {}, None
+        self.raw_prefix_identity = None
 
     def check_limits(self) -> None:
         if time.monotonic() > self.deadline:
@@ -108,7 +122,7 @@ class Meter:
             phase = self.phase
             if phase == "branch":
                 phase = "diagnostic" if tokens.shape[-1] == self.boundary_length else "continuation"
-            cap = {"setup": 40, "diagnostic": 24, "continuation": 64}[phase]
+            cap = self.FORWARD_CAPS[phase]
             count = self.counts.setdefault(phase, {"attempted": 0, "completed": 0})
             if count["attempted"] >= cap:
                 raise ForwardLimit(phase + "_forward_budget_exhausted")
@@ -118,9 +132,9 @@ class Meter:
             count["completed"] += 1
             if (self.phase == "branch" and active == self.capture_edited
                     and self.raw_first is None
-                    and (tokens.shape[-1] == self.boundary_length
-                         or (self.capture_edited and active))):
+                    and tokens.shape[-1] == self.boundary_length):
                 self.raw_first = value[0][0, -1].detach().cpu().double()
+                self.raw_prefix_identity = tensor_identity(tokens)
             return value
 
         runtime.run_with_cache = run

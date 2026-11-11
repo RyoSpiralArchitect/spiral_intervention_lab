@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -24,19 +25,38 @@ from ..runtime.policy import validate_command_against_packet
 from ..runtime.response_probe import state_identity, tensor_identity
 from ..tasks.structural_rescue import (
     CASES, StructuralRescueEnv, _COMMON_ENGLISH_VERBS, benchmark_manifest)
-from ..tasks.structural_rescue_generator import candidate_rows
+from ..tasks.structural_rescue_generator import (
+    FAMILIES_V3, GENERATOR_VERSION_V3, VERBS_V3, candidate_rows, generate,
+)
 from .digit_transform_e2e import (
     build_default_activation_surface_catalog, build_hooked_transformer_worker_runtime, load_worker_model,
 )
 from .replay_orphan_blueprint_ceiling import _release_memory, verify_checkpoint
-from .structural_rescue_benchmark import Meter, aggregate, capture_sources, choose, readout, unavailable_policies
-from .structural_rescue_screen import DISK_FLOOR_GIB, load_selected_cases
+from .structural_rescue_benchmark import (
+    Meter, aggregate, capture_sources, choose, prepare_unembed_storage, readout, unavailable_policies,
+)
+from .structural_rescue_screen import DISK_FLOOR_GIB, load_selected_cases, select as select_screen_failures
+from .structural_rescue_selection import (
+    B0_LOOKAHEAD_MAX_TOKENS, B0_PREVIEW_POLICY, B0_PREVIEW_PROMPT_ADD, b0_preview, compare_selectors,
+)
 
 
 POLICIES = ("b0", "fixed", "fixed_readout", "random", "controller")
 CLAUSE_FORM_POLICIES = ("b0", "fixed", "fixed_readout", "fixed_clause_form", "random", "controller")
 VERB_SLOT_POLICIES = ("b0", "fixed", "fixed_readout", "fixed_clause_form",
                       "fixed_verb_slot", "random", "controller")
+HOLDOUT_POLICIES = ("b0", "fixed_routed", "controller")
+B0_PREVIEW_POLICIES = (*HOLDOUT_POLICIES, B0_PREVIEW_POLICY)
+HOLDOUT_SEED = 20261111
+HOLDOUT_COUNT = 10
+HOLDOUT_CAP = 0.12
+HOLDOUT_DISK_FLOOR_GIB = 10
+HOLDOUT_RUN = {
+    "worker_model": "meta-llama/Llama-3.2-3B-Instruct", "device": "mps", "dtype": "float16",
+    "controller_model": "gpt-5.6-luna", "wall_seconds": 3600, "mps_memory_fraction": 0.7,
+}
+FIXED_ROUTED_RULE = "first_offered_applicable_verb_slot_then_clause_form_then_readout_else_noop"
+READOUT_COMPARISON = "same_token_prefix_unedited_at_scheduled_decode_step"
 RELATIVE_WRITE_CAP = structural_contract.DEFAULT_RELATIVE_WRITE_CAP
 # Half-precision rounding of the clipped write; telemetry reports the realized norm.
 CAST_TOLERANCE = 2e-3
@@ -86,10 +106,12 @@ slot; prefer it there over a boundary push, which cannot reach the slot.
 
 
 def system_prompt(datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-                  clause_form: bool = False, verb_slot: bool = False) -> str:
+                  clause_form: bool = False, verb_slot: bool = False, *,
+                  b0_preview_study: bool = False) -> str:
     return (BASE_PROMPT.format(cap=cap) + (DATASHEET_PROMPT_ADD if datasheet else "")
             + (CLAUSE_FORM_PROMPT_ADD if clause_form else "")
-            + (VERB_SLOT_PROMPT_ADD if verb_slot else ""))
+            + (VERB_SLOT_PROMPT_ADD if verb_slot else "")
+            + (B0_PREVIEW_PROMPT_ADD if b0_preview_study else ""))
 
 
 # How a verb_slot recipe is located: simulate the b0 continuation, find the
@@ -163,12 +185,67 @@ def manifest_bytes(case_set: dict[str, Any] | None = None, datasheet: bool = Fal
                        indent=2, sort_keys=True) + "\n").encode()
 
 
+def heldout_cases():
+    return tuple(replace(case, case_id=f"heldout_{i:03d}", split="heldout_v1")
+                 for i, case in enumerate(generate(HOLDOUT_SEED, HOLDOUT_COUNT, VERBS_V3, FAMILIES_V3)))
+
+
+def heldout_manifest(cases, checkpoint: dict[str, str]) -> dict:
+    binding = {"generator": GENERATOR_VERSION_V3, "seed": HOLDOUT_SEED, "count": HOLDOUT_COUNT,
+               "families": list(FAMILIES_V3), "verbs": list(VERBS_V3),
+               "selection_rule": "all_generated_in_order_no_b0_screen"}
+    frozen = manifest({"cases": cases, "binding": binding}, datasheet=True,
+                      cap=HOLDOUT_CAP, verb_slot=True)
+    return {**frozen, "version": frozen["version"] + "_heldout_v1",
+            "confirmation_status": "unseen_cases_frozen_before_any_model_call",
+            "policies": list(HOLDOUT_POLICIES), "fixed_routed_rule": FIXED_ROUTED_RULE,
+            "disk_floor_gib": HOLDOUT_DISK_FLOOR_GIB, "protocol_deviations": [],
+            "run": HOLDOUT_RUN, "checkpoint_sha256": checkpoint,
+            "readout_comparison": READOUT_COMPARISON,
+            "setup_forward_cap_per_policy": Meter.FORWARD_CAPS["setup"],
+            "forward_accounting": "shared_setup_including_b0_slot_lookahead_plus_branch_per_arm",
+            "analysis_plan": "paired_controller_vs_fixed_routed_joint_success_and_losses_vs_b0"}
+
+
+def b0_preview_manifest(case_set: dict[str, Any], checkpoint: dict[str, str]) -> dict:
+    frozen = manifest(case_set, datasheet=True, cap=HOLDOUT_CAP, verb_slot=True)
+    prompt = system_prompt(True, HOLDOUT_CAP, True, True, b0_preview_study=True)
+    return {**frozen, "version": frozen["version"] + "_b0_preview_study_v1",
+            "policies": list(B0_PREVIEW_POLICIES), "fixed_routed_rule": FIXED_ROUTED_RULE,
+            "disk_floor_gib": HOLDOUT_DISK_FLOOR_GIB, "protocol_deviations": [],
+            "run": HOLDOUT_RUN, "checkpoint_sha256": checkpoint,
+            "readout_comparison": READOUT_COMPARISON,
+            "setup_forward_cap_per_policy": Meter.FORWARD_CAPS["setup"],
+            "max_controller_calls_per_case": 2, "max_controller_calls_per_policy_per_case": 1,
+            "controller_system_prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+            "b0_preview": {"field": "b0_preview", "exposure_policy": B0_PREVIEW_POLICY,
+                           "source": "existing_verb_slot_unedited_lookahead",
+                           "max_tokens": B0_LOOKAHEAD_MAX_TOKENS, "additional_worker_forwards": 0},
+            "analysis_plan": "paired_preview_vs_plain_stratified_by_reproduced_b0_on_eligible_boundaries"}
+
+
+def paired_heldout(rows: list[dict]) -> dict[str, int]:
+    counts = dict(expected=HOLDOUT_COUNT, paired=0, both_pass=0, both_fail=0,
+                  controller_only=0, fixed_routed_only=0)
+    for row in rows:
+        fixed, controller = (row["policies"].get(name, {}) for name in HOLDOUT_POLICIES[1:])
+        if any(arm.get("status") != "ok" or arm.get("selection", {}).get("status") == "error"
+               for arm in (fixed, controller)):
+            continue
+        counts["paired"] += 1
+        a, b = fixed["joint_success"], controller["joint_success"]
+        counts[("both_pass" if a else "controller_only") if b
+               else ("fixed_routed_only" if a else "both_fail")] += 1
+    return counts
+
+
 def required_terms(task: StructuralRescueEnv) -> tuple[str, ...]:
     return tuple(task._SCENARIOS[0]["required_terms"])
 
 
 def verb_slot_plan(worker: Any, task: StructuralRescueEnv,
-                   max_new_tokens: int = 40) -> dict[str, Any] | None:
+                   max_new_tokens: int = B0_LOOKAHEAD_MAX_TOKENS, *,
+                   preview: dict | None = None) -> dict[str, Any] | None:
     """Simulate the free (b0) continuation and locate the substituted verb.
 
     Returns the slot index inside the continuation, the b0 prefix token ids up
@@ -178,8 +255,10 @@ def verb_slot_plan(worker: Any, task: StructuralRescueEnv,
     sim = worker._simulate_decode(max_new_tokens=max_new_tokens, top_k=6,
                                   score_candidate_text=False, score_observer_check=False)
     if sim is None:
-        return None
+        raise RuntimeError(f"verb_slot_lookahead_failed: {worker._last_simulate_decode_error}")
     cont_ids = sim["continuation_token_ids"]
+    if preview is not None:
+        preview.update(b0_preview(worker.codec, cont_ids, max_tokens=max_new_tokens))
     agent = str(task.case.frames[1][0])
     agent_idx = next((i for i, t in enumerate(cont_ids)
                       if agent in worker.codec.decode([t])), None)
@@ -202,14 +281,14 @@ def verb_slot_plan(worker: Any, task: StructuralRescueEnv,
 
 def catalog_for(worker: Any, task: StructuralRescueEnv, n_layers: int,
                 cap: float = RELATIVE_WRITE_CAP, clause_form: bool = False,
-                verb_slot: bool = False) -> tuple[list[dict], Any, list[dict]]:
+                verb_slot: bool = False, *, preview: dict | None = None) -> tuple[list[dict], Any, list[dict]]:
     sources = structural_contract.eligible_sources(worker, required_terms(task))
     last = structural_contract.surface(worker, n_layers - 1)
     starters = (structural_contract.clause_form_recipes(worker, last, cap=cap)
                 if clause_form else [])
     verb_recipes = []
     if verb_slot:
-        plan = verb_slot_plan(worker, task)
+        plan = verb_slot_plan(worker, task, preview=preview)
         if plan is not None:
             verb_recipes = structural_contract.verb_slot_recipe(
                 worker, last, cap=cap, token_id=plan["target_token_id"],
@@ -292,39 +371,34 @@ def compact_packet(worker: Any, recipes: list[dict], case_id: str, observation: 
 
 def select(policy: str, packet: dict, *, provider: Any, fixed: dict[str, str | None],
            datasheet: bool = False, cap: float = RELATIVE_WRITE_CAP,
-           clause_form: bool = False, verb_slot: bool = False) -> tuple[str | None, dict]:
+           clause_form: bool = False, verb_slot: bool = False,
+           b0_preview_study: bool = False) -> tuple[str | None, dict]:
+    if policy == "fixed_routed":
+        recipe_id = next((r["recipe_id"] for kind in ("verb_slot", "clause_form", "readout")
+                          for r in packet["recipes"] if r["kind"] == kind
+                          and (kind == "readout" or r.get("applies_to_this_case") is True)), None)
+        return choose("fixed", packet, fixed_recipe_id=recipe_id)
     if policy in fixed:
         return choose("fixed", packet, fixed_recipe_id=fixed[policy])
+    if policy == B0_PREVIEW_POLICY:
+        if not b0_preview_study or "b0_preview" not in packet:
+            raise ValueError("preview_selector_requires_predeclared_b0_preview")
+        policy = "controller"
     return choose(policy, packet, provider=provider,
-                  system_prompt=system_prompt(datasheet, cap, clause_form, verb_slot))
+                  system_prompt=system_prompt(datasheet, cap, clause_form, verb_slot,
+                                              b0_preview_study=b0_preview_study))
 
 
 def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: Meter, policy: Any,
-           *, cap: float = RELATIVE_WRITE_CAP) -> tuple[dict, Any]:
+           *, cap: float = RELATIVE_WRITE_CAP, token_ids: tuple[int, ...] = ()) -> tuple[dict, Any]:
     if recipe is not None and recipe.get("relative_write_cap") != cap:
         raise ValueError("recipe_cap_differs_from_branch_cap")
     before, caps = state_identity(worker), repr(worker.surface_catalog)
     verb_recipe = recipe is not None and recipe.get("kind") == "verb_slot"
-    baseline_raw = []
-    # For a delayed edit the baseline logits must sit at the same position:
-    # replay the b0 prefix unedited so baseline and edited vectors align.
-    if verb_recipe:
-        meter.boundary_length += recipe["apply_at_step"]
-    try:
-        meter.phase, meter.capture_edited = "branch", False
-        for _ in range(2):
-            meter.raw_first = None
-            baseline = worker._simulate_decode(
-                max_new_tokens=recipe["apply_at_step"] + 1 if verb_recipe else 1, top_k=6,
-                pre_roll_token_ids=recipe["pre_roll_token_ids"] if verb_recipe else None,
-                score_candidate_text=False, score_observer_check=False)
-            if baseline is None or meter.raw_first is None:
-                # Name the cause (a forward or disk limit, a runtime error) instead of hiding it.
-                raise RuntimeError(f"repeated_baseline_failed: {worker._last_simulate_decode_error}")
-            baseline_raw.append(meter.raw_first)
-    finally:
-        if verb_recipe:
-            meter.boundary_length -= recipe["apply_at_step"]
+    apply_at_step = recipe["apply_at_step"] if verb_recipe else 0
+    pre_roll = recipe["pre_roll_token_ids"] if verb_recipe else ()
+    if apply_at_step != len(pre_roll):
+        raise ValueError("branch_boundary_does_not_match_pre_roll")
     command = structural_contract.command(recipe) if recipe is not None else None
     if command:
         packet = worker.build_controller_packet()
@@ -333,14 +407,31 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
                           traces={}, stats={}, active_edits={})
         if tensor_identity(compile_expr(command["edits"][0]["source"]["expr"])(ctx)) != recipe["input_identity"]:
             raise ValueError("recipe_source_changed_before_branch")
-    meter.phase, meter.capture_edited, meter.raw_first = "branch", command is not None, None
-    simulated = worker._simulate_decode(max_new_tokens=64 - len(worker._output_token_ids()), top_k=6,
-        command=command, policy_override=policy if command else None,
-        apply_at_step=recipe["apply_at_step"] if verb_recipe else 0,
-        pre_roll_token_ids=recipe["pre_roll_token_ids"] if verb_recipe else None,
-        score_candidate_text=False, score_observer_check=False)
-    if simulated is None:
-        raise RuntimeError(worker._last_simulate_decode_error)
+    # The comparison is local to this branch, not to the episode's initial boundary.
+    start_boundary = meter.boundary_length
+    meter.boundary_length = start_boundary + apply_at_step
+    prefix_identity = None
+
+    def replay(limit, cmd=None):
+        nonlocal prefix_identity
+        meter.phase, meter.capture_edited, meter.raw_first = "branch", cmd is not None, None
+        meter.raw_prefix_identity = None
+        sim = worker._simulate_decode(max_new_tokens=limit, top_k=6, command=cmd,
+            policy_override=policy if cmd else None, apply_at_step=apply_at_step if cmd else 0,
+            pre_roll_token_ids=pre_roll, score_candidate_text=False, score_observer_check=False)
+        if sim is None or meter.raw_first is None or meter.raw_prefix_identity is None:
+            label = "edited" if cmd else "unedited"
+            raise RuntimeError(f"{label}_boundary_capture_failed: {worker._last_simulate_decode_error}")
+        if prefix_identity is not None and prefix_identity != meter.raw_prefix_identity:
+            raise RuntimeError("branch_readout_prefix_mismatch")
+        prefix_identity = meter.raw_prefix_identity
+        return sim, meter.raw_first
+
+    try:
+        baseline_raw = [replay(apply_at_step + 1)[1] for _ in range(2)]
+        simulated, edited_raw = replay(64 - len(worker._output_token_ids()), command)
+    finally:
+        meter.boundary_length = start_boundary
     text = worker.codec.decode(worker._output_token_ids() + simulated["continuation_token_ids"])
     restored = before == state_identity(worker) and caps == repr(worker.surface_catalog)
     if not restored or worker._collect_active_edits():
@@ -351,22 +442,30 @@ def branch(worker: Any, task: StructuralRescueEnv, recipe: dict | None, meter: M
             raise RuntimeError("one_token_contract_hook_not_confirmed")
         if not telemetry[0].get("relative_write_norm", float("inf")) <= cap + CAST_TOLERANCE:
             raise RuntimeError("contract_write_exceeded_cap")
+    compared_ids = list(token_ids)
+    if recipe and recipe["kind"] in ("readout", "clause_form", "verb_slot"):
+        compared_ids.append(recipe["sources"][0]["token_id"])
+    compared_ids = list(dict.fromkeys(compared_ids))
+    comparison = readout(baseline_raw[0], edited_raw, compared_ids)
+    comparison.update(baseline_scope="same_token_prefix_unedited",
+                      prefix_identity=prefix_identity, decode_step=apply_at_step)
     return {"status": "ok", **task.evaluate(text), "state_restored": restored,
-            "scheduled_apply_at_step": recipe["apply_at_step"] if verb_recipe else 0,
+            "scheduled_apply_at_step": apply_at_step, "readout": comparison,
             "baseline_repeat_max_abs_logit_delta": float((baseline_raw[0] - baseline_raw[1]).abs().max()),
             "baseline_logits_sha256": [tensor_identity(v)["sha256"] for v in baseline_raw],
             "command": command, "recipe_kind": recipe and recipe["kind"],
             "recipe_component": recipe and recipe["component"], "runtime_telemetry": telemetry,
             "first_token_id": simulated["continuation_token_ids"][0],
-            "forwards": deepcopy(meter.counts), "production_apply_allowed": False}, meter.raw_first
+            "token_id_at_comparison": simulated["continuation_token_ids"][apply_at_step],
+            "forwards": deepcopy(meter.counts), "production_apply_allowed": False}, edited_raw
 
 
 def record_branch(worker, task, recipe, meter, destination: dict, policy,
-                  *, cap: float = RELATIVE_WRITE_CAP) -> Any:
+                  *, cap: float = RELATIVE_WRITE_CAP, token_ids: tuple[int, ...] = ()) -> Any:
     """Retain attempted work even if simulation or a contract check fails."""
     destination["status"] = "running"
     try:
-        outcome, raw = branch(worker, task, recipe, meter, policy, cap=cap)
+        outcome, raw = branch(worker, task, recipe, meter, policy, cap=cap, token_ids=token_ids)
         destination.update(outcome)
         return raw
     except Exception as exc:
@@ -391,10 +490,15 @@ def main(argv=None) -> int:
     parser.add_argument("--controller-model", default="gpt-5.6-luna")
     parser.add_argument("--policies", default=None)
     parser.add_argument("--case-ids")
-    parser.add_argument("--screen-dir", type=Path, help="run the cases a frozen B0 screen selected")
+    case_source = parser.add_mutually_exclusive_group()
+    case_source.add_argument("--screen-dir", type=Path, help="run the cases a frozen B0 screen selected")
+    case_source.add_argument("--heldout", action="store_true",
+                             help="fixed 10-case unfiltered paired protocol with cap 0.12")
+    parser.add_argument("--compare-b0-preview", action="store_true",
+                        help="paired plain/preview selectors on every selected case of a frozen B0 screen")
     parser.add_argument("--datasheet", action="store_true",
                         help="offer calibration-measured readout reach estimates to the controller")
-    parser.add_argument("--cap", type=float, default=RELATIVE_WRITE_CAP,
+    parser.add_argument("--cap", type=float,
                         help="relative write cap; non-default values get a separate manifest version")
     parser.add_argument("--verb-slot", action="store_true",
                         help="also offer b0-located substituted-verb pushes; implies --clause-form")
@@ -406,14 +510,52 @@ def main(argv=None) -> int:
     output = args.output_dir.expanduser().resolve()
     case_set = None
     cases = CASES
+    checkpoint = None
+    disk_floor = DISK_FLOOR_GIB
+    if args.compare_b0_preview and args.screen_dir is None:
+        parser.error("--compare-b0-preview requires --screen-dir")
+    if args.heldout or args.compare_b0_preview:
+        if (args.policies is not None or args.case_ids is not None
+                or args.cap not in (None, HOLDOUT_CAP)
+                or any(getattr(args, key) != value for key, value in HOLDOUT_RUN.items())):
+            parser.error("matched protocol requires its frozen policies, cases, cap and execution profile")
+        if args.checkpoint_manifest is None:
+            parser.error("matched protocol requires --checkpoint-manifest at prepare and run")
+        receipt = json.loads(args.checkpoint_manifest.read_text())
+        checkpoint = receipt.get("checkpoint_sha256") or receipt.get("checkpoint_sha256_verified")
+        if not isinstance(checkpoint, dict) or not checkpoint:
+            parser.error("checkpoint manifest must contain the expected checkpoint file hashes")
+        args.cap, args.verb_slot, args.datasheet = HOLDOUT_CAP, True, True
+        disk_floor = HOLDOUT_DISK_FLOOR_GIB
+        if args.heldout:
+            cases = heldout_cases()
+    elif args.cap is None:
+        args.cap = RELATIVE_WRITE_CAP
     if args.screen_dir is not None:
-        cases, binding = load_selected_cases(args.screen_dir.expanduser().resolve())
+        screen_dir = args.screen_dir.expanduser().resolve()
+        cases, binding = load_selected_cases(screen_dir)
         case_set = {"cases": cases, "binding": binding}
+        if args.compare_b0_preview:
+            screen_bytes = (screen_dir / "results.json").read_bytes()
+            screen_report = json.loads(screen_bytes)
+            if checkpoint != screen_report.get("checkpoint_sha256_verified") or not cases:
+                parser.error("preview study requires nonempty screen selection and the same checkpoint")
+            candidates = json.loads((screen_dir / "manifest.json").read_bytes())["candidates"]
+            screen_rows = screen_report.get("rows", [])
+            if (hashlib.sha256(screen_bytes).hexdigest() != binding["screen_results_sha256"]
+                    or [r["case_id"] for r in screen_rows] != [r["case_id"] for r in candidates]
+                    or select_screen_failures(screen_rows) != [case.case_id for case in cases]):
+                parser.error("preview study requires every screen row and the frozen selection rule")
     if not 0 < args.cap <= 0.25:
         raise ValueError("cap must be in (0, 0.25]")
     clause_form = args.clause_form or args.verb_slot
-    frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap,
-                            clause_form=clause_form, verb_slot=args.verb_slot)
+    if args.compare_b0_preview:
+        frozen = (json.dumps(b0_preview_manifest(case_set, checkpoint), indent=2, sort_keys=True) + "\n").encode()
+    elif args.heldout:
+        frozen = (json.dumps(heldout_manifest(cases, checkpoint), indent=2, sort_keys=True) + "\n").encode()
+    else:
+        frozen = manifest_bytes(case_set, datasheet=args.datasheet, cap=args.cap,
+                                clause_form=clause_form, verb_slot=args.verb_slot)
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
         output.mkdir(parents=True, exist_ok=False)
@@ -424,7 +566,8 @@ def main(argv=None) -> int:
         raise ValueError("predeclared_manifest_hash_required_and_must_match")
     if args.worker_model_path is None or args.checkpoint_manifest is None:
         parser.error("--run requires local model and checkpoint manifest")
-    default_policies = (VERB_SLOT_POLICIES if args.verb_slot
+    default_policies = (B0_PREVIEW_POLICIES if args.compare_b0_preview
+                        else HOLDOUT_POLICIES if args.heldout else VERB_SLOT_POLICIES if args.verb_slot
                         else CLAUSE_FORM_POLICIES if clause_form else POLICIES)
     policies = (args.policies or ",".join(default_policies)).split(",")
     case_ids = args.case_ids.split(",") if args.case_ids else [c.case_id for c in cases]
@@ -444,7 +587,10 @@ def main(argv=None) -> int:
     code_hashes = capture_sources(output)
     execution = {"manifest_sha256": digest, "device": args.device, "dtype": args.dtype,
                  "datasheet": args.datasheet, "cap": args.cap, "clause_form": clause_form,
-                 "verb_slot": args.verb_slot,
+                 "verb_slot": args.verb_slot, "heldout": args.heldout,
+                 "compare_b0_preview": args.compare_b0_preview,
+                 "readout_comparison": READOUT_COMPARISON,
+                 "unembed_storage": "transpose_contiguous_once" if args.device == "mps" else "default",
                  "policies": policies, "case_ids": case_ids, "wall_seconds": args.wall_seconds,
                  "mps_memory_fraction": args.mps_memory_fraction,
                  "controller_model": args.controller_model if "controller" in policies else None,
@@ -462,6 +608,10 @@ def main(argv=None) -> int:
     def persist():
         report["elapsed_seconds"] = round(time.monotonic() - started, 3)
         report["aggregate"] = aggregate(report["cases"], policies=policies, splits=splits)
+        if args.heldout:
+            report["paired_heldout"] = paired_heldout(report["cases"])
+        if args.compare_b0_preview:
+            report["paired_b0_preview"] = compare_selectors(report, "controller", B0_PREVIEW_POLICY)
         temp = result_path.with_suffix(".tmp")
         temp.write_text(json.dumps(report, indent=2, default=str) + "\n")
         temp.replace(result_path)
@@ -469,7 +619,10 @@ def main(argv=None) -> int:
     persist()
     worker = None
     try:
-        checkpoint = json.loads(args.checkpoint_manifest.read_text())["checkpoint_sha256"]
+        if checkpoint is None:
+            checkpoint = json.loads(args.checkpoint_manifest.read_text())["checkpoint_sha256"]
+        Meter(None, deadline=started + args.wall_seconds, disk_path=output,
+              disk_floor_gib=disk_floor).check_limits()
         report["checkpoint_sha256_verified"] = verify_checkpoint(args.worker_model_path, checkpoint)
         import torch
         torch.set_default_device("cpu")
@@ -479,6 +632,11 @@ def main(argv=None) -> int:
             torch.mps.set_per_process_memory_fraction(args.mps_memory_fraction)
         model = load_worker_model(args.worker_model, model_path=args.worker_model_path, device=args.device,
                                   dtype=args.dtype, hf_offline=True, mps_mode="conservative")
+        if args.device == "mps":
+            _release_memory()
+            prepare_unembed_storage(model)
+            torch.mps.synchronize()
+            _release_memory()
         n_layers = model.cfg.n_layers
         layers = sorted({n_layers // 2, n_layers - 1})
         catalog = [s for s in build_default_activation_surface_catalog(model, layers=layers)
@@ -501,7 +659,7 @@ def main(argv=None) -> int:
                 max_diagnostic_calls_per_run=12)
             worker.reset(prompt)
             meter = Meter(worker, deadline=started + args.wall_seconds, disk_path=output,
-                          disk_floor_gib=DISK_FLOOR_GIB)
+                          disk_floor_gib=disk_floor)
             row = {"case_id": case.case_id, "split": case.split, "policies": {}, "calibration_matrix": []}
             row["setup_forwards"] = meter.counts
             report["cases"].append(row)
@@ -534,13 +692,20 @@ def main(argv=None) -> int:
                 observation = worker.request_controller_diagnostics(clause_structure.offer(worker)["request"])[0]
                 if observation["status"] != "ok":
                     raise RuntimeError("structure_observation_failed")
+                preview = {} if args.compare_b0_preview else None
                 recipes, policy, sources = catalog_for(worker, task, n_layers, cap=args.cap,
-                                                       clause_form=clause_form, verb_slot=args.verb_slot)
+                                                       clause_form=clause_form, verb_slot=args.verb_slot,
+                                                       preview=preview)
                 fixed = fixed_ids(recipes)
                 packet = compact_packet(worker, recipes, case.case_id, observation,
                                         datasheet=args.datasheet, cap=args.cap,
                                         clause_form=clause_form, verb_slot=args.verb_slot)
                 (output / (case.case_id + "_observation.json")).write_text(json.dumps(packet, indent=2))
+                preview_packet = None
+                if preview is not None:
+                    preview_packet = {**packet, "b0_preview": preview}
+                    (output / (case.case_id + "_b0_preview_observation.json")).write_text(
+                        json.dumps(preview_packet, indent=2))
                 row.update(comparison_eligible=True, shared_setup_forwards=deepcopy(meter.counts),
                            eligible_sources=[{k: s[k] for k in ("token_id", "piece", "source_positions")}
                                              for s in sources],
@@ -548,22 +713,25 @@ def main(argv=None) -> int:
                                                "source_positions": list(policy.write_contract.source_positions)},
                            eligible_recipe_count=len(recipes), recipe_ids=[r["recipe_id"] for r in recipes],
                            fixed_recipe_ids=fixed)
-                baseline_raw = None
-                token_ids = [r["token_id"] for r in observation["structure_readout_rows"]]
+                token_ids = tuple(r["token_id"] for r in observation["structure_readout_rows"])
                 for name in policies:
                     meter.check_limits()
-                    selected_id, trace = select(name, packet, provider=provider, fixed=fixed,
+                    selector_packet = preview_packet if name == B0_PREVIEW_POLICY else packet
+                    selected_id, trace = select(name, selector_packet, provider=provider, fixed=fixed,
                                                 datasheet=args.datasheet, cap=args.cap,
-                                                clause_form=clause_form, verb_slot=args.verb_slot)
+                                                clause_form=clause_form, verb_slot=args.verb_slot,
+                                                b0_preview_study=args.compare_b0_preview)
                     recipe = next((r for r in recipes if r["recipe_id"] == selected_id), None)
                     meter.reset("diagnostic")
                     outcome = {"selection": trace, "selected_recipe_id": selected_id}
                     row["policies"][name] = outcome
-                    raw = record_branch(worker, task, recipe, meter, outcome, policy, cap=args.cap)
-                    if name == "b0":
-                        baseline_raw = raw
-                    outcome.update(selection=trace, selected_recipe_id=selected_id,
-                                   readout=readout(baseline_raw, raw, token_ids))
+                    record_branch(worker, task, recipe, meter, outcome, policy, cap=args.cap,
+                                  token_ids=token_ids)
+                    outcome["total_worker_forwards"] = {
+                        key: sum(count[key] for group in (row["shared_setup_forwards"], outcome["forwards"])
+                                 for count in group.values())
+                        for key in ("attempted", "completed")
+                    }
                     outcome["natural_branch_changed"] = (
                         outcome["output"] != row["policies"]["b0"]["output"]
                         if outcome.get("scheduled_apply_at_step")
@@ -579,8 +747,8 @@ def main(argv=None) -> int:
                         outcome = {"kind": recipe["kind"], "component": recipe["component"],
                                    "sources": recipe["sources"], "recipe_id": recipe["recipe_id"]}
                         row["calibration_matrix"].append(outcome)
-                        raw = record_branch(worker, task, recipe, meter, outcome, policy, cap=args.cap)
-                        outcome["readout"] = readout(baseline_raw, raw, token_ids)
+                        record_branch(worker, task, recipe, meter, outcome, policy, cap=args.cap,
+                                      token_ids=token_ids)
                         persist()
                         print(json.dumps({"case": case.case_id, "matrix": [recipe["kind"], recipe["component"],
                             [s["piece"] for s in recipe["sources"]]], "joint_success": outcome["joint_success"],

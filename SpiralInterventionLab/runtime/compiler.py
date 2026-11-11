@@ -132,10 +132,8 @@ def _readout_matrix(ctx: "StepContext") -> torch.Tensor:
         getattr(getattr(model, "lm_head", None), "weight", None),
     )
     for candidate in candidates:
-        if isinstance(candidate, torch.nn.Parameter):
-            return candidate.detach().float()
         if isinstance(candidate, torch.Tensor):
-            return candidate.detach().float()
+            return candidate.detach()
     raise KeyError("readout_direction could not find W_U, unembed.weight, or lm_head.weight")
 
 
@@ -158,7 +156,8 @@ def _readout_vectors(matrix: torch.Tensor, token_ids: tuple[int, ...]) -> torch.
 def _mean_readout_vector(matrix: torch.Tensor, token_ids: tuple[int, ...]) -> torch.Tensor | None:
     if not token_ids:
         return None
-    vectors = _readout_vectors(matrix, token_ids)
+    # Gather before upcasting: a full-vocabulary FP32 copy is not needed.
+    vectors = _readout_vectors(matrix, token_ids).float()
     return vectors.reshape(len(token_ids), -1).mean(dim=0)
 
 

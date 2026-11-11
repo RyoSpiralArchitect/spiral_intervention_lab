@@ -41,6 +41,16 @@ The repo has now moved beyond the initial v0 scaffold. It includes the intervent
 
 Key current notes:
 
+- [`docs/structural_rescue_aligned_holdout.md`](docs/structural_rescue_aligned_holdout.md)
+  Matched-position readout and paired selector evidence. The unfiltered
+  10-case pilot scored B0 10/10, fixed routing 9/10, and Luna 10/10.
+  A fresh 30-case screen then selected three recorded failures: fixed,
+  plain Luna, and B0-preview Luna chose the same recipes and scored 3/3
+  under the frozen evaluator (six provider calls). One failure is a flagged
+  inflection-scoring inconsistency; the other two show a matched delayed
+  verb push and a boundary reroute. No preview advantage, general success-rate
+  claim, or production permission is established.
+
 - [`docs/structural_rescue_contract.md`](docs/structural_rescue_contract.md)
   An opt-in norm-relative write contract: one edit, one token, at most 8% of the
   edited residual norm, toward source punctuation or connectives only, enforced

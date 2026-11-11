@@ -1,0 +1,249 @@
+{
+  "analysis_plan": "paired_preview_vs_plain_stratified_by_reproduced_b0_on_eligible_boundaries",
+  "apply_scope": "restored_contract_diagnostic_branch_only",
+  "b0_preview": {
+    "additional_worker_forwards": 0,
+    "exposure_policy": "controller_b0_preview",
+    "field": "b0_preview",
+    "max_tokens": 40,
+    "source": "existing_verb_slot_unedited_lookahead"
+  },
+  "baseline_repeats_before_each_branch": 2,
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
+  "case_set": {
+    "screen_manifest_sha256": "974342dfadc2088f1192f241497365cbc8622a1972d96ac8bd8adca6f717ee77",
+    "screen_results_sha256": "b2b8796462ed4f29a97ae7cc50a64f53c7eb81279fcb36b6ee599579bcea2bf5",
+    "selected_case_ids": [
+      "gen_008",
+      "gen_019",
+      "gen_024"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "gen_008",
+      "deadline": "before lunch",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "bring",
+          "proposal",
+          "Ugo"
+        ],
+        [
+          "Yusuf",
+          "give",
+          "manual",
+          "Edda"
+        ]
+      ],
+      "prompt_sha256": "7a5c2bdf4d304fad65dfecafc8f3466ff4544b540451a18fbed45b3f778e3233",
+      "source": "In order to start before lunch, Marta should bring the proposal to Ugo, with Yusuf giving the manual to Edda.",
+      "split": "rescue_v4"
+    },
+    {
+      "case_id": "gen_019",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "send",
+          "ledger",
+          "Stefan"
+        ],
+        [
+          "Felix",
+          "take",
+          "proposal",
+          "Alma"
+        ]
+      ],
+      "prompt_sha256": "abdaf3b7b901a7fe59401598dd85694b963feb23a88188370f7556c40ee6c3b5",
+      "source": "Before supper, Ilse should send the ledger to Stefan, and Felix, who should take the proposal to Alma, also finishes.",
+      "split": "rescue_v4"
+    },
+    {
+      "case_id": "gen_024",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Marta",
+          "give",
+          "proposal",
+          "Kira"
+        ],
+        [
+          "Ugo",
+          "take",
+          "blueprint",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "c63275c0393bb78937193ec6df3adbb9999e5b783bddc0c3d44f36710fbfb573",
+      "source": "Before midnight, Marta should give the proposal to Kira, whereas Ugo, who should take the blueprint to Jonas, also finishes.",
+      "split": "rescue_v4"
+    }
+  ],
+  "checkpoint_sha256": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "clause_form_applicability_rule": "regex:\\bwith\\b",
+  "clause_form_starters": [
+    " while_finite_clause_starter"
+  ],
+  "confirmation_status": "selected_by_preregistered_b0_screen",
+  "continuation_forward_cap_per_policy": 64,
+  "contract": {
+    "cast_tolerance": 0.002,
+    "edits_per_branch": 1,
+    "guard": "per_position_hook_output_minus_input_vs_input_norm",
+    "id": "norm_relative_structural_v1",
+    "patch_alpha": 1.0,
+    "patch_components": [
+      "common",
+      "common_parallel",
+      "common_orthogonal"
+    ],
+    "patch_layer_rule": "n_layers//2",
+    "protected_rule": "structural_lexemes_inside_required_terms",
+    "readout_alpha_rule": "cap*||h_boundary||",
+    "readout_layer_rule": "n_layers-1",
+    "relative_write_cap": 0.12,
+    "site": "resid_pre",
+    "source_rule": "first_three_eligible_source_tokens_in_source_order_plus_clause_form_starters",
+    "structural_lexemes": [
+      ",",
+      ".",
+      ":",
+      ";",
+      "after",
+      "although",
+      "and",
+      "because",
+      "before",
+      "but",
+      "or",
+      "so",
+      "then",
+      "until",
+      "when",
+      "whereas",
+      "while"
+    ],
+    "token": "last",
+    "ttl_steps": 1
+  },
+  "controller_datasheet": {
+    "reach_basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12",
+    "readout_closure_slope": {
+      " while": {
+        "max": 54.0,
+        "mean": 51.0,
+        "min": 49.0
+      },
+      ",": {
+        "max": 26.0,
+        "mean": 22.5,
+        "min": 20.0
+      },
+      ".\n": {
+        "max": 50.0,
+        "mean": 43.0,
+        "min": 36.0
+      }
+    },
+    "unknown_pieces": "no_estimate"
+  },
+  "controller_system_prompt_sha256": "7fcd4a9e2833f7d5158132a868127ec19d71b9af313fb4ffb191fab73a041d4b",
+  "diagnostic_forward_cap_per_policy": 24,
+  "disk_floor_gib": 10,
+  "evaluator": {
+    "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations",
+    "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+  },
+  "fixed_readout_rule": "readout_of_first_eligible_source_token",
+  "fixed_routed_rule": "first_offered_applicable_verb_slot_then_clause_form_then_readout_else_noop",
+  "fixed_rule": "common_orthogonal_of_first_eligible_pair",
+  "max_controller_calls_per_case": 2,
+  "max_controller_calls_per_policy_per_case": 1,
+  "max_controller_output_tokens": 1600,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "policies": [
+    "b0",
+    "fixed_routed",
+    "controller",
+    "controller_b0_preview"
+  ],
+  "policy_seeds": [
+    17
+  ],
+  "production_apply_allowed": false,
+  "protocol_deviations": [],
+  "random_rule": "sha256(case_id,seed)_mod_catalog_size",
+  "readout_comparison": "same_token_prefix_unedited_at_scheduled_decode_step",
+  "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; readout_recipes_added; pairs_with_protected_lexemes_dropped",
+  "run": {
+    "controller_model": "gpt-5.6-luna",
+    "device": "mps",
+    "dtype": "float16",
+    "mps_memory_fraction": 0.7,
+    "wall_seconds": 3600,
+    "worker_model": "meta-llama/Llama-3.2-3B-Instruct"
+  },
+  "setup_forward_cap_per_policy": 40,
+  "verb_slot_action_forms": [
+    "a",
+    "c",
+    "t",
+    "i",
+    "o",
+    "n",
+    "_",
+    "f",
+    "o",
+    "r",
+    "m",
+    "s",
+    "_",
+    "l",
+    "e",
+    "m",
+    "m",
+    "a",
+    "_",
+    "p",
+    "l",
+    "u",
+    "s",
+    "_",
+    "s",
+    "_",
+    "i",
+    "n",
+    "f",
+    "l",
+    "e",
+    "c",
+    "t",
+    "i",
+    "o",
+    "n",
+    "_",
+    "o",
+    "n",
+    "l",
+    "y"
+  ],
+  "verb_slot_allowlist": "inflected_required_action_token_ids_added_to_readout_token_ids",
+  "verb_slot_rule": "simulate_b0_continuation__first_common_verb_after_frame2_agent__pre_roll_b0_prefix__push_<action>s_single_token_ttl1",
+  "version": "structural_rescue_v2_norm_relative_contract_datasheet_clauseform_verbslot_cap0.12_b0_preview_study_v1"
+}

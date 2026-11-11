@@ -1,0 +1,1937 @@
+{
+  "status": "complete",
+  "created_at_utc": "2026-11-11T01:38:33.213611+00:00",
+  "manifest_sha256": "974342dfadc2088f1192f241497365cbc8622a1972d96ac8bd8adca6f717ee77",
+  "code_sha256": {
+    "SpiralInterventionLab/__init__.py": "cc094b061886b1ded8cace092c812ccfe28a02bdffd337a25a5ef1128e143912",
+    "SpiralInterventionLab/backends/__init__.py": "ba56003e853d0c06df72eab51c36630e98abb5e00610d57ea7e49c9c33afd699",
+    "SpiralInterventionLab/backends/base.py": "04741ef8982344c137e9489aea48cf8202524fcdedbafafc533dce6df135a1c2",
+    "SpiralInterventionLab/backends/hf_transformers.py": "45db28c7417f1beea3df83ed4ecacc3164b68dbc7c8e792e19cf979475ba06bf",
+    "SpiralInterventionLab/backends/llama_cpp.py": "6fd936fd054ee5063008de62aee058eb2b16c375c7b41a9c08036645024085ae",
+    "SpiralInterventionLab/backends/mlx_lm.py": "67eed215cebd47b9499514afdbc70f1d727ada354ebfe4a8a825640520d275e2",
+    "SpiralInterventionLab/bridge/__init__.py": "30e49bccefc2289c7377ba4b950322fb7736b0efdb65ddaf9f5fc71a19f39c60",
+    "SpiralInterventionLab/bridge/controller_clients.py": "8640a7c38afa4a1136878df241d19d0616ccc8e68472243f495a5d96b2244ead",
+    "SpiralInterventionLab/controllers/__init__.py": "36339a4b3043e61a35a17582ffdc7ec664bc30324e8453f2d5caf659522bc65d",
+    "SpiralInterventionLab/controllers/base.py": "4ac6185cc3b589827d06516a23715bd8aa931e9bca400ba3b1ea0a75554a8e71",
+    "SpiralInterventionLab/controllers/factory.py": "524e55682590f59011b5306ad908075652c83b3544d498613c192481a1054f4b",
+    "SpiralInterventionLab/controllers/providers.py": "f80e85f86ac1a258524734bd8d03f27a73c52dd40b0fb28d66c2cba7a415744c",
+    "SpiralInterventionLab/examples/__init__.py": "a6c2048c78a673ac054b1f1e32ada77403d8547df48abc7bfb4503ccdb9fad8f",
+    "SpiralInterventionLab/examples/audit_trial_reachability_jsonl.py": "bab8ded1227afffb64af036a4d75411a5f4cdd579462127ea7658dc8d09ea275",
+    "SpiralInterventionLab/examples/compare_activation_patch_jsonl.py": "a079022386a8cf7944e1f2f57ec2bb098f75ad38e691d3d18e6faade6b6f8470",
+    "SpiralInterventionLab/examples/compare_source_clause_choices.py": "66a61e8e2938a8e58194e769b7464ad0ca8ec7866e3eeb598aa98d64c87dd290",
+    "SpiralInterventionLab/examples/digit_transform_e2e.py": "a875514644c806f5b33ecb84497e62a656d7d46ed4e1dd925ba5e35181eae3d5",
+    "SpiralInterventionLab/examples/rebuild_post_run_debrief.py": "a95f8e0e8349af12117f5101c8bfb8d15084cca7d1cdd3bdb7c7375b9ef3e9d7",
+    "SpiralInterventionLab/examples/replay_candidate_handoff_choice.py": "3cc37bafdbe09609bf8bf1374445d30cac97a4fc7c756125804fa1cfd85fe390",
+    "SpiralInterventionLab/examples/replay_candidate_seed_discovery.py": "64d2cf82f06aef5409520f4dacb23d9c1936b5258282e56ed5b57988d57caa11",
+    "SpiralInterventionLab/examples/replay_candidate_seed_discovery_choice.py": "ff29673196d8282003e00ad7b3860aec23726713c8f1b5e5e4301fe11609e04a",
+    "SpiralInterventionLab/examples/replay_controller_operation_cards.py": "90f39ba21abf55265c07d47c964d74f9c9b799d7a44bde991ff9071aeef9fa43",
+    "SpiralInterventionLab/examples/replay_matched_response_probe.py": "f2483f4d3ac85631c2cc94c4eaffe130cdf36c224c9d782685a30eac40c2efb6",
+    "SpiralInterventionLab/examples/replay_operator_dose_response.py": "73b9bafbee0358a2b7b4b055c2bb564f7573e406aabfe7ce5dad84c03ef6abc8",
+    "SpiralInterventionLab/examples/replay_orphan_blueprint_ceiling.py": "3e3825e3ea6074fc71cdcbb627b62f1d167b29f6c5ae80c3da2ae53d0491141d",
+    "SpiralInterventionLab/examples/replay_prefix_response.py": "b727367fa690978f1aced5f3993bd472a3104cd6fc86c24f2e40c0619e42a669",
+    "SpiralInterventionLab/examples/replay_source_clause_diagnostic.py": "f086b5b9d1414bfe9963aaba642228ce9527465d997182699909b701790d7358",
+    "SpiralInterventionLab/examples/replay_source_clause_trajectory.py": "22ecc44fee83fc50715d97901041f83f5fb6a364c8b9c0526a2ca691ff199084",
+    "SpiralInterventionLab/examples/replay_structure_token_probe.py": "9d6215178303c5cb5fffe3213d488a56aa6b034ccd35d71d6be3bd2a15eceabf",
+    "SpiralInterventionLab/examples/rewrite_ladder_baseline.py": "df9fd48aabcce367896d72f7cf92af469765e09d0ddd25c20ec7fd1da1f38bd2",
+    "SpiralInterventionLab/examples/run_iteration_pair.py": "14a070c4800925dc64eaf86619642eb1840addb013a8a36ad5eb1a22bb1efa54",
+    "SpiralInterventionLab/examples/source_radial_choice.py": "30108c5bf999a0cd48e1eb16db3cd0e6a167f355e6ec9a2a4c13ffbfbd153985",
+    "SpiralInterventionLab/examples/structural_rescue_benchmark.py": "b01fe36ae703f62521c00f9f03622a94a41298d75926c76180a49ff13997912b",
+    "SpiralInterventionLab/examples/structural_rescue_benchmark_v2.py": "88e8515ba1ad2d2bd7018129517ac920e108e573fa3d3af4dce3382d3e83d4d3",
+    "SpiralInterventionLab/examples/structural_rescue_cap_sweep.py": "67f79ef132792cb9d4fac6826c464a53f04179832f89cbcb7be7db0b2aaeb852",
+    "SpiralInterventionLab/examples/structural_rescue_screen.py": "12ae445299b85e45a4ce83c0b8ca8b3d537fc0a58e969e26eeb7a51b9e32f44d",
+    "SpiralInterventionLab/examples/structural_rescue_screen_v2.py": "bb0f10bf5b22b0d9bbea799b6be06e2bc602335dd8697cc30a39a89307dcfdda",
+    "SpiralInterventionLab/examples/structural_rescue_screen_v3.py": "41a243e45e7cbd50100e5eb59e0a499fc1525726bb85c991898a5563e80faf87",
+    "SpiralInterventionLab/examples/structural_rescue_screen_v4.py": "d20172365ec488c9f77cc5b2266e11a4753481e9a62f7ba84b66b1ec9c55b131",
+    "SpiralInterventionLab/examples/structural_rescue_selection.py": "a9430c7b64280035ad9a1234ce7c9f7769f0d48dffc4cfc89ba020e547cc19ee",
+    "SpiralInterventionLab/examples/summarize_activation_patch_jsonl.py": "4a36d018d1aca236f6aaf495efc914e6c1ce7fa6881212910b186a9accfce5ae",
+    "SpiralInterventionLab/examples/summarize_structural_rescue.py": "881747ca86563f92f6f632474b2f7ae6735dd33cf3e1aee7c1053be7f5147b7d",
+    "SpiralInterventionLab/examples/survey_clause_structure.py": "5557b50fc69bac23f0f9f466c2099508f3031f9d17ab51c9448f39d76b7e2641",
+    "SpiralInterventionLab/examples/worker_fidelity_preflight.py": "218235049a80711bf4b25967e587ce4e916aeb5a4c3812332dcf0c68b3ef9ee1",
+    "SpiralInterventionLab/runtime/__init__.py": "09855d4d3c49f6c823a458c9d49e60aaef635a73552473d26697ef631771e947",
+    "SpiralInterventionLab/runtime/adapter.py": "32fd6673702aef2ffb1f7c1a2007fbe01c45ca03054b9029ac6fec84c4607cc3",
+    "SpiralInterventionLab/runtime/baselines.py": "c04fbe059de71d65602bc30175612cffad282e8898ef507f5d5e61b6e1e61501",
+    "SpiralInterventionLab/runtime/candidate_actions.py": "e48cad2e79034c27319df26b239e0c4698a2108a66c33e77c6cead0cfa3102b2",
+    "SpiralInterventionLab/runtime/candidate_handoff.py": "14f92ff9f0334f563ddd16cddff527bdf73efbaf88629859406d6acc5b4d0b0b",
+    "SpiralInterventionLab/runtime/candidate_trial.py": "d080762825a027076418daabf0aa90fc94eac4143aaeebe816c2918344a0402d",
+    "SpiralInterventionLab/runtime/clause_actuation.py": "4cf0e15b2a04e23ba707e44c8b71163e736d5a81e701faed552a2d825a5dabc3",
+    "SpiralInterventionLab/runtime/clause_choice.py": "33e0162df57e38ee8680d0849a76aeecfe0f0f3f2be250058326e3b5db7d24f2",
+    "SpiralInterventionLab/runtime/clause_components.py": "4470d784117a5085ad0782e2636ec69ab50592b1c5400670baed72251bd77f27",
+    "SpiralInterventionLab/runtime/clause_direction_controls.py": "97d8acfe37b4e4603970dd0141df27038e8e57cb2e80bb1cf792422c9845fd72",
+    "SpiralInterventionLab/runtime/clause_radial.py": "349417da2dec28fb63cbf7e48a764510cc5bd4d4041935f2220c583b5887620b",
+    "SpiralInterventionLab/runtime/clause_specificity.py": "c8fcbbc679d6c05b6ea3d69f6051500f0bdd41b45fe675e4cf7a5401290e8094",
+    "SpiralInterventionLab/runtime/clause_structure.py": "e6c1687755dc4a200d7116ed576a79ef37d5e63982c0bea5d4762b550dc183d0",
+    "SpiralInterventionLab/runtime/clause_trajectory.py": "64b955084015d567f28e4b335d732829b5d7c1666484b07fb453efe295ce553b",
+    "SpiralInterventionLab/runtime/codecs.py": "366abdd09fdf0fc728a9f7571afebfd5e19b7c67b793ffeae8c5c8395bdbe99a",
+    "SpiralInterventionLab/runtime/compiler.py": "4fb43e5beffabfe5f80daba86184cea3f522f0b2c225b302afe9186307e53a8d",
+    "SpiralInterventionLab/runtime/completion_probe.py": "431475db5cf66e5479e4515742914f1152576f40293a92bf6d6cbb1b00aa539e",
+    "SpiralInterventionLab/runtime/debrief.py": "5bc8495f4667236163e85616398fc1e55c30aa35081b674071209fb3d5a5f767",
+    "SpiralInterventionLab/runtime/diagnostic_budget.py": "22556ad6363ad6d0a88cd6da1c970f9f30c674101edb58456ea5abdc229dff23",
+    "SpiralInterventionLab/runtime/diagnostic_orchestration.py": "111b504c3fab28ee996f2c6829f818b17a8a14d3b27f7d9766e14b159da92e1f",
+    "SpiralInterventionLab/runtime/diagnostic_reuse.py": "171d195e6556a48f6f81d3c7e56aec60e9ca2d0263740916d1aa982c6c8cbe2c",
+    "SpiralInterventionLab/runtime/edit_budget.py": "d9ccf22e296238c8e0571a198163b26b422095068c26f63f2839cd1416194401",
+    "SpiralInterventionLab/runtime/effects.py": "fcb91741f65085fb66d473ee4d67f29470656b0126575ae00e2e3421e91a9110",
+    "SpiralInterventionLab/runtime/entity_candidate_review.py": "ebff926ff30d3dd99aeb7f4673989ac04c167ab4938726d2fad9197acb48cfc4",
+    "SpiralInterventionLab/runtime/entity_probe_refresh.py": "51523db3c24442ad98be5e91c592dcf1b1100a1e9c27020a3818390e858a8028",
+    "SpiralInterventionLab/runtime/evidence_inspection.py": "d63cd62ceac52c18dde89f274e03a50565ebb36776d3371447c14aa9e2944177",
+    "SpiralInterventionLab/runtime/loop.py": "7ffe880262139778bfc194a0e561d40f121b4a8cb398e92fdde65a0af7fcf991",
+    "SpiralInterventionLab/runtime/measurement_positions.py": "2acdf62a1eb10ae5e27216f2b541eb044a1ad4074a51dbd0d8f7e96196b1bb9a",
+    "SpiralInterventionLab/runtime/operation_cards.py": "5c79421fd6446dbc8653718e3177588e2879972741e27f51adcb0d0e6374f52b",
+    "SpiralInterventionLab/runtime/overlays.py": "176c2d94dac1385148a3c426d1c03552389afcddaf055e8cd79189db1bc57fd6",
+    "SpiralInterventionLab/runtime/policy.py": "4c2a14a4930981ca68e0d38ba6164393ea9c28d6ca0f6c813407877216e076f6",
+    "SpiralInterventionLab/runtime/prefix_control.py": "c8fe249fe8db17af1af64969e3396e532f2f2ddcd4ec76dfbac934d9a176701d",
+    "SpiralInterventionLab/runtime/prefix_probe.py": "6126e1bf8e793f6b4c7c042f89483fd95be17f9c709cef906b8ab463926c57ab",
+    "SpiralInterventionLab/runtime/rank1_bridge.py": "6b51afd0956693a0e21afbcf7b852abdb25d8f64adb40d6c83c67057384ac0d9",
+    "SpiralInterventionLab/runtime/response_probe.py": "b10086effd9859c9adeb06ba4b1deaa1ddbee4aa723ac3c4ca428878b2c87cda",
+    "SpiralInterventionLab/runtime/response_promotion.py": "99958d78b48cca343e50b26fae067123ec7353f8258ba2aa9a4de50dd58f4689",
+    "SpiralInterventionLab/runtime/schema.py": "720ab32f8261b8f0bfaa4660e140ec2812a258473496395ccc416a679cf7214f",
+    "SpiralInterventionLab/runtime/sidecar.py": "c16b56de79c9ecef5a8428d2d46e10011672447610e56526427c8c93b178a058",
+    "SpiralInterventionLab/runtime/structural_contract.py": "7e6a8a72233d875f4fb4631fe2ab4488289cdb42decbf29d3640678d192ef33d",
+    "SpiralInterventionLab/runtime/tlens_runtime.py": "7fc5b74888686ed4876a727678ca18d72001d37a2618b4a7c5cccc296c73ccf4",
+    "SpiralInterventionLab/runtime/trace_recorder.py": "d1fd27728fa71b585daaafa172d88a4c57a1f79b88b20de394dacb5495c79d76",
+    "SpiralInterventionLab/runtime/worker.py": "04e0e192f8b3d9cc2e142918f617c94b3cc6a2854016449194b79908b36b8de6",
+    "SpiralInterventionLab/tasks/__init__.py": "e9a7f6b0309d2b95629fbcdff44929bce401b482e8361669c7d73d4371e07aa5",
+    "SpiralInterventionLab/tasks/digit_copy.py": "f6aa1dd46f97b75e2f637af54f0c95b73631cb714d608d55f468d840b047e451",
+    "SpiralInterventionLab/tasks/digit_transform.py": "e4ff8f0ff877e1cee2cc861c111784c86e5d56c71c763f46dd4ce295ed1b14fc",
+    "SpiralInterventionLab/tasks/language_tasks.py": "e64a44a72a2b8aa5361c8035d93e872a7376a2ed2dc1da3c39a5f977d3b289d6",
+    "SpiralInterventionLab/tasks/rewrite_ladder.py": "73c303ac5cb86e467ee7b8145aaf52f99c67126271378bbac9602f4ca96b2e7d",
+    "SpiralInterventionLab/tasks/role_binding.py": "4fbb4880394dc63f90b765ed8c239ad0d11a70ac6e8b42d4266941713fcf6cca",
+    "SpiralInterventionLab/tasks/semantic_critic.py": "1e44dfc3807120b00a2b6732a3bf242b133b3996069cd968399a46879c2939f1",
+    "SpiralInterventionLab/tasks/structural_rescue.py": "a0602034d7d34ba185bd08ffdac41d7cf9087b94913407c003f2bfc790215826",
+    "SpiralInterventionLab/tasks/structural_rescue_generator.py": "8bc411f27a80122d71a07e462a6bf55e427fbbce3ce27922c1f94f5598d4df8e",
+    "SpiralInterventionLab/tests/__init__.py": "1dcd844fc466a6d392c8a9e7a1c93b89fe958e6bf3075ef5bbb357781aedcc32",
+    "SpiralInterventionLab/tests/test_backends_and_bridge.py": "08623c6262004184ccb4fc4c2b6017a22f487cc1cb5715525a0331e6796c0585",
+    "SpiralInterventionLab/tests/test_candidate_actions.py": "917027f4a0e6f1961c10722d9cf79d37b0d5b0a15a159c0920b30d1994091cae",
+    "SpiralInterventionLab/tests/test_candidate_handoff.py": "8e9363f6e303bd4392dd923d5cc4f4cbefe6f4050fd8e9d4634e29b9ac8bd2da",
+    "SpiralInterventionLab/tests/test_candidate_trial.py": "703c9e2a4798eb71a0d2c787452885113035380e915baf6efd153e0a5d8c2efb",
+    "SpiralInterventionLab/tests/test_clause_actuation.py": "10d526f3b41e92da0fecf423e40ab90a4fc010fd05e49820350386919c9bc996",
+    "SpiralInterventionLab/tests/test_clause_choice.py": "5b26e8be13b98a69d5e2a79b879b9da94d7338b35ee3b1449e15e2410d7bbef0",
+    "SpiralInterventionLab/tests/test_clause_components.py": "a5dae9c879e412a8e959c95899f6087408b62da9733f63801e36d4e763cdc547",
+    "SpiralInterventionLab/tests/test_clause_direction_controls.py": "df517cc11c8d6de1b2f2700857bc7701c3ed54140b6e0c8b180b335c46a5367c",
+    "SpiralInterventionLab/tests/test_clause_radial.py": "01a8d41af2ff5af1d84afb8e5558a25f05217ced27d89f44bbbd08c11bf4cb81",
+    "SpiralInterventionLab/tests/test_clause_specificity.py": "86748419757836187a49569d764d6f32c0a77651211a032213996f4e6ec5b0b2",
+    "SpiralInterventionLab/tests/test_clause_structure.py": "06d5188e98aa69c64fe2bbfff91887ee2b80944ccc7d2871c021fbb719d39719",
+    "SpiralInterventionLab/tests/test_clause_trajectory.py": "ffb43bd6f432f2f4af783e6196ae343b539c4c3e569d21e4e52b427dfc5be06b",
+    "SpiralInterventionLab/tests/test_completion_probe.py": "2dabd4e99f676857b29692839575c5a4745b675a1e5d6854eb7360329c2d930b",
+    "SpiralInterventionLab/tests/test_controller_runtime.py": "0e7a03bd306c320d8d14f73d6951ee3182cee97d7c84616cce62e71b00cda745",
+    "SpiralInterventionLab/tests/test_controller_scheduling_audit.py": "ed3b4b2e27451f657476a862dd5a7116c96448807e8fb1b13bf7eaf9aee714f3",
+    "SpiralInterventionLab/tests/test_debrief_transitions.py": "ab5b6fc9221bd858080fe70dc0a87314722532362cc446bc27066ad397eb7f02",
+    "SpiralInterventionLab/tests/test_diagnostic_tooling.py": "01c2dbd8326a88de4767825cc401043affe840c7651d92ab98ab576b2ec147bb",
+    "SpiralInterventionLab/tests/test_entity_candidate_review.py": "856af3526454319dba718833fd56d4e06e9889c50e9a43065b1a241893114fd8",
+    "SpiralInterventionLab/tests/test_entity_probe_refresh.py": "1857e209ba9c1efd1f3229e5ceee9a45a9e8da4d262dad7322e704a5fb673a06",
+    "SpiralInterventionLab/tests/test_evidence_publication.py": "81ce24f446d5b751a649eb86f8ca1e4f50bf7ebcb4e6975db408aaecbaedc409",
+    "SpiralInterventionLab/tests/test_examples.py": "b4ce8086a688a6c3f40b76a4cdd7edce16cd1318bb4f82b048ab85a581d67f44",
+    "SpiralInterventionLab/tests/test_generation_clock.py": "70970ae11b8f7d1823d99edd0ded2b51b2646f0e2b1d04bd8e6585f7b5c4804f",
+    "SpiralInterventionLab/tests/test_iteration_pair.py": "fa0dceda542a6a7a0c272b9cd1fd43f77e0cf62c4a9efd8b6f57c2cd497df42d",
+    "SpiralInterventionLab/tests/test_operation_cards.py": "838b7eb1a0887aa0361640ff618a102f637021badc196467c700d4b5e1485cac",
+    "SpiralInterventionLab/tests/test_operator_dose_response.py": "b5dccecc0bc7c06ed5619da6bb027d2ae1fe4741b949f9f48b3d393849f04db8",
+    "SpiralInterventionLab/tests/test_orphan_blueprint_ceiling.py": "feff9d97b39ff79aa56c9c0d02b6ea4db7e508bd3da117da53c8cc3d55d19f9d",
+    "SpiralInterventionLab/tests/test_prefix_control.py": "ae2d4d92b9dc916dfcc4927bac6932ce1419f7c35c9735af620b217bc0ed81f3",
+    "SpiralInterventionLab/tests/test_prefix_probe.py": "c79f0e7a98dac4fd83ee6555d3b8fd8ae4591ba0ce26f9b5bc0583ac499b2317",
+    "SpiralInterventionLab/tests/test_rewrite_ladder.py": "b9a7eb01d0aa8976b50099475e6899a610a3b5d46a022c0f268eff568e5595b9",
+    "SpiralInterventionLab/tests/test_role_binding.py": "e71be8e4ecc59d0b0a2c2a0f623e3b1b682e6905b600d5e23614127408b58212",
+    "SpiralInterventionLab/tests/test_source_clause_choices.py": "caf1a315d030325114edb322338ad81decc35c31929ac8a0c2c5729ae4149ec9",
+    "SpiralInterventionLab/tests/test_source_radial_choice.py": "12a3b707aed99a9a11282e4bd1e1e1d560668191bb7d5d0d0165214692e27247",
+    "SpiralInterventionLab/tests/test_structural_contract.py": "a8a35ef07a9fa7c72423a14d90f23bf62ad0402ac9a7d06c248bc606ae7ff5e9",
+    "SpiralInterventionLab/tests/test_structural_rescue.py": "f20d04d09711ea34e050f2e08ca3688b6cf4df35e11832d3dbf1e9dcd650ff56",
+    "SpiralInterventionLab/tests/test_structural_rescue_benchmark.py": "7f023e38468eee17e2bd9471a99b8d05cf49486e2235875f05e9ccd0d921f08c",
+    "SpiralInterventionLab/tests/test_structural_rescue_benchmark_v2.py": "24b3f7ad54ed95deb24d2aab9524696adf1c2b99c2a04a71cc6c22ed0fb6cfc3",
+    "SpiralInterventionLab/tests/test_structural_rescue_cap_sweep.py": "4cea0bd4d08e9fbe620b841d3bdf39a80db0366af224ba9c316712112d9cd450",
+    "SpiralInterventionLab/tests/test_structural_rescue_report.py": "adde1e53c10ac5b13d436afc7c1e46f8c71947ca6db3306aac2f6755531f0e53",
+    "SpiralInterventionLab/tests/test_structural_rescue_screen.py": "523d6d0302b87ea64978310f8c29ab4a067bfe09fd83b10b3192687ea702e352",
+    "SpiralInterventionLab/tests/test_structural_rescue_screen_v2.py": "8a78613a5e459b74be56841d8d61f3e41f60c8b3886cb018fca185720df51702",
+    "SpiralInterventionLab/tests/test_structural_rescue_screen_v4.py": "b9dd4261eb688bca654f8993ce94faa3c90fa1d2b3fe3aaa4feb2ca961b151b9",
+    "SpiralInterventionLab/tests/test_task_env.py": "133455c8749eca57df935881b14bfe9f2c767220fa3ea884b69298914c56f9dc",
+    "SpiralInterventionLab/tests/test_trial_reachability_audit.py": "d835c081d29cafcc28f866639ae984568365d6cdf4a53bc6f986fb67d1e27a09",
+    "SpiralInterventionLab/tests/test_worker_fidelity.py": "4e22fa11fae3e96ad605234aad830d24cca56b0edbb5781a9d76a83fc9856955",
+    "pyproject.toml": "d6b9a2b06bc802eb35f3653c263c7df04fc58af1f0a0dab16949771807b1ea2b"
+  },
+  "rows": [
+    {
+      "case_id": "gen_000",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 6,
+          "completed": 6
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Kira brings receipt to Boris",
+      "output": " Kira brings receipt to Boris before dawn; Ilse gives badge to Celia.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Kira",
+            "action": "bring",
+            "theme": "receipt",
+            "recipient": "Boris",
+            "bound_agent": "kira",
+            "bound_recipient": "boris",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Ilse",
+            "action": "give",
+            "theme": "badge",
+            "recipient": "Celia",
+            "bound_agent": "ilse",
+            "bound_recipient": "celia",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_001",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 7,
+          "completed": 7
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Alma sends the roster to Vesna",
+      "output": " Alma sends the roster to Vesna before dawn, while Ilse gives the manual to Pablo.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Alma",
+            "action": "send",
+            "theme": "roster",
+            "recipient": "Vesna",
+            "bound_agent": "alma",
+            "bound_recipient": "vesna",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Ilse",
+            "action": "give",
+            "theme": "manual",
+            "recipient": "Pablo",
+            "bound_agent": "ilse",
+            "bound_recipient": "pablo",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_002",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Edda brings the voucher to Olga",
+      "output": " Edda brings the voucher to Olga, Felix takes the permit to Pablo before dusk.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Edda",
+            "action": "bring",
+            "theme": "voucher",
+            "recipient": "Olga",
+            "bound_agent": "edda",
+            "bound_recipient": "olga",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Felix",
+            "action": "take",
+            "theme": "permit",
+            "recipient": "Pablo",
+            "bound_agent": "felix",
+            "bound_recipient": "pablo",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_003",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 17,
+          "completed": 17
+        }
+      },
+      "boundary_found": false,
+      "prefix": " Nikos gives Alma the ticket before midnight, with Jonas sending the ledger to Felix.",
+      "output": " Nikos gives Alma the ticket before midnight, with Jonas sending the ledger to Felix.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Nikos",
+            "action": "give",
+            "theme": "ticket",
+            "recipient": "Alma",
+            "bound_agent": "nikos",
+            "bound_recipient": "alma",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Jonas",
+            "action": "send",
+            "theme": "ledger",
+            "recipient": "Felix",
+            "bound_agent": "jonas",
+            "bound_recipient": "felix",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_004",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Vesna takes the roster to Wanda",
+      "output": " Vesna takes the roster to Wanda before lunch, while Ilse sends the proposal to Lars.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Vesna",
+            "action": "take",
+            "theme": "roster",
+            "recipient": "Wanda",
+            "bound_agent": "vesna",
+            "bound_recipient": "wanda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Ilse",
+            "action": "send",
+            "theme": "proposal",
+            "recipient": "Lars",
+            "bound_agent": "ilse",
+            "bound_recipient": "lars",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_005",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Lars will take the blueprint to Edda",
+      "output": " Lars will take the blueprint to Edda before supper, and Pablo will bring the manual to Nikos.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Lars",
+            "action": "take",
+            "theme": "blueprint",
+            "recipient": "Edda",
+            "bound_agent": "lars",
+            "bound_recipient": "edda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Pablo",
+            "action": "bring",
+            "theme": "manual",
+            "recipient": "Nikos",
+            "bound_agent": "pablo",
+            "bound_recipient": "nikos",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_006",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 20,
+          "completed": 20
+        }
+      },
+      "boundary_found": false,
+      "prefix": " Olga gives Celia the badge before lunch, while Tilda takes the roster to Ilse.",
+      "output": " Olga gives Celia the badge before lunch, while Tilda takes the roster to Ilse.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Olga",
+            "action": "give",
+            "theme": "badge",
+            "recipient": "Celia",
+            "bound_agent": "olga",
+            "bound_recipient": "celia",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Tilda",
+            "action": "take",
+            "theme": "roster",
+            "recipient": "Ilse",
+            "bound_agent": "tilda",
+            "bound_recipient": "ilse",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_007",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Edda brings the blueprint to Ugo",
+      "output": " Edda brings the blueprint to Ugo, Yusuf gives the letter to Vesna before dawn.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Edda",
+            "action": "bring",
+            "theme": "blueprint",
+            "recipient": "Ugo",
+            "bound_agent": "edda",
+            "bound_recipient": "ugo",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Yusuf",
+            "action": "give",
+            "theme": "letter",
+            "recipient": "Vesna",
+            "bound_agent": "yusuf",
+            "bound_recipient": "vesna",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_008",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Marta brings the proposal to Ugo",
+      "output": " Marta brings the proposal to Ugo before lunch, with Yusuf giving the manual to Edda.",
+      "legacy_score": 0.938889,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": false,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Marta",
+            "action": "bring",
+            "theme": "proposal",
+            "recipient": "Ugo",
+            "bound_agent": "marta",
+            "bound_recipient": "ugo",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Yusuf",
+            "action": "give",
+            "theme": "manual",
+            "recipient": "Edda",
+            "bound_agent": "yusuf",
+            "bound_recipient": "edda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": false,
+      "surface_notes": [
+        "required_action_covered_by_inflection:give"
+      ],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_009",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 16,
+          "completed": 16
+        }
+      },
+      "boundary_found": false,
+      "prefix": " Boris gives Wanda a letter before dusk, while Lars sends Alma a ticket.",
+      "output": " Boris gives Wanda a letter before dusk, while Lars sends Alma a ticket.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Boris",
+            "action": "give",
+            "theme": "letter",
+            "recipient": "Wanda",
+            "bound_agent": "boris",
+            "bound_recipient": "wanda",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Lars",
+            "action": "send",
+            "theme": "ticket",
+            "recipient": "Alma",
+            "bound_agent": "lars",
+            "bound_recipient": "alma",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_010",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 7,
+          "completed": 7
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 9,
+          "completed": 9
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Tilda gives the drawing to Pablo",
+      "output": " Tilda gives the drawing to Pablo before supper, Alma takes the roster to Rosa.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Tilda",
+            "action": "give",
+            "theme": "drawing",
+            "recipient": "Pablo",
+            "bound_agent": "tilda",
+            "bound_recipient": "pablo",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Alma",
+            "action": "take",
+            "theme": "roster",
+            "recipient": "Rosa",
+            "bound_agent": "alma",
+            "bound_recipient": "rosa",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_011",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 18,
+          "completed": 18
+        }
+      },
+      "boundary_found": false,
+      "prefix": " Kira gives Vesna the ticket before midnight; Greta takes the receipt to Stefan.",
+      "output": " Kira gives Vesna the ticket before midnight; Greta takes the receipt to Stefan.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Kira",
+            "action": "give",
+            "theme": "ticket",
+            "recipient": "Vesna",
+            "bound_agent": "kira",
+            "bound_recipient": "vesna",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Greta",
+            "action": "take",
+            "theme": "receipt",
+            "recipient": "Stefan",
+            "bound_agent": "greta",
+            "bound_recipient": "stefan",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_012",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Wanda sends the ledger to Ilse",
+      "output": " Wanda sends the ledger to Ilse, while Kira brings the blueprint to Rosa before midnight.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Wanda",
+            "action": "send",
+            "theme": "ledger",
+            "recipient": "Ilse",
+            "bound_agent": "wanda",
+            "bound_recipient": "ilse",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Kira",
+            "action": "bring",
+            "theme": "blueprint",
+            "recipient": "Rosa",
+            "bound_agent": "kira",
+            "bound_recipient": "rosa",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_013",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Ilse gives the blueprint to Yusuf",
+      "output": " Ilse gives the blueprint to Yusuf before supper, with Celia sending the proposal to Olga.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Ilse",
+            "action": "give",
+            "theme": "blueprint",
+            "recipient": "Yusuf",
+            "bound_agent": "ilse",
+            "bound_recipient": "yusuf",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Celia",
+            "action": "send",
+            "theme": "proposal",
+            "recipient": "Olga",
+            "bound_agent": "celia",
+            "bound_recipient": "olga",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_014",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 7,
+          "completed": 7
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Edda brings the voucher to Henrik",
+      "output": " Edda brings the voucher to Henrik before supper, while Kira gives Lars the letter.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Edda",
+            "action": "bring",
+            "theme": "voucher",
+            "recipient": "Henrik",
+            "bound_agent": "edda",
+            "bound_recipient": "henrik",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Kira",
+            "action": "give",
+            "theme": "letter",
+            "recipient": "Lars",
+            "bound_agent": "kira",
+            "bound_recipient": "lars",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_015",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Yusuf will bring the badge to Alma",
+      "output": " Yusuf will bring the badge to Alma before noon, and Rosa will send the letter to Lars.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Yusuf",
+            "action": "bring",
+            "theme": "badge",
+            "recipient": "Alma",
+            "bound_agent": "yusuf",
+            "bound_recipient": "alma",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Rosa",
+            "action": "send",
+            "theme": "letter",
+            "recipient": "Lars",
+            "bound_agent": "rosa",
+            "bound_recipient": "lars",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_016",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Greta will give the drawing to Ugo",
+      "output": " Greta will give the drawing to Ugo before supper, while Celia sends the roster to Tilda.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Greta",
+            "action": "give",
+            "theme": "drawing",
+            "recipient": "Ugo",
+            "bound_agent": "greta",
+            "bound_recipient": "ugo",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Celia",
+            "action": "send",
+            "theme": "roster",
+            "recipient": "Tilda",
+            "bound_agent": "celia",
+            "bound_recipient": "tilda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_017",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 7,
+          "completed": 7
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Pablo takes the badge to Celia",
+      "output": " Pablo takes the badge to Celia before midnight, while Nikos brings the permit to Greta.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Pablo",
+            "action": "take",
+            "theme": "badge",
+            "recipient": "Celia",
+            "bound_agent": "pablo",
+            "bound_recipient": "celia",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Nikos",
+            "action": "bring",
+            "theme": "permit",
+            "recipient": "Greta",
+            "bound_agent": "nikos",
+            "bound_recipient": "greta",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_018",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Kira takes the voucher to Yusuf",
+      "output": " Kira takes the voucher to Yusuf before dawn, with Ilse bringing the permit to Jonas.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Kira",
+            "action": "take",
+            "theme": "voucher",
+            "recipient": "Yusuf",
+            "bound_agent": "kira",
+            "bound_recipient": "yusuf",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Ilse",
+            "action": "bring",
+            "theme": "permit",
+            "recipient": "Jonas",
+            "bound_agent": "ilse",
+            "bound_recipient": "jonas",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_019",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 7,
+          "completed": 7
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Ilse sends the ledger to Stefan",
+      "output": " Ilse sends the ledger to Stefan before supper, and Felix finishes the proposal for Alma.",
+      "legacy_score": 0.938889,
+      "constraint_violations": [
+        "missing_required_terms"
+      ],
+      "missing_terms_lexical": [],
+      "constraints_ok": false,
+      "single_sentence_ok": true,
+      "role_status": "unknown",
+      "role_unknown_reasons": [
+        "incomplete_frame:take",
+        "action_substituted:finishes"
+      ],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Ilse",
+            "action": "send",
+            "theme": "ledger",
+            "recipient": "Stefan",
+            "bound_agent": "ilse",
+            "bound_recipient": "stefan",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Felix",
+            "action": "take",
+            "theme": "proposal",
+            "recipient": "Alma",
+            "bound_agent": null,
+            "bound_recipient": null,
+            "status": "action_missing"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": false,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": false,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_020",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Celia takes the ticket to Vesna",
+      "output": " Celia takes the ticket to Vesna before dawn, while Greta brings the roster to Edda.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Celia",
+            "action": "take",
+            "theme": "ticket",
+            "recipient": "Vesna",
+            "bound_agent": "celia",
+            "bound_recipient": "vesna",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Greta",
+            "action": "bring",
+            "theme": "roster",
+            "recipient": "Edda",
+            "bound_agent": "greta",
+            "bound_recipient": "edda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_021",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Olga must take the blueprint to Kira",
+      "output": " Olga must take the blueprint to Kira before midnight, while Lars gives the ledger to Nikos.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Olga",
+            "action": "take",
+            "theme": "blueprint",
+            "recipient": "Kira",
+            "bound_agent": "olga",
+            "bound_recipient": "kira",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Lars",
+            "action": "give",
+            "theme": "ledger",
+            "recipient": "Nikos",
+            "bound_agent": "lars",
+            "bound_recipient": "nikos",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_022",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Ugo takes the ticket to Tilda",
+      "output": " Ugo takes the ticket to Tilda, Ilse sends the letter to Felix before supper.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Ugo",
+            "action": "take",
+            "theme": "ticket",
+            "recipient": "Tilda",
+            "bound_agent": "ugo",
+            "bound_recipient": "tilda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Ilse",
+            "action": "send",
+            "theme": "letter",
+            "recipient": "Felix",
+            "bound_agent": "ilse",
+            "bound_recipient": "felix",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_023",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 7,
+          "completed": 7
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Olga takes the voucher to Felix",
+      "output": " Olga takes the voucher to Felix before lunch, with Rosa bringing the receipt to Edda.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Olga",
+            "action": "take",
+            "theme": "voucher",
+            "recipient": "Felix",
+            "bound_agent": "olga",
+            "bound_recipient": "felix",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Rosa",
+            "action": "bring",
+            "theme": "receipt",
+            "recipient": "Edda",
+            "bound_agent": "rosa",
+            "bound_recipient": "edda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_024",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Marta gives the proposal to Kira",
+      "output": " Marta gives the proposal to Kira before midnight, while Ugo finishes the blueprint for Jonas.",
+      "legacy_score": 0.938889,
+      "constraint_violations": [
+        "missing_required_terms"
+      ],
+      "missing_terms_lexical": [],
+      "constraints_ok": false,
+      "single_sentence_ok": true,
+      "role_status": "unknown",
+      "role_unknown_reasons": [
+        "incomplete_frame:take",
+        "action_substituted:finishes"
+      ],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Marta",
+            "action": "give",
+            "theme": "proposal",
+            "recipient": "Kira",
+            "bound_agent": "marta",
+            "bound_recipient": "kira",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Ugo",
+            "action": "take",
+            "theme": "blueprint",
+            "recipient": "Jonas",
+            "bound_agent": null,
+            "bound_recipient": null,
+            "status": "action_missing"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": false,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": false,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_025",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 11,
+          "completed": 11
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Vesna sends the ledger to Nikos",
+      "output": " Vesna sends the ledger to Nikos before dawn, while Felix brings the receipt to Tilda.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Vesna",
+            "action": "send",
+            "theme": "ledger",
+            "recipient": "Nikos",
+            "bound_agent": "vesna",
+            "bound_recipient": "nikos",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Felix",
+            "action": "bring",
+            "theme": "receipt",
+            "recipient": "Tilda",
+            "bound_agent": "felix",
+            "bound_recipient": "tilda",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_026",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 9,
+          "completed": 9
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 12,
+          "completed": 12
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Ugo will send the manual to Olga",
+      "output": " Ugo will send the manual to Olga before lunch, while Kira gives the voucher to Greta.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Ugo",
+            "action": "send",
+            "theme": "manual",
+            "recipient": "Olga",
+            "bound_agent": "ugo",
+            "bound_recipient": "olga",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Kira",
+            "action": "give",
+            "theme": "voucher",
+            "recipient": "Greta",
+            "bound_agent": "kira",
+            "bound_recipient": "greta",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_027",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Edda sends the blueprint to Kira",
+      "output": " Edda sends the blueprint to Kira, Celia takes the drawing to Rosa before midnight.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Edda",
+            "action": "send",
+            "theme": "blueprint",
+            "recipient": "Kira",
+            "bound_agent": "edda",
+            "bound_recipient": "kira",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Celia",
+            "action": "take",
+            "theme": "drawing",
+            "recipient": "Rosa",
+            "bound_agent": "celia",
+            "bound_recipient": "rosa",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_028",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 8,
+          "completed": 8
+        },
+        "diagnostic": {
+          "attempted": 1,
+          "completed": 1
+        },
+        "continuation": {
+          "attempted": 10,
+          "completed": 10
+        }
+      },
+      "boundary_found": true,
+      "prefix": " Pablo will take the manual to Vesna",
+      "output": " Pablo will take the manual to Vesna before dusk, with Stefan bringing the roster to Boris.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Pablo",
+            "action": "take",
+            "theme": "manual",
+            "recipient": "Vesna",
+            "bound_agent": "pablo",
+            "bound_recipient": "vesna",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Stefan",
+            "action": "bring",
+            "theme": "roster",
+            "recipient": "Boris",
+            "bound_agent": "stefan",
+            "bound_recipient": "boris",
+            "bound_recipient_mode": "to_dative",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    },
+    {
+      "case_id": "gen_029",
+      "status": "ok",
+      "forwards": {
+        "setup": {
+          "attempted": 17,
+          "completed": 17
+        }
+      },
+      "boundary_found": false,
+      "prefix": " Rosa gives Ugo the permit before supper, Stefan brings Wanda the manual afterwards.",
+      "output": " Rosa gives Ugo the permit before supper, Stefan brings Wanda the manual afterwards.",
+      "legacy_score": 1.0,
+      "constraint_violations": [],
+      "missing_terms_lexical": [],
+      "constraints_ok": true,
+      "single_sentence_ok": true,
+      "role_status": "pass",
+      "role_unknown_reasons": [],
+      "role_report": {
+        "frames": [
+          {
+            "agent": "Rosa",
+            "action": "give",
+            "theme": "permit",
+            "recipient": "Ugo",
+            "bound_agent": "rosa",
+            "bound_recipient": "ugo",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          },
+          {
+            "agent": "Stefan",
+            "action": "bring",
+            "theme": "manual",
+            "recipient": "Wanda",
+            "bound_agent": "stefan",
+            "bound_recipient": "wanda",
+            "bound_recipient_mode": "double_object",
+            "theme_in_action_clause": true,
+            "status": "bound"
+          }
+        ],
+        "role_violations": [],
+        "role_binding_ok": true,
+        "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+      },
+      "joint_success": true,
+      "surface_notes": [],
+      "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic"
+    }
+  ],
+  "device": "mps",
+  "dtype": "float16",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 672.334,
+  "selected_case_ids": [
+    "gen_008",
+    "gen_019",
+    "gen_024"
+  ],
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  }
+}
