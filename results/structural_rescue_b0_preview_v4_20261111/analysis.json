@@ -1,0 +1,453 @@
+{
+  "status": "complete",
+  "manifest_sha256": "f2a71c4b28f936abdd041b50c227d3421781a59c3550084f975d266c87a6c3b4",
+  "aggregate": {
+    "rescue_v4": {
+      "b0": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 2,
+        "selection_errors": 0,
+        "joint_success_delta_vs_b0": 0.0,
+        "net_joint_success_gain_per_edit": null
+      },
+      "fixed_routed": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 3,
+        "wins_vs_b0": 3,
+        "losses_vs_b0": 0,
+        "output_changes": 3,
+        "applied_diagnostic_edits": 3,
+        "unknown_roles": 0,
+        "selection_errors": 0,
+        "joint_success_delta_vs_b0": 1.0,
+        "net_joint_success_gain_per_edit": 1.0
+      },
+      "controller": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 3,
+        "wins_vs_b0": 3,
+        "losses_vs_b0": 0,
+        "output_changes": 3,
+        "applied_diagnostic_edits": 3,
+        "unknown_roles": 0,
+        "selection_errors": 0,
+        "joint_success_delta_vs_b0": 1.0,
+        "net_joint_success_gain_per_edit": 1.0
+      },
+      "controller_b0_preview": {
+        "completed_pairs": 3,
+        "eligible_pairs": 3,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 3,
+        "wins_vs_b0": 3,
+        "losses_vs_b0": 0,
+        "output_changes": 3,
+        "applied_diagnostic_edits": 3,
+        "unknown_roles": 0,
+        "selection_errors": 0,
+        "joint_success_delta_vs_b0": 1.0,
+        "net_joint_success_gain_per_edit": 1.0
+      }
+    }
+  },
+  "conditions": [
+    {
+      "case_id": "gen_008",
+      "split": "rescue_v4",
+      "policy": "b0",
+      "comparison_eligible": true,
+      "selection_status": "noop",
+      "legacy_score": 0.938889,
+      "joint_success": false,
+      "role_status": "pass",
+      "output": " Marta brings the proposal to Ugo before lunch, with Yusuf giving the manual to Edda.",
+      "output_changed_vs_b0": false,
+      "branch_changed": false,
+      "actual_write_norm": null,
+      "relative_write_norm": null,
+      "actual_forwards": 15,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {}
+    },
+    {
+      "case_id": "gen_008",
+      "split": "rescue_v4",
+      "policy": "fixed_routed",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Marta brings the proposal to Ugo while Yusuf gives Edda the manual before lunch.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.26392317,
+      "relative_write_norm": 0.11999337,
+      "actual_forwards": 15,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {}
+    },
+    {
+      "case_id": "gen_008",
+      "split": "rescue_v4",
+      "policy": "controller",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Marta brings the proposal to Ugo while Yusuf gives Edda the manual before lunch.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.26392317,
+      "relative_write_norm": 0.11999337,
+      "actual_forwards": 15,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {
+        "input_tokens": 2514,
+        "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=2511)",
+        "output_tokens": 168,
+        "output_tokens_details": "OutputTokensDetails(reasoning_tokens=129)",
+        "total_tokens": 2682
+      }
+    },
+    {
+      "case_id": "gen_008",
+      "split": "rescue_v4",
+      "policy": "controller_b0_preview",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Marta brings the proposal to Ugo while Yusuf gives Edda the manual before lunch.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.26392317,
+      "relative_write_norm": 0.11999337,
+      "actual_forwards": 15,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {
+        "input_tokens": 2559,
+        "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=2556)",
+        "output_tokens": 106,
+        "output_tokens_details": "OutputTokensDetails(reasoning_tokens=67)",
+        "total_tokens": 2665
+      }
+    },
+    {
+      "case_id": "gen_019",
+      "split": "rescue_v4",
+      "policy": "b0",
+      "comparison_eligible": true,
+      "selection_status": "noop",
+      "legacy_score": 0.938889,
+      "joint_success": false,
+      "role_status": "unknown",
+      "output": " Ilse sends the ledger to Stefan before supper, and Felix finishes the proposal for Alma.",
+      "output_changed_vs_b0": false,
+      "branch_changed": false,
+      "actual_write_norm": null,
+      "relative_write_norm": null,
+      "actual_forwards": 13,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {}
+    },
+    {
+      "case_id": "gen_019",
+      "split": "rescue_v4",
+      "policy": "fixed_routed",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Ilse sends the ledger to Stefan before supper, and Felix takes the proposal to Alma afterwards.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.15810156,
+      "relative_write_norm": 0.11539647,
+      "actual_forwards": 26,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {}
+    },
+    {
+      "case_id": "gen_019",
+      "split": "rescue_v4",
+      "policy": "controller",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Ilse sends the ledger to Stefan before supper, and Felix takes the proposal to Alma afterwards.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.15810156,
+      "relative_write_norm": 0.11539647,
+      "actual_forwards": 26,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {
+        "input_tokens": 4567,
+        "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4564)",
+        "output_tokens": 194,
+        "output_tokens_details": "OutputTokensDetails(reasoning_tokens=160)",
+        "total_tokens": 4761
+      }
+    },
+    {
+      "case_id": "gen_019",
+      "split": "rescue_v4",
+      "policy": "controller_b0_preview",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Ilse sends the ledger to Stefan before supper, and Felix takes the proposal to Alma afterwards.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.15810156,
+      "relative_write_norm": 0.11539647,
+      "actual_forwards": 26,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {
+        "input_tokens": 4611,
+        "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4608)",
+        "output_tokens": 136,
+        "output_tokens_details": "OutputTokensDetails(reasoning_tokens=102)",
+        "total_tokens": 4747
+      }
+    },
+    {
+      "case_id": "gen_024",
+      "split": "rescue_v4",
+      "policy": "b0",
+      "comparison_eligible": true,
+      "selection_status": "noop",
+      "legacy_score": 0.938889,
+      "joint_success": false,
+      "role_status": "unknown",
+      "output": " Marta gives the proposal to Kira before midnight, while Ugo finishes the blueprint for Jonas.",
+      "output_changed_vs_b0": false,
+      "branch_changed": false,
+      "actual_write_norm": null,
+      "relative_write_norm": null,
+      "actual_forwards": 14,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {}
+    },
+    {
+      "case_id": "gen_024",
+      "split": "rescue_v4",
+      "policy": "fixed_routed",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Marta gives the proposal to Kira, while Ugo takes the blueprint to Jonas before midnight.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.25866461,
+      "relative_write_norm": 0.11999299,
+      "actual_forwards": 16,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {}
+    },
+    {
+      "case_id": "gen_024",
+      "split": "rescue_v4",
+      "policy": "controller",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Marta gives the proposal to Kira, while Ugo takes the blueprint to Jonas before midnight.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.25866461,
+      "relative_write_norm": 0.11999299,
+      "actual_forwards": 16,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {
+        "input_tokens": 4385,
+        "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4382)",
+        "output_tokens": 117,
+        "output_tokens_details": "OutputTokensDetails(reasoning_tokens=81)",
+        "total_tokens": 4502
+      }
+    },
+    {
+      "case_id": "gen_024",
+      "split": "rescue_v4",
+      "policy": "controller_b0_preview",
+      "comparison_eligible": true,
+      "selection_status": "selected",
+      "legacy_score": 1.0,
+      "joint_success": true,
+      "role_status": "pass",
+      "output": " Marta gives the proposal to Kira, while Ugo takes the blueprint to Jonas before midnight.",
+      "output_changed_vs_b0": true,
+      "branch_changed": true,
+      "actual_write_norm": 5.25866461,
+      "relative_write_norm": 0.11999299,
+      "actual_forwards": 16,
+      "state_restored": true,
+      "baseline_repeat_max_abs_logit_delta": 0.0,
+      "provider_usage": {
+        "input_tokens": 4430,
+        "input_tokens_details": "InputTokensDetails(cached_tokens=0, cache_write_tokens=4427)",
+        "output_tokens": 110,
+        "output_tokens_details": "OutputTokensDetails(reasoning_tokens=74)",
+        "total_tokens": 4540
+      }
+    }
+  ],
+  "calibration_matrix": [],
+  "selector_pairs": [
+    {
+      "reference": "fixed_routed",
+      "challenger": "controller",
+      "expected": 3,
+      "unavailable_boundary": [],
+      "unpaired": [],
+      "strata": {
+        "b0_pass": {
+          "paired": 0,
+          "same_choice": 0,
+          "different_choice": 0,
+          "both_pass": 0,
+          "both_fail": 0,
+          "reference_only": 0,
+          "challenger_only": 0,
+          "reference_provider_noop": 0,
+          "challenger_provider_noop": 0
+        },
+        "b0_fail": {
+          "paired": 3,
+          "same_choice": 3,
+          "different_choice": 0,
+          "both_pass": 3,
+          "both_fail": 0,
+          "reference_only": 0,
+          "challenger_only": 0,
+          "reference_provider_noop": 0,
+          "challenger_provider_noop": 0
+        }
+      },
+      "discordant_cases": []
+    },
+    {
+      "reference": "controller",
+      "challenger": "controller_b0_preview",
+      "expected": 3,
+      "unavailable_boundary": [],
+      "unpaired": [],
+      "strata": {
+        "b0_pass": {
+          "paired": 0,
+          "same_choice": 0,
+          "different_choice": 0,
+          "both_pass": 0,
+          "both_fail": 0,
+          "reference_only": 0,
+          "challenger_only": 0,
+          "reference_provider_noop": 0,
+          "challenger_provider_noop": 0
+        },
+        "b0_fail": {
+          "paired": 3,
+          "same_choice": 3,
+          "different_choice": 0,
+          "both_pass": 3,
+          "both_fail": 0,
+          "reference_only": 0,
+          "challenger_only": 0,
+          "reference_provider_noop": 0,
+          "challenger_provider_noop": 0
+        }
+      },
+      "discordant_cases": []
+    }
+  ],
+  "constraint_consistency_findings": [
+    {
+      "case_id": "gen_008",
+      "policy": "b0",
+      "reason": "constraints_failed_without_reported_violation",
+      "surface_notes": [
+        "required_action_covered_by_inflection:give"
+      ],
+      "joint_success_as_recorded": false,
+      "reinterpretation": "requires_versioned_evaluator_audit_not_rescue_evidence"
+    }
+  ],
+  "b0_failure_breakdown": {
+    "rescue_v4": {
+      "constraint": {
+        "cases": [
+          "gen_008",
+          "gen_019",
+          "gen_024"
+        ],
+        "joint_successes": {
+          "b0": 0,
+          "fixed_routed": 3,
+          "controller": 3,
+          "controller_b0_preview": 3
+        }
+      }
+    }
+  },
+  "policy_actual_forward_totals": {
+    "b0": 42,
+    "fixed_routed": 57,
+    "controller": 57,
+    "controller_b0_preview": 57
+  },
+  "shared_setup_forwards": 65,
+  "shared_fallback_forwards": 0,
+  "total_provider_calls": 6,
+  "provider_token_totals": {
+    "input_tokens": 23066,
+    "output_tokens": 831,
+    "total_tokens": 23897
+  },
+  "calibration_matrix_actual_forwards": 0,
+  "production_apply_allowed": false,
+  "limitations": [
+    "one worker and one predeclared boundary per case",
+    "predeclared generated or related cases, not a population sample",
+    "role check is conservative surface analysis, not semantic ground truth",
+    "one-shot recipe selection, not a multi-step adaptive controller",
+    "restored diagnostic branches, not certified production applies",
+    "equal ceilings with separately reported actual consumption"
+  ],
+  "manifest_and_executed_source_verified": true,
+  "source_sha256": "b23541b6a15638d4ef3085bcfa06172404c686faebef76df17359d052a7b47d9",
+  "analyzer_sha256": "6d3a863c01acc7e6d28bd2e65d83dcbc2c0ed6fc4fd7c740eae0c426c124294c"
+}

@@ -1,0 +1,387 @@
+{
+  "status": "error",
+  "created_at_utc": "2026-11-11T00:58:40.754507+00:00",
+  "manifest_sha256": "af946393433bfd059e310e7123c867feebe350616418201f9f484e02f39a4ca2",
+  "checkpoint_sha256_verified": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "device": "mps",
+  "dtype": "float16",
+  "surface_catalog": [
+    {
+      "surface_id": "s_resid_pre_l14_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 14,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    },
+    {
+      "surface_id": "s_resid_pre_l27_last",
+      "target": {
+        "kind": "activation",
+        "worker": "os_0",
+        "site": "resid_pre",
+        "layer": 27,
+        "token": {
+          "mode": "last"
+        }
+      },
+      "allow_ops": [
+        "resid_add",
+        "activation_patch"
+      ],
+      "caps": {
+        "max_alpha": 0.18,
+        "max_ttl_steps": 2,
+        "norm_clip": 1.5,
+        "step_size": 0.12,
+        "revertible_only": true
+      }
+    }
+  ],
+  "policies_requested": [
+    "b0",
+    "fixed_routed",
+    "controller"
+  ],
+  "case_ids_requested": [
+    "heldout_000",
+    "heldout_001",
+    "heldout_002",
+    "heldout_003",
+    "heldout_004",
+    "heldout_005",
+    "heldout_006",
+    "heldout_007",
+    "heldout_008",
+    "heldout_009"
+  ],
+  "cases": [
+    {
+      "case_id": "heldout_000",
+      "split": "heldout_v1",
+      "policies": {
+        "b0": {
+          "selection": {
+            "status": "noop",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": null,
+          "status": "ok",
+          "output": " Pablo will send the receipt to Jonas before dusk, while Marta gives the drawing to Greta.",
+          "legacy_score": 1.0,
+          "constraint_violations": [],
+          "missing_terms_lexical": [],
+          "constraints_ok": true,
+          "single_sentence_ok": true,
+          "role_status": "pass",
+          "role_unknown_reasons": [],
+          "role_report": {
+            "frames": [
+              {
+                "agent": "Pablo",
+                "action": "send",
+                "theme": "receipt",
+                "recipient": "Jonas",
+                "bound_agent": "pablo",
+                "bound_recipient": "jonas",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              },
+              {
+                "agent": "Marta",
+                "action": "give",
+                "theme": "drawing",
+                "recipient": "Greta",
+                "bound_agent": "marta",
+                "bound_recipient": "greta",
+                "bound_recipient_mode": "to_dative",
+                "theme_in_action_clause": true,
+                "status": "bound"
+              }
+            ],
+            "role_violations": [],
+            "role_binding_ok": true,
+            "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+          },
+          "joint_success": true,
+          "surface_notes": [],
+          "evaluation_scope": "lexical_constraints_plus_conservative_surface_role_heuristic",
+          "state_restored": true,
+          "scheduled_apply_at_step": 0,
+          "readout": {
+            "stage": "raw_pre_constraint_full_vocabulary_cpu_float64",
+            "fixed_baseline_winner": 1603,
+            "edited_winner": 1603,
+            "raw_greedy_branch_changed": false,
+            "rows": [
+              {
+                "token_id": 1603,
+                "baseline_gap_to_fixed_winner": 0.0,
+                "edited_gap_to_fixed_winner": 0.0,
+                "gap_closure_fraction": null,
+                "baseline_probability": 0.7722304874646314,
+                "edited_probability": 0.7722304874646314,
+                "probability_delta": 0.0,
+                "rank_before": 1,
+                "rank_after": 1
+              },
+              {
+                "token_id": 11,
+                "baseline_gap_to_fixed_winner": 2.234375,
+                "edited_gap_to_fixed_winner": 2.234375,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.08267423984730533,
+                "edited_probability": 0.08267423984730533,
+                "probability_delta": 0.0,
+                "rank_before": 2,
+                "rank_after": 2
+              },
+              {
+                "token_id": 1418,
+                "baseline_gap_to_fixed_winner": 5.0,
+                "edited_gap_to_fixed_winner": 5.0,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.005203248095614621,
+                "edited_probability": 0.005203248095614621,
+                "probability_delta": 0.0,
+                "rank_before": 6,
+                "rank_after": 6
+              },
+              {
+                "token_id": 627,
+                "baseline_gap_to_fixed_winner": 8.546875,
+                "edited_gap_to_fixed_winner": 8.546875,
+                "gap_closure_fraction": 0.0,
+                "baseline_probability": 0.00014992922408911058,
+                "edited_probability": 0.00014992922408911058,
+                "probability_delta": 0.0,
+                "rank_before": 29,
+                "rank_after": 29
+              }
+            ],
+            "baseline_scope": "same_token_prefix_unedited",
+            "prefix_identity": {
+              "shape": [
+                1,
+                105
+              ],
+              "dtype": "torch.int64",
+              "sha256": "3d724f8b6267ce97cf3a4f03c4e4938726f4c39cc6d40bc87560d0c99daba3f6"
+            },
+            "decode_step": 0
+          },
+          "baseline_repeat_max_abs_logit_delta": 0.0,
+          "baseline_logits_sha256": [
+            "a72a5851bb0d470360e61a051c38d915e20517f774dfb15c4a3b47da06e94c82",
+            "a72a5851bb0d470360e61a051c38d915e20517f774dfb15c4a3b47da06e94c82"
+          ],
+          "command": null,
+          "recipe_kind": null,
+          "recipe_component": null,
+          "runtime_telemetry": [],
+          "first_token_id": 1603,
+          "token_id_at_comparison": 1603,
+          "forwards": {
+            "diagnostic": {
+              "attempted": 3,
+              "completed": 3
+            },
+            "continuation": {
+              "attempted": 12,
+              "completed": 12
+            }
+          },
+          "production_apply_allowed": false,
+          "total_worker_forwards": {
+            "attempted": 37,
+            "completed": 37
+          },
+          "natural_branch_changed": false
+        },
+        "fixed_routed": {
+          "selection": {
+            "status": "selected",
+            "provider_calls": 0
+          },
+          "selected_recipe_id": "structural-contract:58bbec8809cf7e766c6871f0",
+          "status": "error",
+          "error_type": "RuntimeError",
+          "error": "edited_boundary_capture_failed: RuntimeError: MPS backend out of memory (MPS allocated: 11.88 GiB, other allocations: 55.03 MiB, max allowed: 12.43 GiB). Tried to allocate 751.50 MiB on shared pool. Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit for memory allocations (may cause sys",
+          "forwards": {
+            "diagnostic": {
+              "attempted": 5,
+              "completed": 5
+            },
+            "continuation": {
+              "attempted": 2,
+              "completed": 1
+            }
+          },
+          "production_apply_allowed": false
+        }
+      },
+      "calibration_matrix": [],
+      "setup_forwards": {
+        "setup": {
+          "attempted": 22,
+          "completed": 22
+        }
+      },
+      "prefix": " Pablo will send the receipt to Jonas",
+      "boundary_found": true,
+      "tokens_identity": {
+        "shape": [
+          1,
+          105
+        ],
+        "dtype": "torch.int64",
+        "sha256": "3d724f8b6267ce97cf3a4f03c4e4938726f4c39cc6d40bc87560d0c99daba3f6"
+      },
+      "comparison_eligible": true,
+      "shared_setup_forwards": {
+        "setup": {
+          "attempted": 22,
+          "completed": 22
+        }
+      },
+      "eligible_sources": [
+        {
+          "token_id": 11,
+          "piece": ",",
+          "source_positions": [
+            75,
+            83
+          ]
+        },
+        {
+          "token_id": 1418,
+          "piece": " while",
+          "source_positions": [
+            84
+          ]
+        },
+        {
+          "token_id": 627,
+          "piece": ".\n",
+          "source_positions": [
+            94
+          ]
+        }
+      ],
+      "contract_allowlist": {
+        "readout_token_ids": [
+          11,
+          1418,
+          627,
+          1418
+        ],
+        "source_positions": [
+          75,
+          83,
+          84,
+          94
+        ]
+      },
+      "eligible_recipe_count": 13,
+      "recipe_ids": [
+        "structural-contract:1d16cd3f7692622f94c8bdcf",
+        "structural-contract:611544bbaf16d598b3700510",
+        "structural-contract:60397b7d03cb8716e5b4db50",
+        "structural-contract:8119ad7e33df29f9e23f12ad",
+        "structural-contract:ab80d4af0bd32f6dac4bd1c3",
+        "structural-contract:816fefd0ae646cc10e4a804c",
+        "structural-contract:7c9d071ec787c440bc3b6aac",
+        "structural-contract:f3e5c1d40ed82b3bac9bda4a",
+        "structural-contract:0cb18127822410acce706c5b",
+        "structural-contract:58bbec8809cf7e766c6871f0",
+        "structural-contract:c0d84df687c20e4d74c0c23c",
+        "structural-contract:ecfd3634a78bcbe20c5dcc85",
+        "structural-contract:7dd30153133917345fad1311"
+      ],
+      "fixed_recipe_ids": {
+        "fixed": "structural-contract:60397b7d03cb8716e5b4db50",
+        "fixed_readout": "structural-contract:58bbec8809cf7e766c6871f0",
+        "fixed_clause_form": "structural-contract:7dd30153133917345fad1311",
+        "fixed_verb_slot": null
+      }
+    }
+  ],
+  "scope": "restored_contract_branch_pilot_not_production_or_population_efficacy",
+  "production_apply_allowed": false,
+  "elapsed_seconds": 63.254,
+  "aggregate": {
+    "heldout_v1": {
+      "b0": {
+        "completed_pairs": 1,
+        "eligible_pairs": 1,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 1,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "fixed_routed": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      },
+      "controller": {
+        "completed_pairs": 0,
+        "eligible_pairs": 0,
+        "unavailable_boundary_cases": 0,
+        "joint_successes": 0,
+        "wins_vs_b0": 0,
+        "losses_vs_b0": 0,
+        "output_changes": 0,
+        "applied_diagnostic_edits": 0,
+        "unknown_roles": 0,
+        "selection_errors": 0
+      }
+    }
+  },
+  "paired_heldout": {
+    "expected": 10,
+    "paired": 0,
+    "both_pass": 0,
+    "both_fail": 0,
+    "controller_only": 0,
+    "fixed_routed_only": 0
+  },
+  "error_type": "RuntimeError",
+  "error": "edited_boundary_capture_failed: RuntimeError: MPS backend out of memory (MPS allocated: 11.88 GiB, other allocations: 55.03 MiB, max allowed: 12.43 GiB). Tried to allocate 751.50 MiB on shared pool. Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit for memory allocations (may cause system failure)."
+}

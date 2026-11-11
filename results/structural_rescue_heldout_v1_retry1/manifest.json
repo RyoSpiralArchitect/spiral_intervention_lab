@@ -1,0 +1,398 @@
+{
+  "analysis_plan": "paired_controller_vs_fixed_routed_joint_success_and_losses_vs_b0",
+  "apply_scope": "restored_contract_diagnostic_branch_only",
+  "baseline_repeats_before_each_branch": 2,
+  "boundary_rule": "first_natural_prefix_ending_in_to_first_source_recipient",
+  "calibration_matrix": "every_catalog_recipe_on_calibration_cases",
+  "case_set": {
+    "count": 10,
+    "families": [
+      "purpose_first",
+      "deadline_first",
+      "purpose_last",
+      "participle_second",
+      "relative_agent"
+    ],
+    "generator": "structural_rescue_generator_v3",
+    "seed": 20261111,
+    "selection_rule": "all_generated_in_order_no_b0_screen",
+    "verbs": [
+      "send",
+      "take",
+      "bring",
+      "give"
+    ]
+  },
+  "cases": [
+    {
+      "case_id": "heldout_000",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Pablo",
+          "send",
+          "receipt",
+          "Jonas"
+        ],
+        [
+          "Marta",
+          "give",
+          "drawing",
+          "Greta"
+        ]
+      ],
+      "prompt_sha256": "d7ff1cacdd6296329a0d4728f335fe8511612cfff6ef209c57bf9a7615b84e91",
+      "source": "In order to finish before dusk, Pablo should send the receipt to Jonas, while Marta should give the drawing to Greta.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_001",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "drawing",
+          "Jonas"
+        ],
+        [
+          "Felix",
+          "give",
+          "badge",
+          "Kira"
+        ]
+      ],
+      "prompt_sha256": "93e43a2f63cd8b04956413b148008150c56bf05e18030455afeac0ac3d28780a",
+      "source": "Before noon, Rosa should bring the drawing to Jonas, while Felix should give the badge to Kira.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_002",
+      "deadline": "before dusk",
+      "frames_evaluation_only": [
+        [
+          "Wanda",
+          "bring",
+          "receipt",
+          "Henrik"
+        ],
+        [
+          "Celia",
+          "send",
+          "permit",
+          "Boris"
+        ]
+      ],
+      "prompt_sha256": "b910fdfdbd55afaf61c97e605bf06c7f32b0e59c3086e54114d67b1e1def8e6d",
+      "source": "Wanda should bring the receipt to Henrik; meanwhile, Celia should send the permit to Boris, in order to finish before dusk.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_003",
+      "deadline": "before midnight",
+      "frames_evaluation_only": [
+        [
+          "Olga",
+          "give",
+          "voucher",
+          "Wanda"
+        ],
+        [
+          "Ilse",
+          "bring",
+          "receipt",
+          "Jonas"
+        ]
+      ],
+      "prompt_sha256": "ab2fd0e998a16302daf038adec9fe106ccf7ee1f405fddac99858cac0252e40b",
+      "source": "In order to close before midnight, Olga should give the voucher to Wanda, with Ilse bringing the receipt to Jonas.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_004",
+      "deadline": "before supper",
+      "frames_evaluation_only": [
+        [
+          "Henrik",
+          "give",
+          "manual",
+          "Greta"
+        ],
+        [
+          "Olga",
+          "send",
+          "receipt",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "706e295bf019050cc68f93110073128e7435d8e211a5eca7f37475d0bcc448d2",
+      "source": "Before supper, Henrik should give the manual to Greta, and Olga, who should send the receipt to Marta, also finishes.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_005",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Yusuf",
+          "give",
+          "letter",
+          "Kira"
+        ],
+        [
+          "Boris",
+          "take",
+          "voucher",
+          "Felix"
+        ]
+      ],
+      "prompt_sha256": "a9a964721c0c7d185b210a48fe4be90af2216005baa27ac68bec8305d006d155",
+      "source": "In order to be ready before noon, Yusuf should give the letter to Kira, while Boris should take the voucher to Felix.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_006",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Jonas",
+          "bring",
+          "roster",
+          "Alma"
+        ],
+        [
+          "Nikos",
+          "give",
+          "badge",
+          "Wanda"
+        ]
+      ],
+      "prompt_sha256": "22821c634b73421184c34f029586338c70ba24cc9b6ed6caa33f273358e5b7b8",
+      "source": "Before dawn, Jonas should bring the roster to Alma, whereas Nikos should give the badge to Wanda.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_007",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Rosa",
+          "bring",
+          "receipt",
+          "Henrik"
+        ],
+        [
+          "Pablo",
+          "give",
+          "proposal",
+          "Marta"
+        ]
+      ],
+      "prompt_sha256": "3b53398cd822e0d04b4f40bbbffa6e9d10a3fe4ef4bd8fd1475646f83c9b6b28",
+      "source": "Rosa should bring the receipt to Henrik, while Pablo should give the proposal to Marta, in order to be ready before noon.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_008",
+      "deadline": "before noon",
+      "frames_evaluation_only": [
+        [
+          "Ilse",
+          "take",
+          "voucher",
+          "Marta"
+        ],
+        [
+          "Tilda",
+          "bring",
+          "ledger",
+          "Rosa"
+        ]
+      ],
+      "prompt_sha256": "c5a1e6c6a72ec0b48b94916a9fa23886d6d93d49bd563786d6e61f3911275993",
+      "source": "In order to be ready before noon, Ilse should take the voucher to Marta, with Tilda bringing the ledger to Rosa.",
+      "split": "heldout_v1"
+    },
+    {
+      "case_id": "heldout_009",
+      "deadline": "before dawn",
+      "frames_evaluation_only": [
+        [
+          "Greta",
+          "send",
+          "roster",
+          "Wanda"
+        ],
+        [
+          "Stefan",
+          "take",
+          "voucher",
+          "Ugo"
+        ]
+      ],
+      "prompt_sha256": "33302ef586f1329b253e640d543b864bc92e7404211a9b9e53b72c2ac601db84",
+      "source": "Before dawn, Greta should send the roster to Wanda; meanwhile, Stefan, who should take the voucher to Ugo, also finishes.",
+      "split": "heldout_v1"
+    }
+  ],
+  "checkpoint_sha256": {
+    "config.json": "39fb36dc5416f445ebc4e71cb71fbcf6727e80a35836d8ba1a1474c318467b7a",
+    "generation.json": "88effbb63300dbbc7390143fbbdd9d9fa50587b37e8bfd16c8c90d4970a74a36",
+    "model-00001-of-00002.safetensors": "13cbd6d16e927a0c5bad54102514e6e18b4a47b3a6eb911e39d678d328d19f55",
+    "model-00002-of-00002.safetensors": "7b770216613ac5c34d7c54bdff1fa616bc4e338a9d0b20af6303e48c295ee23c",
+    "model.safetensors.index.json": "0a57c30afc07c81610ae7fe013bea3b9d50365f9a8145ae98e8714220f3d7c7c",
+    "special_tokens_map.json": "6f38c73729248f6c127296386e3cdde96e254636cc58b4169d3fd32328d9a8ec",
+    "tokenizer.json": "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4",
+    "tokenizer_config.json": "9823dcfdc1121869029da45192238e85cf44f0b232a6d9dc20e4fe6f4242a14e"
+  },
+  "clause_form_applicability_rule": "regex:\\bwith\\b",
+  "clause_form_starters": [
+    " while_finite_clause_starter"
+  ],
+  "confirmation_status": "unseen_cases_frozen_before_any_model_call",
+  "continuation_forward_cap_per_policy": 64,
+  "contract": {
+    "cast_tolerance": 0.002,
+    "edits_per_branch": 1,
+    "guard": "per_position_hook_output_minus_input_vs_input_norm",
+    "id": "norm_relative_structural_v1",
+    "patch_alpha": 1.0,
+    "patch_components": [
+      "common",
+      "common_parallel",
+      "common_orthogonal"
+    ],
+    "patch_layer_rule": "n_layers//2",
+    "protected_rule": "structural_lexemes_inside_required_terms",
+    "readout_alpha_rule": "cap*||h_boundary||",
+    "readout_layer_rule": "n_layers-1",
+    "relative_write_cap": 0.12,
+    "site": "resid_pre",
+    "source_rule": "first_three_eligible_source_tokens_in_source_order_plus_clause_form_starters",
+    "structural_lexemes": [
+      ",",
+      ".",
+      ":",
+      ";",
+      "after",
+      "although",
+      "and",
+      "because",
+      "before",
+      "but",
+      "or",
+      "so",
+      "then",
+      "until",
+      "when",
+      "whereas",
+      "while"
+    ],
+    "token": "last",
+    "ttl_steps": 1
+  },
+  "controller_datasheet": {
+    "reach_basis": "structural_rescue_cap_sweep_v1_calibration_n3_caps_0.04-0.12",
+    "readout_closure_slope": {
+      " while": {
+        "max": 54.0,
+        "mean": 51.0,
+        "min": 49.0
+      },
+      ",": {
+        "max": 26.0,
+        "mean": 22.5,
+        "min": 20.0
+      },
+      ".\n": {
+        "max": 50.0,
+        "mean": 43.0,
+        "min": 36.0
+      }
+    },
+    "unknown_pieces": "no_estimate"
+  },
+  "controller_system_prompt_sha256": "c7c80a8b893bac2bb4bf4adfba2d4d76b420d2a50b81b8f769c9d119c2b1cd4d",
+  "diagnostic_forward_cap_per_policy": 24,
+  "disk_floor_gib": 10,
+  "evaluator": {
+    "note": "double_object_binding_added_2026_11_06_alters_unknowns_vs_violations",
+    "role_check_scope": "surface_heuristic_nearest_agent_to_or_double_object_recipient_not_grammar"
+  },
+  "fixed_readout_rule": "readout_of_first_eligible_source_token",
+  "fixed_routed_rule": "first_offered_applicable_verb_slot_then_clause_form_then_readout_else_noop",
+  "fixed_rule": "common_orthogonal_of_first_eligible_pair",
+  "forward_accounting": "shared_setup_including_b0_slot_lookahead_plus_branch_per_arm",
+  "max_controller_calls_per_case": 1,
+  "max_controller_output_tokens": 1600,
+  "max_generated_tokens": 64,
+  "max_words": 18,
+  "policies": [
+    "b0",
+    "fixed_routed",
+    "controller"
+  ],
+  "policy_seeds": [
+    17
+  ],
+  "production_apply_allowed": false,
+  "protocol_deviations": [],
+  "random_rule": "sha256(case_id,seed)_mod_catalog_size",
+  "readout_comparison": "same_token_prefix_unedited_at_scheduled_decode_step",
+  "relation_to_v1": "same_cases_boundary_and_patch_directions; doses_replaced_by_contract; readout_recipes_added; pairs_with_protected_lexemes_dropped",
+  "run": {
+    "controller_model": "gpt-5.6-luna",
+    "device": "mps",
+    "dtype": "float16",
+    "mps_memory_fraction": 0.7,
+    "wall_seconds": 3600,
+    "worker_model": "meta-llama/Llama-3.2-3B-Instruct"
+  },
+  "setup_forward_cap_per_policy": 40,
+  "verb_slot_action_forms": [
+    "a",
+    "c",
+    "t",
+    "i",
+    "o",
+    "n",
+    "_",
+    "f",
+    "o",
+    "r",
+    "m",
+    "s",
+    "_",
+    "l",
+    "e",
+    "m",
+    "m",
+    "a",
+    "_",
+    "p",
+    "l",
+    "u",
+    "s",
+    "_",
+    "s",
+    "_",
+    "i",
+    "n",
+    "f",
+    "l",
+    "e",
+    "c",
+    "t",
+    "i",
+    "o",
+    "n",
+    "_",
+    "o",
+    "n",
+    "l",
+    "y"
+  ],
+  "verb_slot_allowlist": "inflected_required_action_token_ids_added_to_readout_token_ids",
+  "verb_slot_rule": "simulate_b0_continuation__first_common_verb_after_frame2_agent__pre_roll_b0_prefix__push_<action>s_single_token_ttl1",
+  "version": "structural_rescue_v2_norm_relative_contract_datasheet_clauseform_verbslot_cap0.12_heldout_v1"
+}

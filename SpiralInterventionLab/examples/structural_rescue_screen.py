@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -25,7 +26,7 @@ from .digit_transform_e2e import (
     build_default_activation_surface_catalog, build_hooked_transformer_worker_runtime, load_worker_model,
 )
 from .replay_orphan_blueprint_ceiling import _release_memory, verify_checkpoint
-from .structural_rescue_benchmark import ForwardLimit, capture_sources
+from .structural_rescue_benchmark import ForwardLimit, Meter, capture_sources, prepare_unembed_storage
 
 
 SEED = 20261103
@@ -81,7 +82,9 @@ def selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[str, 
 def load_selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[str, Any]]:
     """Dispatch on the frozen screen manifest version; v1 receipts stay readable."""
     version = json.loads((screen_dir / "manifest.json").read_text()).get("version")
-    if version == "structural_rescue_screen_v3":
+    if version == "structural_rescue_screen_v4":
+        from .structural_rescue_screen_v4 import selected_cases as pick
+    elif version == "structural_rescue_screen_v3":
         from .structural_rescue_screen_v3 import selected_cases as pick
     elif version == "structural_rescue_screen_v2":
         from .structural_rescue_screen_v2 import selected_cases as pick
@@ -92,12 +95,34 @@ def load_selected_cases(screen_dir: Path) -> tuple[tuple[RescueCase, ...], dict[
     return pick(screen_dir)
 
 
-def screen_case(model: Any, catalog: list[dict], case: RescueCase) -> dict[str, Any]:
+def screen_case(model: Any, catalog: list[dict], case: RescueCase, *,
+                meter_options: dict | None = None, attempt: dict | None = None) -> dict[str, Any]:
     task = StructuralRescueEnv(case)
     worker = build_hooked_transformer_worker_runtime(model, task, seed=0, surface_catalog=catalog,
         clause_structure_diagnostics=True, clause_structure_operator_diagnostics=True,
         max_diagnostic_calls_per_run=12)
     worker.reset(task.reset(0))
+    meter = Meter(worker, **meter_options) if meter_options is not None else None
+    try:
+        if meter is None:
+            return _decode_case(worker, task, case)
+        with meter.install():
+            row = _decode_case(worker, task, case, meter=meter)
+        row["forwards"] = deepcopy(meter.counts)
+        return row
+    except Exception as exc:
+        if attempt is not None:
+            attempt.update(status="error", error_type=type(exc).__name__, error=str(exc))
+        raise
+    finally:
+        if attempt is not None and meter is not None:
+            attempt["forwards"] = deepcopy(meter.counts)
+        worker.runtime_state.clear_edits()
+        worker.runtime_state.last_cache = None
+
+
+def _decode_case(worker: Any, task: StructuralRescueEnv, case: RescueCase, *,
+                 meter: Meter | None = None) -> dict[str, Any]:
     pattern = r"\bto\s+" + re.escape(case.frames[0][3]) + r"$"
     while not worker.done() and len(worker._output_token_ids()) < 32:
         worker.step()
@@ -107,19 +132,25 @@ def screen_case(model: Any, catalog: list[dict], case: RescueCase) -> dict[str, 
     prefix = worker.final_text()
     text = prefix
     if not worker.done():
+        if meter is not None:
+            meter.phase = "branch"
+            meter.boundary_length = worker._current_token_tensor().shape[-1]
+            # This screen discards the worker after its unedited continuation.
+            # Do not clone a full prefix cache solely to restore that disposable state.
+            worker.runtime_state.last_cache = None
+            worker.runtime_state.last_logits = None
+            _release_memory()
         simulated = worker._simulate_decode(max_new_tokens=64 - len(worker._output_token_ids()), top_k=6,
                                             score_candidate_text=False, score_observer_check=False)
         if simulated is None:
             raise RuntimeError(worker._last_simulate_decode_error)
         text = worker.codec.decode(worker._output_token_ids() + simulated["continuation_token_ids"])
-    worker.runtime_state.clear_edits()
-    # Each worker keeps a full activation cache on the device; drop it before the next one.
-    worker.runtime_state.last_cache = None
     return {"case_id": case.case_id, "boundary_found": boundary, "prefix": prefix, **task.evaluate(text)}
 
 
 def select(rows: list[dict]) -> list[str]:
-    return [r["case_id"] for r in rows if r["boundary_found"] and not r["joint_success"]][:SELECTION_LIMIT]
+    return [r["case_id"] for r in rows
+            if r.get("boundary_found") is True and r.get("joint_success") is False][:SELECTION_LIMIT]
 
 
 def main(argv=None) -> int:
@@ -141,6 +172,10 @@ def main(argv=None) -> int:
 
 def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen: bytes,
             families: tuple[str, ...] = FAMILIES) -> int:
+    protocol = json.loads(frozen)
+    if any(getattr(args, key) != value for key, value in protocol.get("run", {}).items()):
+        raise ValueError("screen_execution_profile_differs_from_frozen_protocol")
+    disk_floor = protocol.get("disk_floor_gib", DISK_FLOOR_GIB)
     output = args.output_dir.expanduser().resolve()
     digest = hashlib.sha256(frozen).hexdigest()
     if args.prepare:
@@ -159,6 +194,7 @@ def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen:
         raise FileExistsError(result_path)
     report = {"status": "running", "created_at_utc": datetime.now(timezone.utc).isoformat(),
               "manifest_sha256": digest, "code_sha256": capture_sources(output), "rows": []}
+    report.update(device=args.device, dtype=args.dtype, production_apply_allowed=False)
     started = time.monotonic()
 
     def persist():
@@ -170,7 +206,12 @@ def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen:
 
     persist()
     try:
-        checkpoint = json.loads(args.checkpoint_manifest.read_text())["checkpoint_sha256"]
+        source = json.loads(args.checkpoint_manifest.read_text())
+        checkpoint = source.get("checkpoint_sha256") or source.get("checkpoint_sha256_verified")
+        if "checkpoint_sha256" in protocol and checkpoint != protocol["checkpoint_sha256"]:
+            raise ValueError("screen_checkpoint_differs_from_frozen_protocol")
+        if shutil.disk_usage(output).free < disk_floor * 2**30:
+            raise ForwardLimit(f"disk_below_predeclared_{disk_floor:g}_gib_floor")
         report["checkpoint_sha256_verified"] = verify_checkpoint(args.worker_model_path, checkpoint)
         import torch
         torch.set_default_device("cpu")
@@ -180,15 +221,28 @@ def execute(args: Any, *, seed: int, count: int, verbs: tuple[str, ...], frozen:
             torch.mps.set_per_process_memory_fraction(args.mps_memory_fraction)
         model = load_worker_model(args.worker_model, model_path=args.worker_model_path, device=args.device,
                                   dtype=args.dtype, hf_offline=True, mps_mode="conservative")
+        if args.device == "mps":
+            _release_memory()
+            prepare_unembed_storage(model)
+            torch.mps.synchronize()
+            _release_memory()
         layers = sorted({model.cfg.n_layers // 2, model.cfg.n_layers - 1})
         catalog = [s for s in build_default_activation_surface_catalog(model, layers=layers)
                    if s["target"].get("site") == "resid_pre" and s["target"]["token"]["mode"] == "last"]
         for case in generate(seed, count, verbs, families):
-            if shutil.disk_usage(output).free < DISK_FLOOR_GIB * 2**30:
-                raise ForwardLimit(f"disk_below_predeclared_{DISK_FLOOR_GIB:g}_gib_floor")
-            row = screen_case(model, catalog, case)
+            if shutil.disk_usage(output).free < disk_floor * 2**30:
+                raise ForwardLimit(f"disk_below_predeclared_{disk_floor:g}_gib_floor")
+            options = ({"deadline": started + protocol["wall_seconds"], "disk_path": output,
+                        "disk_floor_gib": disk_floor} if "forward_caps" in protocol else None)
+            attempt = {"case_id": case.case_id, "status": "running"} if options is not None else None
+            if attempt is not None:
+                report["rows"].append(attempt)
+            row = screen_case(model, catalog, case, meter_options=options, attempt=attempt)
             _release_memory()
-            report["rows"].append(row)
+            if attempt is None:
+                report["rows"].append(row)
+            else:
+                attempt.update(row, status="ok")
             persist()
             print(json.dumps({k: row[k] for k in ("case_id", "boundary_found", "joint_success",
                                                   "role_status", "output")}), flush=True)
